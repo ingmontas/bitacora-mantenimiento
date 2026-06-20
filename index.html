@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Bitácora"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Bitácora Mantenimiento 2026</title>
+  <style>
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
+
+    /* HEADER */
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #sp-status { font-size: 20px; cursor: pointer; }
+
+    /* NAV */
+    #nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; }
+    .nav-btn { flex: 1; padding: 8px 4px 10px; background: none; border: none; color: var(--muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
+    .nav-btn.active { color: var(--accent); }
+    .nav-btn span { font-size: 22px; }
+
+    /* CONTENT */
+    #content { padding: 14px 14px 80px; }
+
+    /* SCREENS */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* CARDS */
+    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+    .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+
+    /* FORM FIELDS */
+    .field { margin-bottom: 13px; }
+    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    textarea { resize: vertical; min-height: 70px; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+    /* ROWS */
+    .row { display: flex; gap: 10px; }
+    .row .field { flex: 1; }
+    .col-sm { width: 80px; flex-shrink: 0; }
+
+    /* BUTTONS */
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .btn:active { opacity: .8; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
+    .btn-row { display: flex; gap: 8px; }
+
+    /* TAGS */
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .tag-preventivo { background: #10B98122; color: var(--green); border: 1px solid #10B98133; }
+    .tag-correctivo { background: #EF444422; color: var(--red); border: 1px solid #EF444433; }
+    .tag-proyecto { background: #818CF822; color: var(--blue); border: 1px solid #818CF833; }
+    .tag-local { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B33; }
+    .tag-synced { background: #10B98122; color: var(--green); border: 1px solid #10B98133; }
+    .tag-paro { background: #EF444422; color: var(--red); border: 1px solid #EF444433; }
+
+    /* TECNICO CHIPS */
+    .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
+    .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+
+    /* TOGGLE */
+    .toggle-row { display: flex; gap: 6px; }
+    .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .toggle-btn.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .toggle-btn.sel-green { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .toggle-btn.sel-red { border-color: var(--red); background: #EF444418; color: var(--red); }
+
+    /* TOAST */
+    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error { background: var(--red); }
+    #toast.warn { background: var(--orange); }
+
+    /* LOADING OVERLAY */
+    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading.show { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* HISTORY ITEM */
+    .hist-item { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); }
+    .hist-item.preventivo { border-left-color: var(--green); }
+    .hist-item.correctivo { border-left-color: var(--red); }
+    .hist-item.proyecto { border-left-color: var(--blue); }
+    .hist-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7px; gap: 8px; }
+    .hist-title { font-weight: 700; font-size: 14px; }
+    .hist-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .hist-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+    .hist-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+    .hist-desc strong { color: var(--text); }
+
+    /* STATS */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .stat-box { background: var(--card); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border); }
+    .stat-num { font-size: 34px; font-weight: 900; line-height: 1; }
+    .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 4px; text-transform: uppercase; }
+    .bar-wrap { margin-bottom: 10px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+    .bar-track { background: var(--surface); border-radius: 4px; height: 7px; }
+    .bar-fill { background: var(--accent); border-radius: 4px; height: 7px; transition: width .6s; }
+
+    /* CONFIG */
+    .info-box { background: #F59E0B11; border: 1px solid #F59E0B33; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .code-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .code-chip { background: var(--surface); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; color: var(--muted); }
+
+    /* SYNC BANNER */
+    .sync-banner { background: #F59E0B18; border: 1px solid #F59E0B44; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sync-banner p { font-size: 13px; color: var(--accent); font-weight: 600; }
+    .sync-banner small { font-size: 11px; color: var(--muted); display: block; }
+
+    /* SEARCH */
+    #search-box { margin-bottom: 12px; position: relative; }
+    #search-box input { padding-left: 36px; }
+    #search-box::before { content: "🔍"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 15px; }
+
+    /* EMPTY STATE */
+    .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+    .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .empty p { font-size: 14px; line-height: 1.6; }
+
+    /* SP CONFIG STATUS */
+    .sp-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .sp-dot.ok { background: var(--green); }
+    .sp-dot.off { background: var(--red); }
+
+    /* DIVIDER */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+    /* OFFLINE NOTICE */
+    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; display: none; }
+    #offline-bar.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="offline-bar">📵 Sin conexión — los registros se guardan localmente</div>
+
+<div id="header">
+  <div>
+    <h1>🔧 Bitácora Mantenimiento</h1>
+    <small id="header-sub">2026 · Cargando...</small>
+  </div>
+  <div id="sp-status" title="Estado SharePoint">⚙️</div>
+</div>
+
+<div id="content">
+
+  <!-- ── SCREEN: NUEVO ─────────────────────────────────────────────── -->
+  <div class="screen active" id="screen-nuevo">
+    <div class="card">
+      <div class="card-title">📋 Nueva Entrada</div>
+      <div class="card-sub">Registra el trabajo realizado</div>
+
+      <div class="row">
+        <div class="field">
+          <label>Fecha *</label>
+          <input type="date" id="f-fecha"/>
+        </div>
+        <div class="field col-sm">
+          <label>Semana</label>
+          <input type="number" id="f-semana" min="1" max="53"/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Línea / Área *</label>
+        <select id="f-linea">
+          <option value="">Seleccionar...</option>
+          <option>weaving</option><option>coating</option><option>tape line</option>
+          <option>tepe line</option><option>reciclaje</option><option>resicladora</option>
+          <option>almacen</option><option>compresor</option><option>chiller</option>
+          <option>taller</option><option>planta 1</option><option>planta 2</option>
+          <option>laboratorio</option><option>extruder</option><option>pe fillm</option>
+          <option>ventiladores</option><option>baños</option><option>jardineria</option>
+          <option>portones</option><option>logistica</option><option>otro</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Tipo Máquina</label>
+          <input type="text" id="f-tipo-maq" placeholder="ej: extruder"/>
+        </div>
+        <div class="field">
+          <label>Equipo</label>
+          <input type="text" id="f-equipo" placeholder="ej: #6"/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Pieza / Componente</label>
+        <input type="text" id="f-pieza" placeholder="ej: rodamiento, filtro..."/>
+      </div>
+
+      <div class="field">
+        <label>Descripción de la Falla (Causa) *</label>
+        <textarea id="f-falla" placeholder="¿Qué pasó?"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Descripción de la Solución</label>
+        <textarea id="f-solucion" placeholder="¿Cómo se resolvió?"></textarea>
+      </div>
+
+      <!-- TIEMPOS -->
+      <div class="card" style="background:var(--surface);padding:12px;margin-bottom:13px;">
+        <label style="margin-bottom:10px;">⏱ Tiempos</label>
+        <div class="row">
+          <div class="field"><label>H. Inicio</label><input type="time" id="f-hinicio"/></div>
+          <div class="field"><label>H. Técnico</label><input type="time" id="f-htecnico"/></div>
+          <div class="field"><label>H. Final</label><input type="time" id="f-hfinal"/></div>
+        </div>
+        <div id="duracion-display" style="font-size:12px;color:var(--accent);font-weight:600;min-height:16px;"></div>
+      </div>
+
+      <!-- TIPO MANTENIMIENTO -->
+      <div class="field">
+        <label>Tipo de Mantenimiento *</label>
+        <div class="toggle-row" id="tipo-mto-group">
+          <button class="toggle-btn sel" data-val="Correctivo" onclick="selectToggle('tipo-mto-group',this)">⚠️ Correctivo</button>
+          <button class="toggle-btn" data-val="Preventivo" onclick="selectToggle('tipo-mto-group',this)">🛡 Preventivo</button>
+          <button class="toggle-btn" data-val="Proyecto" onclick="selectToggle('tipo-mto-group',this)">🏗 Proyecto</button>
+        </div>
+      </div>
+
+      <!-- M/E -->
+      <div class="row">
+        <div class="field">
+          <label>M / E</label>
+          <div class="toggle-row" id="me-group">
+            <button class="toggle-btn sel" data-val="m" onclick="selectToggle('me-group',this)">M</button>
+            <button class="toggle-btn" data-val="e" onclick="selectToggle('me-group',this)">E</button>
+            <button class="toggle-btn" data-val="m/e" onclick="selectToggle('me-group',this)">M/E</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Genera OT</label>
+          <div class="toggle-row" id="ot-group">
+            <button class="toggle-btn" data-val="si" onclick="selectToggle('ot-group',this)">Sí</button>
+            <button class="toggle-btn sel" data-val="no" onclick="selectToggle('ot-group',this)">No</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PARÓ PLANTA -->
+      <div class="field">
+        <label>¿Paró la Planta?</label>
+        <div class="toggle-row" id="paro-group">
+          <button class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)" style="color:var(--red)">🚨 Sí, paró</button>
+          <button class="toggle-btn sel" data-val="no" onclick="selectToggle('paro-group',this)">No</button>
+        </div>
+      </div>
+
+      <!-- TÉCNICOS -->
+      <div class="field">
+        <label>Técnicos Asignados</label>
+        <div class="tec-grid" id="tec-grid">
+          <button class="tec-chip" data-tec="FELIX M. GIL #777" onclick="toggleTec(this)">FELIX #777</button>
+          <button class="tec-chip" data-tec="ANTONIO SANTANA #805" onclick="toggleTec(this)">ANTONIO #805</button>
+          <button class="tec-chip" data-tec="JUAN L. JIMÉNEZ #628" onclick="toggleTec(this)">JUAN #628</button>
+          <button class="tec-chip" data-tec="LEBRON" onclick="toggleTec(this)">LEBRON</button>
+          <button class="tec-chip" data-tec="LUIS CARLOS" onclick="toggleTec(this)">LUIS CARLOS</button>
+          <button class="tec-chip" data-tec="ARISTOSTELE #2434" onclick="toggleTec(this)">ARISTOSTELE #2434</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="submitForm()">✅ Registrar en Bitácora</button>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: HISTORIAL ─────────────────────────────────────────── -->
+  <div class="screen" id="screen-historial">
+    <div id="sync-banner" class="sync-banner" style="display:none">
+      <div>
+        <p id="sync-count">0 pendientes</p>
+        <small>Guardados localmente, sin subir a SharePoint</small>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="syncPending()">🔄 Subir</button>
+    </div>
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="Buscar por línea, equipo, falla..." oninput="renderHistory()"/>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ── SCREEN: ESTADÍSTICAS ──────────────────────────────────────── -->
+  <div class="screen" id="screen-stats">
+    <div class="card-title" style="margin-bottom:4px">📊 Resumen</div>
+    <div class="card-sub">Todos los registros en SharePoint</div>
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--green)" id="s-preventivo">—</div><div class="stat-lbl">Preventivos</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--orange)" id="s-paro">—</div><div class="stat-lbl">Paros Planta</div></div>
+    </div>
+    <div class="card" id="lineas-card" style="display:none">
+      <div style="font-weight:700;margin-bottom:12px">🏭 Top Líneas</div>
+      <div id="lineas-bars"></div>
+    </div>
+    <div class="card" id="semana-card" style="display:none">
+      <div style="font-weight:700;margin-bottom:12px">📅 Por Semana</div>
+      <div id="semana-bars"></div>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: CONFIGURACIÓN ─────────────────────────────────────── -->
+  <div class="screen" id="screen-config">
+    <div class="card-title" style="margin-bottom:4px">⚙️ Conexión SharePoint</div>
+    <div class="card-sub">Donde se guardan todos los registros</div>
+
+    <div class="info-box">
+      💡 <strong>Importante:</strong> Todos los técnicos deben estar logueados en Microsoft 365 en su navegador. La app guarda en SharePoint automáticamente al registrar.<br/><br/>
+      Si no hay internet, guarda localmente y sincroniza cuando vuelva la conexión.
+    </div>
+
+    <div class="card">
+      <div class="field">
+        <label>URL del Sitio SharePoint *</label>
+        <input type="url" id="cfg-url" placeholder="https://empresa.sharepoint.com/sites/mantenimiento"/>
+      </div>
+      <div class="field">
+        <label>Nombre de la Lista (exacto)</label>
+        <input type="text" id="cfg-lista" placeholder="BITACORA_2026" value="BITACORA_2026"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="testSP()" style="flex:1">🔌 Probar</button>
+        <button class="btn btn-primary btn-sm" onclick="saveConfig()" style="flex:1">💾 Guardar</button>
+      </div>
+      <div id="test-result" style="font-size:12px;margin-top:10px;min-height:14px;"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px">📋 Columnas necesarias en la lista SP</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Crea una lista personalizada con estas columnas (tipo Texto/Número):</div>
+      <div class="code-chips">
+        <span class="code-chip">Title</span><span class="code-chip">SEMANA</span><span class="code-chip">FECHA</span>
+        <span class="code-chip">LINEA_EQUIPO</span><span class="code-chip">TIPO_MAQUINA</span><span class="code-chip">EQUIPO</span>
+        <span class="code-chip">PIEZA</span><span class="code-chip">DESCRIPCION_FALLA</span><span class="code-chip">DESCRIPCION_SOLUCION</span>
+        <span class="code-chip">H_INICIO</span><span class="code-chip">H_TECNICO</span><span class="code-chip">H_FINAL</span>
+        <span class="code-chip">TOTAL_MIN_TECNICO</span><span class="code-chip">TOTAL_MIN_MAQUINA</span>
+        <span class="code-chip">ME</span><span class="code-chip">GENERA_OT</span><span class="code-chip">TIPO_MANTENIMIENTO</span>
+        <span class="code-chip">PARO_PLANTA</span><span class="code-chip">TECNICOS</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px">📱 Instalar en celular</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.7">
+        <strong style="color:var(--text)">Android (Chrome):</strong><br/>
+        Menú ⋮ → "Agregar a pantalla de inicio"<br/><br/>
+        <strong style="color:var(--text)">iPhone (Safari):</strong><br/>
+        Botón compartir 📤 → "En la pantalla de inicio"
+      </div>
+    </div>
+
+    <div class="card" style="border-color:var(--red)">
+      <div style="font-weight:700;margin-bottom:8px;color:var(--red)">🗑 Limpiar datos locales</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Elimina los registros guardados en este dispositivo. <strong>No afecta SharePoint.</strong></div>
+      <button class="btn btn-danger" onclick="clearLocal()">Limpiar almacenamiento local</button>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<nav id="nav">
+  <button class="nav-btn active" onclick="goTo('nuevo',this)"><span>➕</span>Nuevo</button>
+  <button class="nav-btn" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
+  <button class="nav-btn" onclick="goTo('stats',this)"><span>📊</span>Resumen</button>
+  <button class="nav-btn" onclick="goTo('config',this)"><span>⚙️</span>Configurar</button>
+</nav>
+
+<div id="toast"></div>
+<div id="loading"><div class="spinner"></div><div style="color:var(--muted);font-size:13px">Guardando...</div></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  CONFIG & STATE
+// ══════════════════════════════════════════════════════════════
+let SP = JSON.parse(localStorage.getItem('sp_config') || '{"siteUrl":"","listName":"BITACORA_2026"}');
+let LOCAL_KEY = 'bitacora_records_v2';
+let digestCache = { value: null, expires: 0 };
+
+function getLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); } catch { return []; } }
+function saveLocal(arr) { localStorage.setItem(LOCAL_KEY, JSON.stringify(arr)); }
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Fecha y semana por defecto
+  const d = new Date();
+  document.getElementById('f-fecha').value = d.toISOString().split('T')[0];
+  document.getElementById('f-semana').value = getWeekNumber(d);
+  const t = d.toTimeString().slice(0,5);
+  document.getElementById('f-hinicio').value = t;
+  document.getElementById('f-htecnico').value = t;
+
+  // Config guardada
+  if (SP.siteUrl) {
+    document.getElementById('cfg-url').value = SP.siteUrl;
+    document.getElementById('cfg-lista').value = SP.listName || 'BITACORA_2026';
+  }
+
+  updateHeaderStatus();
+  setupTimeListeners();
+
+  // Offline detection
+  window.addEventListener('online', () => { document.getElementById('offline-bar').classList.remove('show'); syncPending(); });
+  window.addEventListener('offline', () => document.getElementById('offline-bar').classList.add('show'));
+  if (!navigator.onLine) document.getElementById('offline-bar').classList.add('show');
+
+  // Register SW
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+});
+
+function getWeekNumber(d) {
+  const start = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil((((d - start) / 86400000) + 1) / 7);
+}
+
+function updateHeaderStatus() {
+  const sub = document.getElementById('header-sub');
+  const icon = document.getElementById('sp-status');
+  const pending = getLocal().filter(r => !r._synced).length;
+  if (SP.siteUrl) {
+    sub.textContent = `2026 · SP Conectado${pending > 0 ? ' · ' + pending + ' pendientes' : ' ✓'}`;
+    icon.textContent = '🟢';
+  } else {
+    sub.textContent = '2026 · Sin SharePoint';
+    icon.textContent = '🔴';
+  }
+  icon.onclick = () => goTo('config', document.querySelectorAll('.nav-btn')[3]);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════════
+function goTo(screen, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  btn.classList.add('active');
+  if (screen === 'historial') { renderHistory(); updateSyncBanner(); }
+  if (screen === 'stats') loadStats();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FORM HELPERS
+// ══════════════════════════════════════════════════════════════
+function selectToggle(groupId, btn) {
+  document.querySelectorAll('#' + groupId + ' .toggle-btn').forEach(b => b.classList.remove('sel','sel-green','sel-red'));
+  btn.classList.add('sel');
+}
+function getToggle(groupId) {
+  const sel = document.querySelector('#' + groupId + ' .toggle-btn.sel');
+  return sel ? sel.dataset.val : '';
+}
+
+function toggleTec(btn) { btn.classList.toggle('sel'); }
+function getSelectedTecs() {
+  return [...document.querySelectorAll('#tec-grid .tec-chip.sel')].map(b => b.dataset.tec);
+}
+
+function setupTimeListeners() {
+  ['f-hinicio','f-hfinal'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateDuration);
+  });
+}
+function timeToMin(t) {
+  if (!t) return 0;
+  const [h,m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+function updateDuration() {
+  const start = timeToMin(document.getElementById('f-hinicio').value);
+  const end = timeToMin(document.getElementById('f-hfinal').value);
+  const el = document.getElementById('duracion-display');
+  if (start && end && end > start) {
+    const diff = end - start;
+    el.textContent = `⏳ Duración máquina: ${diff} min (${(diff/60).toFixed(1)} hrs)`;
+  } else el.textContent = '';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SHAREPOINT API
+// ══════════════════════════════════════════════════════════════
+async function getDigest() {
+  if (digestCache.value && Date.now() < digestCache.expires) return digestCache.value;
+  const r = await fetch(`${SP.siteUrl}/_api/contextinfo`, {
+    method: 'POST', credentials: 'include',
+    headers: { Accept: 'application/json;odata=verbose' }
+  });
+  const j = await r.json();
+  digestCache.value = j.d.GetContextWebInformation.FormDigestValue;
+  digestCache.expires = Date.now() + 25 * 60 * 1000;
+  return digestCache.value;
+}
+
+async function spPost(record) {
+  const digest = await getDigest();
+  const listType = SP.listName.replace(/[^a-zA-Z0-9]/g,'');
+  const body = { __metadata: { type: `SP.Data.${listType}ListItem` }, ...record };
+  const r = await fetch(`${SP.siteUrl}/_api/web/lists/getbytitle('${SP.listName}')/items`, {
+    method: 'POST', credentials: 'include',
+    headers: {
+      'Accept': 'application/json;odata=verbose',
+      'Content-Type': 'application/json;odata=verbose',
+      'X-RequestDigest': digest,
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('SP ' + r.status + ': ' + await r.text());
+  return r.json();
+}
+
+async function spGet(filter = '', top = 200) {
+  let url = `${SP.siteUrl}/_api/web/lists/getbytitle('${SP.listName}')/items?$top=${top}&$orderby=Created desc`;
+  if (filter) url += `&$filter=${filter}`;
+  const r = await fetch(url, {
+    credentials: 'include',
+    headers: { Accept: 'application/json;odata=verbose' }
+  });
+  if (!r.ok) throw new Error('SP ' + r.status);
+  const j = await r.json();
+  return j.d.results;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUBMIT FORM
+// ══════════════════════════════════════════════════════════════
+async function submitForm() {
+  const linea = document.getElementById('f-linea').value;
+  const falla = document.getElementById('f-falla').value.trim();
+  if (!linea || !falla) { showToast('⚠️ Completa Línea y Descripción de Falla', 'error'); return; }
+
+  const fecha = document.getElementById('f-fecha').value;
+  const hInicio = document.getElementById('f-hinicio').value;
+  const hFinal = document.getElementById('f-hfinal').value;
+  const hTecnico = document.getElementById('f-htecnico').value;
+  const minMaq = hFinal ? timeToMin(hFinal) - timeToMin(hInicio) : 0;
+  const minTec = hFinal ? timeToMin(hFinal) - timeToMin(hTecnico) : 0;
+
+  const record = {
+    Title: 'OT-' + Date.now(),
+    SEMANA: parseInt(document.getElementById('f-semana').value) || getWeekNumber(new Date()),
+    FECHA: fecha,
+    LINEA_EQUIPO: linea,
+    TIPO_MAQUINA: document.getElementById('f-tipo-maq').value.trim(),
+    EQUIPO: document.getElementById('f-equipo').value.trim(),
+    PIEZA: document.getElementById('f-pieza').value.trim(),
+    DESCRIPCION_FALLA: falla,
+    DESCRIPCION_SOLUCION: document.getElementById('f-solucion').value.trim(),
+    H_INICIO: hInicio,
+    H_TECNICO: hTecnico,
+    H_FINAL: hFinal,
+    TOTAL_MIN_MAQUINA: minMaq > 0 ? minMaq : 0,
+    TOTAL_MIN_TECNICO: minTec > 0 ? minTec : 0,
+    ME: getToggle('me-group') || 'm',
+    GENERA_OT: getToggle('ot-group') || 'no',
+    TIPO_MANTENIMIENTO: getToggle('tipo-mto-group') || 'Correctivo',
+    PARO_PLANTA: getToggle('paro-group') || 'no',
+    TECNICOS: getSelectedTecs().join(', '),
+  };
+
+  document.getElementById('loading').classList.add('show');
+  let synced = false;
+
+  if (SP.siteUrl && navigator.onLine) {
+    try {
+      await spPost(record);
+      synced = true;
+    } catch (e) {
+      console.warn('SP error:', e.message);
+    }
+  }
+
+  // Always save locally as backup
+  const local = getLocal();
+  local.push({ ...record, _id: Date.now(), _synced: synced, _ts: new Date().toISOString() });
+  saveLocal(local);
+
+  document.getElementById('loading').classList.remove('show');
+
+  if (synced) {
+    showToast('✅ Guardado en SharePoint correctamente', 'success');
+  } else if (!SP.siteUrl) {
+    showToast('💾 Guardado local. Configura SharePoint para sincronizar', 'warn');
+  } else {
+    showToast('📵 Sin conexión — guardado local, se subirá después', 'warn');
+  }
+
+  resetForm();
+  updateHeaderStatus();
+}
+
+function resetForm() {
+  const d = new Date();
+  document.getElementById('f-linea').value = '';
+  document.getElementById('f-tipo-maq').value = '';
+  document.getElementById('f-equipo').value = '';
+  document.getElementById('f-pieza').value = '';
+  document.getElementById('f-falla').value = '';
+  document.getElementById('f-solucion').value = '';
+  const t = d.toTimeString().slice(0,5);
+  document.getElementById('f-hinicio').value = t;
+  document.getElementById('f-htecnico').value = t;
+  document.getElementById('f-hfinal').value = '';
+  document.getElementById('duracion-display').textContent = '';
+  document.querySelectorAll('.tec-chip').forEach(c => c.classList.remove('sel'));
+  // Reset toggles to default
+  selectToggle('tipo-mto-group', document.querySelector('#tipo-mto-group [data-val="Correctivo"]'));
+  selectToggle('me-group', document.querySelector('#me-group [data-val="m"]'));
+  selectToggle('ot-group', document.querySelector('#ot-group [data-val="no"]'));
+  selectToggle('paro-group', document.querySelector('#paro-group [data-val="no"]'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════════════════════════════
+let allRecords = [];
+
+async function renderHistory() {
+  const list = document.getElementById('history-list');
+  const q = document.getElementById('search-input').value.toLowerCase();
+
+  // Load from SP first if online
+  if (SP.siteUrl && navigator.onLine && allRecords.length === 0) {
+    try {
+      allRecords = await spGet('', 300);
+    } catch (e) { /* use local */ }
+  }
+
+  // Merge local unsynced
+  const local = getLocal().filter(r => !r._synced);
+  const combined = [...local.map(r => ({...r, _local: true})), ...allRecords];
+
+  const filtered = combined.filter(r => {
+    if (!q) return true;
+    const hay = [r.LINEA_EQUIPO, r.EQUIPO, r.TIPO_MANTENIMIENTO, r.DESCRIPCION_FALLA, r.TECNICOS].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty"><span class="emoji">📭</span><p>Sin registros${q ? ' con ese filtro' : ''}.<br/>Crea el primero en "Nuevo".</p></div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(r => {
+    const tipo = (r.TIPO_MANTENIMIENTO || '').toLowerCase();
+    const esParo = r.PARO_PLANTA === 'si';
+    const tags = `<span class="tag tag-${tipo}">${r.TIPO_MANTENIMIENTO || ''}</span>
+      ${r._local ? '<span class="tag tag-local">LOCAL</span>' : '<span class="tag tag-synced">SP ✓</span>'}
+      ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}`;
+    const fecha = r.FECHA || r._ts?.slice(0,10) || '';
+    return `<div class="hist-item ${tipo}">
+      <div class="hist-header">
+        <div>
+          <div class="hist-title">${r.LINEA_EQUIPO || '—'} ${r.EQUIPO ? '· ' + r.EQUIPO : ''}</div>
+          <div class="hist-date">📅 ${fecha} &nbsp;·&nbsp; Sem. ${r.SEMANA || '?'} ${r.TECNICOS ? '&nbsp;·&nbsp;👷 ' + r.TECNICOS.split(',')[0] : ''}</div>
+        </div>
+        <div class="hist-tags">${tags}</div>
+      </div>
+      <div class="hist-desc"><strong>Falla:</strong> ${r.DESCRIPCION_FALLA || '—'}</div>
+      ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${r.DESCRIPCION_SOLUCION}</div>` : ''}
+      ${r.TOTAL_MIN_MAQUINA > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:5px">⏱ ${r.TOTAL_MIN_MAQUINA} min máquina</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function updateSyncBanner() {
+  const pending = getLocal().filter(r => !r._synced).length;
+  const banner = document.getElementById('sync-banner');
+  if (pending > 0 && SP.siteUrl) {
+    banner.style.display = 'flex';
+    document.getElementById('sync-count').textContent = `${pending} registro${pending>1?'s':''} sin sincronizar`;
+  } else { banner.style.display = 'none'; }
+}
+
+async function syncPending() {
+  if (!SP.siteUrl || !navigator.onLine) { showToast('Sin conexión o SharePoint no configurado', 'error'); return; }
+  const all = getLocal();
+  const pending = all.filter(r => !r._synced);
+  if (pending.length === 0) { showToast('Todo está sincronizado ✓', 'success'); return; }
+
+  document.getElementById('loading').classList.add('show');
+  let ok = 0;
+  for (let r of all) {
+    if (!r._synced) {
+      try {
+        const { _id, _synced, _ts, _local, ...rec } = r;
+        await spPost(rec);
+        r._synced = true;
+        ok++;
+      } catch (e) { console.warn(e.message); }
+    }
+  }
+  saveLocal(all);
+  document.getElementById('loading').classList.remove('show');
+  showToast(`✅ ${ok} registros subidos a SharePoint`, 'success');
+  updateHeaderStatus();
+  updateSyncBanner();
+  allRecords = [];
+  renderHistory();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════════════════════════
+async function loadStats() {
+  let data = [];
+  if (SP.siteUrl && navigator.onLine) {
+    try { data = await spGet('', 500); } catch {}
+  }
+  if (data.length === 0) data = getLocal();
+
+  document.getElementById('s-total').textContent = data.length;
+  document.getElementById('s-correctivo').textContent = data.filter(r => r.TIPO_MANTENIMIENTO === 'Correctivo').length;
+  document.getElementById('s-preventivo').textContent = data.filter(r => r.TIPO_MANTENIMIENTO === 'Preventivo').length;
+  document.getElementById('s-paro').textContent = data.filter(r => r.PARO_PLANTA === 'si').length;
+
+  // Top líneas
+  const byLinea = {};
+  data.forEach(r => { const k = r.LINEA_EQUIPO || '?'; byLinea[k] = (byLinea[k]||0)+1; });
+  const topLineas = Object.entries(byLinea).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  if (topLineas.length) {
+    document.getElementById('lineas-card').style.display = 'block';
+    const max = topLineas[0][1];
+    document.getElementById('lineas-bars').innerHTML = topLineas.map(([k,v]) => `
+      <div class="bar-wrap">
+        <div class="bar-label"><span style="text-transform:capitalize">${k}</span><strong>${v}</strong></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(v/max*100).toFixed(1)}%"></div></div>
+      </div>`).join('');
+  }
+
+  // Por semana
+  const bySem = {};
+  data.forEach(r => { const k = 'Sem '+r.SEMANA; bySem[k] = (bySem[k]||0)+1; });
+  const semanas = Object.entries(bySem).sort((a,b)=>a[0].localeCompare(b[0], undefined, {numeric:true})).slice(-8);
+  if (semanas.length > 1) {
+    document.getElementById('semana-card').style.display = 'block';
+    const maxS = Math.max(...semanas.map(s=>s[1]));
+    document.getElementById('semana-bars').innerHTML = semanas.map(([k,v]) => `
+      <div class="bar-wrap">
+        <div class="bar-label"><span>${k}</span><strong>${v}</strong></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(v/maxS*100).toFixed(1)}%;background:var(--blue)"></div></div>
+      </div>`).join('');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════════════════
+function saveConfig() {
+  SP.siteUrl = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  SP.listName = document.getElementById('cfg-lista').value.trim() || 'BITACORA_2026';
+  localStorage.setItem('sp_config', JSON.stringify(SP));
+  updateHeaderStatus();
+  showToast('✅ Configuración guardada', 'success');
+}
+
+async function testSP() {
+  const url = document.getElementById('cfg-url').value.trim().replace(/\/$/,'');
+  const res = document.getElementById('test-result');
+  if (!url) { res.textContent = '⚠️ Ingresa la URL primero'; res.style.color = 'var(--red)'; return; }
+  res.textContent = '⏳ Probando conexión...'; res.style.color = 'var(--muted)';
+  try {
+    const r = await fetch(`${url}/_api/web/title`, { credentials: 'include', headers: { Accept: 'application/json;odata=verbose' } });
+    const j = await r.json();
+    res.textContent = `✅ Conectado: ${j.d?.Title || 'SharePoint OK'}`;
+    res.style.color = 'var(--green)';
+  } catch (e) {
+    res.textContent = '❌ No se pudo conectar. Verifica la URL y que estés logueado en Microsoft 365.';
+    res.style.color = 'var(--red)';
+  }
+}
+
+function clearLocal() {
+  if (!confirm('¿Eliminar todos los registros locales? Los datos en SharePoint no se afectan.')) return;
+  localStorage.removeItem(LOCAL_KEY);
+  allRecords = [];
+  showToast('🗑 Datos locales eliminados', 'warn');
+  updateHeaderStatus();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (type === 'error' ? 'error' : type === 'warn' ? 'warn' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
