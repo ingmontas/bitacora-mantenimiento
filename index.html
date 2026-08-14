@@ -125,9 +125,16 @@
 
   <!-- SCREEN: NUEVO -->
   <div class="screen active" id="screen-nuevo">
+    <div id="edit-banner" class="sync-banner" style="display:none;background:#818CF818;border-color:#818CF844;">
+      <div>
+        <p style="color:var(--blue);">✏️ Editando registro existente</p>
+        <small>Los cambios reemplazarán la entrada original</small>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancelar</button>
+    </div>
     <div class="card">
-      <div class="card-title">📋 Nueva Entrada</div>
-      <div class="card-sub">Registra el trabajo realizado</div>
+      <div class="card-title" id="form-title">📋 Nueva Entrada</div>
+      <div class="card-sub" id="form-sub">Registra el trabajo realizado</div>
 
       <div class="row">
         <div class="field">
@@ -248,16 +255,11 @@
       <div class="field">
         <label>Técnicos Asignados</label>
         <div class="tec-grid" id="tec-grid">
-          <button class="tec-chip" data-tec="FELIX M. GIL #777" onclick="toggleTec(this)">FELIX #777</button>
-          <button class="tec-chip" data-tec="ANTONIO SANTANA #805" onclick="toggleTec(this)">ANTONIO #805</button>
-          <button class="tec-chip" data-tec="JUAN L. JIMÉNEZ #628" onclick="toggleTec(this)">JUAN #628</button>
-          <button class="tec-chip" data-tec="LEBRON" onclick="toggleTec(this)">LEBRON</button>
-          <button class="tec-chip" data-tec="LUIS CARLOS" onclick="toggleTec(this)">LUIS CARLOS</button>
-          <button class="tec-chip" data-tec="ARISTOSTELE #2434" onclick="toggleTec(this)">ARISTOSTELE #2434</button>
+          <!-- se llena automáticamente desde tecnicos.json -->
         </div>
       </div>
 
-      <button class="btn btn-primary" onclick="submitForm()">✅ Registrar en Bitácora</button>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitForm()">✅ Registrar en Bitácora</button>
     </div>
   </div>
 
@@ -343,7 +345,7 @@
       </div>
       <div class="card">
         <div class="field">
-          <label>URL del Flujo Power Automate *</label>
+          <label>URL del Flujo Power Automate (Crear) *</label>
           <input type="url" id="cfg-webhook" placeholder="https://prod-xx.westus.logic.azure.com/workflows/..."/>
         </div>
         <div class="btn-row">
@@ -351,6 +353,19 @@
           <button class="btn btn-primary btn-sm" onclick="saveWebhookConfig()" style="flex:1">💾 Guardar</button>
         </div>
         <div id="webhook-result" style="font-size:12px;margin-top:10px;min-height:14px;line-height:1.5;"></div>
+      </div>
+
+      <div class="info-box">
+        ✏️ <strong>Opcional — para poder EDITAR registros ya guardados.</strong> Crea un <u>segundo</u> flujo en Power Automate, igual al anterior pero con la acción <strong>"Actualizar elemento"</strong> en vez de "Crear elemento", buscando el elemento por su <strong>Id</strong>. Sin esto, solo podrás corregir registros que aún no se hayan subido a SharePoint.
+      </div>
+      <div class="card">
+        <div class="field">
+          <label>URL del Flujo de Actualización</label>
+          <input type="url" id="cfg-webhook-update" placeholder="https://prod-xx.westus.logic.azure.com/workflows/..."/>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="saveWebhookUpdateConfig()" style="flex:1">💾 Guardar</button>
+        </div>
       </div>
     </div>
 
@@ -361,6 +376,15 @@
         <small>Sin subir a SharePoint</small>
       </div>
       <button class="btn btn-primary btn-sm" onclick="syncPending()">🔄 Subir</button>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px">👷 Lista de técnicos (central)</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Los técnicos que aparecen en "Nueva Entrada" vienen del archivo <strong style="color:var(--text)">tecnicos.json</strong> en el repositorio de GitHub — <strong style="color:var(--text)">no</strong> están escritos dentro de la app. Para agregar, quitar o renombrar un técnico: edita ese archivo en GitHub y haz commit. En cuanto lo hagas, todos los celulares lo verán actualizado la próxima vez que abran o recarguen la app — sin tocar el código de <code>index.html</code>.
+      </div>
+      <div id="tec-actual-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+      <button class="btn btn-secondary btn-sm" onclick="loadTecnicos().then(()=>showToast('✅ Lista de técnicos recargada','success'))">🔄 Recargar lista ahora</button>
     </div>
 
     <div class="card">
@@ -405,7 +429,7 @@
 
 <script>
 // ══════ CONFIG & STATE ══════
-let SP = JSON.parse(localStorage.getItem('sp_config') || '{"siteUrl":"","listName":"BITACORA_2026","webhookUrl":"","method":"api"}');
+let SP = JSON.parse(localStorage.getItem('sp_config') || '{"siteUrl":"","listName":"BITACORA_2026","webhookUrl":"","webhookUpdateUrl":"","method":"api"}');
 const LOCAL_KEY = 'bitacora_records_v3';
 let digestCache = { value: null, expires: 0 };
 let allRecords = [];
@@ -425,11 +449,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (SP.siteUrl) document.getElementById('cfg-url').value = SP.siteUrl;
   if (SP.listName) document.getElementById('cfg-lista').value = SP.listName;
   if (SP.webhookUrl) document.getElementById('cfg-webhook').value = SP.webhookUrl;
+  if (SP.webhookUpdateUrl) document.getElementById('cfg-webhook-update').value = SP.webhookUpdateUrl;
   if (SP.method === 'webhook') {
     switchMethod('webhook', document.querySelectorAll('.method-tab')[1]);
   }
 
   updateHeaderStatus();
+  loadTecnicos();
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
 
@@ -439,6 +465,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 });
+
+// ══════ LISTA DE TÉCNICOS (centralizada en tecnicos.json) ══════
+const TECNICOS_FALLBACK = [
+  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
+  { "nombre": "ANTONIO SANTANA #805", "corto": "ANTONIO #805" },
+  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
+  { "nombre": "LEBRON", "corto": "LEBRON" },
+  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" },
+  { "nombre": "ARISTOSTELE #2434", "corto": "ARISTOSTELE #2434" }
+];
+
+async function loadTecnicos() {
+  let lista = TECNICOS_FALLBACK;
+  try {
+    const r = await fetch('tecnicos.json?_=' + Date.now()); // evita caché vieja
+    if (r.ok) {
+      const data = await r.json();
+      if (Array.isArray(data) && data.length) lista = data;
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message);
+  }
+  renderTecGrid(lista);
+}
+
+function renderTecGrid(lista) {
+  const grid = document.getElementById('tec-grid');
+  const seleccionados = getSelectedTecs(); // conserva selección si ya había alguna
+  grid.innerHTML = lista.map(t => `
+    <button class="tec-chip${seleccionados.includes(t.nombre)?' sel':''}" data-tec="${t.nombre.replace(/"/g,'&quot;')}" onclick="toggleTec(this)">${t.corto || t.nombre}</button>
+  `).join('');
+
+  const preview = document.getElementById('tec-actual-list');
+  if (preview) {
+    preview.innerHTML = lista.map(t => `<span class="code-chip">${t.nombre}</span>`).join('') || '<span style="color:var(--muted);font-size:12px;">Sin técnicos cargados</span>';
+  }
+}
 
 function getWeekNumber(d) {
   const start = new Date(d.getFullYear(), 0, 1);
@@ -496,6 +559,10 @@ function selectToggle(groupId, btn) {
 function getToggle(groupId) {
   const sel = document.querySelector('#' + groupId + ' .toggle-btn.sel');
   return sel ? sel.dataset.val : '';
+}
+function selectToggleByValue(groupId, val) {
+  const btn = document.querySelector(`#${groupId} [data-val="${val}"]`);
+  if (btn) selectToggle(groupId, btn);
 }
 function toggleTec(btn) { btn.classList.toggle('sel'); }
 function getSelectedTecs() {
@@ -560,6 +627,39 @@ async function spPostWebhook(record) {
   return true;
 }
 
+async function spUpdateAPI(id, record) {
+  const digest = await getDigest();
+  const listType = SP.listName.replace(/[^a-zA-Z0-9_]/g,'');
+  const body = { __metadata: { type: `SP.Data.${listType}ListItem` }, ...record };
+  const r = await fetch(`${SP.siteUrl}/_api/web/lists/getbytitle('${SP.listName}')/items(${id})`, {
+    method: 'POST', credentials: 'include',
+    headers: {
+      'Accept': 'application/json;odata=verbose',
+      'Content-Type': 'application/json;odata=verbose',
+      'X-RequestDigest': digest,
+      'X-HTTP-Method': 'MERGE',
+      'IF-MATCH': '*',
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error('SP ' + r.status + ': ' + txt.substring(0,200));
+  }
+  return true;
+}
+
+async function spPostWebhookUpdate(record) {
+  if (!SP.webhookUpdateUrl) throw new Error('NO_UPDATE_WEBHOOK');
+  const r = await fetch(SP.webhookUpdateUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(record)
+  });
+  if (!r.ok) throw new Error('Webhook actualización error ' + r.status);
+  return true;
+}
+
 async function spGet(top = 300) {
   if (!SP.siteUrl) return [];
   const url = `${SP.siteUrl}/_api/web/lists/getbytitle('${SP.listName}')/items?$top=${top}&$orderby=Created desc`;
@@ -567,6 +667,60 @@ async function spGet(top = 300) {
   if (!r.ok) throw new Error('SP GET ' + r.status);
   const j = await r.json();
   return j.d.results;
+}
+
+// ══════ EDITAR REGISTRO ══════
+function editRecord(idx) {
+  const r = (window._historyCache || [])[idx];
+  if (!r) return;
+  window.editingRecord = r;
+  fillFormFromRecord(r);
+
+  document.getElementById('edit-banner').style.display = 'flex';
+  document.getElementById('form-title').textContent = '✏️ Editar Entrada';
+  document.getElementById('form-sub').textContent = 'Corrige los datos y guarda';
+  document.getElementById('submit-btn').textContent = '💾 Guardar Cambios';
+
+  goTo('nuevo', document.querySelectorAll('.nav-btn')[0]);
+  window.scrollTo(0,0);
+}
+
+function fillFormFromRecord(r) {
+  document.getElementById('f-fecha').value = r.FECHA || '';
+  document.getElementById('f-semana').value = r.SEMANA || '';
+  document.getElementById('f-linea').value = r.LINEA_EQUIPO || '';
+  document.getElementById('f-tipo-maq').value = r.TIPO_MAQUINA || '';
+  document.getElementById('f-equipo').value = r.EQUIPO || '';
+  document.getElementById('f-pieza').value = r.PIEZA || '';
+  document.getElementById('f-falla').value = r.DESCRIPCION_FALLA || '';
+  document.getElementById('f-solucion').value = r.DESCRIPCION_SOLUCION || '';
+  document.getElementById('f-hinicio').value = r.H_INICIO || '';
+  document.getElementById('f-htecnico').value = r.H_TECNICO || '';
+  document.getElementById('f-hfinal').value = r.H_FINAL || '';
+  updateDuration();
+
+  selectToggleByValue('tipo-mto-group', r.TIPO_MANTENIMIENTO || 'Correctivo');
+  selectToggleByValue('me-group', r.ME || 'm');
+  selectToggleByValue('ot-group', r.GENERA_OT || 'no');
+  selectToggleByValue('paro-group', r.PARO_PLANTA || 'no');
+
+  const tecsSeleccionados = (r.TECNICOS || '').split(',').map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('#tec-grid .tec-chip').forEach(chip => {
+    chip.classList.toggle('sel', tecsSeleccionados.includes(chip.dataset.tec));
+  });
+}
+
+function cancelEdit() {
+  exitEditMode();
+}
+
+function exitEditMode() {
+  window.editingRecord = null;
+  document.getElementById('edit-banner').style.display = 'none';
+  document.getElementById('form-title').textContent = '📋 Nueva Entrada';
+  document.getElementById('form-sub').textContent = 'Registra el trabajo realizado';
+  document.getElementById('submit-btn').textContent = '✅ Registrar en Bitácora';
+  resetForm();
 }
 
 // ══════ SUBMIT ══════
@@ -583,7 +737,7 @@ async function submitForm() {
   const minTec = hFinal ? Math.max(0, timeToMin(hFinal) - timeToMin(hTecnico)) : 0;
 
   const record = {
-    Title: 'OT-' + Date.now(),
+    Title: window.editingRecord ? window.editingRecord.Title : ('OT-' + Date.now()),
     SEMANA: parseInt(document.getElementById('f-semana').value) || getWeekNumber(new Date()),
     FECHA: fecha,
     LINEA_EQUIPO: linea,
@@ -605,6 +759,43 @@ async function submitForm() {
   };
 
   document.getElementById('loading').classList.add('show');
+
+  // ═══ MODO EDICIÓN: actualizar un registro ya existente ═══
+  if (window.editingRecord) {
+    const editing = window.editingRecord;
+    try {
+      if (editing._local) {
+        // solo existía en este celular, aún no se había subido
+        const local = getLocal();
+        const i = local.findIndex(x => x._id === editing._id);
+        if (i > -1) {
+          local[i] = { ...record, _id: editing._id, _synced: false, _ts: new Date().toISOString() };
+          saveLocal(local);
+        }
+        showToast('💾 Cambios guardados — se subirá al sincronizar', 'warn');
+      } else if (editing.Id != null) {
+        // ya estaba en SharePoint
+        if (SP.method === 'api' && SP.siteUrl) {
+          await spUpdateAPI(editing.Id, record);
+          showToast('✅ Actualizado en SharePoint', 'success');
+        } else if (SP.method === 'webhook' && SP.webhookUpdateUrl) {
+          await spPostWebhookUpdate({ Id: editing.Id, ...record });
+          showToast('✅ Actualización enviada', 'success');
+        } else {
+          showToast('⚠️ Falta configurar cómo actualizar SharePoint (ver Configurar)', 'error');
+        }
+      }
+    } catch (e) {
+      showToast('❌ Error al actualizar: ' + e.message, 'error');
+    }
+    document.getElementById('loading').classList.remove('show');
+    exitEditMode();
+    allRecords = [];
+    goTo('historial', document.querySelectorAll('.nav-btn')[1]);
+    return;
+  }
+
+  // ═══ MODO CREAR: comportamiento normal ═══
   let synced = false;
 
   if (navigator.onLine) {
@@ -680,7 +871,9 @@ async function renderHistory() {
     return;
   }
 
-  list.innerHTML = filtered.map(r => {
+  window._historyCache = filtered;
+
+  list.innerHTML = filtered.map((r,idx) => {
     const tipo = (r.TIPO_MANTENIMIENTO || '').toLowerCase();
     const esParo = r.PARO_PLANTA === 'si';
     const tags = `<span class="tag tag-${tipo}">${r.TIPO_MANTENIMIENTO||'—'}</span>
@@ -696,7 +889,10 @@ async function renderHistory() {
       </div>
       <div class="hist-desc"><strong>Falla:</strong> ${r.DESCRIPCION_FALLA||'—'}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${r.DESCRIPCION_SOLUCION}</div>` : ''}
-      ${r.TOTAL_MIN_MAQUINA > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:5px">⏱ ${r.TOTAL_MIN_MAQUINA} min máquina</div>` : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+        ${r.TOTAL_MIN_MAQUINA > 0 ? `<div style="font-size:11px;color:var(--muted);">⏱ ${r.TOTAL_MIN_MAQUINA} min máquina</div>` : '<div></div>'}
+        <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})">✏️ Editar</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -790,6 +986,12 @@ function saveWebhookConfig() {
   localStorage.setItem('sp_config', JSON.stringify(SP));
   updateHeaderStatus();
   showToast('✅ Webhook guardado', 'success');
+}
+
+function saveWebhookUpdateConfig() {
+  SP.webhookUpdateUrl = document.getElementById('cfg-webhook-update').value.trim();
+  localStorage.setItem('sp_config', JSON.stringify(SP));
+  showToast('✅ Webhook de actualización guardado', 'success');
 }
 
 async function testSP() {
