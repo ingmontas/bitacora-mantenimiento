@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Cualquier persona que abra la app queda autenticada de forma anónima
+    // (sin usuario/contraseña, es automático). Estas reglas solo permiten
+    // leer/escribir a quien pase por esa autenticación anónima, para que la
+    // base de datos no quede completamente abierta a cualquiera en internet.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

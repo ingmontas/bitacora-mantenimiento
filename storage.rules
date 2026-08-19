@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Mismo criterio que firestore.rules: solo usuarios autenticados de
+    // forma anónima (cualquiera que abra la app) puede subir/ver fotos y
+    // manuales PDF.
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

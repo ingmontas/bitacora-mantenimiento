@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0d1117"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Panel de Mantenimiento Predictivo</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #0d1117;
+    --panel: #141a22;
+    --panel-2: #1b2330;
+    --line: #262f3d;
+    --text: #e6ebf1;
+    --muted: #8b98ab;
+    --amber: #f0a930;
+    --amber-dim: #7a5a1f;
+    --red: #ef4b4b;
+    --red-dim: #4a2323;
+    --teal: #35d0b0;
+    --teal-dim: #1f4b42;
+    --blue: #5b9bf0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  .wrap{max-width:1320px;margin:0 auto;padding:28px 24px 80px;}
+
+  /* header */
+  .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px;gap:20px;flex-wrap:wrap;}
+  .hdr-title{display:flex;align-items:center;gap:14px;}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 2.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  h1{font-size:22px;font-weight:700;margin:0;letter-spacing:.2px;}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:3px;font-family:'IBM Plex Mono',monospace;}
+  .clock{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);text-align:right;}
+  .clock b{color:var(--text);font-size:14px;display:block;}
+
+  /* KPI row */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px;}
+  .sel-banner{display:flex;align-items:center;justify-content:space-between;background:#2a2410;border:1px solid var(--amber-dim);color:var(--amber);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;}
+
+  .history-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 18px;}
+  .history-summary .hs{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;}
+  .history-summary .hs .hlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace;}
+  .history-summary .hs .hval{font-size:19px;font-weight:700;margin-top:4px;}
+
+  .reco-box{margin-top:20px;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:9px;padding:16px 18px;}
+  .reco-box h3{margin:0 0 8px;font-size:13px;color:var(--teal);display:flex;align-items:center;gap:8px;}
+  .reco-box p{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--text);}
+  .reco-box p:last-child{margin-bottom:0;}
+  .reco-box .std-tag{display:inline-block;background:#123832;color:var(--teal);border-radius:4px;padding:1px 7px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;margin-right:5px;}
+
+  .kaizen-item{border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-bottom:10px;background:var(--panel-2);}
+  .kaizen-item .kz-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+  .kaizen-item .kz-title{font-weight:600;font-size:13px;}
+  .kaizen-item .kz-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;}
+  .kaizen-item .kz-action{font-size:12px;color:var(--text);line-height:1.5;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:7px;padding:9px 11px;}
+  .trend-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono',monospace;}
+  .trend-tag.empeorando{background:var(--red-dim);color:#ff8a8a;}
+  .trend-tag.mejorando{background:var(--teal-dim);color:var(--teal);}
+  .trend-tag.estable{background:#2a3a1f;color:#b6e07a;}
+  .trend-tag.insuficiente{background:#2a2f3a;color:var(--muted);}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 16px 14px;position:relative;overflow:hidden;}
+  .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
+  .kpi .val{font-size:28px;font-weight:700;margin-top:6px;}
+  .kpi .foot{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .kpi.accent-amber{border-color:var(--amber-dim);} .kpi.accent-amber .val{color:var(--amber);}
+  .kpi.accent-red{border-color:var(--red-dim);} .kpi.accent-red .val{color:var(--red);}
+  .kpi.accent-teal .val{color:var(--teal);}
+
+  /* layout */
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-bottom:16px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;}
+  .card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
+  .card .cardsub{font-size:11.5px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;}
+  canvas{max-width:100%;}
+
+  /* predictive table */
+  .risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  .risk.critico{background:var(--red-dim);color:#ff8a8a;}
+  .risk.alto{background:#4a3419;color:var(--amber);}
+  .risk.medio{background:#2a3a1f;color:#b6e07a;}
+  .risk.bajo{background:var(--teal-dim);color:var(--teal);}
+  .risk.na{background:#2a2f3a;color:var(--muted);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;user-select:none;}
+  thead th:hover{color:var(--text);}
+  tbody td{padding:9px 10px;border-bottom:1px solid #1b212b;vertical-align:top;}
+  tbody tr:hover{background:#171e28;}
+  tbody tr[data-key]{cursor:pointer;}
+  tbody tr[data-area]{cursor:pointer;}
+  tbody tr[data-tec]{cursor:pointer;}
+  .tec-link{cursor:pointer;text-decoration:underline dotted;text-decoration-color:var(--muted);}
+  .tec-link:hover{color:var(--amber);text-decoration-color:var(--amber);}
+  tbody tr.selected-row{background:#241d0c;box-shadow:inset 3px 0 0 var(--amber);}
+  .eqname{font-weight:600;}
+  .areaname{color:var(--muted);font-size:11px;}
+  .numcell{font-family:'IBM Plex Mono',monospace;}
+
+  .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:7px;font-size:12.5px;font-family:'Space Grotesk',sans-serif;}
+  select:focus,input:focus{outline:1px solid var(--amber);}
+
+  /* feed panel */
+  .feed-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--muted);font-size:12.5px;font-family:'IBM Plex Mono',monospace;margin:26px 0 10px;}
+  .feed-toggle:hover{color:var(--text);}
+  .feed-body{display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:20px;}
+  .feed-body.open{display:block;}
+  textarea{width:100%;min-height:140px;background:#0a0e14;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;resize:vertical;}
+  .feed-actions{display:flex;gap:10px;margin-top:10px;align-items:center;}
+  button{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;cursor:pointer;font-family:'Space Grotesk',sans-serif;}
+  button.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  button:hover{filter:brightness(1.08);}
+  .feed-status{font-size:12px;color:var(--teal);font-family:'IBM Plex Mono',monospace;}
+  .hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;}
+
+  .empty{color:var(--muted);font-size:12.5px;padding:20px 0;text-align:center;}
+
+  footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:'IBM Plex Mono',monospace;}
+
+  @media(max-width:900px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .grid2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-title">
+      <div class="dot"></div>
+      <div>
+        <h1>Panel de Mantenimiento &mdash; Análisis Preventivo &amp; Predictivo</h1>
+        <div class="sub" id="rangeInfo">cargando datos…</div>
+      </div>
+    </div>
+    <div class="clock"><b id="nowClock">--</b>fecha de referencia del análisis</div>
+  </div>
+
+  <div class="sel-banner" id="selBanner" style="display:none;">
+    <span></span>
+    <button class="secondary" id="clearSelBtn" style="padding:4px 12px;font-size:11px;">Quitar filtro ✕</button>
+  </div>
+
+  <div class="kpis" id="kpiRow"></div>
+
+  <div class="card" id="historyCard" style="display:none;margin-bottom:16px;">
+    <h2 id="historyTitle">Historial completo del equipo</h2>
+    <div class="cardsub">Todas las órdenes de trabajo registradas para este equipo, en orden cronológico — incluye preventivos, correctivos y proyectos, con su tiempo de paro.</div>
+
+    <div id="historySummary" class="history-summary"></div>
+    <div id="tecEquipoBreakdown" style="display:none;"></div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr id="historyHeadRow">
+            <th>Fecha</th>
+            <th>OT</th>
+            <th>Tipo</th>
+            <th>Técnico(s)</th>
+            <th>Paro planta</th>
+            <th>Paro máq. (min)</th>
+            <th>Descripción de falla</th>
+            <th>Solución aplicada</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+
+    <div class="reco-box" id="recoBox"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Fallas correctivas por línea/área</h2>
+      <div class="cardsub">Ordenado de mayor a menor incidencia — prioriza dónde invertir mantenimiento preventivo</div>
+      <canvas id="chartArea" height="230"></canvas>
+    </div>
+    <div class="card">
+      <h2>Distribución por tipo de mantenimiento</h2>
+      <div class="cardsub">Correctivo vs. Preventivo vs. Proyecto</div>
+      <canvas id="chartTipo" height="230"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Tendencia semanal de correctivos</h2>
+    <div class="cardsub">Volumen de fallas correctivas por semana — una línea ascendente sostenida anticipa saturación del equipo de mantenimiento</div>
+    <canvas id="chartTrend" height="110"></canvas>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Medición por línea/área</h2>
+    <div class="cardsub">Vista agregada de cada línea. Haz clic en una fila para ver el detalle completo de esa línea/área: historial, técnicos y plan de mejora.</div>
+    <div style="overflow-x:auto;">
+      <table id="areaTable">
+        <thead>
+          <tr>
+            <th data-ak="area">Área / línea</th>
+            <th data-ak="equipos">Equipos distintos</th>
+            <th data-ak="ots">Total OTs</th>
+            <th data-ak="correctivos">Correctivos</th>
+            <th data-ak="pct">% Correctivo</th>
+            <th data-ak="downtime">Paro total</th>
+            <th data-ak="tecnico">Técnico principal</th>
+            <th data-ak="riesgo">Equipos en riesgo alto/crítico</th>
+          </tr>
+        </thead>
+        <tbody id="areaBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Análisis predictivo por equipo (MTBF)</h2>
+    <div class="cardsub">Calculado a partir del intervalo promedio entre fallas correctivas registradas por equipo. Incluye técnico habitual, descripción de la última falla y un plan de acción sugerido. Requiere mínimo 3 fallas para estimar tendencia.</div>
+
+    <div class="toolbar">
+      <input type="text" id="searchBox" placeholder="Buscar equipo, área o pieza…">
+      <select id="areaFilter"><option value="">Todas las áreas</option></select>
+      <select id="riskFilter">
+        <option value="">Todos los niveles de riesgo</option>
+        <option value="critico">Crítico (vencido)</option>
+        <option value="alto">Alto (≤7 días)</option>
+        <option value="medio">Medio (≤30 días)</option>
+        <option value="bajo">Bajo</option>
+      </select>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table id="predTable">
+        <thead>
+          <tr>
+            <th data-k="area">Área</th>
+            <th data-k="equipo">Equipo / Pieza</th>
+            <th data-k="tecnico">Técnico habitual</th>
+            <th data-k="fallas">Correctivos</th>
+            <th data-k="mtbf">MTBF (días)</th>
+            <th data-k="last">Última falla</th>
+            <th data-k="next">Próxima falla estimada</th>
+            <th data-k="downtime">Paro prom. (min)</th>
+            <th data-k="risk">Riesgo</th>
+            <th data-k="plan">Plan recomendado</th>
+          </tr>
+        </thead>
+        <tbody id="predBody"></tbody>
+      </table>
+      <div class="empty" id="predEmpty" style="display:none;">No hay equipos que coincidan con el filtro.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Evaluación de técnicos</h2>
+    <div class="cardsub" id="tecEvalSub">Desempeño por técnico según las OTs registradas — tiempo promedio de reparación (MTTR), tasa de casos sin resolver y cobertura de áreas.</div>
+    <canvas id="chartTecnicos" height="90" style="margin-bottom:18px;"></canvas>
+    <div style="overflow-x:auto;">
+      <table id="tecTable">
+        <thead>
+          <tr>
+            <th data-tk="tecnico">Técnico</th>
+            <th data-tk="ots">OTs atendidas</th>
+            <th data-tk="correctivos">Correctivos</th>
+            <th data-tk="mttr">MTTR prom.</th>
+            <th data-tk="downtime">Paro prom. máquina</th>
+            <th data-tk="areas">Áreas cubiertas</th>
+            <th data-tk="noresuelto">% sin resolver</th>
+            <th data-tk="desempeno">Desempeño</th>
+          </tr>
+        </thead>
+        <tbody id="tecBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Oportunidades de mejora continua</h2>
+    <div class="cardsub">Piezas/causas que se repiten en varios correctivos del mismo equipo. Ciclo sugerido: <b>Plan</b> (analizar causa raíz) → <b>Do</b> (aplicar contramedida, no solo el parche) → <b>Check</b> (verificar en el próximo ciclo) → <b>Act</b> (estandarizar si funcionó). Este enfoque PDCA/Kaizen es el que usan la mayoría de los sistemas de mejora continua en mantenimiento industrial.</div>
+    <div id="kaizenList"></div>
+  </div>
+
+  <div class="feed-toggle" id="feedToggle">▸ Cargar OTs antiguas en bloque (pegar filas, formato separado por tabulaciones)</div>
+  <div class="feed-body" id="feedBody">
+    <div class="hint">Este panel ahora se alimenta solo, en vivo, desde lo que se registra en la Bitácora (o desde aquí). Usa esto solo para cargar de una vez OTs viejas que tengas en Excel — se agregan a la base de datos compartida (Firebase) y aparecen automáticamente en Bitácora también. Formato: columnas separadas por tabulación, una OT por línea.</div>
+    <textarea id="feedArea" placeholder="OT-XXXXXXXXXX	semana	fecha	linea-equipos	tipo de maquina	Equipo	pieza	H-INICIO	H-TECNICO	H-FINAL	M-E	GENERA-OT	TIPO-MANTENIMIENTO	PARO-PLANTA	TECNICOS	TOTAL-MIN-MAQUINA	TOTAL-MIN-TECNICO	DESCRIPCION-FALLA	DESCRIPCION-SOLUCION"></textarea>
+    <div class="feed-actions">
+      <button id="appendBtn">Subir a la base de datos compartida</button>
+      <button class="secondary" id="clearFeedBtn">Limpiar cuadro</button>
+      <span class="feed-status" id="feedStatus"></span>
+    </div>
+  </div>
+
+  <footer>Panel generado a partir de las órdenes de trabajo cargadas · los cálculos de MTBF y riesgo son estimaciones estadísticas, no diagnósticos definitivos</footer>
+</div>
+
+<script>
+/* ---------- RAW SEED DATA (tab-separated, same structure as source table) ---------- */
+const RAW = `OT-1782169190273\t25\t2026-06-22\tAlmacén\tbomba de agua\t1\tbomba\t13:55\t13:59\t14:20\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t25\t21\tse quedo sin agua\ttiene escape en el acople
+OT-1782169366873\t25\t2026-06-22\tChiller\tchiller\tcoating\tencendido\t05:00\t05:00\t05:10\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t10\t10\tarranque\tninguna
+OT-1782173244012\t25\t2026-06-22\tAgua Tratada\tBomba Leo2ACm159H\t2\tAcople tanque bomna\t19:40\t19:40\t20:07\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t27\t27\tAlta presión causo que el conector se saliera al Swich quedarse activo por oxidación en los contactos\tAcoplar conector a la bomba y verificación de Swich de presión para ver su estado para su cambio
+OT-1782173393316\t25\t2026-06-22\tReciclaje\tCabezal\t1\tRodamientos base de cuchillas\t21:15\t14:55\t14:15\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t0\t0\tEje dañado. Rodamientos dañado\tLa solución no fue definitiva. Se le hizo un correctivo, limpieza y lubricacion
+OT-1782178006068\t25\t2026-06-23\tAlmacén\tCamión\t1\tProtector interior\t20:09\t20:09\t21:26\tm\tno\tCorrectivo\tno\t\t77\t77\tAlgunos protectores despegado por impacto de al entra o salir mercancías\tAlinear y acoplar protectores
+OT-1782219035877\t25\t2026-06-23\tCoating\tlaminadora\tbomba\tfiltro\t08:35\t08:37\t08:41\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t6\t4\tfiltro largo\tcorte de filtro
+OT-1782221386291\t25\t2026-06-23\tWeaving\tBatidora de aceite y agua\t1\tPanel eléctrico\t09:00\t09:00\t\te\tno\tProyecto\tno\tFELIX M. GIL #777\t0\t0\tNo apagan el motor de batidora\tConfección de caja de control
+OT-1782223413870\t25\t2026-06-23\tWeaving\tWeaving #17\t\tEspray de cadena\t09:30\t09:53\t10:00\tm\tno\tCorrectivo\tno\tLEBRON\t0\t0\tCadena floja y Reseca\tTensión limpieza y lubricacion
+OT-1782229188978\t25\t2026-06-23\tWeaving\tMezcladora de agua\t1\tBomba\t11:00\t11:00\t12:00\tm/e\tno\tProyecto\tno\tLEBRON\t60\t60\tMovimiento de sistema de agua de taladrina\tInstalación nueva
+OT-1782229805709\t25\t2026-06-23\tReciclaje\tCañón\t1\tVentilador fan\t11:25\t11:30\t11:47\tm/e\tno\tPreventivo\tsi\tFELIX M. GIL #777\t22\t17\tAlta temperatura en cañón zona 3\tPreventivo se limpió filtros y está en observación
+OT-1782236606054\t25\t2026-06-23\tWeaving\tPreparación de tanque de taladrina\t\tTornillos y tarugos\t23:00\t23:05\t13:01\tm\tno\tCorrectivo\tno\tLEBRON\t0\t0\tInstalación de tordo\tProteger tanque de taladrando
+OT-1782244377268\t25\t2026-06-23\tReciclaje\tResiclaje\tAgua tratada\tEscoba\t14:01\t14:00\t15:30\tm\tno\tCorrectivo\tno\tLEBRON\t89\t90\tLimpieza sucia\tLimpieza de área
+OT-1782244988905\t25\t2026-06-23\tTape-Line\twainer\t\tsensores\t22:15\t15:00\t15:00\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t0\t0\tde calibración\tcalibrar
+OT-1782245163406\t25\t2026-06-23\tEnsamble de Válvulas\tprobadora\t\tbody\t15:03\t15:10\t15:10\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t7\t0\tplato trancado\tbody defectuoso
+OT-1782246611579\t25\t2026-06-23\tWeaving\tWeaving\t#8\tNo\t15:25\t15:15\t15:50\tm\tno\tCorrectivo\tno\tLEBRON\t25\t35\tMaquina numero #23 sin el motor contador\tSe tomó el de la maquina numero#8
+OT-1782247269318\t25\t2026-06-23\tAgua Tratada\tÁrea desorganizado\t1\tÁrea desorganizada\t15:25\t15:30\t16:15\tm\tno\tProyecto\tno\tLEBRON\t50\t45\tInsulante desorganizado\tSe sacaron los insulante dañado
+OT-1782261264966\t25\t2026-06-24\tEnsamble de Válvulas\tSmart line\t1\tSensor de cilindro #27\t20:31\t20:31\t20:34\te\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t3\t3\tSensor fuera de posición\tReubicación del sensor
+OT-1782312512819\t26\t2026-06-24\tEnsamble de Válvulas\tensamble\t\tcilindro\t09:50\t10:35\t10:45\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t55\t10\tcilindro de sprin flojo\tajuste
+OT-1782339835755\t26\t2026-06-24\tCoating\trodillo\tmantenimiento\trodillo\t08:10\t08:10\t17:18\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t548\t548\trodillo roto,en los laterales\tcambio de rodillo
+OT-1782339953445\t26\t2026-06-24\tMontacarga\tmontacargas\tmantenimiento\tmangueras\t17:20\t17:20\t18:20\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t60\t60\tmanguera rota\tcambio de manguera
+OT-1782341852867\t26\t2026-06-24\tReciclaje\tConveyor\t1\tRodillo\t17:41\t17:48\t18:45\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t64\t57\tConveyor trancado por el rodillo lleno de hilo\tSe desarmó rodillo para limpiar el eje
+OT-1782342547381\t26\t2026-06-24\tBaños\tBaños planta 1\t2\tInodoros y drenajes\t12:15\t12:30\t\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t0\t0\tTubería tapada\tSe buscó un contratista
+OT-1782388432888\t26\t2026-06-25\tPE-Film\t\t\t\t07:00\t07:00\t08:00\tm\tno\tCorrectivo\tno\t\t60\t60\tRegero de resigna\tRecoger resigna
+OT-1782388533868\t26\t2026-06-25\tPE-Film\t\t\tRecoger area\t07:00\t07:00\t07:55\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t55\t55\tResigna derramada\tRecoger resigna
+OT-1782388742118\t26\t2026-06-25\tÁrea Común\t\t\t\t07:55\t07:55\t08:10\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t15\t15\tPaletas regadas\tPaletas recogidas
+OT-1782399914039\t26\t2026-06-25\tWeaving\tWeaving\t\tDisco de corte\t08:10\t08:10\t10:15\tm\tno\tCorrectivo\tno\tLEBRON\t125\t125\tMaquinas sin tubo de 90 cm\tCortar 14 tubo
+OT-1782400077343\t26\t2026-06-25\tWeaving\tWeaving\t18\tTrapos\t10:20\t10:20\t11:07\tm\tno\tCorrectivo\tno\tLEBRON\t47\t47\tMaquina con panel eléctrico sucio\tLimpieza
+OT-1782405312764\t26\t2026-06-25\tWeaving\tWeaving\t#21 asta la #26\tEsprey de cadenas\t11:10\t11:10\t12:15\tm\tno\tCorrectivo\tno\tLEBRON\t65\t65\tCadenas reseca y sucias\tLimpieza y Lubricacion
+OT-1782420229546\t26\t2026-06-25\tReciclaje\tCombeyor\t\tCuchillas\t14:44\t14:39\t16:10\tm\tno\tCorrectivo\tno\tLEBRON\t86\t91\tRolo trancado con ilo y Materiales\tDesmontar rolos y limpiar
+OT-1782439252123\t26\t2026-06-26\tWeaving\tPanel de control\t1\tTarugo y tornillo\t21:24\t21:24\t22:00\te\tno\tProyecto\tno\tANTONIO SANTANA #805\t36\t36\tNo tiene panel de control\tIntalación de panel
+OT-1782485846707\t26\t2026-06-25\tWeaving\tweaving\t26\t6 rodamiento 6000\t10:00\t10:15\t10:20\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t20\t5\t00000\t0000
+OT-1782519819816\t26\t2026-06-27\tPaneles Eléctricos\tPlanta 2\t1\tBreak principal\t19:00\t19:35\t19:50\te\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t50\t15\tApagón en el parque\tCargar y encender
+OT-1782519989346\t26\t2026-06-27\tEnsamble de Válvulas\tSelladora\t1\tSoporte del cilindro neumático\t20:15\t20:23\t20:45\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t30\t22\tSe desajusto el soporte\tAjuste del soporte
+OT-1782586970051\t26\t2026-06-27\tReciclaje\tTriturador\t1\tCuchillas\t09:40\t09:40\t15:02\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t322\t322\tLas cuchillas no corta el fabric\tEvaluación total y seteo
+OT-1782725380633\t27\t2026-06-29\tCoating\tLaminadora\t1\tEn encendido\t05:00\t05:00\t05:30\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t30\t30\tMáquina apagada\tEncendido de máquina
+OT-1782725515844\t27\t2026-06-29\tTape-Line\tExtruder\t1\tEncendido\t05:00\t05:29\t05:29\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t29\t0\tMáquina apagada\tEncendido
+OT-1782725602627\t27\t2026-06-29\tPE-Film\tPE Fillm\t1\tEncendido\t05:00\t05:00\t05:30\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t30\t30\tMáquina apagada\tEncendido de máquina
+OT-1782725696109\t27\t2026-06-29\tReciclaje\tResiclaje\t1\tEncendido\t05:00\t05:00\t05:29\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t29\t29\tMáquina apagada\tEncendido de máquina
+OT-1782725812288\t27\t2026-06-29\tCompresor de Aire\tCompresor\t1\tEncendido\t05:10\t05:10\t05:28\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t18\t18\tMáquina apagada\tEncendido de máquina
+OT-1782726137240\t27\t2026-06-29\tChiller\tChiller\t1\tEncendido\t05:00\t05:00\t05:30\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t30\t30\tMáquina apagada\tEncendido de máquina
+OT-1782740338478\t27\t2026-06-29\tWeaving\tWeaving\t#4\tRodamientos 6006\t08:20\t08:15\t09:38\tm\tno\tCorrectivo\tno\tLEBRON\t78\t83\tRolo guía con rodamientos dañados\tCambio de rodamientos
+OT-1782746168711\t27\t2026-06-29\tReciclaje\tResiclaje\t1\tResiclaje\t08:01\t08:15\t11:15\tm/e\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t194\t180\tFiltro tapado, máquina sucia\tMantenimiento general
+OT-1782747564853\t27\t2026-06-29\tPE-Film\tbobinado\tcilindro\ttornillo 10/32\t08:40\t08:40\t11:39\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t179\t179\tbrazo de bobinado desajustado\tajustar tornillos
+OT-1782756243444\t27\t2026-06-29\tReciclaje\tResicladora\t1\tFiltro\t13:00\t13:00\t14:04\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t64\t64\tCorte de filtros\tCorte filtro
+OT-1782761756339\t27\t2026-06-29\tCoating\tLaminadora\t1\tRodillo de goma\t14:04\t14:04\t15:30\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t86\t86\tEje pinchado para evaluar area\tVerificar área pinchado
+OT-1782762516974\t27\t2026-06-29\tWeaving\tFill cooll\tFill coll\tPenetrante\t10:10\t22:15\t12:35\tm\tno\tCorrectivo\tno\tLEBRON\t145\t0\tAgujas desensartando por desgaste\tSe ajusto la alandera
+OT-1782762801650\t27\t2026-06-29\tReciclaje\tCabezal\t\tTela metálica para filtro\t14:01\t14:00\t15:48\tm\tno\tCorrectivo\tno\tLEBRON\t107\t108\tNo abia filtro disponibles\tColtar filtros 25 filtros
+OT-1782394059347\t26\t2026-06-25\tÁrea Común\t\t\t\t08:46\t08:46\t09:27\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t41\t41\tRecoger safacones\tLlevando la basura al contenedor
+OT-1782394149835\t26\t2026-06-25\tWeaving\t\t\t\t08:50\t08:50\t09:28\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t38\t38\tRecoger safacones\tLlevar basura
+OT-1782394411085\t26\t2026-06-25\tWeaving\t\t\t\t08:50\t08:50\t09:33\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t43\t43\tSacar basura de los zafacones\tMover basura
+OT-1782394465888\t26\t2026-06-25\tComedor\t\t\t\t09:25\t09:25\t09:34\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t9\t9\tSacar basura\tMover al contenedor
+OT-1782394510177\t26\t2026-06-25\tComedor\t\t\t\t09:34\t09:34\t09:45\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t11\t11\tBasura de los safacones\tLlevar al contenedor
+OT-1782581970264\t26\t2026-06-27\tOficinas\t\t\tRolo , brocha , pintura ,\t20:00\t20:00\t13:39\tm\tno\tProyecto\tno\tLUIS CARLOS\t0\t0\tPintar oficina\tPintada y recogida
+OT-1782732628380\t27\t2026-06-29\tEstructura\t\t\tEscoba , recogedor\t07:05\t07:05\t07:30\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t25\t25\tResigna derramada en el suelo\tRecogidas y llevada a resiclage
+OT-1782737361543\t27\t2026-06-29\tÁrea Común\t\t\tRolo , brocha ,pintura\t07:38\t07:38\t08:48\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t70\t70\tPintar garita del seguridad\tPintada y limpia
+OT-1782744781382\t27\t2026-06-29\tÁrea Común\t\t\tEscoba , recogedor , funda\t08:50\t08:50\t10:51\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t121\t121\tPlanta llena de resigna\tRecoger resigna
+OT-1782745650125\t27\t2026-06-29\tWeaving\t\t\t\t10:53\t10:53\t11:06\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t13\t13\tSafacones lleno de basura\tRecoger basura
+OT-1782746103718\t27\t2026-06-29\tComedor\t\t\t\t11:07\t11:07\t11:14\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t7\t7\tRecoger safacones del comedor\tLlevar la basura
+OT-1782757615422\t27\t2026-06-29\tAlmacén\t\t\tEscoba , recogedor, funda\t11:45\t11:45\t14:25\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t160\t160\tRecoger resigna, cartones\tLlevar la basura al contenedor
+OT-1782764636543\t27\t2026-06-29\tWeaving\tWeaving\t#5\tRodamiento 6006\t16:22\t16:22\t\tm\tno\tCorrectivo\tno\tLEBRON\t0\t0\tRolo guía con rodamientos dañados\tCambio de rodamientos
+OT-1782764845139\t27\t2026-06-29\tWeaving\tWeaving\t#5\tRodamientos 6096\t15:54\t15:54\t16:27\tm\tno\tCorrectivo\tno\tLEBRON\t33\t33\tRolo guía con rodamientos dañados\tCambio de rodamientos
+OT-1782768332561\t27\t2026-06-29\tReciclaje\tResicladora\t1\tCentrífugo\t15:35\t15:35\t16:05\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t30\t30\tCentrífugo tapado por gránulos\tSe destapó la entrada de material
+OT-1782770782634\t27\t2026-06-29\tReciclaje\tResiclaje\t\tLevantamiento\t16:30\t16:32\t17:47\tm/e\tno\tProyecto\tno\tFELIX M. GIL #777\t77\t75\tLevantamiento de piezas\tSe le coloco imágenes
+OT-1782781528774\t26\t2026-06-30\tReciclaje\tFan del centrífugo\t1\tOverlo\t20:30\t20:40\t21:05\te\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t35\t25\tObstrucción por funda plástica alto consumo\tReposición del overlo
+OT-1782815781126\t27\t2026-06-30\tÁrea Común\t\t\tPintura ,rolo,brocha\t16:30\t16:30\t06:10\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t0\t0\tPared falta de pintura\tPare pintada
+OT-1782827125466\t27\t2026-06-30\tOficinas\treunion\tmantenimiento\tbitacora\t08:30\t08:30\t09:30\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t60\t60\tllenado de bitacora\tllenado de bitacora
+OT-1782818732881\t27\t2026-06-30\tComedor\t\t\t\t07:10\t07:10\t07:24\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t14\t14\tRecoger safacones\tLlevar al contenedor
+OT-1782827572139\t27\t2026-06-30\tWeaving\t\t\t\t07:26\t07:26\t08:52\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t86\t86\tRecoger safacones\tLlevar basura al contenedor
+OT-1782828359302\t27\t2026-06-29\tReciclaje\tResicladora\tAgromerador\tFiltro\t08:00\t08:00\t11:30\tm\tno\tPreventivo\tsi\tARISTOSTELE #2434\t210\t210\tMantenimiento preventivo\tLimpieza de filtro, sopladores, agromerador, con ello, sistema eléctrico
+OT-1782830305254\t27\t2026-06-29\tTaller\tCoutin\tRebobinadora\tFlechero\t11:30\t11:30\t04:30\tm\tsi\tCorrectivo\tno\tARISTOSTELE #2434\t0\t0\tRodamientos 6006 2RS trancado\tDesmontar y debastar rodamientos
+OT-1782830630589\t27\t2026-06-29\tTaller\tÁrea de trabajo\tHerramientas\tHerramientas\t04:30\t04:30\t04:57\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t27\t27\tHerramientas\tRecojer y limpiar área
+OT-1782830635995\t27\t2026-06-30\tOficinas\tOficina\t1\tEquipo de trabajo\t08:05\t08:20\t09:35\tm/e\tno\tCorrectivo\tno\tFELIX M. GIL #777\t90\t75\tMal llenado de bitácora digital\tIndicaciones de como llenar
+OT-1782830919979\t27\t2026-06-30\tReciclaje\tResiclaje\t1\tBase de cuchillas\t09:37\t09:38\t10:03\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t26\t25\tTornillo defectuoso, base doblada\tSe enderezó la base de cuchillas
+OT-1782831015360\t27\t2026-06-30\tCoating\tCoating\tLaminadora\tRebobinadora\t08:00\t08:00\t08:10\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t10\t10\tImpersión general de la línea\tMáquina en estado normal
+OT-1782831367203\t27\t2026-06-30\tCoating\tCoating\tRebobinadora\tFlechero\t08:10\t08:10\t08:30\tm\tsi\tCorrectivo\tno\tARISTOSTELE #2434\t20\t20\tContinuasion de preparar flechero\tInstalar rodamientos 6006 2RS
+OT-1782832182173\t27\t2026-06-30\tOficinas\tOficina\tOficina\tPersonal de trabajo\t08:30\t08:30\t09:30\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t60\t60\tReunión de trabajo\tReunión de trabajo
+OT-1782833812636\t26\t2026-06-30\tOficinas\tOficinas\tOficinas\t\t08:00\t08:10\t09:20\tm\tno\tCorrectivo\tno\tLEBRON\t80\t70\tReunión de mantenimiento\tReunión de mantenimiento
+OT-1782834005916\t26\t2026-06-30\tWeaving\tWeaving\t#7\tAceite 320\t09:30\t09:30\t11:25\tm\tno\tCorrectivo\tno\tLEBRON\t115\t115\tReductor con aceite en mal estado\tCambio de aceite y limpieza
+OT-1782837788164\t27\t2026-06-30\tReciclaje\tRecicladora\t1\tTina de agua\t10:35\t10:35\t12:42\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t127\t127\tTubería tapada\tÁcido muriático a la tina
+OT-1782837974800\t27\t2026-06-30\tTaller\tPurta de hemergencia\tPuerta\tElectrodo\t09:30\t09:30\t12:30\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t180\t180\tInstalar soporte para puertas\tInstalación puertas de emergencia
+OT-1782838607176\t27\t2026-06-30\tÁrea Común\t\t\tPistola de pintar , relleno , tiner etc\t09:53\t09:53\t12:52\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t179\t179\tPintar tarros\tDal relleno
+OT-1782838631493\t27\t2026-06-30\tCoating\tLaminadora\tDesbobinador\tFlechero del desbobinador\t12:30\t12:35\t12:58\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t28\t23\tExceso de rebarba por golpe\tMecanizar mediante pulidora
+OT-1782839006278\t26\t2026-06-29\tWeaving\tFirecol\t1\tAgujas y soporte de ajugas\t19:20\t19:30\t20:33\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t73\t63\tAgujas rompen y dejan de coser uniformes\tCambio de agujas y ajuste
+OT-1782839194439\t26\t2026-06-29\tCoating\tCilindro de corte\t1\tCuchilla\t04:18\t04:25\t04:42\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t24\t17\tDesgaste y rotura de cuchilla\tRemplazo de cuchilla
+OT-1782839348780\t26\t2026-06-29\tReciclaje\tTina de aguas\t1\tFiltros\t06:06\t06:13\t06:40\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t34\t27\tObstrucción de sarro y particulado\tRemover sarro
+OT-1782848527969\t27\t2026-06-30\tTaller\tPuerta de hemergencia\tPuerta\tSoporte de puertas\t12:58\t12:58\t15:15\tm\tsi\tProyecto\tno\tARISTOSTELE #2434\t137\t137\tContinuasion de instalación de puertas\tParada para correctivo en coating
+OT-1782849020142\t26\t2026-06-30\tCoating\tRebobinadora\tSistema hidráulico\tVálvula solenoide\t15:15\t15:20\t15:45\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t30\t25\tCilindro se para antes de tiempo\tSe reguló las válvulas
+OT-1782849995345\t26\t2026-06-30\tTecho\tExtrator\tWeaving\tMotor\t11:10\t11:10\t12:50\tm\tno\tCorrectivo\tno\tLEBRON\t100\t100\tDesmontaje de motor para prueba\tSe le hizo prueba electrica
+OT-1782850233648\t26\t2026-06-30\tTecho\tExtrator\tExtrator\tMotor\t14:00\t14:00\t16:05\tm\tno\tCorrectivo\tno\tLEBRON\t125\t125\tExtrator con motor quemado\tSe instaló motor nuevo
+OT-1782850483284\t27\t2026-06-30\tWeaving\tFill core\t1\tBase de agujas\t13:31\t13:31\t14:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t64\t64\tLas agujas se salen de la base\tSe calibró posición y nuevo oring
+OT-1782851345175\t27\t2026-06-30\tOficinas\tOficina\t1\tReunión\t15:20\t15:20\t15:40\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t20\t20\tTrabajos inconcluso\tRecomendaciones
+OT-1782851669012\t27\t2026-06-30\tCoating\tLaminadora\t1\tRodillo\t15:45\t15:44\t16:25\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t40\t41\tPinche en la punta frontal del cilindro\tSe localizó con aire comprimido
+OT-1782852968851\t26\t2026-06-30\tTape-Line\textractor\tcables\tcaja de control\t11:00\t11:00\t16:50\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t350\t350\tinstalación de panel eléctrico\textractor
+OT-1782854095548\t27\t2026-06-30\tTaller\tTecho de pintura\t1\tTecho de pintura\t16:35\t16:35\t17:15\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t40\t40\tPintura regada en area\tTecho para pintura
+OT-1782854158098\t26\t2026-06-30\tTaller\tPuerta de hemergencia\tPuerta\tSoporte\t15:50\t15:50\t17:15\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t85\t85\tContinuasion de instalación de puertas\tAvance 50%
+OT-1782861647482\t27\t2026-06-30\tWeaving\tFill core\t1\tAgujas\t17:14\t17:14\t18:20\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t66\t66\tAgujas se salen de base\tLa falla sigue, probar agujas más grandes
+OT-1782866849603\t26\t2026-07-01\tWeaving\tFirecol\t1\tAgujas\t19:31\t20:41\t20:00\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t29\t0\tArandela desgastada, agujas pequeñas\tAjuste del lado izquierdo
+OT-1782866951454\t26\t2026-07-01\tCoating\tCilindro de corte\t1\tCuchilla\t20:09\t20:20\t20:30\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t21\t10\tDesgaste de cuchilla\tCambio de cuchilla
+OT-1782867267922\t26\t2026-07-01\tCoating\tGrua diferencial\t1\tControlador\t20:12\t20:25\t20:54\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t42\t29\tContactos fallando\tLimpieza de contacto
+OT-1782885083325\t27\t2026-06-30\tReciclaje\tCabezal\t1\tResistencia del cabezal\t00:30\t00:35\t00:50\te\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t20\t15\tResistencia abierta no mide consumo\tVerificación para su remplazo
+OT-1782885262345\t27\t2026-06-30\tCoating\tRodillo de agua fria\t1\tCadena doble\t01:36\t01:40\t01:54\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t18\t14\tCadena saltando por floja\tAjuste de cadena
+OT-1782893306254\t27\t2026-07-01\tCoating\tBrazo hidráulico\t1\tSensor del cilindro neumático\t03:02\t03:12\t04:08\te\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t66\t56\tSensor no permite secuencia correcta del plc\tReseteo del sistema eléctrico
+OT-1782903077710\t27\t2026-07-01\tÁrea de Baterías\tSoporte de bateria\t\tPintura\t06:05\t06:10\t06:33\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t28\t23\tNo está pintado\tPintura al soporte
+OT-1782908887515\t27\t2026-07-01\tComedor\t\t\t\t07:19\t07:19\t07:30\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t11\t11\tSacar basura\tLlevar al contenedor
+OT-1782908951784\t27\t2026-07-01\tWeaving\t\t\t\t07:40\t07:40\t08:00\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t20\t20\tSacar basura\tLlevar al contenedor
+OT-1782909023096\t27\t2026-07-01\tÁrea Común\t\t\tLija\t08:00\t08:00\t08:29\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t29\t29\tLijar tarros\tLijado listo
+OT-1782909042169\t27\t2026-07-01\tCoating\tLaminadora\tRebobinadora\tFlechero y laminadora\t08:11\t08:13\t08:30\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t19\t17\tImpersión de sistema hidráulico\tVerificación de línea
+OT-1782910873739\t27\t2026-07-01\tTape-Line\tEstrudel\tCalentadores y enfriador\tImpersión\t08:30\t08:30\t09:00\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t30\t30\tImpersión de filtro, temperatura, liqueo, rodamientos\tHumedad en piso, rodamientos deteriorados
+OT-1782911136594\t27\t2026-07-01\tCoating\tLaminadora\tFiltro\tPulidora inalambrica\t09:00\t09:03\t09:10\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t10\t7\tExceso de filtro sobresalido\tCorte de filtro
+OT-1782911648528\t27\t2026-07-01\tOficinas\t\t\tEscoba ,recogedor , suape , miatolin ,cloro ,ambientador .\t08:30\t08:30\t09:12\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t42\t42\tSucia y olor a humedad\tLimpia y buen ambiente
+OT-1782915140078\t27\t2026-07-01\tÁrea Común\tMáquinas\t1\tVarias máquinas\t08:10\t08:10\t09:15\tm/e\tno\tCorrectivo\tno\tFELIX M. GIL #777\t65\t65\tEvaluación y revisión de maquinarias\tResiclaje cargador, tape line extractores
+OT-1782915411343\t27\t2026-07-01\tMontacarga\tCargador\t1\tFusible\t08:55\t08:55\t09:37\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t42\t42\tFusible incorrecto\tCambio de fusible
+OT-1782920948530\t27\t2026-07-01\tTaller\tPuerta de hemergencia\tPuerta\tMáquina de soldar\t09:10\t09:10\t11:49\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t159\t159\tContinuasion de instalación de puertas\tInstalar corredera
+OT-1782922577220\t27\t2026-07-01\tTape-Line\textruder\textractor\tcables eléctricos\t08:10\t08:10\t12:15\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t245\t245\tculminacion instalación extractores\textractores
+OT-1782926191112\t27\t2026-07-01\tReciclaje\tRecicladora\t1\tCabezal\t10:17\t10:17\t13:05\tm/e\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t168\t168\tResistencia abierta y fusible abierto\tCambio de resistencia y fusible
+OT-1782928012856\t27\t2026-07-01\tÁrea Común\t\t\t\t09:14\t09:14\t13:44\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t270\t270\tDando lija a los tarros\tTarros pintado
+OT-1782931484852\t27\t2026-07-01\tPE-Film\t\t\tEscoba,  recogedor , funda\t13:46\t13:46\t14:15\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t29\t29\tResigna derramada\tResigna a resiclage
+OT-1782935247551\t27\t2026-07-01\tMontacarga\tMontacargas\t1\tCargador\t14:10\t14:10\t15:40\te\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t90\t90\tCargador enviando 53 y 55 voltios DC\tSe revisó diodos y circuito
+OT-1782938379046\t27\t2026-07-01\tWeaving\tWeaving\t\t\t08:10\t08:10\t09:00\tm\tno\tCorrectivo\tno\tLEBRON\t50\t50\tImpecion de maquinas en marcha\tImpecion de maquinas
+OT-1782938533173\t27\t2026-07-01\tWeaving\tFill coll\tFill coll\tPenetrantes y agujas\t9:24\t9:35\t11:50\tm\tno\tCorrectivo\tno\tLEBRON\t146\t132\tMaquina desajustada y rompiendo aguja\tAjuste de maquina
+OT-1782938720180\t27\t2026-07-01\tWeaving\tFill coll\tFill coll\tPenetrante agujas\t13:00\t13:00\t16:30\tm\tno\tCorrectivo\tno\tLEBRON\t210\t210\tMaquina inavilitada\tAvilitar maquina
+OT-1782939408283\t27\t2026-07-01\tTape-Line\twainer\twainer\tencoders\t13:30\t13:30\t16:50\te\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t200\t200\tprisionero del encoders flojo\tcalibrar tension
+OT-1782941336350\t27\t2026-07-01\tTaller\tPuerta de hemergencia\tPuerta\tMáquina de soldar\t13:00\t13:00\t17:20\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t260\t260\tInstalación de corredera para puertas\tCorredera instalada
+OT-1782943761610\t27\t2026-07-01\tReciclaje\tResicladora\t1\tLevantamiento\t17:15\t17:15\t18:08\tm/e\tno\tPreventivo\tno\tFELIX M. GIL #777\t53\t53\tFalta de imágenes a números de parte\tSe le tiró foto a las piezas
+OT-1782943922051\t27\t2026-07-01\tWeaving\tWeaving\t1\tCaja de breaker\t16:37\t16:38\t17:08\te\tno\tCorrectivo\tno\tFELIX M. GIL #777\t31\t30\tCableado desorganizado\tDesmantelamiento de cableado
+OT-1782947690753\t27\t2026-07-01\tÁrea Común\t\t\tClear\t16:55\t16:45\t17:24\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t29\t39\tDal clear a 3 tarros\tTarros terminado
+OT-1782947797311\t27\t2026-07-01\tOficinas\t\t\tBroca ,pintura blanca , pintura amarilla, pintura gris ,\t17:30\t17:30\t18:20\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t50\t50\tPreparando mezcla color\tColor realizado
+OT-1782992914434\t27\t2026-07-02\tComedor\t\t\t\t07:20\t07:20\t07:32\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t12\t12\tSacar basura del comedor\tLlevar al contenedor
+OT-1782993038832\t27\t2026-07-02\tWeaving\t\t\t\t07:35\t07:35\t07:49\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t14\t14\tSacar basura de safacones\tLlevar al contenedor
+OT-1783001321150\t27\t2026-07-02\tCoating\tcoating\tfiltro\tresistencia\t08:00\t09:00\t10:05\tm/e\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t125\t65\tfiltro tapado, resistencia desconectada\tcambio de filtro, conectar resistencia
+OT-1783007586040\t27\t2026-07-02\tAgua Tratada\t\t\tEscoba , recogedor , funda , cloro , lava platos\t07:50\t07:50\t11:49\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t239\t239\tMucha basura, área desorganizada\tÁrea limpia y organizada
+OT-1783013909615\t27\t2026-07-02\tTape-Line\tRolo de agua fría y caliente\tTape línea\tPunta jiratoria\t08:15\t08:15\t11:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t165\t165\tRodamientos dañado\tCambio de rodamientos
+OT-1783014291142\t27\t2026-07-02\tTaller\tTaller\tPulidora\tMica de 1/4\t11:00\t11:00\t12:00\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t60\t60\tMecanizar piezas\tCortar 2 piezas de mica
+OT-1783014601381\t27\t2026-07-02\tReciclaje\tCabezar\tPorta cuchillas\tPorta cuchillas\t12:00\t12:00\t13:00\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t60\t60\tTornillos con cabeza corrida\tCambio de tornillos
+OT-1783017367119\t27\t2026-07-02\tÁrea Común\t\t\tEncoba,  recogedor , funda\t11:53\t11:53\t12:40\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t47\t47\tResigna derramada\tRecoger y llevar a resiclage
+OT-1783017487881\t27\t2026-07-02\tPE-Film\t\t\tEscoba recogedor funda\t12:55\t12:55\t13:35\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t40\t40\tResina y basura en el área\tRecoger resigna, basura al contenedor
+OT-1783021706524\t27\t2026-07-02\tOficinas\t\t\tRolo , brocha , pintura\t15:10\t15:15\t15:47\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t37\t32\tPrueba de pintura\tPared pintada
+OT-1783022491064\t27\t2026-07-02\tAlmacén\t\t\tA mano\t15:48\t15:48\t16:01\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t13\t13\tSubir mesa al camión\tMesa subida
+OT-1783025614835\t27\t2026-07-02\tTape-Line\twainer\tlado B\tdos brocha , alanilla\t11:30\t11:30\t16:45\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t315\t315\tajuste de tension del arranque\tlimpieza y ajuste
+OT-1783026989443\t27\t2026-07-02\tAlmacén\t\t\tEscoba , recogedor funda\t16:01\t16:01\t16:45\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t44\t44\tPasillo de almacén sucio, resigna\tBasura recogida
+OT-1783027036050\t27\t2026-07-02\tTape-Line\tRolo agua frías\tTape línea\tPunta jiratoria\t13:00\t13:00\t17:15\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t255\t255\tRodamientos dañado\tDesarme y ensamble de puerta jiratoria
+OT-1783030280871\t27\t2026-07-02\tReciclaje\tRecicladora\t1\tManguera tina tapa del cabezal retenedor\t20:50\t21:00\t16:40\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t0\t0\tObstrucción en cabezal, temperatura baja, agua metiéndose\tSe quitó obstrucción con ácido muriático, sello de olla de presión
+OT-1783030760139\t27\t2026-07-02\tReciclaje\tRecicladora\t1\tRecicladora\t16:55\t16:55\t18:19\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t84\t84\tEvaluación de funcionamiento\tPresión entre 1 y 2 megapascales, sin taponamiento
+OT-1783040519839\t27\t2026-07-03\tWeaving\tFillcol\tFillcol\tAgujas y penetrante\t08:15\t08:15\t16:39\tm\tno\tCorrectivo\tno\tLEBRON\t504\t504\tMaquina fuera de tiempo\tAjuste de maquina
+OT-1783044403170\t27\t2026-07-02\tOficinas\t\t\tRolo , brocha pintura\t17:16\t17:16\t20:10\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t174\t174\tCambiar color de oficina\tPintando la oficina
+OT-1783078560196\t27\t2026-07-03\tComedor\t\t\t\t07:19\t07:20\t07:35\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t16\t15\tSacar basura\tLlevar al contenedor
+OT-1783085629486\t27\t2026-07-03\tTape-Line\tRolo frio y caliente\tTapé línea\tPunta jiratoria rodamientos 6212-2RS\t08:00\t08:00\t09:30\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t90\t90\tEn espera de rodamientos\tInstalación de rodamientos 6212-2RS
+OT-1783090254654\t27\t2026-07-03\tÁrea Común\t1-Máquina reciclaje máquina fill cool,chiller\t1\tRevición de trabajos\t08:20\t08:20\t08:55\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t35\t35\tFill cool no teje, chiller filtro sucio\tCambio de agujas, limpieza de filtros
+OT-1783090465878\t27\t2026-07-03\tWeaving\tFill cool\t1\tAgujas y correas de tiempo\t09:15\t09:15\t10:25\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t70\t70\tNo teje, fuera de tiempo\tCambio de agujas y tiempo
+OT-1783093086555\t27\t2026-07-03\tBaños\tBaño damas planta 2\t1\tLlave lava mano\t10:20\t10:20\t10:58\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t38\t38\tLlave lavamano pinchada\tNo solucionado
+OT-1783093588512\t27\t2026-07-03\tAlmacén\t\t\tEscoba , recogedor funda\t07:36\t07:36\t09:35\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t119\t119\tBasura, resigna y mucho polvo\tBasura recogida
+OT-1783093649539\t27\t2026-07-03\tÁrea Común\t\t\t\t09:45\t09:45\t11:15\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t90\t90\tLimpieza a la guagua de Antonio\tLimpia
+OT-1783093721015\t27\t2026-07-03\tÁrea Común\t\t\t\t11:29\t11:30\t11:47\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t18\t17\tLimpiar 3 tanque en el patio\tLimpio
+OT-1783095532940\t27\t2026-07-03\tTape-Line\tTina de enfriamiento\tTape línea\tVálvula y tubería\t09:30\t09:33\t12:19\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t169\t166\tTubería sucia, dureza del agua\tLimpieza de tubería, instalación de válvula
+OT-1783106558041\t25\t2026-06-24\tTaller\tInversor\t1\tSoporte de bateria\t13:34\t14:08\t15:22\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t108\t74\tSoporte con diseño diferente\tModificar diseño
+OT-1783109888120\t27\t2026-07-03\tÁrea Común\t\t\t\t14:43\t14:43\t15:40\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t57\t57\tLimpieza del carro de Antonio\tCarro limpio
+OT-1783112787746\t27\t2026-07-03\tCoating\tfiltro\tsello\tsello\t08:20\t08:20\t11:05\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t165\t165\tfiltro obstruido, sellos dañados\tlimpieza de filtro, cambio de sello
+OT-1783112982217\t27\t2026-07-03\tReciclaje\tcabezar\tcuchillas\tmaterial\t11:20\t11:25\t11:55\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t35\t30\tcuchillas con material\tquitar
+OT-1783113154444\t27\t2026-07-03\tOficinas\t\t\t\t15:50\t15:50\t17:00\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t70\t70\tMudanza para oficina de Piter\tMudanza realizada
+OT-1783113167755\t27\t2026-07-03\tCoating\tfiltro\tselló\tfiltro y sello\t13:30\t13:30\t15:00\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t90\t90\tlimpieza de filtro y cambió de sello\tlimpieza y cambio de sello
+OT-1783113304880\t27\t2026-07-03\tReciclaje\tconveyor\tcorrea\tcorrea\t15:40\t15:45\t16:10\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t30\t25\tconveyor trancado\tquitar los hilos
+OT-1783113570412\t27\t2026-07-03\tTape-Line\tRolo de agua fría y caliente\tTape línea\tRodamientos 6212 -2RS\t12:18\t12:18\t\tm\tsi\tCorrectivo\tsi\tARISTOSTELE #2434\t0\t0\tContinuasion\tInstalación de rodamientos 6212-2RS
+OT-1783126254527\t27\t2026-07-04\tOficinas\tOficina de Peter\t1\tTapa de registro\t15:20\t15:20\t15:50\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t30\t30\tRegistro de cable sin tapa\tSe instaló la tapa
+OT-1783126507157\t27\t2026-07-03\tAlmacén\tStock rum\t1\tAire acondicionado\t16:05\t16:06\t17:40\tm/e\tno\tProyecto\tno\tFELIX M. GIL #777\t95\t94\tFalta de electricidad\tSe instaló cable 220v
+OT-1783137589818\t27\t2026-07-04\tWeaving\tFillcol\tFfillcol\tAguja\t08:06\t20:06\t15:20\tm\tno\tCorrectivo\tno\tLEBRON\t434\t0\tMaquina fuera de tiempos\tAjuste de maquina
+OT-1783181895867\t27\t2026-07-04\tTape-Line\tRolo agua frías y caliente\tTape línea\tPunta jiratoria\t08:36\t08:36\t12:17\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t221\t221\tLiqueo, sello sin puntos de fijación\tCorregir liqueo, cambiar sello de carbono
+OT-1783195722164\t27\t2026-07-04\tÁrea Común\t\t\tPintura , rolo , brocha ,tiner\t23:07\t23:07\t16:07\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t0\t0\tPintar portones\tPortones pintado
+OT-1783327951992\t27\t2026-07-06\tPaneles Eléctricos\tCouting tape line pe fill y reciclaje\t4\tPaneles eléctricos y displey\t04:18\t04:18\t04:52\te\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t34\t34\tSin fallas\tEncender maquinarias
+OT-1783337513559\t27\t2026-07-05\tÁrea Común\t\t\tPintura , rolo , brocha\t08:00\t08:00\t00:30\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t0\t0\tPintar portones en couting\tPortones pintado
+OT-1783341994545\t28\t2026-07-06\tCoating\tLaminadora\tCoating\tSensor de tramieto de corona\t08:05\t08:15\t08:45\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t40\t30\tSensor fuera de alcance\tAsercar dentro de alcance
+OT-1783343504342\t28\t2026-07-06\tTape-Line\tRolo agua fría y caliente\tTapé línea\tPuerta jiratoria y estrudel\t08:45\t08:46\t09:11\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t26\t25\tInstalación de rodamientos y sellos usados\tGotas en monitoreo
+OT-1783349682086\t28\t2026-07-06\tOficinas\taire acondicionado\tresección\tmanguera\t09:00\t09:00\t10:50\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t110\t110\tfallo de bomba de agua\tcambio de manguera
+OT-1783355137708\t28\t2026-07-06\tWeaving\tFill core\t2\tVolanta de tiempo y agujas\t08:20\t08:20\t12:25\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t245\t245\tAguja gruesa vs fina mal seteada\tCambio de agujas por gruesas
+OT-1783359477863\t28\t2026-07-06\tCoating\tPuerta de hemergencia\tPuerta de hemergencia\tMáquina de soldar y pulidora\t09:11\t09:10\t13:20\tm\tsi\tProyecto\tno\tARISTOSTELE #2434\t249\t250\tInstalación de puertas de hemergencia\tParada para reparar flechero
+OT-1783364739146\t28\t2026-07-06\tCoating\tRebobinadora\tCoating\tFlechero\t13:20\t13:20\t15:05\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t105\t105\tFlechero saliendo de la máquina\tReparación mediante soldadura
+OT-1783366431954\t27\t2026-07-06\tExtractores\tVentilador\t1\tExtractores\t14:25\t14:25\t14:50\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t25\t25\tDescenso de extractor y base de batería\tSe movió con montacargas
+OT-1783368057955\t28\t2026-07-06\tAlmacén\textractores\taspa\taspa\t11:00\t11:00\t15:50\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t290\t290\tdesmontar extractor ambos lados\textractor
+OT-1783368307179\t28\t2026-07-06\tCoating\tCoating\tCoating\tFlechero\t15:05\t15:05\t16:05\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t60\t60\tFlechero pinchado\tParado por reunión
+OT-1783371822795\t27\t2026-07-06\tOficinas\tOficina\t1\tOficina\t16:00\t16:00\t17:02\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t62\t62\tMostreo de trabajos\tSe mostró el trabajo de cada persona
+OT-1783371876268\t28\t2026-07-06\tWeaving\tFill coll\tFill coll\tAgujas\t08:50\t08:45\t12:15\tm\tno\tCorrectivo\tno\tLEBRON\t205\t210\tMáquinas dañadas\tCambio de agujas y tiempo
+OT-1783372432746\t27\t2026-07-06\tCoating\tCoating\t1\tFiltro\t17:03\t17:03\t17:13\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t10\t10\tFuga de materia prima\tSe cerró el by pass
+OT-1783374427091\t28\t2026-07-06\tCoating\tLaminadora\tCoating\tFiltro\t17:13\t17:13\t17:46\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t33\t33\tDerrame de materia prima por entrada de filtro\tSe limpió y aumento caudal
+OT-1783380725746\t28\t2026-07-06\tWeaving\tFirecol\t1 y 2\tCosedora\t19:11\t19:11\t19:20\tm/e\tno\tPreventivo\tno\tANTONIO SANTANA #805\t9\t9\tSin fallas\tFuncionamiento en buen estado
+OT-1783382761555\t28\t2026-07-06\tTaller\tFlechero\t1\tTubo de caucho\t19:34\t19:34\t20:05\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t31\t31\tFuga de aire\tReparación del tubo
+OT-1783385514712\t28\t2026-07-06\tReciclaje\tReciclaje\t1\tOperación de la maquina\t20:31\t20:31\t20:51\tm/e\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t20\t20\tParada por resistencia deficiente, filtros obstruidos\tLimpieza de filtro y cinta
+OT-1783387882339\t28\t2026-07-06\tWeaving\tFirecol\t1\tAgujas\t21:19\t21:19\t21:31\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t12\t12\tUna de las agujas te daño\tRemplazo de la agujas
+OT-1783401924861\t28\t2026-07-06\tTape-Line\tEscanel\t1\tRodillo derecho\t00:04\t00:15\t01:25\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t81\t70\tRodamiento 6005 dañado por polvo\tCambio de rodamiento
+OT-1783404347306\t28\t2026-07-06\tTape-Line\tEscanel\t1\tRodillo derecho\t00:04\t00:12\t01:32\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t88\t80\tRodamiento 6005 dañado por polvo\tCambio de rodamiento
+OT-1783421320921\t28\t2026-07-06\tTape-Line\tWainel\tB75\tCono\t04:05\t04:10\t04:30\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t25\t20\tCono estancado\tDesmonte de cono
+OT-1783426817214\t28\t2026-07-07\tCoating\tRebobinadora y laminadora\tCoating\tFlechero y cabezar\t08:12\t08:12\t08:19\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t7\t7\tInspección general\tLiqueo de materia prima en entrada
+OT-1783428226783\t28\t2026-07-07\tTape-Line\tTape línea\tTape línea\tRolo de agua fría y caliente\t08:19\t08:20\t08:43\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t24\t23\tInstalación general de componentes\tLiqueo por frio, rodamientos deteriorados
+OT-1783428231404\t28\t2026-07-07\tPE-Film\tbobinador\tcadena\tcadena\t08:15\t08:15\t08:43\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t28\t28\tcadena del embobinado floja\tajustar
+OT-1783429022671\t28\t2026-07-07\tReciclaje\tEsclusora\tResiclaje\tBase porta cuchillas\t08:43\t08:43\t08:56\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t13\t13\tTornillos corrido\tCortes y cambio de tornillos
+OT-1783429437149\t28\t2026-07-07\tCoating\tLaminadora\t1\tFiltro\t08:16\t08:15\t09:04\tm/e\tno\tCorrectivo\tno\tFELIX M. GIL #777\t48\t49\tDerrame de material\tSe limpió la tubería de agua fría
+OT-1783436410341\t28\t2026-07-07\tReciclaje\tResicladora\t1\tAglomerador\t09:30\t09:30\t10:45\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t75\t75\tCuchillas bota y corta\tCambio de cuchillas
+OT-1783437951349\t27\t2026-07-07\tEstructura\tCanaleta\tPintura\tPintira , brocha\t10:49\t10:49\t11:09\tm\tno\tPreventivo\tno\tLUIS CARLOS\t20\t20\tCanaletas sin pintar\tSe pinto un solo color
+OT-1783439012485\t28\t2026-07-07\tTecho\tEscalera pa era subir al techo\tEscoba , recogedor\tEscoba , recogedor , funda\t11:10\t11:15\t11:43\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t33\t28\tMucha basura y desagües tapado\tBasura recogida, desagüe destapado
+OT-1783439477690\t28\t2026-07-07\tÁrea Común\tTranformadores\tMadera\tLas manos\t11:43\t11:43\t11:51\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t8\t8\tRecoger pedazos de tablas rotas\tLlevada al contenedor
+OT-1783442612140\t28\t2026-07-07\tAlmacén\tPalellar\tPaleta\tPalellar\t11:51\t11:51\t12:24\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t33\t33\tOlganisal paleta\tPaletas olganisadad
+OT-1783443109961\t28\t2026-07-07\tWeaving\tFill coll y weaving\tFill coll\t\t08:15\t08:15\t09:10\tm\tno\tCorrectivo\tno\tLEBRON\t55\t55\tInspección de maquina\tInspección de maquinas
+OT-1783443289482\t28\t2026-07-07\tWeaving\tTanque de taladrina\t\tCodos de 1/2\t09:20\t09:20\t12:00\tm\tno\tCorrectivo\tno\tLEBRON\t160\t160\tÁrea sin tanque de taladrina\tInstalación de tanque
+OT-1783443486351\t27\t2026-07-07\tWeaving\tFill coll\t\tPenetrante\t12:10\t12:17\t12:45\tm\tno\tCorrectivo\tsi\tLEBRON\t35\t28\tMaquina trancada con ilo\tDestrancar maquina
+OT-1783450914127\t28\t2026-07-07\tExtractores\taspa\taspa\tege\t09:00\t09:00\t14:40\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t340\t340\tcambio de ege de extractor\textractor
+OT-1783454305213\t28\t2026-07-07\tTaller\tPuerta\tPuerta de hemergencia\tMáquina de soldar nivel y pulidora\t10:00\t10:00\t12:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t120\t120\tAlinear y nivelar puertas\tParo para revisar hidráulico en coutin
+OT-1783454544440\t28\t2026-07-07\tWeaving\tN/A\tPaletas\tPalellar\t13:56\t13:56\t14:40\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t44\t44\tPaletas regadas\tPaletas llevadas
+OT-1783454753589\t28\t2026-07-07\tEstructura\tlima olla\t#3\tlima olla\t15:39\t15:40\t16:00\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t21\t20\tverificación de lima olla\tgotea en algunas partes
+OT-1783456000290\t28\t2026-07-07\tCoating\tRebobinadora\tCoating\tSistema hidráulico\t12:00\t12:00\t12:15\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t15\t15\tError de comunicación brazo hidráulico\tAsionamiento manual, calibración
+OT-1783456580895\t28\t2026-07-07\tCoating\tPuerta de hemergencia\tPuerta de hemergencia\tMáquina de soldar nivel y pulidora\t13:00\t13:00\t16:35\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t215\t215\tContinuasion instalación soporte\tMecanizar soporte
+OT-1783458132929\t28\t2026-07-07\tTape-Line\tRolo de agua fría y caliente\tTapé línea\tRolo condusido\t16:50\t16:50\t17:00\tm\tno\tPreventivo\tsi\tARISTOSTELE #2434\t10\t10\tToma de numeración de rodamientos\tRodamientos 6208 ZZ, 4 en deterioro
+OT-1783459448954\t28\t2026-07-07\tReciclaje\tResicladora\t1\tCabezal\t15:45\t15:45\t17:08\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t83\t83\tTemperatura baja, tapa no sella\tMontura de Silicon
+OT-1783459821489\t28\t2026-07-07\tReciclaje\tResicladora\t1\tBase de motor\t15:31\t15:35\t16:08\tm\tno\tCorrectivo\tsi\t\t37\t33\tCilindro de base de motor flojo\tSe apretó el cilindro
+OT-1783469344788\t28\t2026-07-07\tWeaving\tFirecol\t2\tAgujas\t19:30\t19:30\t20:00\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t30\t30\tRotura de hilos\tEnsarte
+OT-1783475753924\t28\t2026-07-07\tTape-Line\tTape line\t1\tLimpieza general\t20:09\t20:09\t21:55\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t106\t106\tSi fallas\tLimpieza general, cambio de agua
+OT-1783476116156\t28\t2026-07-07\tWeaving\tFirecol\t1\tHilo\t21:45\t21:50\t22:01\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t16\t11\tHilo enredado\tAjuste del hilo
+OT-1783511481586\t28\t2026-07-08\tPE-Film\tPi-film\tSafacon\tFunda\t07:30\t07:35\t07:50\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t20\t15\tSacar basura de safacon\tLlevar basura al contenedor
+OT-1783516376799\t28\t2026-07-08\tWeaving\tFill coll\t2\tAguja\t08:15\t08:15\t09:10\tm\tno\tCorrectivo\tsi\tLEBRON\t55\t55\tMaquina con 4 agujas rotas\tMontar agujas y poner ilos
+OT-1783518164400\t28\t2026-07-08\tCompactadoras\tFlejadora\t1\tBateria,terminal cargador\t08:15\t08:15\t08:46\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t31\t31\tBateria sin carga\tTerminales al cargador
+OT-1783518525931\t28\t2026-07-08\tPE-Film\tEscáner\t1\tConector, limit switch\t08:54\t08:54\t09:50\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t56\t56\tConector flojo, escán no para bien\tSe aseguró cable, sopletió conectores
+OT-1783520764740\t28\t2026-07-08\tReciclaje\tcabezal\tajustador\tajustador\t09:00\t09:00\t10:20\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t80\t80\tfabricacion de ajustador de cuchillas\treciclaje
+OT-1783527492094\t28\t2026-07-08\tReciclaje\tcabezal\tcuchillas\tcuchillas\t10:30\t10:30\t12:15\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t105\t105\tcolocación de 4 cuchillas del cabezal\tcuchillas
+OT-1783529966339\t28\t2026-07-08\tTaller\tPuerta de hemergencia\tPuerta\tMáquina de soldar, angular, pulidora\t08:26\t08:26\t10:00\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t94\t94\tFijación de puerta\tMecanizar soportes
+OT-1783530411939\t28\t2026-07-08\tTaller\tMáquina de soldar\tMáquina de soldar\tDestornillador terminales\t10:00\t10:00\t11:00\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t60\t60\tConductor partido\tEmparme de alambre, terminales
+OT-1783535207704\t28\t2026-07-08\tWeaving\tWeaving #1\t#1\tPenetrante de cadenas\t09:25\t09:25\t13:00\tm\tno\tCorrectivo\tno\tLEBRON\t215\t215\tCadenas flojas y resecas\tTensión lubricacion de cadenas
+OT-1783537932968\t28\t2026-07-08\tEstructura\tlima olla\tlima\tlima olla\t13:30\t13:30\t14:30\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t60\t60\tgotera\tidentificación de gotera
+OT-1783538271727\t28\t2026-07-08\tEnsamble de Válvulas\tensamble\tensamble\tcrop\t15:00\t15:00\t15:17\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t17\t17\tbrazo del crop flojo\tajustar
+OT-1783540174930\t28\t2026-07-08\tWeaving\tWeaving\t#1 #2\tTairas\t13:05\t13:05\t15:29\tm\tno\tCorrectivo\tno\tLEBRON\t144\t144\tCables eléctricos colocados con teipi\tColocar taira correctamente
+OT-1783543898196\t28\t2026-07-08\tCoating\tPuerta de hemergencia\tPuerta de hemergencia\tMáquina de soldar pulidora electrodo\t11:00\t11:00\t16:00\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t300\t300\tMecanizar soporte de fijación\tSoporte terminado
+OT-1783544252782\t28\t2026-07-08\tReciclaje\tcabezal\tcuchillas\tcuchillas\t15:35\t15:35\t16:57\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t82\t82\tmonitoreo de reciclaje, cuchillas\tmonitoreo
+OT-1783544716104\t28\t2026-07-08\tCoating\tLaminadora y rebobinadora\tCoating\tFlechero, sistema hidráulico, filtro\t16:30\t16:30\t17:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t30\t30\tFlechero saltando, filtro con derrame\tEsperando paro para limpiar
+OT-1783550351889\t28\t2026-07-07\tReciclaje\tResicladora\t1\tCabezal\t15:54\t15:54\t17:05\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t71\t71\tTemperatura baja en cabezal\tMaterial bison más fino
+OT-1783550712589\t28\t2026-07-07\tPE-Film\tPE Fillm\tEscaner\tMotor transportador de escáner\t17:21\t17:20\t18:05\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t44\t45\tSe queda girando a la izquierda\tNo solucionado
+OT-1783567920425\t28\t2026-07-08\tWeaving\tFirecol\t1\tHilo\t21:55\t22:00\t22:31\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t36\t31\tGramaje incorrecto\tAgregar más hilos
+OT-1783568184125\t28\t2026-07-08\tReciclaje\tCabezal\t\tObstrucción en el área de filtro\t22:50\t22:57\t23:35\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t45\t38\tOrificios de filtros obstruidos por plástico carbonizado\tLimpieza de orificios
+OT-1783600370695\t28\t2026-07-09\tCoating\tRebobinadora y laminadora\tCoating\tInstalación general\t08:05\t08:05\t08:32\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t27\t27\tInspección tratamiento de corona\tFiltro con derrame ambos lados
+OT-1783601365078\t28\t2026-07-09\tReciclaje\tResiclaje\t1\tCabezal\t08:25\t08:25\t08:50\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t25\t25\tCabezal frío cuchillas rota\tSe subió temperatura del agua
+OT-1783605143861\t28\t2026-07-09\tOficinas\tOficina\t1\tEstractor\t09:30\t09:29\t09:55\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t25\t26\tEstractor de baño sin neutro\tSe colocó el neutro
+OT-1783612314469\t28\t2026-07-09\tWeaving\tFillcol\tFillcol\tAgujas\t08:00\t08:00\t08:55\tm\tno\tCorrectivo\tno\tLEBRON\t55\t55\tMaquina #2 con agujas rotas\tCambio de agujas
+OT-1783612470943\t28\t2026-07-09\tWeaving\tFill col\tFillcol\tMontacargas\t09:10\t09:10\t11:25\tm\tno\tCorrectivo\tno\tLEBRON\t135\t135\tMaquina fuera de funcionamiento\tMover para taller
+OT-1783612608384\t28\t2026-07-09\tWeaving\tFillcol\tFillcol\tNo\t11:40\t11:45\t11:56\tm\tno\tCorrectivo\tno\tLEBRON\t16\t11\tMaquina #1 gramaje alto\tBajar gramaje
+OT-1783615953982\t28\t2026-07-09\tOficinas\tGarita de seguridad\t1\tEspejo, tomas de corriente, interruptor\t10:40\t10:40\t12:52\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t132\t132\tInterruptor sin tapa, sin espejo\tSe repararon todos los elementos
+OT-1783618690554\t28\t2026-07-09\tPE-Film\tcabezal\tcorona\tcorona\t08:50\t08:50\t12:00\tm/e\tno\tPreventivo\tno\tJUAN L. JIMÉNEZ #628\t190\t190\tmantenimiento al cabezal corona\tlimpieza en general
+OT-1783624146278\t28\t2026-07-09\tCoating\tTratamiento corona\tRebobinadora\tSensor\t08:30\t08:30\t08:45\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t15\t15\tSensor fuera de rango\tAlineación de sensor
+OT-1783624217306\t28\t2026-07-09\tWeaving\tWeaving\t#4\tBotón de arranque manual\t13:00\t13:00\t15:00\tm\tno\tCorrectivo\tno\tLEBRON\t120\t120\tBotón dañado\tCambio de botón
+OT-1783624649756\t28\t2026-07-09\tCoating\tTratamiento de corona\tCoating\tPantalla de control\t08:45\t08:45\t09:00\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t15\t15\tQuemaba el Fabri\tSe bajó a 1.19
+OT-1783624146278\t28\t2026-07-09\tCoating\tTratamiento corona\tRebobinadora\tSensor\t08:30\t08:30\t08:45\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t15\t15\tSensor fuera de rango\tAlineación de sensor
+OT-1783630638383\t28\t2026-07-09\tCoating\tN/A\tSafacon\tFunda\t10:58\t10:58\t23:25\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t747\t747\tSafacon lleno\tBasura al contenedor
+OT-1783632851018\t28\t2026-07-09\tCoating\tPuerta de hemergencia\tCoating\tMáquina de soldar pulidora\t15:00\t15:00\t16:30\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t90\t90\tInstalación soporte de rodamientos\tInterrupción para cambiar cuchilla
+OT-1783633129563\t28\t2026-07-09\tCoating\tRebobinadora\tCoating\tCuchillas corte orizontal\t16:30\t16:30\t17:00\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t30\t30\tCuchillas botas\tCambio de cuchilla
+OT-1783633445628\t28\t2026-07-09\tCoating\tPuerta de hemergencia\tCoating\tMáquina de soldar pulidora electrodo\t17:00\t17:00\t17:43\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t43\t43\tContinuasion instalación puerta\tContinuar mañana
+OT-1783642830550\t28\t2026-07-09\tCoating\tCouting\tQ\tOperación\t19:51\t19:51\t20:00\tm/e\tno\tPreventivo\tno\tANTONIO SANTANA #805\t9\t9\tSin fallas\tFuncionando en buen estado
+OT-1783643034750\t28\t2026-07-09\tReciclaje\tReciclaje\t1\tOperación\t20:05\t20:05\t20:23\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t18\t18\tSin fallas\tAlta temperatura en tina
+OT-1783660532670\t28\t2026-07-09\tWeaving\tFirecol\t1 y 2\tOperación\t21:03\t21:05\t23:18\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t135\t133\tTanque casi lleno\tMonitoreo de operacion
+OT-1783695753681\t28\t2026-07-10\tTape-Line\tTina de enfriamiento\tTapé línea\tTubería de agua fría\t08:10\t08:10\t11:00\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t170\t170\tOtruccion en la tubería\tLimpiar tubería
+OT-1783704913509\t28\t2026-07-10\tExtractores\tcaradina\textractor\tcontactor y overlock\t08:20\t08:20\t13:15\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t295\t295\tinstalacion electrónica del mezclador\tmezclador
+OT-1783712399401\t28\t2026-07-10\tTecho\tVentilador\tVentilador\tTaira\t08:15\t08:15\t13:05\tm\tno\tCorrectivo\tno\tLEBRON\t290\t290\tBraikee quemado del ventilador\tInstalación de motor y braiker
+OT-1783712851039\t28\t2026-07-10\tTaller\tStock rum\t1\tPiesas\t08:10\t08:10\t08:45\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t35\t35\tPiezas desorganizadas\tSe preparó área
+OT-1783713311000\t28\t2026-07-10\tExtractores\tVentilador\t1\tVentilador\t21:10\t21:10\t23:55\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t165\t165\tCable quemado y breaker quemado\tSe cambiaron cables y contactor
+OT-1783713951848\t28\t2026-07-10\tReciclaje\tReciclaje\t1\tTina de agua\t21:45\t21:45\t22:52\tm/e\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t67\t67\tExceso de temperatura tumbaron breaker\tSe limpiaron filtros y agua fresca
+OT-1783714399815\t28\t2026-07-10\tÁrea Común\tExtruder y coating\t2\tRodillos y rodamientos\t11:05\t11:05\t13:11\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t126\t126\tAsesoría sobre áreas a auditar\tVerificamos rodillos y filtro roto
+OT-1783716831725\t28\t2026-07-10\tCoating\tEstrudel\tCoating\tFiltro\t11:00\t11:00\t16:55\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t355\t355\tFiltro con derrame ambos lados\tLimpiar tubería, cambio de filtro
+OT-1783719309610\t28\t2026-07-10\tCoating\tCabezal\t1\tFiltros y sistema de agua\t13:33\t13:33\t17:34\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t241\t241\tObstrucción en sistema de agua\tMantenimiento y remplazo de filtro
+OT-1783801573823\t28\t2026-07-11\tÁrea de Baterías\tInversor\t2\tSoporte de bateria\t21:30\t21:30\t16:25\tm/e\tno\tProyecto\tno\tANTONIO SANTANA #805\t0\t0\tSoporte pequeño para baterías\tModificar soporte
+OT-1783801662856\t28\t2026-07-11\tÁrea de Baterías\tinversor\tbace de las baterías\tbace de las baterías\t08:25\t08:25\t16:15\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t470\t470\tfabricacion de bace de las baterías\tbace
+OT-1783801835455\t28\t2026-07-11\tCoating\tCouting\t1\tPuerta de emergencia\t10:11\t10:12\t16:29\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t378\t377\tIntalación\tIntalación de puerta
+OT-1783801890686\t28\t2026-07-11\tCoating\tCouting\t\tPuerta de emergencia\t10:10\t10:11\t16:31\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t381\t380\tIntalación\tIntalación de puerta
+OT-1783935743356\t29\t2026-07-13\tCompresor de Aire\tCompresor\t1\tCompresor\t05:00\t05:00\t05:41\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t41\t41\tMaquina apagada\tEncendido de compresor
+OT-1783935861127\t29\t2026-07-13\tChiller\tChiller\t1\tChiller\t05:00\t05:00\t05:41\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t41\t41\tMáquina apagada\tEncendido de máquina
+OT-1783935927190\t29\t2026-07-13\tCoating\tLaminadora\t1\tLaminadora\t05:00\t05:00\t05:40\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t40\t40\tMáquina apagada\tEncendido de máquina
+OT-1783949725367\t28\t2026-07-13\tCoating\tCouting\t1\tCuchilla\t08:32\t08:32\t09:35\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t63\t63\tCuchilla en mal estado, soporte flojo\tCambio de cuchilla, ajuste de soporte
+OT-1783955734730\t28\t2026-07-13\tÁrea Común\tMaquinas\t1\tArranque de máquinas\t08:15\t08:15\t10:30\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t135\t135\tVerificación de arranque de cada máquina\tSe buscaron soluciones de arranque
+OT-1783955941152\t28\t2026-07-13\tPE-Film\tPE Fillm\t1\tBandejas de cabezal\t08:50\t08:15\t09:49\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t59\t94\tFalta de 10 tornillo\tSe compraron tornillos
+OT-1783956192971\t28\t2026-07-13\tReciclaje\tResiclaje\t1\tCabezal\t10:20\t10:22\t11:21\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t61\t59\tTemperatura baja\tSilicón para curar
+OT-1783971232185\t28\t2026-07-13\tTaller\tMateriales\t\tTornillería\t09:40\t09:40\t12:33\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t173\t173\tNo está organizado\tClasificación y organización
+OT-1783971434733\t28\t2026-07-13\tTape-Line\tTrituradora\t\tCuchilla\t13:33\t13:33\t14:54\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t81\t81\tNo tienen cuchilla, se reparan\tCuchillas instaladas
+OT-1783971596709\t28\t2026-07-13\tCoating\tCilindro de corte\t\tSoporte de cuchilla\t15:00\t15:00\t15:39\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t39\t39\tTornillos aflojan, rosca debilitada\tMecanizado y ajuste
+OT-1783972923136\t28\t2026-07-13\tTaller\tSorting\t1\tVarios\t10:24\t10:25\t13:15\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t171\t170\tPiezas ligadas\tSe sortearon piezas
+OT-1783974918042\t28\t2026-07-13\tCoating\tCilindro de corte\t\tCuchilla\t15:30\t15:30\t16:34\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t64\t64\tRotura de cuchilla\tCambio de cuchilla
+OT-1783977290018\t28\t2026-07-13\tReciclaje\tCabezal\t\tResistencia de filtro\t16:30\t16:30\t17:14\te\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t44\t44\tResistencia en corto\tRemplazo de resistencia
+OT-1783977771759\t28\t2026-07-13\tReciclaje\tResiclaje\t1\tResistencia\t15:45\t15:45\t16:34\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t49\t49\tResistencia en cortocircuito\tCambio de resistencia
+OT-1784001734330\t29\t2026-07-14\tCoating\trodillo\tcadena\tcadena\t20:35\t20:35\t21:00\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t25\t25\tcadena floja en rodillos de enfriamiento\tajustar
+OT-1784001870179\t29\t2026-07-14\tReciclaje\tporta cuchilla\testrella\ttornillos\t22:00\t22:00\t22:20\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t20\t20\ttornillos lanvidos\tsacar en poner nuevos
+OT-1784008396876\t29\t2026-07-14\tCoating\tfiltro\tfiltro\tfiltro liqueando\t13:30\t13:30\t01:53\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t0\t0\tfiltro liqueando\tmover filtro
+OT-1784023785227\t29\t2026-07-14\tReciclaje\tresistencia\tzona #1\tresistencia\t02:00\t02:00\t02:55\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t55\t55\tresistencia fallando en zona #1\tchequear
+OT-1784034961628\t29\t2026-07-14\tCoating\tLaminadora, rebobinadora\tCoating\tFlechero y sistema hidráulico\t08:00\t08:05\t08:30\tm\tno\tPreventivo\tno\tARISTOSTELE #2434\t30\t25\tFlechero con salto\tFiltro con liqueo ligero
+OT-1784041279219\t29\t2026-07-14\tTape-Line\tTrituradora\tTapé línea\tTester, Española 24\t08:00\t08:30\t10:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t120\t90\tRodamientos en deterioro\tTrituradora alto consumo
+OT-1784051933115\t29\t2026-07-14\tEnsamble de Válvulas\tEnsamble de Válvulas\t\tCilindros giratorio\t13:38\t13:38\t13:58\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t20\t20\tCilindro con demasiada presión\tCalibración del cilindro
+OT-1784053279458\t29\t2026-07-14\tTape-Line\tTriturador\tTape línea\tEspañola 24\t11:55\t11:55\t13:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t65\t65\tTriturador tripiado por alto consumo\tCambiar sistema de producción
+OT-1784053895724\t29\t2026-07-14\tWeaving\tTanque de la taladrina\tTanque\tTubería de media\t09:00\t09:00\t00:35\tm\tno\tCorrectivo\tno\tLEBRON\t0\t0\tBomba mezcladora no quedo en lugar correcto\tCambio de bomba
+OT-1784063197521\t29\t2026-07-14\tCoating\tPuerta\tPuerta de hemergencia\tMáquina de soldar pulidora electrodo\t13:00\t13:00\t17:00\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t240\t240\tInstalación de puertas hemergencia\tPuerta instalada
+OT-1784068039735\t29\t2026-07-14\tPE-Film\tPefillm\t1\tCabezal y resistencias\t08:20\t08:20\t13:25\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t305\t305\tGolpes en orilla, resistencia dañada\tSe corrigieron golpes, cambio de resistencia
+OT-1784068920237\t29\t2026-07-14\tReciclaje\tResicladora\t1\tResiclaje\t17:32\t17:32\t18:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t63\t63\tFiltro tapado, falta de agua\tCambio de filtros
+OT-1784119358030\t29\t2026-07-15\tCoating\tLaminadora y rebobinadora\tCoating\tFlechero sistema hidráulico\t08:05\t08:05\t08:30\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t25\t25\tRodamientos en deterioro, filtro eslongado\tEsperando parada
+OT-1784125595862\t29\t2026-07-15\tCoating\tPaliya\tPaliya\tMáquina de soldar pulidora electrodo\t09:00\t09:00\t10:25\tm\tno\tCorrectivo\tno\tARISTOSTELE #2434\t85\t85\tManubrios partido\tMecanizar mediante soldadura
+OT-1784136494634\t29\t2026-07-15\tWeaving\tFill coll\tFill coll\tTrapos\t08:20\t08:20\t11:27\tm\tno\tCorrectivo\tsi\tLEBRON\t187\t187\tMaquina fuera de tiempos\tPoner en tiempo
+OT-1784136644853\t29\t2026-07-15\tWeaving\tTanque de la taladrina\t\tCodos y unión universal\t11:30\t11:30\t13:00\tm\tno\tCorrectivo\tno\tLEBRON\t90\t90\tFijar bomba, agujeros en plataforma\tFijar bomba
+OT-1784144180265\t29\t2026-07-15\tCoating\tPuerta de hemergencia\tPuerta de hemergencia\tMáquina de soldar pulidora electrodo\t10:30\t10:30\t15:20\tm\tno\tProyecto\tno\tARISTOSTELE #2434\t290\t290\tTerminación de instalación de puertas\tInsterrusion en coating
+OT-1784144310569\t29\t2026-07-15\tCoating\tLaminadora\tCoating\tPulidora de pila\t15:20\t15:20\t15:35\tm\tno\tCorrectivo\tsi\tARISTOSTELE #2434\t15\t15\tFiltro eslongado\tCorte de filtro
+OT-1784147552304\t29\t2026-07-15\tBaños\tÁrea de compras\tÁrea de compras\tPalanca\t14:30\t14:30\t15:00\tm\tno\tCorrectivo\tno\tLEBRON\t30\t30\tBaños de dama sin palanca\tInstalacion
+OT-1784147784357\t29\t2026-07-15\tWeaving\tFill coll\tFill coll\tIlos\t15:20\t15:20\t16:00\tm\tno\tCorrectivo\tsi\tLEBRON\t40\t40\tMaquina sin ilos\tInstalación de ilos
+OT-1784152844187\t29\t2026-07-15\tReciclaje\tReciclaje\t\tCabezal\t13:00\t13:00\t18:00\tm/e\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t300\t300\tNo corta estable, obstruye circulación\tMantenimiento general
+OT-1784154321482\t29\t2026-07-15\tReciclaje\tCabezal de tritulador\t\t\t16:00\t16:01\t17:35\tm\tno\tPreventivo\tno\tLEBRON\t95\t94\tCabezal defectuoso\tMantenimiento
+OT-1784165992780\t29\t2026-07-16\tCoating\tbomba\thidráulico\tcuñero\t20:00\t20:00\t21:39\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t99\t99\tcuñero dañado de bomba hidráulico\tbomba
+OT-1784178668050\t29\t2026-07-16\tCoating\tbomba\tbomba\tcuñero\t21:10\t21:10\t00:00\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t0\t0\tcuñero de bomba hidráulico dañado\tcambio de cuñero
+OT-1784196991246\t29\t2026-07-16\tCoating\tbomba\tcuñero\tcuñero\t02:00\t02:00\t06:16\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t256\t256\tfalla de bomba del hidráulico\tmonitoreo
+OT-1784208923809\t29\t2026-07-15\tReciclaje\tResicladora\t1\tCabezal, porta cuchillas manguera de transporte\t08:15\t08:15\t19:15\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t660\t660\tTurones, estrangulamiento, tina sucia, tuberías obstruidas\tSe quitó manguera, cuchillas rotas, limpieza
+OT-1784209479089\t29\t2026-07-16\tReciclaje\tResicladora\t1\tFiltro, eje de porta cuchillas\t08:11\t08:10\t09:45\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t94\t95\tEje rígido, orificios de filtro tapados\tSe limpió eje y filtro
+OT-1784210075391\t29\t2026-07-16\tCoating\tCouting\t\tFlechero\t09:05\t09:05\t09:54\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t49\t49\tFlechero tiene fuga de aire\tReparación de fuga
+OT-1784210269240\t29\t2026-07-16\tEnsamble de Válvulas\tVálvula\t\tCilindro giratorio\t08:27\t08:27\t09:02\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t35\t35\tVálvulas no encajan y se dañan\tAjuste del cilindro
+OT-1784292000600\t29\t2026-07-16\tReciclaje\tResicladora\t1\tCabezal\t11:10\t11:11\t12:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t85\t84\tTemperatura baja\tSello de teflón y silicón
+OT-1784321586180\t29\t2026-07-17\tReciclaje\tResicladora\t1\tTrituradora\t11:05\t11:05\t15:35\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t270\t270\tTrituradora desarmada con material en huecos\tLimpieza y fabricación de pasador
+OT-1784564637600\t29\t2026-07-18\tOficinas\tN/A\tPintura\tPintura , rolo , brocha\t07:10\t07:10\t11:00\tm\tno\tPreventivo\tno\tLUIS CARLOS\t230\t230\tParedes con ongo y falta de pintura\tProblema resuelto
+OT-1784579215570\t29\t2026-07-20\tWeaving\tFill coll\tFill coll\tTrapos penetrarte\t08:24\t08:24\t11:00\tm\tno\tCorrectivo\tsi\tLEBRON\t156\t156\tMantenimiento maquina 1 y 2\tMantenimiento ajuste y limpieza
+OT-1784580777515\t30\t2026-07-20\tReciclaje\tcabezal\tplato\tSilicon\t14:30\t14:30\t16:52\tm/e\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t142\t142\tcambio de plato\tajuste
+OT-1784583758726\t29\t2026-07-19\tTaller\tAlmacén\t\tRepuesto\t12:03\t12:03\t16:10\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t247\t247\tDesorganizado\tClasificación de repuestos
+OT-1784588860405\t30\t2026-07-20\tTape-Line\tExtruder\t1\tTrituradora\t08:25\t08:25\t19:08\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t643\t643\tCuchillas deformes, mal seteadas, cuello de botella\tSe cambiaron cuchillas, aún no solucionado
+OT-1784640963221\t30\t2026-07-21\tWeaving\tWeaving\t8\tSensor de cortina y botón de emergencia\t08:20\t08:20\t09:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t75\t75\tReflector roto, botón roto, contacto defectuoso\tCambio de reflector y botón
+OT-1784645107212\t30\t2026-07-21\tReciclaje\tcabezal\tfiltro\tcuchillas\t09:30\t09:30\t10:44\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t74\t74\tajustador de cuchillas mal estado\tajustar
+OT-1784649396802\t30\t2026-07-21\tReciclaje\tResicladora\t1\tCabezal\t09:53\t09:53\t10:55\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t62\t62\tManta poco material\tCambio de filtro, variar temperatura
+OT-1784649805651\t30\t2026-07-21\tReciclaje\tResicladora\t1\tExtrusor, parametro\t11:27\t11:26\t12:02\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t35\t36\tPoco material saliendo\tSe puso en automático
+OT-1784658028419\t29\t2026-07-21\tWeaving\tWeaving #8\t#8\tBotón sector\t08:05\t08:05\t21:49\tm\tno\tCorrectivo\tsi\tLEBRON\t824\t824\tBotón colector dañado\tCambio de botón
+OT-1784658231401\t29\t2026-07-21\tWeaving\tFill coll\tFill coll\tAguja\t10:00\t10:00\t12:35\tm\tno\tCorrectivo\tsi\tLEBRON\t155\t155\tMaquina fuera de tiempo y saltando\tAjuste de maquina
+OT-1784664737464\t29\t2026-07-21\tReciclaje\tCabezal\t\tÁrea de filtro\t08:07\t08:07\t10:11\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t124\t124\tPresión sube demasiado, se apaga extrusor\tLimpieza de orificios de filtros
+OT-1784727156417\t30\t2026-07-21\tWeaving\tMaquina#13\t\tGrasa de cartucho\t13:00\t13:00\t15:15\tm\tno\tCorrectivo\tsi\tLEBRON\t135\t135\tRolo superior con sonido fuerte\tLubricacion y limpieza
+OT-1784729067213\t30\t2026-07-22\tEstructura\tLaminado\t11\tFiltro\t10:02\t10:05\t00:30\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t0\t0\tTapado\tDespapado
+OT-1784730233401\t30\t2026-07-22\tAlmacén\tFlejadora\t1\tRodillos de arrastre y sellador\t08:25\t08:25\t09:51\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t86\t86\tNo hala el fleje\tCambio de rodillo y sellador
+OT-1784744643407\t30\t2026-07-22\tEnsamble de Válvulas\tensamble\testación crou\ttornillos\t14:00\t14:00\t14:23\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t23\t23\testacion muy hacia arriba\tse bajo un poco
+OT-1784744927482\t30\t2026-07-22\tPE-Film\tEscaner\t1\tSensor marcador de grado, encoder\t11:15\t11:15\t14:29\tm\tno\tCorrectivo\tno\t\t194\t194\tSe devolvía antes de terminar ciclo\tLimpieza de sensor y anillo
+OT-1784746250006\t30\t2026-07-22\tCompactadoras\tComparadora\t\tSoporte guia de paro\t09:00\t09:00\t11:00\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t120\t120\tBarra doblada, soporte de goma dañado\tMecanizado de barra
+OT-1784748137246\t30\t2026-07-22\tWeaving\tFill coll\t\tAgujas\t08:00\t20:05\t09:15\tm\tno\tCorrectivo\tsi\tLEBRON\t75\t0\tAgujas rotas, maquina saltando\tMontaje de aguja y ajuste
+OT-1784748296667\t30\t2026-07-22\tWeaving\tWeaving #25\t\tBotón luz roja\t09:25\t09:35\t11:15\tm\tno\tCorrectivo\tsi\tLEBRON\t110\t100\tBotón dañado\tCambio de botón
+OT-1784748522641\t30\t2026-07-22\tWeaving\tFill coll\tFill coll\tHilos\t11:35\t11:35\t12:40\tm\tno\tCorrectivo\tno\tLEBRON\t65\t65\tBajo peso en gramaje\tColocar hilos
+OT-1784753188744\t30\t2026-07-22\tMontacarga\tmontacargas\tbotellas\tcinturón de seguridad\t14:40\t14:40\t16:30\tm\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t110\t110\tsellos dañados de botellas, cinturón dañado\tbotellas a reparar
+OT-1784755721778\t30\t2026-07-22\tPE-Film\tPE Fillm\t1\tEscaner\t14:20\t14:20\t17:28\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t188\t188\tSe detuvo, traspaso límites\tReinicio del panel
+OT-1784755941534\t30\t2026-07-22\tReciclaje\tResicladora\t1\tTornillos sinfín en alto consumo\t14:40\t14:40\t15:53\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t73\t73\tAlto consumo constante\tSe verificó orificios, se bajó velocidad
+OT-1784756337019\t30\t2026-07-22\tPE-Film\tSensor periférico\t\tInterruptor de paso\t13:01\t13:05\t16:31\tm/e\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t210\t206\tNo detecta, entra en alarma\tVerificación de limit switch
+OT-1784777572129\t30\t2026-07-22\tCoating\tCouting\t\tFlechero\t21:00\t21:00\t23:32\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t152\t152\tFuga de aire\tReparación de flechero
+OT-1784815629200\t30\t2026-07-23\tWeaving\tWeaving\tEscoba , suape , recogedor\tEscoba, recogedor , suape\t07:40\t07:40\t09:50\tm\tno\tCorrectivo\tno\tLUIS CARLOS\t130\t130\tLlave de lavamanos abierta, inundó área\tSe trapeó área completa
+OT-1784817347176\t30\t2026-07-23\tCoating\tCouting\t\tFlechero\t09:01\t09:01\t10:02\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t61\t61\tTubo de caucho dañado\tReparación de tubo
+OT-1784817330042\t30\t2026-07-23\tEnsamble de Válvulas\tensamble\testacion crou\tcilindro y cuelitas\t08:50\t08:50\t10:35\tm/e\tno\tPreventivo\tsi\tJUAN L. JIMÉNEZ #628\t105\t105\tcilindro dañado, muelitas desgastadas\tcambio de ambos
+OT-1784817436488\t30\t2026-07-23\tExtractores\tÁrea de couting\t\tCorrea B52\t10:10\t10:10\t10:37\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t27\t27\tCorrea dañada\tRemplazo de correa
+OT-1784820548165\t30\t2026-07-23\tCoating\tLaminadora\t1\tFlechero con tubo pinchado\t08:20\t08:20\t09:45\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t85\t85\tTubo pinchado, parcho dañado\tSe cortó el tubo
+OT-1784820842090\t30\t2026-07-23\tWeaving\tWeaving\t25\tFusible de 4 amp y luz piloto\t09:45\t09:45\t11:33\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t108\t108\tFusible quemado, corto circuito\tSe quitó fusible y cable
+OT-1784821161546\t30\t2026-07-23\tWeaving\tweaving\tcontrol\tfucible\t10:50\t10:50\t11:35\tm/e\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t45\t45\tfucible quemado y continuidad desconectada\tcambio de fucible
+OT-1784822755147\t30\t2026-07-23\tCoating\t#25\t\t\t09:35\t09:35\t11:55\tm\tno\tCorrectivo\tsi\tLEBRON\t140\t140\tMaquina con falla eléctrica\tBuscar falla
+OT-1784835383064\t30\t2026-07-23\tReciclaje\tTina\t\tFiltro\t10:37\t10:37\t11:35\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t58\t58\tObstrucción del filtro\tLimpieza del filtro
+OT-1784835519804\t30\t2026-07-23\tTaller\tCouting\t\tTubo de caucho\t14:36\t14:36\t15:38\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t62\t62\tFuga de aire\tReparación de tubo
+OT-1784839972718\t30\t2026-07-23\tPE-Film\tpe-film\tescaner\tsensor\t14:00\t14:00\t16:52\tm/e\tno\tCorrectivo\tno\tJUAN L. JIMÉNEZ #628\t172\t172\tsensor de escaner en falla de lectura\tverificación
+OT-1784842809955\t30\t2026-07-23\tCoating\tCouting\t\tFlechero\t17:04\t17:05\t17:40\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t36\t35\tFuga de aire\tReparación de fuga
+OT-1784843523008\t30\t2026-07-23\tPE-Film\tPe- film\t1\tSensor escáner\t13:15\t13:25\t17:38\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t263\t253\tThickness IA Error\tNo solucionado todavía
+OT-1784846836555\t30\t2026-07-23\tReciclaje\tAgromerador\t\tHerramientas\t17:40\t17:40\t18:47\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t67\t67\tObstrucción de material derretido\tLimpieza del agromerador
+OT-1784846931183\t30\t2026-07-23\tReciclaje\tResicladora\t1\tAglomerador\t17:20\t17:35\t18:48\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t88\t73\tMaterial enfriado trancado\tQuitar material
+OT-1784847089812\t30\t2026-07-23\tReciclaje\tagrumerador\tagrumerador\therramientas\t17:00\t17:00\t18:51\tm\tno\tCorrectivo\tsi\tJUAN L. JIMÉNEZ #628\t111\t111\tegrumerador con material seco\tsacar material
+OT-1784926247708\t30\t2026-07-24\tTaller\tSistema de aire\t\tTubería ppr\t08:01\t08:02\t11:46\tm\tno\tProyecto\tno\tANTONIO SANTANA #805\t225\t224\tReubicación de distribución de aire\tPreparando instalación
+OT-1785145204644\t31\t2026-07-27\tÁrea Común\tMaquinas\t1\tEncendido\t05:00\t05:00\t05:40\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t40\t40\tMaquinas apagadas\tSe encendieron las maquinarias
+OT-1785161852236\t31\t2026-07-27\tCoating\tTratamiento de corona\t\tSensor\t09:04\t10:04\t10:08\te\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t64\t4\tSensor fuera de rango\tAjuste de sensor
+OT-1785162387594\t31\t2026-07-27\tCoating\tLaminadora\t1\tBrazo elevador, brazo giratorio y resistencias\t08:15\t08:20\t09:07\tm/e\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t52\t47\tSensores fuera de posición, resistencia sobre tope\tAjuste de sensores, reseteo
+OT-1785166202059\t31\t2026-07-27\tPE-Film\tPE Fillm\t1\tEscaner\t09:40\t09:40\t10:20\tm/e\tno\tCorrectivo\tno\tFELIX M. GIL #777\t40\t40\tThickness IA Error\tCambio de cable sensor-módulo
+OT-1785178779533\t31\t2026-07-27\tReciclaje\tResicladora\t1\tAglomerador\t11:32\t11:32\t12:15\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t43\t43\tMaterial compactado\tRemover material
+OT-1785180406925\t31\t2026-07-27\tReciclaje\tReciclaje\t\tVacun, deshidratador, soporte de filtro\t13:23\t13:23\t15:26\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t123\t123\tObstrucción de sarro y carbón\tMantenimiento
+OT-1785184489515\t31\t2026-07-27\tWeaving\tFill col\tFill#2\tAguja\t08:31\t08:40\t10:43\tm\tno\tCorrectivo\tsi\tLEBRON\t132\t123\tAgujas rotas y trancaba\tDestrancar maquina
+OT-1785184686427\t31\t2026-07-27\tWeaving\tWeaving\t#2\tPenetrante se cadenas\t11:40\t23:40\t12:15\tm\tno\tCorrectivo\tsi\tLEBRON\t35\t0\tCadena de embobinado floja\tTensar y lubricar
+OT-1785185065226\t30\t2026-07-27\tWeaving\tFill coll\t\tCuchilla\t15:00\t15:00\t16:35\tm\tno\tCorrectivo\tno\tLEBRON\t95\t95\tHilos desensartados y enrollados\tDesenredar hilos
+OT-1785261280286\t31\t2026-07-27\tTape-Line\tHorno\t\tSistema neumático\t20:10\t20:10\t21:00\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t50\t50\tFuga de aire en distribución\tCambio de manguera
+OT-1785271367334\t31\t2026-07-27\tReciclaje\tCabezal\t\tCuchillas\t20:55\t20:55\t21:40\tm\tno\tCorrectivo\tsi\tANTONIO SANTANA #805\t45\t45\tSe rompieron cuchillas\tEntrega de cuchillas y ajuste
+OT-1785353994061\t31\t2026-07-29\tCoating\tCabezal\t\tFiltro\t10:38\t10:38\t12:39\tm\tno\tPreventivo\tno\tANTONIO SANTANA #805\t121\t121\tFiltro requiere reemplazo\tRemplazo de filtro
+OT-1785795477976\t32\t2026-08-03\tIluminación\tCables eléctricos\t1\tCable y tubería\t20:20\t20:20\t21:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t75\t75\tCables desorganizados, tuberías sueltas\tExtracción y reorganización
+OT-1785795763765\t32\t2026-08-03\tPE-Film\tPefillm\t1\tEscaner\t09:39\t09:43\t18:22\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t523\t519\tCarro traspasa limit switch\tNo solucionado, posible módulo o software
+OT-1785885841470\t32\t2026-08-04\tPE-Film\tPE Fillm\t1\tPaneles\t08:20\t08:20\t10:25\tm\tno\tPreventivo\tno\tFELIX M. GIL #777\t125\t125\tPaneles sucio con polvo\tSe limpiaron paneles
+OT-1785886470511\t32\t2026-08-04\tReciclaje\tRecicladora\t1\tFusibles y resistencia\t16:30\t16:30\t19:35\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t185\t185\tBase del filtro no se mueve, resistencia en corto\tCambio de resistencia y fusibles
+OT-1785901583921\t32\t2026-08-04\tReciclaje\tResicladora\t1\tFiltro\t20:10\t20:10\t23:45\tm\tno\tCorrectivo\tsi\tFELIX M. GIL #777\t215\t215\tFiltro trancado\tNo terminado, continua mañana
+OT-1785951296903\t32\t2026-08-05\tAlmacén\tAlmacén\t1\tLámpara y cables\t10:48\t10:48\t12:15\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t87\t87\tLámparas quemadas\tCambio de lámparas
+OT-1786046143257\t32\t2026-08-03\tReciclaje\tCabezal\t\tTapa y soporte de motor cortado\t08:15\t08:15\t12:35\tm\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t260\t260\tProblema de estabilidad, roturas de cuchilla\tModifica casquillos, instala tapa
+OT-1786047167636\t32\t2026-08-06\tTape-Line\tTina de agua\t1\tTubería de acero inoxidable\t13:50\t13:50\t16:05\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t135\t135\tTaponamiento de materia prima\tLimpieza con ácido muriático
+OT-1786047547976\t32\t2026-08-05\tReciclaje\tCabezal\t\tVálvula hidráulica\t08:16\t08:16\t14:18\tm/e\tno\tCorrectivo\tno\tANTONIO SANTANA #805\t362\t362\tVálvula no activa por obstrucción\tMantenimiento a la válvula
+OT-1786049895486\t32\t2026-08-06\tPaneles Eléctricos\tPonchador\t1\tToma de corriente\t15:40\t15:40\t16:45\tm\tno\tCorrectivo\tno\tFELIX M. GIL #777\t65\t65\tToma en mala posición\tSe reubicó toma, evitó corto
+OT-1786033752448\t32\t2026-08-03\tReciclaje\tCabezal\t\tPenetrante grasa trapos\t08:10\t08:19\t17:15\tm\tno\tCorrectivo\tsi\tLEBRON\t545\t536\tCabezal con casquillos dañados\tInstalación de cabezal
+OT-1786033912013\t32\t2026-08-04\tReciclaje\tCabezal\t\tEdpstulas\t08:00\t08:20\t10:20\tm\tno\tCorrectivo\tsi\tLEBRON\t140\t120\tCabezal sin cuchillas\tFabricación de cuchillas
+OT-1786034067307\t32\t2026-08-04\tWeaving\tWeaving\t#3\tBoton sector de emergencia\t10:31\t10:30\t11:36\tm\tno\tCorrectivo\tsi\tLEBRON\t65\t66\tBotón de emergencia dañado\tInstalación de botón
+OT-1786046274124\t32\t2026-08-06\tReciclaje\tCabezal\t\tEspatula\t09:35\t09:35\t11:00\tm\tno\tCorrectivo\tsi\tLEBRON\t85\t85\tCabezal y extrusor tapado\tDesconjestionar equipo
+OT-1786110875353\t32\t2026-08-07\tReciclaje\tCengrifuga\t\tBarilla de sordar\t08:00\t08:00\t10:00\tm\tno\tCorrectivo\tsi\tLEBRON\t120\t120\tMaquina con acoples rotos\tReparacion de Acoples`;
+
+/* ---------- state ---------- */
+let allRows = [];
+
+function parseRaw(raw){
+  const lines = raw.split('\n');
+  const out = [];
+  for(let line of lines){
+    line = line.replace(/\r$/,'');
+    if(!line.trim()) continue;
+    const c = line.split('\t');
+    const titulo = (c[0]||'').trim();
+    if(!titulo || titulo.toLowerCase()==='título' || titulo.startsWith('TEST-CONEXION')) continue;
+    const totalMinMaquina = parseFloat(c[15]);
+    const totalMinTecnico = parseFloat(c[16]);
+    out.push({
+      ot: titulo,
+      semana: (c[1]||'').trim(),
+      fecha: (c[2]||'').trim(),
+      area: (c[3]||'').trim() || 'Sin área',
+      tipoMaquina: (c[4]||'').trim(),
+      equipo: (c[5]||'').trim(),
+      pieza: (c[6]||'').trim(),
+      me: (c[10]||'').trim(),
+      tipoMant: (c[12]||'').trim() || 'Sin clasificar',
+      paroPlanta: (c[13]||'').trim(),
+      tecnicos: (c[14]||'').trim(),
+      minMaquina: isNaN(totalMinMaquina)?0:totalMinMaquina,
+      minTecnico: isNaN(totalMinTecnico)?0:totalMinTecnico,
+      falla: (c[17]||'').trim(),
+      solucion: (c[18]||'').trim(),
+    });
+  }
+  return out;
+}
+
+function dayKey(equipoRow){
+  return equipoRow.area + ' | ' + (equipoRow.equipo || equipoRow.tipoMaquina || 'Equipo sin nombre');
+}
+
+function daysBetween(d1,d2){
+  return Math.round((d2-d1)/86400000);
+}
+
+function parseFecha(s){
+  const d = new Date(s+'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* reference "today" = latest date found in dataset (simulates "now" for the plant) */
+function getRefDate(rows){
+  let max = null;
+  rows.forEach(r=>{
+    const d = parseFecha(r.fecha);
+    if(d && (!max || d>max)) max = d;
+  });
+  return max || new Date();
+}
+
+let charts = {};
+if(typeof ChartDataLabels !== 'undefined'){
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display:false });
+}
+
+function render(){
+  const rows = allRows.filter(r=>r.fecha);
+  const refDate = getRefDate(rows);
+  document.getElementById('nowClock').textContent = refDate.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric'});
+
+  const fechas = rows.map(r=>parseFecha(r.fecha)).filter(Boolean);
+  const minF = fechas.length? new Date(Math.min(...fechas)) : null;
+  const maxF = fechas.length? new Date(Math.max(...fechas)) : null;
+  document.getElementById('rangeInfo').textContent = rows.length + ' órdenes de trabajo cargadas' + (minF&&maxF? ' · del ' + minF.toLocaleDateString('es-DO') + ' al ' + maxF.toLocaleDateString('es-DO') : '');
+
+  /* ---- selection scope (filters KPIs + charts to one equipo, área OR técnico if selected) ---- */
+  const selKey = window._selectedKey;       // area+equipo
+  const selArea = window._selectedArea;     // solo area
+  const selTecnico = window._selectedTecnico; // solo técnico
+  let scopeRows, scopeLabel, scopeMode;
+  if(selKey){
+    scopeRows = rows.filter(r=>dayKey(r)===selKey);
+    scopeLabel = selKey.replace(' | ',' — ');
+    scopeMode = 'equipo';
+  } else if(selArea){
+    scopeRows = rows.filter(r=>r.area===selArea);
+    scopeLabel = 'Línea/área: ' + selArea;
+    scopeMode = 'area';
+  } else if(selTecnico){
+    scopeRows = rows.filter(r=>splitTecnicos(r.tecnicos).includes(selTecnico));
+    scopeLabel = 'Técnico: ' + selTecnico;
+    scopeMode = 'tecnico';
+  } else {
+    scopeRows = rows;
+    scopeLabel = null;
+    scopeMode = null;
+  }
+
+  const selBanner = document.getElementById('selBanner');
+  if(scopeLabel){
+    selBanner.style.display = 'flex';
+    selBanner.querySelector('span').textContent = 'Mostrando gráficas de: ' + scopeLabel;
+  } else {
+    selBanner.style.display = 'none';
+  }
+
+  /* ---- KPIs ---- */
+  const correctivos = scopeRows.filter(r=>r.tipoMant.toLowerCase()==='correctivo');
+  const preventivos = scopeRows.filter(r=>r.tipoMant.toLowerCase()==='preventivo');
+  const totalDowntime = scopeRows.reduce((s,r)=>s+r.minMaquina,0);
+  const pctCorrectivo = scopeRows.length? Math.round(correctivos.length/scopeRows.length*100) : 0;
+
+  const areaCounts = {};
+  correctivos.forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
+  const topArea = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  const kpiRow = document.getElementById('kpiRow');
+  kpiRow.innerHTML = `
+    <div class="kpi"><div class="lbl">Total OTs</div><div class="val">${scopeRows.length}</div><div class="foot">registros válidos analizados</div></div>
+    <div class="kpi accent-red"><div class="lbl">% Correctivo</div><div class="val">${pctCorrectivo}%</div><div class="foot">${correctivos.length} de ${scopeRows.length} — a mayor %, menos control preventivo</div></div>
+    <div class="kpi accent-teal"><div class="lbl">% Preventivo</div><div class="val">${scopeRows.length? Math.round(preventivos.length/scopeRows.length*100):0}%</div><div class="foot">${preventivos.length} órdenes planificadas</div></div>
+    <div class="kpi accent-amber"><div class="lbl">Paro de máquina acumulado</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min totales registrados</div></div>
+    <div class="kpi"><div class="lbl">${selKey? 'Área del equipo' : 'Área más crítica'}</div><div class="val" style="font-size:19px;">${topArea? topArea[0]:'—'}</div><div class="foot">${topArea? topArea[1]+' correctivos registrados':''}</div></div>
+  `;
+
+  /* ---- chart: fallas por área ---- */
+  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  if(charts.area) charts.area.destroy();
+  charts.area = new Chart(document.getElementById('chartArea'),{
+    type:'bar',
+    data:{ labels: areaSorted.map(a=>a[0]), datasets:[{ data: areaSorted.map(a=>a[1]), backgroundColor:'#f0a930', borderRadius:4 }]},
+    options:{ indexAxis:'y', plugins:{
+      legend:{display:false},
+      datalabels:{ display:true, anchor:'end', align:'end', color:'#e6ebf1', font:{family:'IBM Plex Mono',size:11,weight:'600'}, formatter:(v)=>v }
+    }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'}}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}} } }
+  });
+
+  /* ---- chart: tipo mantenimiento ---- */
+  const tipoCounts = {};
+  scopeRows.forEach(r=>{ const k = r.tipoMant || 'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
+  if(charts.tipo) charts.tipo.destroy();
+  charts.tipo = new Chart(document.getElementById('chartTipo'),{
+    type:'doughnut',
+    data:{ labels:Object.keys(tipoCounts), datasets:[{ data:Object.values(tipoCounts), backgroundColor:['#ef4b4b','#35d0b0','#5b9bf0','#8b98ab'], borderColor:'#141a22', borderWidth:2 }]},
+    options:{ plugins:{
+      legend:{position:'bottom', labels:{color:'#e6ebf1', font:{family:'Space Grotesk', size:11}}},
+      datalabels:{ display:true, color:'#0d1117', font:{family:'IBM Plex Mono',size:11,weight:'700'},
+        formatter:(value, ctx)=>{
+          const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+          const pct = total? Math.round(value/total*100) : 0;
+          return value + ' (' + pct + '%)';
+        }
+      }
+    } }
+  });
+
+  /* ---- chart: tendencia semanal ---- */
+  const weekCounts = {};
+  correctivos.forEach(r=>{ if(r.semana){ weekCounts[r.semana]=(weekCounts[r.semana]||0)+1; } });
+  const weeksSorted = Object.keys(weekCounts).sort((a,b)=>parseInt(a)-parseInt(b));
+  if(charts.trend) charts.trend.destroy();
+  charts.trend = new Chart(document.getElementById('chartTrend'),{
+    type:'line',
+    data:{ labels: weeksSorted.map(w=>'Sem '+w), datasets:[{ data: weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930' }]},
+    options:{ plugins:{
+      legend:{display:false},
+      datalabels:{ display:true, align:'top', offset:6, color:'#f0a930', font:{family:'IBM Plex Mono',size:10,weight:'600'}, formatter:(v)=>v }
+    }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true} } }
+  });
+
+  /* ---- predictive analysis by equipo ---- */
+  const groups = {};
+  correctivos.forEach(r=>{
+    const d = parseFecha(r.fecha);
+    if(!d) return;
+    const key = dayKey(r);
+    if(!groups[key]) groups[key] = { area:r.area, equipo: r.equipo||r.tipoMaquina||'Equipo sin nombre', dates:[], downtime:[], entries:[] };
+    groups[key].dates.push(d);
+    groups[key].downtime.push(r.minMaquina);
+    groups[key].entries.push({ date:d, falla:r.falla, solucion:r.solucion, pieza:r.pieza, tecnicos:r.tecnicos });
+  });
+
+  function topByFrequency(list){
+    const counts = {};
+    list.forEach(v=>{ if(!v) return; counts[v]=(counts[v]||0)+1; });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    return sorted.length? {value:sorted[0][0], count:sorted[0][1]} : null;
+  }
+
+  function buildPlan(risk, topPieza, mtbf){
+    let base;
+    if(risk==='critico') base = 'Intervención inmediata: según el historial, esta falla ya debió repetirse. Programar inspección esta semana y no esperar al próximo aviso.';
+    else if(risk==='alto') base = 'Programar mantenimiento preventivo en los próximos 7 días, antes de la fecha estimada de falla.';
+    else if(risk==='medio') base = 'Incluir en el plan de mantenimiento preventivo del próximo mes.';
+    else if(risk==='bajo') base = 'Mantener en monitoreo rutinario; el intervalo entre fallas es amplio (' + (mtbf? mtbf.toFixed(0):'?') + ' días).';
+    else base = 'Registrar más eventos correctivos de este equipo para poder generar una recomendación confiable (se necesitan mínimo 3).';
+    if(topPieza && topPieza.count>=2){
+      base += ' Enfocar la revisión en: ' + topPieza.value + ' (repite en ' + topPieza.count + ' de las fallas).';
+    }
+    return base;
+  }
+
+  const predictive = Object.values(groups).map(g=>{
+    g.dates.sort((a,b)=>a-b);
+    g.entries.sort((a,b)=>a.date-b.date);
+    const n = g.dates.length;
+    let mtbf = null, nextDate = null, daysUntil = null, risk = 'na';
+    if(n>=3){
+      const intervals = [];
+      for(let i=1;i<n;i++) intervals.push(daysBetween(g.dates[i-1],g.dates[i]));
+      mtbf = intervals.reduce((s,x)=>s+x,0)/intervals.length;
+      const last = g.dates[n-1];
+      nextDate = new Date(last.getTime() + mtbf*86400000);
+      daysUntil = daysBetween(refDate, nextDate);
+      if(daysUntil<0) risk='critico';
+      else if(daysUntil<=7) risk='alto';
+      else if(daysUntil<=30) risk='medio';
+      else risk='bajo';
+    }
+    const avgDowntime = g.downtime.length? (g.downtime.reduce((s,x)=>s+x,0)/g.downtime.length) : 0;
+    const lastEntry = g.entries[g.entries.length-1];
+    const tecnicoTop = topByFrequency(g.entries.map(e=>e.tecnicos));
+    const piezaTop = topByFrequency(g.entries.map(e=>e.pieza));
+    return {
+      area:g.area, equipo:g.equipo, fallas:n, mtbf, nextDate, daysUntil, risk,
+      last:g.dates[n-1], avgDowntime,
+      lastFalla: lastEntry? lastEntry.falla : '',
+      tecnico: tecnicoTop? tecnicoTop.value : '—',
+      plan: buildPlan(risk, piezaTop, mtbf)
+    };
+  }).sort((a,b)=>{
+    const order = {critico:0,alto:1,medio:2,bajo:3,na:4};
+    if(order[a.risk]!==order[b.risk]) return order[a.risk]-order[b.risk];
+    return b.fallas - a.fallas;
+  });
+
+  window._predictive = predictive;
+
+  /* populate area filter */
+  const areaFilter = document.getElementById('areaFilter');
+  const currentSel = areaFilter.value;
+  const uniqueAreas = [...new Set(predictive.map(p=>p.area))].sort();
+  areaFilter.innerHTML = '<option value="">Todas las áreas</option>' + uniqueAreas.map(a=>`<option value="${a}">${a}</option>`).join('');
+  areaFilter.value = currentSel;
+
+  renderTable();
+  computeAreaStats(rows, predictive);
+  renderHistoryAndReco(scopeMode, scopeLabel, scopeRows, predictive, selArea, selKey, selTecnico, rows);
+  renderTecnicos(scopeRows, scopeLabel);
+  renderKaizen(scopeRows, scopeLabel);
+}
+
+/* ---------- resumen por línea/área ---------- */
+function computeAreaStats(rows, predictive){
+  const groups = {};
+  rows.forEach(r=>{
+    if(!groups[r.area]) groups[r.area] = { ots:0, correctivos:0, equipos:new Set(), downtime:0, tecCounts:{} };
+    const g = groups[r.area];
+    g.ots++;
+    g.downtime += r.minMaquina;
+    g.equipos.add(r.equipo || r.tipoMaquina || 'Equipo sin nombre');
+    if(r.tipoMant.toLowerCase()==='correctivo') g.correctivos++;
+    splitTecnicos(r.tecnicos).forEach(t=>{ g.tecCounts[t]=(g.tecCounts[t]||0)+1; });
+  });
+
+  const riesgoByArea = {};
+  predictive.forEach(p=>{
+    if(p.risk==='critico'||p.risk==='alto') riesgoByArea[p.area] = (riesgoByArea[p.area]||0)+1;
+  });
+
+  window._areaStats = Object.entries(groups).map(([area,g])=>{
+    const tecTop = Object.entries(g.tecCounts).sort((a,b)=>b[1]-a[1])[0];
+    return {
+      area, equipos:g.equipos.size, ots:g.ots, correctivos:g.correctivos,
+      pct: g.ots? Math.round(g.correctivos/g.ots*100):0,
+      downtime:g.downtime, tecnico: tecTop? tecTop[0] : '—',
+      riesgo: riesgoByArea[area]||0
+    };
+  });
+  renderAreaRows();
+}
+
+function renderAreaRows(){
+  const sortKey = window._areaSortKey || 'ots';
+  let list = [...(window._areaStats||[])];
+  list.sort((a,b)=>{
+    if(sortKey==='ots') return b.ots-a.ots;
+    if(sortKey==='correctivos') return b.correctivos-a.correctivos;
+    if(sortKey==='pct') return b.pct-a.pct;
+    if(sortKey==='downtime') return b.downtime-a.downtime;
+    if(sortKey==='equipos') return b.equipos-a.equipos;
+    if(sortKey==='riesgo') return b.riesgo-a.riesgo;
+    if(sortKey==='area') return a.area.localeCompare(b.area);
+    if(sortKey==='tecnico') return a.tecnico.localeCompare(b.tecnico);
+    return 0;
+  });
+
+  const selArea = window._selectedArea;
+  document.getElementById('areaBody').innerHTML = list.map(a=>`
+    <tr data-area="${a.area.replace(/"/g,'&quot;')}" class="${selArea===a.area?'selected-row':''}">
+      <td class="eqname">${a.area}</td>
+      <td class="numcell">${a.equipos}</td>
+      <td class="numcell">${a.ots}</td>
+      <td class="numcell">${a.correctivos}</td>
+      <td class="numcell">${a.pct}%</td>
+      <td class="numcell">${fmtHM(a.downtime)}</td>
+      <td>${a.tecnico}</td>
+      <td class="numcell">${a.riesgo>0? `<span class="risk critico">${a.riesgo}</span>` : '0'}</td>
+    </tr>
+  `).join('') || `<tr><td colspan="8" class="empty">Sin datos.</td></tr>`;
+}
+
+/* ---------- evaluación de técnicos ---------- */
+function splitTecnicos(str){
+  if(!str) return [];
+  return str.split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+function getTecnicoStats(rows){
+  const map = {};
+  rows.forEach(r=>{
+    const tecs = splitTecnicos(r.tecnicos);
+    if(!tecs.length) return;
+    tecs.forEach(t=>{
+      if(!map[t]) map[t] = { ots:0, correctivos:0, mttrSum:0, mttrN:0, downtimeSum:0, areas:new Set(), noResuelto:0 };
+      const m = map[t];
+      m.ots++;
+      m.areas.add(r.area);
+      m.downtimeSum += r.minMaquina;
+      if(r.tipoMant.toLowerCase()==='correctivo'){
+        m.correctivos++;
+        if(r.minTecnico>0){ m.mttrSum += r.minTecnico; m.mttrN++; }
+        const sol = (r.solucion||'').toLowerCase();
+        if(sol.includes('no solucionado') || sol.includes('no solucionada') || sol.includes('no resuelto') || sol.includes('sin solucionar') || sol.includes('no terminado') || sol.includes('aún no') || sol.includes('pendiente')){
+          m.noResuelto++;
+        }
+      }
+    });
+  });
+
+  const list = Object.entries(map).map(([tecnico,m])=>({
+    tecnico,
+    ots:m.ots,
+    correctivos:m.correctivos,
+    mttr: m.mttrN? m.mttrSum/m.mttrN : null,
+    avgDowntime: m.ots? m.downtimeSum/m.ots : 0,
+    areas: m.areas.size,
+    noResueltoPct: m.correctivos? Math.round(m.noResuelto/m.correctivos*100) : 0
+  })).filter(x=>x.ots>0);
+
+  const validMttrs = list.filter(x=>x.mttr!=null).map(x=>x.mttr);
+  const plantAvgMttr = validMttrs.length? validMttrs.reduce((s,x)=>s+x,0)/validMttrs.length : null;
+
+  list.forEach(x=>{
+    if(x.noResueltoPct>20 || (plantAvgMttr && x.mttr!=null && x.mttr>plantAvgMttr*1.5)) x.desempeno='atencion';
+    else if(x.noResueltoPct<=5 && plantAvgMttr && x.mttr!=null && x.mttr<=plantAvgMttr*0.85) x.desempeno='alto';
+    else x.desempeno='normal';
+  });
+
+  return { list, plantAvgMttr };
+}
+
+function renderTecnicos(rows, scopeLabel){
+  document.getElementById('tecEvalSub').textContent = scopeLabel
+    ? 'Desempeño por técnico, filtrado a: ' + scopeLabel
+    : 'Desempeño por técnico según las OTs registradas — tiempo promedio de reparación (MTTR), tasa de casos sin resolver y cobertura de áreas. Haz clic en un técnico para ver su historial completo.';
+
+  const { list } = getTecnicoStats(rows);
+  list.sort((a,b)=>b.ots-a.ots);
+  window._tecnicos = list;
+
+  /* chart: top 10 por OTs atendidas */
+  const top = list.slice(0,10);
+  if(charts.tecnicos) charts.tecnicos.destroy();
+  charts.tecnicos = new Chart(document.getElementById('chartTecnicos'),{
+    type:'bar',
+    data:{ labels: top.map(t=>t.tecnico), datasets:[{ label:'OTs atendidas', data: top.map(t=>t.ots), backgroundColor:'#5b9bf0', borderRadius:4 }]},
+    options:{ plugins:{
+      legend:{display:false},
+      datalabels:{ display:true, anchor:'end', align:'top', color:'#e6ebf1', font:{family:'IBM Plex Mono',size:10,weight:'600'}, formatter:(v)=>v }
+    }, scales:{ x:{ticks:{color:'#8b98ab',font:{family:'IBM Plex Mono',size:10}},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true} } }
+  });
+
+  renderTecTable();
+}
+
+function desempenoLabel(d){ return {alto:'Alto', normal:'Normal', atencion:'Necesita atención'}[d] || '—'; }
+function desempenoRiskClass(d){ return {alto:'bajo', normal:'medio', atencion:'critico'}[d] || 'na'; }
+
+function renderTecTable(){
+  const sortKey = window._tecSortKey || 'ots';
+  let list = [...(window._tecnicos||[])];
+  list.sort((a,b)=>{
+    if(sortKey==='ots') return b.ots-a.ots;
+    if(sortKey==='correctivos') return b.correctivos-a.correctivos;
+    if(sortKey==='mttr') return (a.mttr??1e9)-(b.mttr??1e9);
+    if(sortKey==='downtime') return b.avgDowntime-a.avgDowntime;
+    if(sortKey==='areas') return b.areas-a.areas;
+    if(sortKey==='noresuelto') return b.noResueltoPct-a.noResueltoPct;
+    if(sortKey==='tecnico') return a.tecnico.localeCompare(b.tecnico);
+    return 0;
+  });
+  const selTec = window._selectedTecnico;
+  document.getElementById('tecBody').innerHTML = list.map(t=>`
+    <tr data-tec="${t.tecnico.replace(/"/g,'&quot;')}" class="${selTec===t.tecnico?'selected-row':''}">
+      <td class="eqname">${t.tecnico}</td>
+      <td class="numcell">${t.ots}</td>
+      <td class="numcell">${t.correctivos}</td>
+      <td class="numcell">${t.mttr!=null? fmtHM(t.mttr) : '—'}</td>
+      <td class="numcell">${fmtHM(t.avgDowntime)}</td>
+      <td class="numcell">${t.areas}</td>
+      <td class="numcell">${t.correctivos? t.noResueltoPct+'%' : '—'}</td>
+      <td><span class="risk ${desempenoRiskClass(t.desempeno)}">${desempenoLabel(t.desempeno)}</span></td>
+    </tr>
+  `).join('') || `<tr><td colspan="8" class="empty">Sin datos de técnicos para este alcance.</td></tr>`;
+}
+
+/* ---------- mejora continua (kaizen) ---------- */
+function renderKaizen(rows, scopeLabel){
+  const correctivos = rows.filter(r=>r.tipoMant.toLowerCase()==='correctivo' && r.pieza);
+  const groups = {};
+  correctivos.forEach(r=>{
+    const d = parseFecha(r.fecha);
+    if(!d) return;
+    const key = r.area + ' | ' + (r.equipo||r.tipoMaquina||'Equipo') + ' | ' + r.pieza;
+    if(!groups[key]) groups[key] = { area:r.area, equipo:r.equipo||r.tipoMaquina||'Equipo', pieza:r.pieza, dates:[], fallas:[] };
+    groups[key].dates.push(d);
+    groups[key].fallas.push(r.falla);
+  });
+
+  const items = Object.values(groups).filter(g=>g.dates.length>=2).map(g=>{
+    g.dates.sort((a,b)=>a-b);
+    const n = g.dates.length;
+    let trend = 'insuficiente';
+    if(n>=4){
+      const mid = Math.floor(n/2);
+      const firstHalf = g.dates.slice(0,mid);
+      const secondHalf = g.dates.slice(mid);
+      const avgIntervalOf = (arr)=>{ if(arr.length<2) return null; let s=0; for(let i=1;i<arr.length;i++) s+=daysBetween(arr[i-1],arr[i]); return s/(arr.length-1); };
+      const i1 = avgIntervalOf(firstHalf), i2 = avgIntervalOf(secondHalf);
+      if(i1!=null && i2!=null){
+        if(i2 < i1*0.8) trend = 'empeorando';
+        else if(i2 > i1*1.2) trend = 'mejorando';
+        else trend = 'estable';
+      }
+    }
+    return { ...g, count:n, first:g.dates[0], last:g.dates[n-1], trend };
+  }).sort((a,b)=>b.count-a.count).slice(0,10);
+
+  const cont = document.getElementById('kaizenList');
+  if(!items.length){
+    cont.innerHTML = `<div class="empty">No hay piezas que se repitan 2+ veces en el alcance actual — buena señal, o aún falta histórico.</div>`;
+    return;
+  }
+
+  const trendLabel = {empeorando:'Empeorando (fallas más seguidas)', mejorando:'Mejorando (fallas más espaciadas)', estable:'Estable', insuficiente:'Insuficiente dato'};
+
+  cont.innerHTML = items.map(it=>`
+    <div class="kaizen-item">
+      <div class="kz-head">
+        <div class="kz-title">${it.area} — ${it.equipo} · pieza: ${it.pieza}</div>
+        <span class="trend-tag ${it.trend}">${trendLabel[it.trend]}</span>
+      </div>
+      <div class="kz-meta">${it.count} correctivos registrados · primera vez: ${it.first.toLocaleDateString('es-DO')} · última vez: ${it.last.toLocaleDateString('es-DO')}</div>
+      <div class="kz-action"><b>Plan sugerido:</b> aplica un análisis de causa raíz (5 Porqués) a "${it.pieza}" en este equipo — ${it.count} reparaciones de la misma pieza indican que el correctivo actual probablemente ataca el síntoma, no la causa. Documenta la contramedida aplicada y verifica en la próxima OT si la pieza vuelve a fallar; si no vuelve, estandariza esa contramedida para equipos similares.</div>
+    </div>
+  `).join('');
+}
+
+function fmtHM(mins){
+  if(mins==null || isNaN(mins)) return '—';
+  const h = Math.floor(mins/60), m = Math.round(mins%60);
+  return h>0? `${h}h ${m}m` : `${m}m`;
+}
+
+function renderHistoryAndReco(mode, label, historyRows, predictive, selArea, selKey, selTecnico, allRowsFull){
+  const card = document.getElementById('historyCard');
+  if(!mode){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const titles = { equipo:'Historial completo — '+label, area:'Detalle completo de la línea/área — '+selArea, tecnico:'Historial completo — Técnico: '+selTecnico };
+  document.getElementById('historyTitle').textContent = titles[mode];
+
+  /* orden cronológico */
+  const sorted = [...historyRows].sort((a,b)=> (parseFecha(a.fecha)||0) - (parseFecha(b.fecha)||0));
+
+  const totalParo = historyRows.reduce((s,r)=>s+r.minMaquina,0);
+  const correctivosHist = historyRows.filter(r=>r.tipoMant.toLowerCase()==='correctivo');
+  const mttr = correctivosHist.length? correctivosHist.reduce((s,r)=>s+r.minTecnico,0)/correctivosHist.length : null;
+  const paroPlantaCount = historyRows.filter(r=>(r.paroPlanta||'').toLowerCase()==='si').length;
+  const noResueltoCount = correctivosHist.filter(r=>{
+    const sol=(r.solucion||'').toLowerCase();
+    return sol.includes('no solucionado')||sol.includes('no solucionada')||sol.includes('no resuelto')||sol.includes('sin solucionar')||sol.includes('no terminado')||sol.includes('aún no')||sol.includes('pendiente');
+  }).length;
+
+  /* cajas de resumen, según el modo */
+  const boxes = [{lbl:'Eventos totales', val:historyRows.length}];
+  if(mode==='area') boxes.push({lbl:'Equipos distintos', val:new Set(historyRows.map(r=>r.equipo||r.tipoMaquina||'Equipo sin nombre')).size});
+  if(mode==='tecnico') boxes.push({lbl:'Áreas cubiertas', val:new Set(historyRows.map(r=>r.area)).size});
+  boxes.push({lbl:'Paro de máquina acumulado', val:fmtHM(totalParo)});
+  boxes.push({lbl:'MTTR (tiempo prom. de reparación)', val: mttr!=null? fmtHM(mttr) : '—'});
+  if(mode==='tecnico') boxes.push({lbl:'% correctivos sin resolver', val: correctivosHist.length? Math.round(noResueltoCount/correctivosHist.length*100)+'%' : '—'});
+  else boxes.push({lbl:'Veces que paró la planta', val:paroPlantaCount});
+
+  document.getElementById('historySummary').innerHTML = boxes.map(b=>`<div class="hs"><div class="hlbl">${b.lbl}</div><div class="hval">${b.val}</div></div>`).join('');
+
+  /* ---- relación técnico ↔ equipo (solo en modo técnico) ---- */
+  const breakdownDiv = document.getElementById('tecEquipoBreakdown');
+  if(mode==='tecnico'){
+    const eqMap = {};
+    historyRows.forEach(r=>{
+      const eq = r.equipo || r.tipoMaquina || 'Equipo sin nombre';
+      const key = r.area + ' | ' + eq;
+      if(!eqMap[key]) eqMap[key] = { area:r.area, equipo:eq, ots:0, correctivos:0, downtime:0, last:null };
+      const g = eqMap[key];
+      g.ots++;
+      g.downtime += r.minMaquina;
+      if(r.tipoMant.toLowerCase()==='correctivo') g.correctivos++;
+      const d = parseFecha(r.fecha);
+      if(d && (!g.last || d>g.last)) g.last = d;
+    });
+    const eqList = Object.values(eqMap).sort((a,b)=>b.ots-a.ots);
+    breakdownDiv.style.display = 'block';
+    breakdownDiv.innerHTML = `
+      <h3 style="font-size:13px;margin:4px 0 10px;color:var(--text);">🔧 Relación técnico ↔ equipo — clic en un equipo para ver su detalle</h3>
+      <div style="overflow-x:auto;margin-bottom:20px;">
+        <table>
+          <thead><tr><th>Área</th><th>Equipo</th><th>OTs atendidas</th><th>Correctivos</th><th>Paro acumulado</th><th>Última vez</th></tr></thead>
+          <tbody>
+            ${eqList.map(g=>`
+              <tr data-key="${(g.area+' | '+g.equipo).replace(/"/g,'&quot;')}">
+                <td class="areaname">${g.area}</td>
+                <td class="eqname">${g.equipo}</td>
+                <td class="numcell">${g.ots}</td>
+                <td class="numcell">${g.correctivos}</td>
+                <td class="numcell">${fmtHM(g.downtime)}</td>
+                <td class="numcell">${g.last? g.last.toLocaleDateString('es-DO') : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else {
+    breakdownDiv.style.display = 'none';
+    breakdownDiv.innerHTML = '';
+  }
+
+  document.getElementById('historyBody').innerHTML = sorted.map(r=>`
+    <tr>
+      <td class="numcell">${parseFecha(r.fecha)? parseFecha(r.fecha).toLocaleDateString('es-DO') : r.fecha}</td>
+      <td class="numcell" style="color:var(--muted);">${r.ot}</td>
+      ${mode==='area'? `<td class="eqname">${r.equipo||r.tipoMaquina||'—'}</td>` : ''}
+      ${mode==='tecnico'? `<td class="areaname">${r.area}</td><td class="eqname">${r.equipo||r.tipoMaquina||'—'}</td>` : ''}
+      <td><span class="risk ${r.tipoMant.toLowerCase()==='correctivo'?'critico':(r.tipoMant.toLowerCase()==='preventivo'?'bajo':'na')}">${r.tipoMant}</span></td>
+      ${mode!=='tecnico'? `<td>${r.tecnicos||'—'}</td>` : ''}
+      <td class="numcell">${(r.paroPlanta||'').toLowerCase()==='si'? 'Sí' : 'No'}</td>
+      <td class="numcell">${r.minMaquina||0}</td>
+      <td style="max-width:220px;">${r.falla||'—'}</td>
+      <td style="max-width:220px;color:var(--muted);">${r.solucion||'—'}</td>
+    </tr>
+  `).join('');
+
+  /* encabezado de tabla dinámico según modo */
+  const headRow = document.getElementById('historyHeadRow');
+  headRow.innerHTML = `
+    <th>Fecha</th><th>OT</th>
+    ${mode==='area'? '<th>Equipo</th>' : ''}
+    ${mode==='tecnico'? '<th>Área</th><th>Equipo</th>' : ''}
+    <th>Tipo</th>
+    ${mode!=='tecnico'? '<th>Técnico(s)</th>' : ''}
+    <th>Paro planta</th><th>Paro máq. (min)</th><th>Descripción de falla</th><th>Solución aplicada</th>
+  `;
+
+  /* ---- recomendación basada en buenas prácticas de confiabilidad ---- */
+  const recoBox = document.getElementById('recoBox');
+
+  if(mode==='equipo'){
+    const equipoInfo = predictive.find(p=>(p.area+' | '+p.equipo)===selKey);
+    if(!equipoInfo || equipoInfo.mtbf==null){
+      recoBox.innerHTML = `
+        <h3>📋 Recomendación</h3>
+        <p>Este equipo aún no tiene suficientes fallas correctivas registradas (mínimo 3) para calcular un intervalo de mantenimiento confiable. Sigue registrando cada correctivo con fecha y descripción — en cuanto acumule el histórico mínimo, el panel podrá sugerir un plan de preventivo basado en datos reales.</p>
+      `;
+    } else {
+      const mtbf = equipoInfo.mtbf;
+      const preventivoSugerido = Math.max(1, Math.round(mtbf*0.6));
+      recoBox.innerHTML = `
+        <h3>📋 Recomendación basada en confiabilidad industrial</h3>
+        <p><span class="std-tag">RCM</span><span class="std-tag">TPM</span> Una práctica estándar de la ingeniería de confiabilidad (Mantenimiento Centrado en Confiabilidad / Mantenimiento Productivo Total) es programar el mantenimiento preventivo <b>antes</b> de que se cumpla el intervalo promedio entre fallas (MTBF), no después. Con un MTBF de <b>${mtbf.toFixed(1)} días</b>, un punto de partida razonable es una revisión preventiva cada <b>~${preventivoSugerido} días</b> (60% del MTBF), ajustando según la criticidad real observada en campo.</p>
+        <p><span class="std-tag">ISO 14224</span> Para que este cálculo sea cada vez más confiable, documenta de forma consistente: fecha exacta, pieza específica que falló, causa raíz (no solo el síntoma) y tiempo de reparación — esta es la base de la norma ISO 14224 para recolección de datos de confiabilidad de equipos industriales.</p>
+        <p><span class="std-tag">ISO 55001</span> Si este equipo aparece repetidamente en "Crítico", considera evaluarlo dentro de un plan de gestión de activos (ISO 55001): decidir si conviene reparar de nuevo, hacer un overhaul completo, o reemplazar el componente que más se repite — la reparación paliativa recurrente casi siempre termina costando más que la intervención de fondo.</p>
+        <p style="color:var(--muted);font-size:11.5px;">Esto es una guía orientativa según buenas prácticas de mantenimiento industrial, no una certificación ni una auditoría formal — la decisión final de intervalo y alcance debe validarla el equipo de mantenimiento en planta.</p>
+      `;
+    }
+  } else if(mode==='area'){
+    /* modo área: priorizar los equipos más riesgosos de esa línea */
+    const equiposArea = predictive.filter(p=>p.area===selArea).sort((a,b)=>{
+      const order = {critico:0,alto:1,medio:2,bajo:3,na:4};
+      return order[a.risk]-order[b.risk] || b.fallas-a.fallas;
+    });
+    const prioritarios = equiposArea.filter(p=>p.risk==='critico'||p.risk==='alto').slice(0,5);
+    recoBox.innerHTML = `
+      <h3>📋 Recomendación basada en confiabilidad industrial — línea completa</h3>
+      <p><span class="std-tag">RCM</span> En una línea con múltiples equipos, la práctica recomendada no es tratar todos por igual, sino priorizar por criticidad (Mantenimiento Centrado en Confiabilidad): atiende primero los equipos en riesgo Crítico/Alto, que son los que más probabilidad tienen de parar la línea completa.</p>
+      ${prioritarios.length? `
+        <p><b>Equipos a priorizar en "${selArea}" ahora mismo:</b></p>
+        <p>${prioritarios.map(p=>`• <b>${p.equipo}</b> — MTBF ${p.mtbf.toFixed(1)}d, riesgo ${riskLabel(p.risk)}${p.daysUntil!=null&&p.daysUntil<0? ' (vencido hace '+Math.abs(p.daysUntil)+'d)':''}`).join('<br>')}</p>
+      ` : `<p>Ningún equipo de esta línea está en riesgo Crítico o Alto con los datos actuales — buena señal, mantén el ritmo de preventivo actual.</p>`}
+      <p><span class="std-tag">TPM</span> Si esta línea concentra mucho más paro que las demás, considera un evento de Mantenimiento Productivo Total (TPM) enfocado solo en ella: involucra a los operadores en limpieza e inspección diaria, no solo a mantenimiento.</p>
+      <p style="color:var(--muted);font-size:11.5px;">Guía orientativa según buenas prácticas de mantenimiento industrial — la priorización final debe validarla el equipo de mantenimiento en planta considerando impacto en producción.</p>
+    `;
+  } else if(mode==='tecnico'){
+    /* modo técnico: comparar contra el promedio de planta y sugerir desarrollo */
+    const {list: plantList, plantAvgMttr} = getTecnicoStats(allRowsFull);
+    const me = plantList.find(t=>t.tecnico===selTecnico);
+
+    /* área donde más correctivos ha atendido este técnico (mayor exposición) */
+    const areaCounts = {};
+    correctivosHist.forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
+    const topAreaTec = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1])[0];
+
+    if(!me || me.mttr==null){
+      recoBox.innerHTML = `
+        <h3>📋 Recomendación</h3>
+        <p>Aún no hay suficientes correctivos con tiempo de reparación registrado para este técnico como para compararlo con el promedio de la planta. Sigue registrando el campo de tiempo por técnico en cada OT.</p>
+      `;
+    } else {
+      const vsAvgPct = plantAvgMttr? Math.round(((me.mttr - plantAvgMttr)/plantAvgMttr)*100) : null;
+      let desempenoTxt;
+      if(me.desempeno==='alto') desempenoTxt = `Su tiempo de reparación está <b>por debajo</b> del promedio de planta${vsAvgPct!=null? ' ('+Math.abs(vsAvgPct)+'% más rápido)':''}, y su tasa de casos sin resolver es baja.`;
+      else if(me.desempeno==='atencion') desempenoTxt = `Su tiempo de reparación o su tasa de casos sin resolver está <b>por encima</b> del promedio de planta${vsAvgPct!=null && vsAvgPct>0? ' ('+vsAvgPct+'% más lento)':''}.`;
+      else desempenoTxt = `Su desempeño está dentro del rango normal de la planta${vsAvgPct!=null? ' ('+(vsAvgPct>0?'+':'')+vsAvgPct+'% vs. promedio)':''}.`;
+
+      recoBox.innerHTML = `
+        <h3>📋 Recomendación de desarrollo — ${selTecnico}</h3>
+        <p><span class="std-tag">Benchmark interno</span> ${desempenoTxt} MTTR propio: <b>${fmtHM(me.mttr)}</b> · promedio de planta: <b>${plantAvgMttr!=null? fmtHM(plantAvgMttr):'—'}</b> · % sin resolver: <b>${me.noResueltoPct}%</b>.</p>
+        ${topAreaTec? `<p>Su mayor exposición es en <b>${topAreaTec[0]}</b> (${topAreaTec[1]} correctivos atendidos ahí) — es el área donde más experiencia acumula, y también donde más impacto tendría reforzar su formación si hay oportunidad de mejora.</p>` : ''}
+        ${me.desempeno==='atencion' ? `
+        <p><span class="std-tag">TWI</span><span class="std-tag">Matriz de habilidades</span> Cuando un técnico está por debajo del promedio en un área específica, la práctica común en mantenimiento industrial (Training Within Industry / matriz de habilidades) es emparejarlo temporalmente con un técnico de alto desempeño en esa misma área para transferencia de conocimiento práctico, en vez de solo señalar el número.</p>
+        ` : me.desempeno==='alto' ? `
+        <p><span class="std-tag">Trabajo estándar</span> Al ser un desempeño por encima del promedio, es buen candidato para documentar su método como "hoja de trabajo estándar" para esa falla recurrente, y/o para apoyar como mentor interno de otros técnicos en su área de mayor experiencia.</p>
+        ` : ``}
+        <p style="color:var(--muted);font-size:11.5px;">Comparación estadística simple sobre los datos cargados — no es una evaluación formal de desempeño ni sustituye el criterio del supervisor de mantenimiento, que conoce el contexto de cada intervención (complejidad, disponibilidad de repuestos, etc.).</p>
+      `;
+    }
+  }
+}
+
+function riskLabel(r){
+  return { critico:'Crítico', alto:'Alto', medio:'Medio', bajo:'Bajo', na:'Datos insuf.' }[r] || '—';
+}
+
+function renderTable(){
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  const areaF = document.getElementById('areaFilter').value;
+  const riskF = document.getElementById('riskFilter').value;
+  const sortKey = window._sortKey || 'risk';
+
+  let list = (window._predictive||[]).filter(p=>{
+    if(areaF && p.area!==areaF) return false;
+    if(riskF && p.risk!==riskF) return false;
+    if(search && !(p.area.toLowerCase().includes(search) || p.equipo.toLowerCase().includes(search))) return false;
+    return true;
+  });
+
+  const order = {critico:0,alto:1,medio:2,bajo:3,na:4};
+  list.sort((a,b)=>{
+    if(sortKey==='risk'){ if(order[a.risk]!==order[b.risk]) return order[a.risk]-order[b.risk]; return b.fallas-a.fallas; }
+    if(sortKey==='fallas') return b.fallas-a.fallas;
+    if(sortKey==='mtbf') return (a.mtbf??1e9)-(b.mtbf??1e9);
+    if(sortKey==='downtime') return b.avgDowntime-a.avgDowntime;
+    if(sortKey==='area') return a.area.localeCompare(b.area);
+    if(sortKey==='equipo') return a.equipo.localeCompare(b.equipo);
+    return 0;
+  });
+
+  const tbody = document.getElementById('predBody');
+  const empty = document.getElementById('predEmpty');
+  if(!list.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  tbody.innerHTML = list.map(p=>{
+    const key = p.area + ' | ' + p.equipo;
+    const isSel = window._selectedKey === key;
+    return `
+    <tr data-key="${key.replace(/"/g,'&quot;')}" class="${isSel?'selected-row':''}">
+      <td class="areaname">${p.area}</td>
+      <td class="eqname">${p.equipo}</td>
+      <td>${p.tecnico&&p.tecnico!=='—'? `<span class="tec-link" data-tec-link="${p.tecnico.replace(/"/g,'&quot;')}">${p.tecnico}</span>` : '—'}</td>
+      <td class="numcell">${p.fallas}</td>
+      <td class="numcell">${p.mtbf!=null? p.mtbf.toFixed(1) : '—'}</td>
+      <td class="numcell">
+        ${p.last? p.last.toLocaleDateString('es-DO') : '—'}
+        ${p.lastFalla? `<div style="color:var(--muted);font-size:11px;margin-top:3px;max-width:220px;">${p.lastFalla}</div>` : ''}
+      </td>
+      <td class="numcell">${p.nextDate? p.nextDate.toLocaleDateString('es-DO') + (p.daysUntil!=null? ' ('+(p.daysUntil<0? 'vencido hace '+Math.abs(p.daysUntil)+'d' : 'en '+p.daysUntil+'d')+')':'') : 'necesita ≥3 fallas'}</td>
+      <td class="numcell">${p.avgDowntime.toFixed(0)}</td>
+      <td><span class="risk ${p.risk}">${riskLabel(p.risk)}</span></td>
+      <td style="max-width:260px;color:var(--text);font-size:12px;line-height:1.45;">${p.plan}</td>
+    </tr>
+  `;}).join('');
+}
+
+/* ---------- events ---------- */
+document.getElementById('searchBox').addEventListener('input', renderTable);
+document.getElementById('areaFilter').addEventListener('change', renderTable);
+document.getElementById('riskFilter').addEventListener('change', renderTable);
+document.querySelectorAll('#predTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{ window._sortKey = th.dataset.k; renderTable(); });
+});
+document.querySelectorAll('#tecTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{ window._tecSortKey = th.dataset.tk; renderTecTable(); });
+});
+
+document.getElementById('feedToggle').addEventListener('click', ()=>{
+  const body = document.getElementById('feedBody');
+  const open = body.classList.toggle('open');
+  document.getElementById('feedToggle').textContent = (open?'▾':'▸') + ' Alimentar el panel con más órdenes de trabajo (pegar filas nuevas, formato separado por tabulaciones)';
+});
+
+document.getElementById('appendBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('feedArea').value;
+  const newRows = parseRaw(raw);
+  if(!newRows.length){
+    document.getElementById('feedStatus').textContent = 'No se detectaron filas válidas.';
+    document.getElementById('feedStatus').style.color = '#ef4b4b';
+    return;
+  }
+  document.getElementById('feedStatus').textContent = `Subiendo ${newRows.length} OT(s)…`;
+  document.getElementById('feedStatus').style.color = '#8b98ab';
+  await window.fbReady;
+  let ok = 0;
+  for(const r of newRows){
+    try{ await db.collection('ots').add({ ...rowToOtRecord(r), createdAt: fbTimestamp() }); ok++; }
+    catch(err){ console.error(err); }
+  }
+  document.getElementById('feedStatus').textContent = `✅ ${ok} OT(s) subidas a la base de datos compartida`;
+  document.getElementById('feedStatus').style.color = '#35d0b0';
+  document.getElementById('feedArea').value = '';
+  // no hace falta llamar render(): el listener en vivo de Firestore actualiza allRows solo
+});
+
+document.getElementById('clearFeedBtn').addEventListener('click', ()=>{
+  document.getElementById('feedArea').value = '';
+  document.getElementById('feedStatus').textContent = '';
+});
+
+/* selección de equipo: clic en una fila filtra las gráficas y KPIs a ese equipo (o clic en el técnico habitual salta a su perfil) */
+document.getElementById('predBody').addEventListener('click', (e)=>{
+  const tecLink = e.target.closest('.tec-link');
+  if(tecLink){
+    const tec = tecLink.dataset.tecLink;
+    window._selectedTecnico = (window._selectedTecnico === tec) ? null : tec;
+    window._selectedKey = null;
+    window._selectedArea = null;
+    render();
+    return;
+  }
+  const tr = e.target.closest('tr[data-key]');
+  if(!tr) return;
+  const key = tr.dataset.key;
+  window._selectedKey = (window._selectedKey === key) ? null : key;
+  window._selectedArea = null;
+  window._selectedTecnico = null;
+  render();
+});
+
+/* selección de línea/área: clic en una fila filtra todo a esa línea completa */
+document.getElementById('areaBody').addEventListener('click', (e)=>{
+  const tr = e.target.closest('tr[data-area]');
+  if(!tr) return;
+  const area = tr.dataset.area;
+  window._selectedArea = (window._selectedArea === area) ? null : area;
+  window._selectedKey = null;
+  window._selectedTecnico = null;
+  render();
+});
+
+document.querySelectorAll('#areaTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{ window._areaSortKey = th.dataset.ak; renderAreaRows(); });
+});
+
+/* selección de técnico: clic en una fila filtra todo a ese técnico */
+document.getElementById('tecBody').addEventListener('click', (e)=>{
+  const tr = e.target.closest('tr[data-tec]');
+  if(!tr) return;
+  const tec = tr.dataset.tec;
+  window._selectedTecnico = (window._selectedTecnico === tec) ? null : tec;
+  window._selectedKey = null;
+  window._selectedArea = null;
+  render();
+});
+
+document.getElementById('clearSelBtn').addEventListener('click', ()=>{
+  window._selectedKey = null;
+  window._selectedArea = null;
+  window._selectedTecnico = null;
+  render();
+});
+
+/* relación técnico → equipo: clic en un equipo dentro del detalle del técnico salta a ese equipo */
+document.getElementById('tecEquipoBreakdown').addEventListener('click', (e)=>{
+  const tr = e.target.closest('tr[data-key]');
+  if(!tr) return;
+  window._selectedKey = tr.dataset.key;
+  window._selectedArea = null;
+  window._selectedTecnico = null;
+  render();
+});
+
+/* ---------- puente con Firestore (colección compartida "ots") ---------- */
+// Traduce una fila interna (la forma que usa todo este panel) al formato de
+// documento que usan Bitácora/Inventario en Firestore, y viceversa — así las
+// tres herramientas leen y escriben la misma base de datos compartida.
+function rowToOtRecord(r){
+  return {
+    Title: r.ot || ('OT-' + Date.now() + '-' + Math.random().toString(36).slice(2,6)),
+    SEMANA: r.semana || '', FECHA: r.fecha || '', LINEA_EQUIPO: r.area || '',
+    TIPO_MAQUINA: r.tipoMaquina || '', EQUIPO: r.equipo || '', PIEZA: r.pieza || '',
+    DESCRIPCION_FALLA: r.falla || '', DESCRIPCION_SOLUCION: r.solucion || '',
+    H_INICIO: '', H_TECNICO: '', H_FINAL: '',
+    TOTAL_MIN_MAQUINA: r.minMaquina || 0, TOTAL_MIN_TECNICO: r.minTecnico || 0,
+    ME: r.me || 'm', GENERA_OT: 'no', TIPO_MANTENIMIENTO: r.tipoMant || 'Sin clasificar',
+    PARO_PLANTA: r.paroPlanta || 'no', TECNICOS: r.tecnicos || '',
+  };
+}
+function otRecordToRow(doc){
+  return {
+    ot: doc.Title || doc.id, semana: String(doc.SEMANA ?? ''), fecha: doc.FECHA || '',
+    area: doc.LINEA_EQUIPO || 'Sin área', tipoMaquina: doc.TIPO_MAQUINA || '', equipo: doc.EQUIPO || '',
+    pieza: doc.PIEZA || '', me: doc.ME || '', tipoMant: doc.TIPO_MANTENIMIENTO || 'Sin clasificar',
+    paroPlanta: doc.PARO_PLANTA || '', tecnicos: doc.TECNICOS || '',
+    minMaquina: Number(doc.TOTAL_MIN_MAQUINA) || 0, minTecnico: Number(doc.TOTAL_MIN_TECNICO) || 0,
+    falla: doc.DESCRIPCION_FALLA || '', solucion: doc.DESCRIPCION_SOLUCION || '',
+  };
+}
+
+/* ---------- init ---------- */
+window._sortKey = 'risk';
+document.addEventListener('DOMContentLoaded', ()=>{
+  fbRenderMiniNav('analisis');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+});
+
+window.fbReady.then(async ()=>{
+  const otsRef = db.collection('ots');
+  const firstSnap = await otsRef.get().catch(()=>null);
+
+  if(firstSnap && firstSnap.empty){
+    // primera vez que se usa esta base de datos: sube el histórico precargado
+    // (mismo que traía este panel) una sola vez, para no perderlo.
+    const seedRows = parseRaw(RAW);
+    for(const r of seedRows){
+      await otsRef.add({ ...rowToOtRecord(r), createdAt: fbTimestamp() }).catch(err=>console.error(err));
+    }
+  }
+
+  otsRef.onSnapshot((snap)=>{
+    allRows = snap.docs.map(doc => otRecordToRow(doc.data()));
+    render();
+  }, (err)=>{
+    console.error('Error escuchando OTs:', err);
+    document.getElementById('rangeInfo').textContent = 'Error de conexión a Firebase: ' + err.message;
+  });
+}).catch((err)=>{
+  console.error('No se pudo conectar a Firebase:', err);
+  document.getElementById('rangeInfo').textContent = 'No se pudo conectar a Firebase — revisa firebase-config.js';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0d1117"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Inventario de Repuestos</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0d1117; --panel:#141a22; --panel-2:#1b2330; --line:#262f3d;
+    --text:#e6ebf1; --muted:#8b98ab;
+    --amber:#f0a930; --amber-dim:#4a3419;
+    --red:#ef4b4b; --red-dim:#3a2020;
+    --teal:#35d0b0; --teal-dim:#1a3a33;
+    --blue:#5b9bf0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  ::-webkit-scrollbar{height:8px;width:8px;} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  .wrap{max-width:1360px;margin:0 auto;padding:26px 22px 80px;}
+
+  /* header */
+  .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px;gap:16px;flex-wrap:wrap;}
+  .hdr-left{display:flex;align-items:center;gap:12px;}
+  .hdr-icon{width:38px;height:38px;border-radius:9px;background:linear-gradient(145deg,var(--amber),#c97f1a);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  h1{font-size:20px;margin:0;font-weight:700;}
+  .hdr-sub{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+  .search-box{position:relative;flex:1;max-width:420px;min-width:220px;}
+  .search-box input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px 14px 10px 36px;border-radius:9px;font-size:13px;font-family:'Space Grotesk';}
+  .search-box input:focus{outline:1px solid var(--amber);}
+  .search-box .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
+
+  /* KPI row */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px;}
+  .kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
+  .kpi .val{font-size:26px;font-weight:700;margin-top:5px;}
+  .kpi.red .val{color:var(--red);} .kpi.amber .val{color:var(--amber);} .kpi.teal .val{color:var(--teal);}
+
+  /* equipo cards grid */
+  .section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .section-hdr h2{font-size:15px;margin:0;}
+  .equipo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:10px;}
+  .equipo-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;cursor:pointer;transition:border-color .15s;position:relative;overflow:hidden;}
+  .equipo-card:hover{border-color:var(--amber-dim);}
+  .equipo-card .badge-loc{position:absolute;top:14px;right:14px;font-size:10px;font-family:'IBM Plex Mono';color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:20px;}
+  .equipo-card h3{margin:0 0 4px;font-size:16px;padding-right:70px;}
+  .equipo-card .meta{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono';margin-bottom:14px;}
+  .equipo-card .stats-row{display:flex;gap:16px;}
+  .equipo-card .stat{font-size:11px;font-family:'IBM Plex Mono';}
+  .equipo-card .stat b{display:block;font-size:17px;font-family:'Space Grotesk';font-weight:700;}
+  .equipo-card .stat.ok b{color:var(--teal);} .equipo-card .stat.sinstock b{color:var(--red);} .equipo-card .stat.bajo b{color:var(--amber);}
+
+  .add-card{background:transparent;border:1.5px dashed var(--line);border-radius:12px;padding:18px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--muted);min-height:130px;}
+  .add-card:hover{border-color:var(--amber);color:var(--amber);}
+  .add-card .plus{font-size:26px;}
+
+  button{font-family:'Space Grotesk';cursor:pointer;}
+  .btn{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;}
+  .btn:hover{filter:brightness(1.08);}
+  .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btn.danger{background:var(--red-dim);color:#ff9494;border:1px solid #5a2a2a;}
+  .btn.sm{padding:6px 11px;font-size:11.5px;}
+  .btn.icon-only{padding:6px 9px;}
+
+  /* detail view */
+  .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;cursor:pointer;margin-bottom:16px;font-family:'IBM Plex Mono';}
+  .back-link:hover{color:var(--text);}
+  .detail-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:18px;}
+  .detail-hdr h2{margin:0 0 4px;font-size:22px;}
+  .detail-hdr .sub{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono';}
+
+  .specs-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .specs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
+  .spec{}
+  .spec .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';margin-bottom:3px;}
+  .spec .v{font-size:13.5px;font-weight:500;}
+  .spec .v.empty{color:var(--muted);font-style:italic;font-weight:400;}
+  .spec input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;width:100%;font-family:'Space Grotesk';}
+
+  /* parts table */
+  .table-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;}
+  .table-toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+  .filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .fchip{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:'IBM Plex Mono';cursor:pointer;}
+  .fchip.active{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;}
+  tbody td{padding:10px 10px;border-bottom:1px solid #1b212b;vertical-align:middle;}
+  tbody tr:hover{background:#171e28;}
+  .part-name{font-weight:600;}
+  .part-modelo{font-family:'IBM Plex Mono';color:var(--muted);font-size:11.5px;}
+  .part-desc{color:var(--muted);font-size:11.5px;max-width:260px;}
+
+  .gauge-wrap{display:flex;align-items:center;gap:8px;min-width:120px;}
+  .gauge{flex:1;height:7px;background:#1b212b;border-radius:4px;overflow:visible;position:relative;}
+  .gauge-min-mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text);opacity:.55;}
+
+  .thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;border:1px solid var(--line);cursor:pointer;display:block;}
+  .thumb:hover{border-color:var(--amber);}
+  .thumb-placeholder{width:34px;height:34px;border-radius:6px;background:var(--panel-2);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted);}
+  .gauge-fill{height:100%;border-radius:4px;}
+  .gauge-fill.ok{background:var(--teal);} .gauge-fill.bajo{background:var(--amber);} .gauge-fill.sin{background:var(--red);}
+  .gauge-fill.nodata{background:repeating-linear-gradient(45deg,#3a4252,#3a4252 4px,#2a3140 4px,#2a3140 8px);}
+  .qty-num{font-family:'IBM Plex Mono';font-weight:600;font-size:12px;min-width:22px;text-align:right;}
+
+  .stock-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono';white-space:nowrap;}
+  .stock-badge.ok{background:var(--teal-dim);color:var(--teal);}
+  .stock-badge.bajo{background:var(--amber-dim);color:var(--amber);}
+  .stock-badge.sin{background:var(--red-dim);color:#ff8a8a;}
+  .stock-badge.nodata{background:#252c38;color:var(--muted);}
+
+  .row-actions{display:flex;gap:5px;opacity:.4;transition:opacity .12s;}
+  tr:hover .row-actions{opacity:1;}
+  .icon-btn{background:none;border:none;color:var(--muted);font-size:13px;padding:3px 5px;border-radius:5px;}
+  .icon-btn:hover{background:var(--panel-2);color:var(--text);}
+
+  input.cell-edit{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:5px;width:52px;font-family:'IBM Plex Mono';font-size:12px;text-align:center;}
+
+  .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty-state .big{font-size:34px;margin-bottom:10px;}
+
+  /* modal */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center;padding:20px;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:560px;width:100%;max-height:85vh;overflow-y:auto;}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal .modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-field{display:flex;flex-direction:column;gap:5px;}
+  .form-field.full{grid-column:1/-1;}
+  .form-field label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-family:'IBM Plex Mono';}
+  .form-field input,.form-field textarea{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:'Space Grotesk';}
+  .form-field textarea{resize:vertical;min-height:50px;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-2);border:1px solid var(--line);padding:12px 20px;border-radius:9px;font-size:13px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .footer-actions{display:flex;gap:10px;justify-content:center;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);}
+
+  @media(max-width:720px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .form-grid{grid-template-columns:1fr;}
+    table{font-size:11.5px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon">🔧</div>
+      <div>
+        <h1>Inventario de Repuestos</h1>
+        <div class="hdr-sub" id="hdrSub">cargando…</div>
+      </div>
+    </div>
+    <div class="search-box">
+      <span class="icon">🔍</span>
+      <input type="text" id="globalSearch" placeholder="Buscar repuesto en TODOS los equipos… (nombre, modelo, descripción)">
+    </div>
+    <button class="btn secondary sm" id="pinBtn" onclick="configurePin()" title="Proteger la eliminación con una clave">🔒 Clave</button>
+    <button class="btn secondary sm" id="refreshBtn" onclick="refreshFromServer()" title="Confirmar que estás al día (la sincronización ya es automática)">🔄 Actualizar</button>
+    <button class="btn secondary sm" id="syncStatusBtn" onclick="openConfigModal()" title="Estado de la conexión a Firebase">⚪ Conectando…</button>
+  </div>
+
+  <div id="searchResultsView" style="display:none;">
+    <div class="section-hdr"><h2 id="searchResultsTitle">Resultados</h2>
+      <span class="btn secondary sm" onclick="clearSearch()">✕ Cerrar búsqueda</span>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead><tr><th>Equipo</th><th>Repuesto</th><th>Modelo</th><th>Descripción</th><th>Stock</th><th>En máquina</th><th>Estado</th></tr></thead>
+        <tbody id="searchResultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="homeView">
+    <div class="kpis" id="kpiRow"></div>
+
+    <div class="section-hdr">
+      <h2>Equipos / Máquinas</h2>
+    </div>
+    <div class="equipo-grid" id="equipoGrid"></div>
+  </div>
+
+  <div id="detailView" style="display:none;"></div>
+
+  <div class="footer-actions">
+    <button class="btn secondary sm" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
+    <button class="btn secondary sm" onclick="exportData()">⬇ Exportar respaldo (JSON)</button>
+    <button class="btn secondary sm" onclick="document.getElementById('importFile').click()">⬆ Importar respaldo</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
+</div>
+
+<!-- Modal: nuevo equipo -->
+<div class="modal-bg" id="modalEquipo">
+  <div class="modal">
+    <h3 id="equipoModalTitle">➕ Nuevo equipo / máquina</h3>
+    <div class="modal-sub">Datos generales — puedes dejar campos vacíos y completarlos después</div>
+    <div class="form-grid">
+      <div class="form-field full"><label>Nombre *</label><input id="eq-nombre" placeholder="Ej: VALVE ASSEMBLY"></div>
+      <div class="form-field"><label>Marca</label><input id="eq-marca"></div>
+      <div class="form-field"><label>Modelo</label><input id="eq-modelo"></div>
+      <div class="form-field"><label>Serie</label><input id="eq-serie"></div>
+      <div class="form-field"><label>Localidad</label><input id="eq-localidad" placeholder="Ej: PLANTA 1"></div>
+      <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
+      <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
+      <div class="form-field"><label>Tensión</label><input id="eq-tension" placeholder="220 V"></div>
+      <div class="form-field"><label>Potencia</label><input id="eq-potencia" placeholder="3 KW"></div>
+      <div class="form-field"><label>Frecuencia</label><input id="eq-frecuencia" placeholder="50/60 HZ"></div>
+      <div class="form-field"><label>Tamaño</label><input id="eq-tamano" placeholder="1340x1340x1670mm"></div>
+      <div class="form-field"><label>Peso</label><input id="eq-peso" placeholder="1 ton."></div>
+      <div class="form-field"><label>Fase</label><input id="eq-fase" placeholder="MONO FASICO"></div>
+      <div class="form-field"><label>Made in</label><input id="eq-madein"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalEquipo')">Cancelar</button>
+      <button class="btn" onclick="saveEquipo()">Guardar equipo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nuevo/editar repuesto -->
+<div class="modal-bg" id="modalRepuesto">
+  <div class="modal">
+    <h3 id="repModalTitle">➕ Nuevo repuesto</h3>
+    <div class="modal-sub">Se agrega al equipo que estás viendo</div>
+    <div class="form-grid">
+      <div class="form-field full"><label>Repuesto *</label><input id="rp-nombre" placeholder="Ej: RELE"></div>
+      <div class="form-field"><label>Tipo / Marca</label><input id="rp-tipo" placeholder="Ej: OMRON"></div>
+      <div class="form-field"><label>Modelo</label><input id="rp-modelo"></div>
+      <div class="form-field full"><label>Descripción</label><textarea id="rp-descripcion"></textarea></div>
+      <div class="form-field full"><label>Uso / dónde se usa</label><input id="rp-uso" placeholder="Ej: POSICIÓN DE CILINDRO"></div>
+      <div class="form-field"><label>Stock actual (Qty)</label><input id="rp-qty" type="number" min="0" placeholder="Déjalo vacío si aún no lo cuentas"></div>
+      <div class="form-field"><label>Cantidad en máquina</label><input id="rp-cm" type="number" min="0" placeholder="Opcional"></div>
+      <div class="form-field"><label>Mínimo (alerta stock bajo)</label><input id="rp-min" type="number" min="0" placeholder="Ej: 5"></div>
+      <div class="form-field"><label>Máximo (tope a comprar)</label><input id="rp-max" type="number" min="0" placeholder="Ej: 30"></div>
+      <div class="form-field full">
+        <label>Foto del repuesto</label>
+        <input type="file" id="rp-imagen-camera" accept="image/*" capture="environment" style="display:none" onchange="handleImageUpload(event)">
+        <input type="file" id="rp-imagen-gallery" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-imagen-camera').click()">📷 Tomar foto</button>
+          <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-imagen-gallery').click()">🖼️ Adjuntar imagen</button>
+        </div>
+        <div id="rp-imagen-preview" style="display:none;margin-top:8px;position:relative;width:fit-content;">
+          <img id="rp-imagen-img" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid var(--line);display:block;">
+          <button type="button" class="btn danger sm" style="margin-top:6px;" onclick="removeImage()">🗑 Quitar foto</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalRepuesto')">Cancelar</button>
+      <button class="btn" onclick="saveRepuesto()">Guardar repuesto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox: ver foto en grande -->
+<div class="modal-bg" id="modalLightbox" onclick="closeModal('modalLightbox')">
+  <img id="lightboxImg" style="max-width:90vw;max-height:85vh;border-radius:10px;">
+</div>
+
+<!-- Modal: estado de conexión a Firebase -->
+<div class="modal-bg" id="modalConfig">
+  <div class="modal" style="max-width:560px;">
+    <h3>☁️ Conexión a Firebase</h3>
+    <div class="modal-sub">Base de datos compartida en tiempo real entre todos los celulares y con Bitácora/Análisis.</div>
+    <div id="fbStatusBox" class="info-box" style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px;font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px;">
+      Comprobando conexión…
+    </div>
+    <div class="info-box" style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px;font-size:12px;color:var(--muted);line-height:1.6;">
+      No hace falta configurar nada aquí — la conexión viene lista desde <code>firebase-config.js</code>. Cualquier repuesto o equipo que agregues aparece en los demás celulares en segundos, y si no hay señal se guarda en este dispositivo y se sube solo al reconectar.
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn secondary sm" onclick="configurePin()">🔒 Cambiar clave de eliminación</button>
+      <button class="btn secondary" onclick="closeModal('modalConfig')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: registrar entrada/salida de stock -->
+<div class="modal-bg" id="modalMovimiento">
+  <div class="modal">
+    <h3 id="movModalTitle">📦 Movimiento de stock</h3>
+    <div class="modal-sub" id="movModalSub"></div>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>Tipo de movimiento</label>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn" id="movTipoEntrada" onclick="setMovTipo('entrada')">📥 Entrada</button>
+          <button type="button" class="btn secondary" id="movTipoSalida" onclick="setMovTipo('salida')">📤 Salida</button>
+        </div>
+      </div>
+      <div class="form-field"><label>Cantidad</label><input id="mov-cantidad" type="number" min="1" value="1"></div>
+      <div class="form-field"><label>Tu nombre (técnico)</label><input id="mov-tecnico" placeholder="Ej: Juan Pérez"></div>
+      <div class="form-field full"><label>Motivo / dónde se usó</label><input id="mov-motivo" placeholder="Ej: Reparación de rodillo, OT-123"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalMovimiento')">Cancelar</button>
+      <button class="btn" onclick="confirmMovimiento()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: historial de movimientos -->
+<div class="modal-bg" id="modalMovimientos">
+  <div class="modal" style="max-width:800px;">
+    <h3>🕒 Historial de movimientos</h3>
+    <div class="modal-sub" id="movHistSub"></div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Técnico</th><th>Repuesto</th><th>Tipo</th><th>Cant.</th><th>Quedó en</th><th>Motivo</th></tr></thead>
+        <tbody id="movHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalMovimientos')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal: carga masiva de repuestos (pegar tabla) -->
+<div class="modal-bg" id="modalBulk">
+  <div class="modal" style="max-width:720px;">
+    <h3>📋 Carga masiva de repuestos</h3>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por repuesto. Si un repuesto ya existe en este equipo (mismo nombre + modelo), se suma en vez de duplicarse.</div>
+    <div class="form-field full">
+      <label>Formato de columnas: Repuesto · Tipo · Modelo · Descripción · Uso · Qty · Cant.Máquina · Mínimo · Máximo</label>
+      <textarea id="bulkPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="RELE	OMRON	MY2N-GS-C1	Relé 24VDC 8 pines		4	5	2	10"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalBulk')">Cancelar</button>
+      <button class="btn" onclick="bulkImportRepuestos()">Procesar y cargar</button>
+    </div>
+    <div id="bulkStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- Overlay de carga durante sincronización -->
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(13,17,23,.72);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+  <div style="width:34px;height:34px;border:3px solid #2a3140;border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div id="loadingText" style="color:var(--amber);font-family:'IBM Plex Mono',monospace;font-size:12.5px;">Sincronizando…</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════ NORMALIZACIÓN Y FUSIÓN (evitan duplicados) ═══════════════ */
+function normalizeKey(str){
+  return (str||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
+}
+function partKey(p){
+  // dos repuestos se consideran "el mismo" si coinciden nombre + (modelo o, si no hay modelo, descripción)
+  return normalizeKey(p.r) + '|' + normalizeKey(p.m || p.d || '');
+}
+function mergeRepuestoInto(list, incoming){
+  const key = partKey(incoming);
+  const existing = list.find(p => partKey(p) === key);
+  if(!existing){ list.push({...incoming}); return {merged:false}; }
+  const prevQ = existing.q!=null ? parseFloat(existing.q) : null;
+  const addQ = incoming.q!=null ? parseFloat(incoming.q) : null;
+  if(prevQ!=null || addQ!=null) existing.q = (prevQ||0) + (addQ||0);
+  ['t','m','d','u'].forEach(k=>{ if(!existing[k] && incoming[k]) existing[k] = incoming[k]; });
+  if((existing.cm==null||existing.cm==='') && incoming.cm!=null) existing.cm = incoming.cm;
+  if((existing.min==null||existing.min==='') && incoming.min!=null) existing.min = incoming.min;
+  if((existing.max==null||existing.max==='') && incoming.max!=null) existing.max = incoming.max;
+  if(!existing.img && incoming.img) existing.img = incoming.img;
+  return {merged:true, total: existing.q};
+}
+function mergeEquipoInto(targetList, importedEquipo){
+  let existing = targetList.find(e => normalizeKey(e.nombre) === normalizeKey(importedEquipo.nombre));
+  if(!existing){ targetList.push(JSON.parse(JSON.stringify(importedEquipo))); return; }
+  ['marca','modelo','serie','localidad','fabricacion','instalacion','tension','potencia','frecuencia','tamano','peso','fase','madein'].forEach(k=>{
+    if(!existing[k] && importedEquipo[k]) existing[k] = importedEquipo[k];
+  });
+  if(!existing.manualUrl && importedEquipo.manualUrl){ existing.manualUrl = importedEquipo.manualUrl; existing.manualNombre = importedEquipo.manualNombre; }
+  (importedEquipo.repuestos||[]).forEach(p => mergeRepuestoInto(existing.repuestos, p));
+}
+
+/* ═══════════════ DATOS SEMILLA ═══════════════ */
+const SEED = [
+  {
+    id: 'eq1', nombre: 'VALVE ASSEMBLY', marca: 'WENZHOU FURI', modelo: 'FRTB-ZH', serie: 'FR88-0217TN4',
+    localidad: 'PLANTA 1', fabricacion: '2025-01-04', instalacion: '2025-08-07',
+    tension: '220 V', potencia: '3 KW', frecuencia: '50/60 HZ', tamano: '1340x1340x1670mm',
+    peso: '1 ton.', fase: 'MONO FASICO', madein: 'CHINA',
+    repuestos: [
+      {r:'RELE',t:'OMRON',m:'MY2N-GS-C1',d:'RELE MY2N-GS-C1 DC24 OMRON (24VDC 8 PINES)',u:'',q:4,cm:5},
+      {r:'SENSOR',t:'DMS',m:'DMSG-050 (B30HY)',d:'SENSOR ELECTRONICO DE ESTADO SOLIDO',u:'POSICION DE CILINDRO',q:6,cm:33},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M8/M6',d:'CONECTOR NEUMATICO FESTO TIPO T M8/M6',u:'',q:1,cm:10},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M16/M10',d:'CONECTOR NEUMATICO FESTO TIPO T M16/M10',u:'',q:0,cm:2},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M6',d:'CONECTOR NEUMATICO FESTO TIPO T M6/M6',u:'',q:2,cm:10},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M6/M6',d:'CONECTOR NEUMATICO FESTO TIPO Y M6/M6',u:'',q:2,cm:30},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M8/M6',d:'CONECTOR NEUMATICO FESTO TIPO Y M8/M6',u:'',q:2,cm:20},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M10/M8',d:'CONECTOR NEUMATICO FESTO TIPO Y M10/M8',u:'',q:0,cm:16},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M12/M10',d:'CONECTOR NEUMATICO FESTO TIPO Y M12/M10',u:'',q:0,cm:10},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M12/M12',d:'CONECTOR NEUMATICO FESTO TIPO Y M12/M12',u:'',q:0,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M16/M12',d:'CONECTOR NEUMATICO FESTO TIPO Y M16/M12',u:'',q:0,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/2 A M16',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/2/M16',u:'',q:0,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/4 A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/4 A M6',u:'',q:2,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/8 A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/8 A M6',u:'',q:2,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/2 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/2/M12',u:'',q:0,cm:5},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 5MM A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 5MM A M6',u:'',q:2,cm:15},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/2 A M16',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/2 A M16',u:'',q:0,cm:6},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 5/8 A M16',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 5/8 A M16',u:'',q:0,cm:4},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/4 A M8',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/4 A M8',u:'',q:2,cm:20},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/4 A M6',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/4 A M6',u:'',q:2,cm:50},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'SS316 M8/1/4',d:'Conector doble férula acero inoxidable 316, macho recto, M8 a NPT 1/4',u:'',q:0,cm:60},
+      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO VALVULA',m:'REGULADOR M6/M6',d:'Regulador de caudal de línea neumático para tubo M6/M6',u:'',q:3,cm:30},
+      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO CODO',m:'Rosca M5xM8',d:'Regulador de caudal neumático codo, rosca M5 x M8',u:'',q:1,cm:70},
+      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO CODO',m:'Rosca 1/8xM8',d:'Regulador de caudal neumático codo, rosca 1/8 x M8',u:'',q:2,cm:10},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE M16 A M16',d:'CONECTOR NEUMATICO FESTO TIPO CODO M16/M16',u:'',q:0,cm:2},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE 5/8 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CODO 5/8 A M12',u:'',q:0,cm:2},
+      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE 3/8 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CODO 3/8 A M12',u:'',q:0,cm:9},
+      {r:'MANGUERA',t:'Tubo de plástico',m:'M6',d:'Tubo de plástico PUN-H, PUN-H-DUO M6',u:'',q:0,cm:'100 PIE'},
+      {r:'MANGUERA',t:'Tubo de plástico',m:'M8',d:'Tubo de plástico PUN-H, PUN-H-DUO M8',u:'',q:0,cm:'100 PIE'},
+      {r:'MANGUERA',t:'Tubo de plástico',m:'M10',d:'Tubo de plástico PUN-H, PUN-H-DUO M10',u:'',q:0,cm:'100 PIE'},
+      {r:'MANGUERA',t:'Tubo de plástico',m:'M12',d:'Tubo de plástico PUN-H, PUN-H-DUO M12',u:'',q:0,cm:'20 PIE'},
+      {r:'MANGUERA',t:'Tubo de plástico',m:'M16',d:'Tubo de plástico PUN-H, PUN-H-DUO M16',u:'',q:0,cm:'10 PIE'},
+      {r:'SENSOR INDUCTIVO',t:'LEUZE',m:'IS 122PP/2NO-5E0',d:'Interruptor inductivo SN=5mm, 10-30VDC, 200mA',u:'',q:2,cm:18},
+      {r:'Servomotor',t:'innovador',m:'MS1H4-40B30CB-T331R-S',d:'Servomotor innovador',u:'',q:0,cm:1},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'MD20X35S',d:'',u:'',q:0,cm:3},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TN16X25S',d:'Cilindro neumático doble eje, doble varilla',u:'',q:0,cm:1},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TN16X10S',d:'Cilindro neumático doble eje, doble varilla',u:'',q:0,cm:9},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TCLJ16X30-20S',d:'Cilindro triaxial de doble efecto',u:'',q:0,cm:28},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'HRQ30A',d:'Cilindro de tabla giratoria',u:'',q:0,cm:1},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'SDAJ40X50-30SB',d:'Cilindro neumático compacto de doble efecto',u:'',q:0,cm:3},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TCM6X10S',d:'Cilindro de tres varillas con cojinete de bronce',u:'',q:0,cm:2},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'MD20X15S',d:'',u:'',q:0,cm:3},
+      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'HFZ16',d:'Cilindro de dedo neumático, garra abierta y cerrada',u:'',q:2,cm:6},
+      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO VALVULA',u:'',q:0,cm:2},
+      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO BODY',u:'',q:0,cm:4},
+      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO CROSS',u:'',q:0,cm:2},
+      {r:'ELECTROVALVULA',t:'AIRTAC',m:'4V210-08',d:'DC24, 0.15-0.8MPa',u:'',q:4,cm:48},
+      {r:'ELECTROVALVULA',t:'AIRTAC',m:'4V220-08',d:'DC24, 0.15-0.8MPa',u:'',q:0,cm:2},
+      {r:'SENSOR',t:'LEUZE',m:'HT5.1/2',d:'',u:'CONVEYOR',q:2,cm:10},
+      {r:'Resorte de Compresión',t:'',m:'RC-25x2x50-6.5D-PE',d:'Øext25 Øalambre2 L.libre50mm 6.5 espiras derecho planas esmeriladas',u:'',q:2,cm:6},
+      {r:'Resorte de Compresión',t:'',m:'RC-24x1x125-15.5D-PE',d:'Øext24 Øalambre1 L.libre125mm 15.5 espiras derecho planas esmeriladas',u:'',q:2,cm:2},
+      {r:'Resorte de Compresión',t:'',m:'RC-25x2x114-12.5D-PE',d:'Øext25 Øalambre2 L.libre114mm 12.5 espiras derecho planas esmeriladas',u:'',q:4,cm:16},
+      {r:'Interruptor de vacío',t:'SMC',m:'ZSE20-N-01-L',d:'',u:'Vacuum Switch',q:2,cm:28},
+      {r:'Interruptor de presión',t:'DPS',m:'DPSN1',d:'Serie DPS Airtac, pantalla digital',u:'',q:0,cm:2},
+      {r:'VALVULA SOLENOIDE',t:'SMC',m:'VX214EA',d:'DC24V 4.5W',u:'Valves Vacuum',q:2,cm:56},
+      {r:'filtro de bomba vacío',t:'',m:'',d:'Elemento de filtro de bomba de vacío',u:'',q:0,cm:1},
+      {r:'filtro de vacío',t:'SMC ZFC100-04B',m:'SMC ZFC100-06B',d:'Montaje de manguera de aire de vacío, accesorios conexión rápida',u:'filtro Vacuum',q:10,cm:28},
+      {r:'Sensor',t:'fibra óptica coaxial',m:'Ffrc-610-Mu',d:'Sensor de fibra óptica coaxial de reflexión difusa, sonda curva',u:'',q:1,cm:3},
+      {r:'SENSOR INDUCTIVO',t:'omron',m:'E2B-S08KS02-WP-B1 2M',d:'PNP/NO; 0-2mm; 10-30VDC; M8; 2m; IP67',u:'',q:0,cm:1},
+      {r:'correa',t:'Optibelt OMEGA HTD',m:'1080-8M',d:'Correa de distribución',u:'',q:0,cm:1},
+      {r:'correa',t:'Optibelt',m:'1120-14M',d:'Correa de tiempo tipo 14M, 1120mm',u:'',q:0,cm:1},
+      {r:'Correa',t:'Tipo Vee V Cinturón',m:'z400',d:'Correa trapezoidal clásica',u:'',q:0,cm:4},
+      {r:'MOTOR',t:'MAILI',m:'ch32',d:'2hp 1500w 220/380v 6.59/3.62A 50/60hz 1350/1650rpm',u:'',q:0,cm:1},
+      {r:'VACOOM',t:'ORION',m:'DRY-PUMP',d:'Bomba',u:'',q:0,cm:1},
+      {r:'motor vacoom',t:'aevf',m:'nanjing kingdom-motor',d:'2hp 1.5kw 220v 8.8A 50/60hz 1435/1720rpm',u:'',q:0,cm:1},
+      {r:'rodamiento del vacoom',t:'skf',m:'6205-zz',d:'',u:'BOMBA',q:0,cm:4},
+      {r:'rodamiento del vacoom',t:'skf',m:'6203-zz',d:'',u:'BOMBA',q:0,cm:4},
+      {r:'RODAMIENTO',t:'SKF',m:'6004-E',d:'',u:'CINTA',q:0,cm:8},
+      {r:'RODAMIENTO',t:'SKF',m:'6002-Z',d:'',u:'CINTA',q:0,cm:8},
+      {r:'variador',t:'kewo',m:'ad300-2s1.5 gb',d:'In 1.5kw 220v 50/60hz, out 3hp 0-220v 0-50hz 7A',u:'',q:0,cm:1},
+      {r:'variador',t:'CUH',m:'SDVC31-S',d:'1.5A, in 85-260VAC, out 40-400Hz',u:'',q:0,cm:4},
+      {r:'variador',t:'CUH',m:'SDVC31-M',d:'3A, in 85-260VAC, out 40-400Hz',u:'',q:0,cm:3},
+      {r:'AC SERVO MOTOR',t:'INOVANCE',m:'MS1H4-75B30CB',d:'Usado',u:'',q:0,cm:1},
+      {r:'Rele',t:'MIBBO',m:'SA-40D3Z',d:'Relé de estado sólido',u:'',q:0,cm:1},
+      {r:'BREAKER',t:'CHNT',m:'NXB-63 C25',d:'Breaker europeo doble',u:'',q:0,cm:2},
+      {r:'BREAKER',t:'CHNT',m:'NXB-63 C16',d:'Breaker europeo simple',u:'',q:0,cm:2},
+      {r:'CONTACTOR',t:'CHNT',m:'CJX2-18-10',d:'AC 380V/220V/110V/36V/24V',u:'',q:0,cm:3},
+      {r:'POWER SUPPLY',t:'MEAN WELL',m:'LRS-600-24',d:'24V 600W, perfil bajo',u:'',q:0,cm:1},
+      {r:'POWER SUPPLY',t:'MEAN WELL',m:'LRS-150-24',d:'24V, perfil bajo',u:'',q:0,cm:1},
+      {r:'SERVO DRIVE',t:'INOVANCE',m:'SV630A',d:'AC200V 750W, usado',u:'',q:0,cm:2},
+      {r:'Motor de velocidad variable',t:'MAILI',m:'3RK20GN-C',d:'20W 220V 1250RPM 50/60Hz',u:'',q:0,cm:4},
+      {r:'Motor de velocidad variable',t:'MAILI',m:'5RK40GN-CF',d:'40W 220V 1350/1550RPM',u:'',q:0,cm:1},
+      {r:'CILINDRO NEUMATICOS',t:'AIRTAC',m:'MAC20',d:'Mini cilindro MAC20X75',u:'',q:0,cm:1},
+      {r:'CILINDRO NEUMATICOS',t:'AIRTAC',m:'MI 16X50 SCA.',d:'',u:'',q:0,cm:1},
+      {r:'REGULADOR DE AIRE',t:'AIRTAC',m:'GFR400-15',d:'Filtro regulador 20-130PSI, separador aceite/agua 80CC',u:'',q:0,cm:2},
+      {r:'ACOPLE',t:'AIRTAC',m:'F-M8X125F',d:'Floating Joint, rosca M8, paso 1.25mm',u:'',q:0,cm:4},
+      {r:'ACOPLE',t:'AIRTAC',m:'F-M8X125F (2)',d:'Floating Joint',u:'',q:0,cm:4},
+      {r:'ACOPLE',t:'AIRTAC',m:'F-M14X150F',d:'Floating Joint',u:'',q:0,cm:2},
+      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 3070 x 110 x 1mm',u:'',q:0,cm:1},
+      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 1730 x 110 x 1mm',u:'',q:0,cm:1},
+      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 1720 x 130 x 1mm',u:'',q:0,cm:1},
+      {r:'RESISTENCIA',t:'',m:'Resistencia de abrazadera',d:'Ø35x35 220V',u:'',q:0,cm:1},
+      {r:'SENSOR',t:'Leuze',m:'HT3CL1/2N-M8',d:'Sensor difuso con supresión de fondo — 50136237',u:'',q:0,cm:1},
+      {r:'SENSOR',t:'OPTEX',m:'Wll170-2P330',d:'Sensor de fibra óptica — 6029513',u:'',q:0,cm:3},
+      {r:'chumacera',t:'skf',m:'uc209',d:'UC209-26+AK209, hierro fundido, 1.625"',u:'',q:0,cm:2},
+      {r:'codificador',t:'OMRON',m:'E6B2-CWZ6C',d:'Resolución 1000 p/r',u:'',q:0,cm:1},
+      {r:'Sensor de proximidad',t:'AIRTAC',m:'Dmsj DMS Series 2/3',d:'Reed magnético para cilindro neumático',u:'',q:0,cm:1},
+      {r:'FUENTE',t:'SUICHIN',m:'2420',d:'Adaptador AC/DC, in 100-240V 50/60Hz, out 24V 2A',u:'',q:0,cm:1},
+      {r:'sensor',t:'AIRTAC',m:'HR12-D10NK',d:'Interruptor magnético con sensor de proximidad',u:'',q:0,cm:1},
+    ]
+  },
+  {
+    id: 'eq2', nombre: 'COATING', marca: 'HENGLI', modelo: 'SFM-Z90X31-1600', serie: '065',
+    localidad: 'PLANTA 1', fabricacion: '2022-01-04', instalacion: 'Jul-22',
+    tension: '380V', potencia: '220KW', frecuencia: '50 HZ', tamano: '16500x10000x400mm',
+    peso: '25 ton.', fase: '3', madein: 'CHINA',
+    repuestos: [
+      {r:'SENSOR',t:'DMS',m:'DMSG-N020',d:'NPN/IP64 — 5~30V DC 30V/200 MA MAX',u:'SENSOR DEL CILINDRO QUE BAJA EL ROLLO TERMINADO DE COATING',q:null,cm:null},
+      {r:'RODAMIENTO',t:'SKF',m:'22216-EK-C3',d:'Rodamiento de rótulas en rodillos — Ø int. 80mm, Ø ext. 140mm, espesor 33mm, vel. límite 4300 RPM, carga dinámica 236000KN, estática 270000KN',u:'RODILLO DE AGUA FRIA',q:null,cm:null},
+      {r:'RODAMIENTO',t:'SKF',m:'1306-ENTN9',d:'Rodamiento a rótula de bola — Ø int. 30mm, Ø ext. 72mm, espesor 19mm, peso 396g',u:'RODAMIENTO PARA RODILLOS',q:null,cm:null},
+      {r:'RETENEDORA',t:'SKF',m:'45 x 65 x 10',d:'Retén de Viton — Ø ext. 65mm, Ø int. 45mm, espesor 10mm',u:'RETENEDORA',q:null,cm:null},
+      {r:'FILTRO',t:'',m:'100 x 120 lcr18n19 ti',d:'Filtro automático — automatic belt filtering net 100x120 lcr18n19 ti',u:'FILTRO DE LA EXTRUSORA',q:null,cm:null},
+      {r:'FILTRO',t:'',m:'100 x 260 lcr18n19 ti',d:'Filtro automático — automatic belt filtering net 100x260 lcr18n19 ti',u:'FILTRO DE LA EXTRUSORA',q:null,cm:null},
+      {r:'RETENEDORA',t:'SKF',m:'35 x 52 x 10',d:'Retén de Viton — Ø ext. 52mm, Ø int. 35mm, espesor 10mm',u:'RETENEDORA',q:null,cm:null},
+      {r:'MOTOR',t:'',m:'BTS-50-S',d:'',u:'',q:null,cm:2},
+      {r:'VALVULA',t:'',m:'',d:'',u:'',q:null,cm:2},
+      {r:'TUMA CERO',t:'',m:'FC209',d:'',u:'',q:null,cm:2},
+      {r:'CILINDRO',t:'',m:'SC50*405',d:'',u:'',q:null,cm:2},
+      {r:'REDUTOR',t:'',m:'',d:'',u:'',q:null,cm:1},
+      {r:'MOTOR',t:'',m:'',d:'',u:'',q:null,cm:1},
+      {r:'CILINDRO PARA CUCHILLA',t:'',m:'',d:'Longitud 1970mm',u:'',q:null,cm:null},
+      {r:'CILINDRO',t:'',m:'SC63*1605',d:'',u:'',q:null,cm:2},
+      {r:'DYSPLAY',t:'KADO',m:'AE500',d:'KADO Automation AE500 display unit, cable and software',u:'CONTROLADOR',q:null,cm:1},
+      {r:'FLECHERO',t:'',m:'',d:'Air cylinder arrow 175CM',u:'BOBINA',q:null,cm:2},
+      {r:'ENCODER',t:'',m:'ZZUU4809-001G-2500BZ1-4P5L',d:'Rotary encoder',u:'',q:null,cm:1},
+      {r:'CILINDRO',t:'',m:'',d:'Cylinder Corona 171CM x 20.5CM',u:'TRATAMIENTO CORONA',q:null,cm:1},
+      {r:'CILINDRO',t:'',m:'',d:'Cylinder Cool Water 170CM x 35CM',u:'CILINDRO DE AGUA',q:null,cm:1},
+      {r:'FAN',t:'',m:'pfb0924ghe-5l3n',d:'Brand new DC24V 0.76A cooling fan for ACS510/550',u:'',q:null,cm:2},
+    ]
+  }
+];
+
+/* ═══════════════ ESTADO ═══════════════ */
+let DB = [];
+let currentEquipoId = null;
+let editingRepIndex = null;
+let repFilter = 'todos'; // todos | sin | bajo
+
+/* ═══════════════ CONEXIÓN A FIREBASE ═══════════════ */
+function openConfigModal(){
+  openModal('modalConfig');
+}
+
+function updateSyncStatus(state){
+  const btn = document.getElementById('syncStatusBtn');
+  if(state==='ok') btn.innerHTML = '🟢 En vivo';
+  else if(state==='syncing') btn.innerHTML = '🟡 Sincronizando…';
+  else if(state==='error') btn.innerHTML = '🔴 Error de conexión';
+  else if(state==='local') btn.innerHTML = '💾 Solo local';
+  else btn.innerHTML = '⚪ Conectando…';
+}
+
+// quita valores `undefined` (Firestore los rechaza) reemplazándolos por null
+function fbSanitize(obj){
+  return JSON.parse(JSON.stringify(obj === undefined ? null : obj));
+}
+
+// Guarda el estado actual de un equipo (datos + su array de repuestos) en su
+// documento de Firestore. No se espera (await) la confirmación del servidor
+// para no bloquear la interfaz si no hay señal — con persistencia offline
+// activada, el cambio se sube solo en cuanto haya conexión.
+function fbSaveEquipo(e){
+  const { id, ...rest } = e;
+  db.collection('equipos').doc(id).set(fbSanitize({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
+    .catch(err => { console.error('Error guardando equipo:', err); showToast('⚠️ No se pudo sincronizar: '+err.message); });
+}
+function fbDeleteEquipoDoc(id){
+  return db.collection('equipos').doc(id).delete();
+}
+
+/* ═══════════════ CARGA EN VIVO (Firestore) ═══════════════ */
+let dbListenerStarted = false;
+async function loadDB(){
+  await window.fbReady;
+  if(dbListenerStarted) return; // el listener ya mantiene DB actualizada
+  dbListenerStarted = true;
+  updateSyncStatus('syncing');
+
+  const equiposRef = db.collection('equipos');
+  const firstSnap = await equiposRef.get().catch(()=>null);
+
+  if(firstSnap && firstSnap.empty){
+    // primera vez que se usa esta base de datos: sube los datos precargados
+    // (SEED) una sola vez, para no perder el inventario que ya tenías.
+    showLoading('Preparando la base de datos por primera vez…');
+    for(const eq of SEED){
+      const ref = equiposRef.doc();
+      const { id, ...rest } = eq;
+      await ref.set(fbSanitize({ ...rest, updatedAt: fbTimestamp() })).catch(err=>console.error(err));
+    }
+    hideLoading();
+  }
+
+  equiposRef.onSnapshot((snap)=>{
+    DB = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    updateSyncStatus('ok');
+    const box = document.getElementById('fbStatusBox');
+    if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${firebaseConfig.projectId}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
+    if(currentEquipoId){ if(getCurrentEquipo()) renderDetail(); else backHome(); }
+    else renderHome();
+  }, (err)=>{
+    console.error('Error escuchando equipos:', err);
+    updateSyncStatus('error');
+    const box = document.getElementById('fbStatusBox');
+    if(box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${err.message}`;
+    showToast('⚠️ Error de conexión a Firebase: '+err.message);
+  });
+}
+function saveDB(){
+  // por compatibilidad con el resto del código: guarda el equipo actual
+  // (los cambios en otros equipos ya se guardan puntualmente donde ocurren)
+  const e = getCurrentEquipo();
+  if(e) fbSaveEquipo(e);
+}
+
+/* ═══════════════ HELPERS DE STOCK ═══════════════ */
+function stockStatus(p){
+  if(p.q===null || p.q===undefined || p.q===''){ return 'nodata'; }
+  const q = parseFloat(p.q);
+  if(isNaN(q)) return 'nodata';
+  if(q<=0) return 'sin';
+  const min = parseFloat(p.min);
+  if(!isNaN(min) && min>0){
+    return q < min ? 'bajo' : 'ok';
+  }
+  // sin mínimo definido: se usa el 20% de lo instalado en la máquina como referencia
+  const cm = parseFloat(p.cm);
+  if(!isNaN(cm) && cm>0 && q < cm*0.2) return 'bajo';
+  return 'ok';
+}
+function stockLabel(s){ return {sin:'SIN STOCK', bajo:'BAJO', ok:'OK', nodata:'SIN CONTAR'}[s]; }
+function gaugeRef(p){
+  // referencia (100% de la barra): Máximo si está definido, si no Cantidad en máquina
+  const max = parseFloat(p.max);
+  if(!isNaN(max) && max>0) return max;
+  const cm = parseFloat(p.cm);
+  if(!isNaN(cm) && cm>0) return cm;
+  return null;
+}
+function gaugePct(p){
+  if(stockStatus(p)==='nodata') return 0;
+  const q = parseFloat(p.q)||0;
+  const ref = gaugeRef(p);
+  if(!ref) return q>0? 100:0;
+  return Math.max(3, Math.min(100, Math.round(q/ref*100)));
+}
+function minMarkerPct(p){
+  const min = parseFloat(p.min);
+  const ref = gaugeRef(p);
+  if(isNaN(min) || min<=0 || !ref) return null;
+  return Math.max(0, Math.min(100, Math.round(min/ref*100)));
+}
+
+/* ═══════════════ RENDER: HOME ═══════════════ */
+function renderHome(){
+  const allParts = DB.flatMap(e=>e.repuestos);
+  const sinStock = allParts.filter(p=>stockStatus(p)==='sin').length;
+  const bajo = allParts.filter(p=>stockStatus(p)==='bajo').length;
+  const sinContar = allParts.filter(p=>stockStatus(p)==='nodata').length;
+
+  document.getElementById('hdrSub').textContent = `${DB.length} equipos · ${allParts.length} tipos de repuesto registrados`;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi"><div class="lbl">Equipos</div><div class="val">${DB.length}</div></div>
+    <div class="kpi"><div class="lbl">Tipos de repuesto</div><div class="val">${allParts.length}</div></div>
+    <div class="kpi red"><div class="lbl">Sin stock</div><div class="val">${sinStock}</div></div>
+    <div class="kpi amber"><div class="lbl">Stock bajo</div><div class="val">${bajo}</div></div>
+    ${sinContar? `<div class="kpi"><div class="lbl">Sin contar</div><div class="val" style="color:var(--muted);">${sinContar}</div></div>` : ''}
+  `;
+
+  const grid = document.getElementById('equipoGrid');
+  grid.innerHTML = DB.map(e=>{
+    const parts = e.repuestos;
+    const sin = parts.filter(p=>stockStatus(p)==='sin').length;
+    const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
+    const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
+    const ok = parts.length - sin - baj - noData;
+    return `
+      <div class="equipo-card" onclick="openEquipo('${e.id}')">
+        ${e.localidad? `<span class="badge-loc">${e.localidad}</span>` : ''}
+        <h3>${e.nombre}</h3>
+        <div class="meta">${[e.marca,e.modelo].filter(Boolean).join(' · ') || 'Sin datos de marca/modelo'}</div>
+        <div class="stats-row">
+          <div class="stat ok"><b>${ok}</b>OK</div>
+          <div class="stat bajo"><b>${baj}</b>BAJO</div>
+          <div class="stat sinstock"><b>${sin}</b>SIN STOCK</div>
+          ${noData? `<div class="stat" style="color:var(--muted);"><b style="color:var(--muted);">${noData}</b>SIN CONTAR</div>` : ''}
+          <div class="stat" style="margin-left:auto;color:var(--muted);"><b style="color:var(--text)">${parts.length}</b>TOTAL</div>
+        </div>
+      </div>
+    `;
+  }).join('') + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
+}
+
+/* ═══════════════ RENDER: DETALLE DE EQUIPO ═══════════════ */
+async function openEquipo(id){
+  currentEquipoId = id;
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('searchResultsView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+  document.getElementById('globalSearch').value = '';
+  repFilter = 'todos';
+  renderDetail(); // DB ya se mantiene al día en vivo por el listener de Firestore
+}
+function backHome(){
+  currentEquipoId = null;
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('homeView').style.display = 'block';
+  renderHome();
+}
+
+function getCurrentEquipo(){ return DB.find(e=>e.id===currentEquipoId); }
+
+function renderDetail(){
+  const e = getCurrentEquipo();
+  if(!e){ backHome(); return; }
+  const parts = e.repuestos;
+  const sin = parts.filter(p=>stockStatus(p)==='sin').length;
+  const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
+  const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
+
+  const specs = [
+    ['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie], ['Localidad', e.localidad],
+    ['Fecha fabricación', e.fabricacion], ['Fecha instalación', e.instalacion],
+    ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia],
+    ['Tamaño', e.tamano], ['Peso', e.peso], ['Fase', e.fase], ['Made in', e.madein],
+  ];
+
+  let filtered = parts;
+  if(repFilter==='sin') filtered = parts.filter(p=>stockStatus(p)==='sin');
+  if(repFilter==='bajo') filtered = parts.filter(p=>stockStatus(p)==='bajo');
+  if(repFilter==='nodata') filtered = parts.filter(p=>stockStatus(p)==='nodata');
+
+  document.getElementById('detailView').innerHTML = `
+    <div class="back-link" onclick="backHome()">← Volver a todos los equipos</div>
+    <div class="detail-hdr">
+      <div>
+        <h2>${e.nombre}</h2>
+        <div class="sub">${parts.length} repuestos registrados · ${sin} sin stock · ${baj} con stock bajo${noData?` · ${noData} sin contar`:''}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
+        <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
+        <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
+        <button class="btn secondary sm" onclick="deleteEquipo()">🗑 Eliminar equipo</button>
+        <button class="btn sm" onclick="openRepuestoModal()">＋ Agregar repuesto</button>
+      </div>
+    </div>
+
+    <div class="specs-card">
+      <div class="specs-grid">
+        ${specs.map(([k,v])=>`<div class="spec"><div class="k">${k}</div><div class="v ${!v?'empty':''}">${v||'sin registrar'}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <input type="file" id="manualInput" accept="application/pdf" style="display:none" onchange="handleManualUpload(event)">
+        ${e.manualUrl ? `
+          <button class="btn secondary sm" onclick="viewManual()">📄 Ver manual — ${e.manualNombre||'PDF'}</button>
+          <button class="btn secondary sm" onclick="document.getElementById('manualInput').click()">🔄 Reemplazar</button>
+          <button class="btn danger sm" onclick="removeManual()">🗑 Quitar manual</button>
+        ` : `
+          <button class="btn secondary sm" onclick="document.getElementById('manualInput').click()">📄 Subir manual de partes (PDF)</button>
+        `}
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="filter-chips">
+          <span class="fchip ${repFilter==='todos'?'active':''}" onclick="setRepFilter('todos')">Todos (${parts.length})</span>
+          <span class="fchip ${repFilter==='sin'?'active':''}" onclick="setRepFilter('sin')">🔴 Sin stock (${sin})</span>
+          <span class="fchip ${repFilter==='bajo'?'active':''}" onclick="setRepFilter('bajo')">🟡 Bajo (${baj})</span>
+          ${noData? `<span class="fchip ${repFilter==='nodata'?'active':''}" onclick="setRepFilter('nodata')">⚪ Sin contar (${noData})</span>` : ''}
+        </div>
+        <input type="text" id="localSearch" placeholder="Filtrar en este equipo…" oninput="renderPartsTable()" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:7px 11px;border-radius:7px;font-size:12px;">
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th></th><th>Repuesto</th><th>Tipo/Marca</th><th>Modelo</th><th>Descripción</th><th>Uso</th>
+            <th>Stock</th><th>Mín/Máx</th><th>En máquina</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody id="partsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  renderPartsTable();
+}
+
+function setRepFilter(f){ repFilter = f; renderDetail(); }
+
+function renderPartsTable(){
+  const e = getCurrentEquipo();
+  if(!e) return;
+  const localQ = (document.getElementById('localSearch')?.value || '').toLowerCase();
+  let list = e.repuestos.map((p,i)=>({...p, _idx:i}));
+  if(repFilter==='sin') list = list.filter(p=>stockStatus(p)==='sin');
+  if(repFilter==='bajo') list = list.filter(p=>stockStatus(p)==='bajo');
+  if(repFilter==='nodata') list = list.filter(p=>stockStatus(p)==='nodata');
+  if(localQ) list = list.filter(p=> (p.r+p.t+p.m+p.d+p.u).toLowerCase().includes(localQ));
+
+  const body = document.getElementById('partsBody');
+  if(!list.length){
+    body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="big">📭</div>No hay repuestos que coincidan.</div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = list.map(p=>{
+    const st = stockStatus(p);
+    const pct = gaugePct(p);
+    const minPct = minMarkerPct(p);
+    const isNum = !isNaN(parseFloat(p.q));
+    const minMaxTxt = [(p.min!=null&&p.min!==''?p.min:'—'), (p.max!=null&&p.max!==''?p.max:'—')].join(' / ');
+    return `
+      <tr>
+        <td>${p.img ? `<img src="${p.img}" class="thumb" onclick="openLightbox('${p.img}')">` : `<div class="thumb-placeholder">📦</div>`}</td>
+        <td class="part-name">${p.r}</td>
+        <td class="part-modelo">${p.t||'—'}</td>
+        <td class="part-modelo">${p.m||'—'}</td>
+        <td class="part-desc">${p.d||'—'}</td>
+        <td class="part-modelo">${p.u||'—'}</td>
+        <td>
+          <div class="gauge-wrap">
+            <span class="qty-num">${isNum? p.q : '—'}</span>
+            <div class="gauge">
+              <div class="gauge-fill ${st}" style="width:${isNum?pct:100}%"></div>
+              ${minPct!=null ? `<div class="gauge-min-mark" style="left:${minPct}%"></div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="mono" style="color:var(--muted);font-size:11px;">${minMaxTxt}</td>
+        <td class="mono">${(p.cm!==null && p.cm!==undefined && p.cm!=='')? p.cm : '—'}</td>
+        <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-btn" onclick="openMovimiento(${p._idx},'entrada')" title="Registrar entrada de stock">📥</button>
+            <button class="icon-btn" onclick="openMovimiento(${p._idx},'salida')" title="Registrar salida de stock">📤</button>
+            <button class="icon-btn" onclick="openRepuestoModal(${p._idx})" title="Editar todo">✏️</button>
+            <button class="icon-btn" onclick="deleteRepuesto(${p._idx})" title="Eliminar">🗑</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* ═══════════════ MODALES ═══════════════ */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+let editingEquipoId = null;
+const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein'];
+
+function openNewEquipoModal(){
+  editingEquipoId = null;
+  document.getElementById('equipoModalTitle').textContent = '➕ Nuevo equipo / máquina';
+  EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  openModal('modalEquipo');
+}
+function openEditEquipoModal(){
+  const e = getCurrentEquipo();
+  editingEquipoId = e.id;
+  document.getElementById('equipoModalTitle').textContent = '✏️ Editar datos del equipo';
+  document.getElementById('eq-nombre').value = e.nombre||'';
+  document.getElementById('eq-marca').value = e.marca||'';
+  document.getElementById('eq-modelo').value = e.modelo||'';
+  document.getElementById('eq-serie').value = e.serie||'';
+  document.getElementById('eq-localidad').value = e.localidad||'';
+  document.getElementById('eq-fabricacion').value = e.fabricacion||'';
+  document.getElementById('eq-instalacion').value = e.instalacion||'';
+  document.getElementById('eq-tension').value = e.tension||'';
+  document.getElementById('eq-potencia').value = e.potencia||'';
+  document.getElementById('eq-frecuencia').value = e.frecuencia||'';
+  document.getElementById('eq-tamano').value = e.tamano||'';
+  document.getElementById('eq-peso').value = e.peso||'';
+  document.getElementById('eq-fase').value = e.fase||'';
+  document.getElementById('eq-madein').value = e.madein||'';
+  openModal('modalEquipo');
+}
+
+async function saveEquipo(){
+  const nombre = document.getElementById('eq-nombre').value.trim();
+  if(!nombre){ showToast('⚠️ El nombre es obligatorio'); return; }
+  const dupe = DB.find(e2=>normalizeKey(e2.nombre)===normalizeKey(nombre) && e2.id!==editingEquipoId);
+  if(dupe){ showToast('⚠️ Ya existe otro equipo con ese nombre'); return; }
+
+  const datos = {
+    nombre,
+    marca: document.getElementById('eq-marca').value.trim(),
+    modelo: document.getElementById('eq-modelo').value.trim(),
+    serie: document.getElementById('eq-serie').value.trim(),
+    localidad: document.getElementById('eq-localidad').value.trim(),
+    fabricacion: document.getElementById('eq-fabricacion').value,
+    instalacion: document.getElementById('eq-instalacion').value,
+    tension: document.getElementById('eq-tension').value.trim(),
+    potencia: document.getElementById('eq-potencia').value.trim(),
+    frecuencia: document.getElementById('eq-frecuencia').value.trim(),
+    tamano: document.getElementById('eq-tamano').value.trim(),
+    peso: document.getElementById('eq-peso').value.trim(),
+    fase: document.getElementById('eq-fase').value.trim(),
+    madein: document.getElementById('eq-madein').value.trim(),
+  };
+
+  if(editingEquipoId){
+    const e = DB.find(x=>x.id===editingEquipoId);
+    Object.assign(e, datos);
+    fbSaveEquipo(e);
+    closeModal('modalEquipo');
+    renderDetail();
+    showToast('✅ Datos del equipo guardados');
+    return;
+  }
+
+  await window.fbReady;
+  const ref = db.collection('equipos').doc(); // id generado localmente, sin esperar al servidor
+  const nuevo = { id: ref.id, ...datos, repuestos: [] };
+  fbSaveEquipo(nuevo);
+  DB.push(nuevo);
+  closeModal('modalEquipo');
+  EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  renderHome();
+  showToast('✅ Equipo agregado');
+}
+
+/* ═══════════════ MANUAL DE PARTES (PDF por equipo) ═══════════════ */
+function handleManualUpload(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  if(file.type !== 'application/pdf'){ showToast('⚠️ Solo se aceptan archivos PDF'); ev.target.value=''; return; }
+  const sizeMB = file.size / 1024 / 1024;
+  if(sizeMB > 15){
+    if(!confirm(`Este PDF pesa ${sizeMB.toFixed(1)}MB. ¿Continuar de todos modos?`)) { ev.target.value=''; return; }
+  }
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    const eq = getCurrentEquipo();
+    const prevUrl = eq.manualUrl;
+    showLoading('Subiendo manual…');
+    try{
+      const url = await fbUploadDataUrl(e.target.result, `manuales/${eq.id}/${Date.now()}-${file.name}`);
+      eq.manualUrl = url;
+      eq.manualNombre = file.name;
+      fbSaveEquipo(eq);
+      if(prevUrl) fbDeleteFile(prevUrl);
+      showToast('✅ Manual subido');
+    }catch(err){
+      showToast('❌ No se pudo subir el manual: '+err.message);
+    }
+    hideLoading();
+    renderDetail();
+  };
+  reader.readAsDataURL(file);
+  ev.target.value = '';
+}
+function viewManual(){
+  const eq = getCurrentEquipo();
+  if(!eq.manualUrl) return;
+  window.open(eq.manualUrl, '_blank');
+}
+function removeManual(){
+  if(!confirm('¿Quitar el manual de este equipo?')) return;
+  const eq = getCurrentEquipo();
+  fbDeleteFile(eq.manualUrl);
+  eq.manualUrl = null; eq.manualNombre = null;
+  fbSaveEquipo(eq);
+  renderDetail();
+  showToast('🗑 Manual eliminado');
+}
+
+/* ═══════════════ INDICADOR DE CARGA ═══════════════ */
+function showLoading(msg){
+  document.getElementById('loadingText').textContent = msg || 'Sincronizando…';
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading(){
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+/* ═══════════════ MOVIMIENTOS DE STOCK (entrada / salida) ═══════════════ */
+let movTipo = 'entrada';
+let movRepIdx = null;
+
+function setMovTipo(t){
+  movTipo = t;
+  document.getElementById('movTipoEntrada').className = t==='entrada' ? 'btn' : 'btn secondary';
+  document.getElementById('movTipoSalida').className = t==='salida' ? 'btn' : 'btn secondary';
+}
+
+function openMovimiento(idx, tipo){
+  movRepIdx = idx;
+  const p = getCurrentEquipo().repuestos[idx];
+  document.getElementById('movModalTitle').textContent = '📦 Movimiento — ' + p.r;
+  document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null ? p.q : 'sin contar');
+  document.getElementById('mov-cantidad').value = 1;
+  document.getElementById('mov-motivo').value = '';
+  document.getElementById('mov-tecnico').value = localStorage.getItem('inventario_tecnico_actual') || '';
+  setMovTipo(tipo || 'entrada');
+  openModal('modalMovimiento');
+}
+
+async function confirmMovimiento(){
+  const e = getCurrentEquipo();
+  const p = e.repuestos[movRepIdx];
+  const cant = parseFloat(document.getElementById('mov-cantidad').value);
+  if(!cant || cant<=0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+  const tecnico = document.getElementById('mov-tecnico').value.trim();
+  const motivo = document.getElementById('mov-motivo').value.trim();
+  if(tecnico) localStorage.setItem('inventario_tecnico_actual', tecnico);
+
+  const prevQ = p.q!=null ? parseFloat(p.q) : 0;
+  const newQ = movTipo==='entrada' ? prevQ + cant : prevQ - cant;
+  if(newQ < 0 && !confirm(`El stock quedaría en negativo (${newQ}). ¿Continuar de todos modos?`)) return;
+
+  p.q = newQ;
+  fbSaveEquipo(e);
+  logMovimiento({ tecnico:tecnico||'—', equipo:e.nombre, repuesto:p.r, tipo:movTipo, cantidad:cant, motivo, quedaEn:newQ });
+
+  closeModal('modalMovimiento');
+  renderDetail();
+  showToast(`${movTipo==='entrada'?'📥':'📤'} ${movTipo==='entrada'?'Entrada':'Salida'} registrada — nuevo stock: ${newQ}`);
+}
+
+// El historial de movimientos vive en Firestore (colección "movimientos"),
+// compartido entre todos los celulares — ya no es solo de este dispositivo.
+function logMovimiento(mov){
+  db.collection('movimientos').add({ ...mov, fecha: fbTimestamp() })
+    .catch(err => console.error('Error guardando movimiento:', err));
+}
+
+async function showMovimientos(){
+  const e = getCurrentEquipo();
+  document.getElementById('movHistSub').textContent = `Cargando movimientos de "${e.nombre}"…`;
+  document.getElementById('movHistBody').innerHTML = '';
+  openModal('modalMovimientos');
+  await window.fbReady;
+  let equipoLog = [];
+  try{
+    const snap = await db.collection('movimientos').where('equipo','==', e.nombre).limit(500).get();
+    equipoLog = snap.docs.map(d=>d.data());
+    equipoLog.sort((a,b)=> (b.fecha?.toMillis?.()||0) - (a.fecha?.toMillis?.()||0));
+  }catch(err){ showToast('⚠️ No se pudo cargar el historial: '+err.message); }
+  document.getElementById('movHistSub').textContent = `${equipoLog.length} movimiento(s) registrados para "${e.nombre}" — compartido entre todos los celulares.`;
+  document.getElementById('movHistBody').innerHTML = equipoLog.length ? equipoLog.map(m=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${m.tecnico}</td>
+      <td class="part-name">${m.repuesto}</td>
+      <td><span class="stock-badge ${m.tipo==='entrada'?'ok':'sin'}">${m.tipo==='entrada'?'📥 Entrada':'📤 Salida'}</span></td>
+      <td class="mono">${m.cantidad}</td>
+      <td class="mono">${m.quedaEn}</td>
+      <td class="part-desc">${m.motivo||'—'}</td>
+    </tr>`).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
+}
+
+/* ═══════════════ CARGA MASIVA (pegar tabla) ═══════════════ */
+async function bulkImportRepuestos(){
+  const text = document.getElementById('bulkPasteArea').value;
+  if(!text.trim()){ showToast('⚠️ Pega la tabla primero'); return; }
+  const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim());
+  const e = getCurrentEquipo();
+  let added=0, merged=0;
+  document.getElementById('bulkStatus').textContent = 'Procesando…';
+
+  for(const line of lines){
+    const c = line.split('\t');
+    if(!c[0] || !c[0].trim()) continue;
+    const obj = {
+      r: c[0].trim(), t:(c[1]||'').trim(), m:(c[2]||'').trim(), d:(c[3]||'').trim(), u:(c[4]||'').trim(),
+      q: (c[5]!==undefined && c[5].trim()!=='') ? (parseFloat(c[5])||0) : null,
+      cm: (c[6]!==undefined && c[6].trim()!=='') ? c[6].trim() : null,
+      min: (c[7]!==undefined && c[7].trim()!=='') ? (parseFloat(c[7])||0) : null,
+      max: (c[8]!==undefined && c[8].trim()!=='') ? (parseFloat(c[8])||0) : null,
+      img: null
+    };
+    const result = mergeRepuestoInto(e.repuestos, obj);
+    if(result.merged) merged++; else added++;
+  }
+
+  fbSaveEquipo(e);
+  closeModal('modalBulk');
+  document.getElementById('bulkPasteArea').value = '';
+  renderDetail();
+  showToast(`✅ Carga masiva: ${added} nuevos, ${merged} sumados`);
+}
+
+async function deleteEquipo(){
+  const e = getCurrentEquipo();
+  if(!(await verifyPin())) return;
+  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos? Esta acción no se puede deshacer.`)) return;
+  fbDeleteEquipoDoc(e.id).catch(err=>showToast('⚠️ No se pudo borrar en la nube: '+err.message));
+  DB = DB.filter(x=>x.id!==currentEquipoId);
+  backHome();
+  showToast('🗑 Equipo eliminado');
+}
+
+let tempImgData = null;
+
+function openRepuestoModal(idx){
+  editingRepIndex = (idx!=null) ? idx : null;
+  tempImgData = null;
+  const title = document.getElementById('repModalTitle');
+  document.getElementById('rp-imagen-camera').value = '';
+  document.getElementById('rp-imagen-gallery').value = '';
+  if(editingRepIndex!=null){
+    const p = getCurrentEquipo().repuestos[editingRepIndex];
+    title.textContent = '✏️ Editar repuesto';
+    document.getElementById('rp-nombre').value = p.r;
+    document.getElementById('rp-tipo').value = p.t;
+    document.getElementById('rp-modelo').value = p.m;
+    document.getElementById('rp-descripcion').value = p.d;
+    document.getElementById('rp-uso').value = p.u;
+    document.getElementById('rp-qty').value = (p.q===null||p.q===undefined)? '' : p.q;
+    document.getElementById('rp-cm').value = (p.cm===null||p.cm===undefined)? '' : p.cm;
+    document.getElementById('rp-min').value = (p.min===null||p.min===undefined)? '' : p.min;
+    document.getElementById('rp-max').value = (p.max===null||p.max===undefined)? '' : p.max;
+    if(p.img){ tempImgData = p.img; showImagePreview(p.img); } else { hideImagePreview(); }
+  } else {
+    title.textContent = '➕ Nuevo repuesto';
+    ['rp-nombre','rp-tipo','rp-modelo','rp-descripcion','rp-uso','rp-qty','rp-cm','rp-min','rp-max'].forEach(id=>document.getElementById(id).value='');
+    hideImagePreview();
+  }
+  openModal('modalRepuesto');
+}
+
+function showImagePreview(src){
+  document.getElementById('rp-imagen-img').src = src;
+  document.getElementById('rp-imagen-preview').style.display = 'block';
+}
+function hideImagePreview(){
+  document.getElementById('rp-imagen-preview').style.display = 'none';
+}
+function removeImage(){
+  tempImgData = null;
+  document.getElementById('rp-imagen-camera').value = '';
+  document.getElementById('rp-imagen-gallery').value = '';
+  hideImagePreview();
+}
+
+let pendingImgUpload = null; // promesa de la subida a Storage en curso, si hay una
+
+function handleImageUpload(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      // redimensiona a máx 480px antes de subir, para no gastar espacio de más
+      const maxDim = 480;
+      let w = img.width, h = img.height;
+      if(w>h && w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+      else if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const localPreview = canvas.toDataURL('image/jpeg', 0.8);
+      showImagePreview(localPreview); // vista previa instantánea mientras sube
+      const path = `repuestos/${currentEquipoId}/${Date.now()}.jpg`;
+      pendingImgUpload = fbUploadDataUrl(localPreview, path).then(url=>{
+        tempImgData = url;
+        pendingImgUpload = null;
+      }).catch(err=>{
+        showToast('⚠️ No se pudo subir la foto: '+err.message);
+        pendingImgUpload = null;
+      });
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openLightbox(src){
+  document.getElementById('lightboxImg').src = src;
+  openModal('modalLightbox');
+}
+
+async function saveRepuesto(){
+  const nombre = document.getElementById('rp-nombre').value.trim();
+  if(!nombre){ showToast('⚠️ El nombre del repuesto es obligatorio'); return; }
+
+  if(pendingImgUpload){ showLoading('Subiendo foto…'); await pendingImgUpload; hideLoading(); }
+
+  const qtyRaw = document.getElementById('rp-qty').value.trim();
+  const cmRaw = document.getElementById('rp-cm').value.trim();
+  const minRaw = document.getElementById('rp-min').value.trim();
+  const maxRaw = document.getElementById('rp-max').value.trim();
+  const obj = {
+    r: nombre,
+    t: document.getElementById('rp-tipo').value.trim(),
+    m: document.getElementById('rp-modelo').value.trim(),
+    d: document.getElementById('rp-descripcion').value.trim(),
+    u: document.getElementById('rp-uso').value.trim(),
+    q: qtyRaw==='' ? null : (parseFloat(qtyRaw)||0),
+    cm: cmRaw==='' ? null : (parseFloat(cmRaw)||0),
+    min: minRaw==='' ? null : (parseFloat(minRaw)||0),
+    max: maxRaw==='' ? null : (parseFloat(maxRaw)||0),
+    img: tempImgData || null,
+  };
+  const e = getCurrentEquipo();
+  let toastMsg = '✅ Repuesto agregado';
+
+  if(editingRepIndex!=null){
+    // edición explícita de un repuesto puntual: siempre actualiza ese mismo, sin buscar coincidencias
+    e.repuestos[editingRepIndex] = obj;
+    toastMsg = '✅ Repuesto actualizado';
+  } else {
+    // nuevo repuesto: si ya existe uno igual (mismo nombre+modelo) en este equipo, se suma en vez de duplicarse
+    const result = mergeRepuestoInto(e.repuestos, obj);
+    toastMsg = result.merged
+      ? `🔗 Ya existía "${nombre}" — se sumó al stock (nuevo total: ${result.total ?? '—'})`
+      : '✅ Repuesto agregado';
+  }
+
+  fbSaveEquipo(e);
+  closeModal('modalRepuesto');
+  renderDetail();
+  showToast(toastMsg);
+}
+
+async function deleteRepuesto(idx){
+  const e = getCurrentEquipo();
+  if(!(await verifyPin())) return;
+  const p = e.repuestos[idx];
+  if(!confirm(`¿Eliminar "${p.r}"?`)) return;
+  if(p.img) fbDeleteFile(p.img);
+  e.repuestos.splice(idx,1);
+  fbSaveEquipo(e);
+  renderDetail();
+  showToast('🗑 Repuesto eliminado');
+}
+
+/* ═══════════════ CLAVE DE ELIMINACIÓN (compartida entre todos los celulares) ═══════════════ */
+async function verifyPin(){
+  await window.fbReady;
+  let pin;
+  try{ pin = await fbGetSharedPin(); }catch(err){ showToast('⚠️ No se pudo comprobar la clave: '+err.message); return false; }
+  if(!pin){
+    const crear = confirm('Todavía no hay una clave configurada para eliminar (es la misma en todos los celulares).\n\n¿Quieres crearla ahora?');
+    if(!crear){ showToast('Eliminación cancelada — no hay clave configurada'); return false; }
+    const nueva = prompt('Crea una clave para proteger la eliminación:');
+    if(!nueva) return false;
+    const confirmacion = prompt('Confirma la clave:');
+    if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden — inténtalo de nuevo'); return false; }
+    await fbSetSharedPin(nueva);
+    showToast('🔒 Clave configurada — vuelve a tocar eliminar para continuar');
+    return false; // por seguridad, la primera vez solo configura la clave; hay que volver a intentar eliminar
+  }
+  const entered = prompt('🔒 Ingresa la clave para eliminar:');
+  if(entered===null) return false; // canceló
+  if(entered !== pin){ showToast('❌ Clave incorrecta'); return false; }
+  return true;
+}
+
+async function configurePin(){
+  await window.fbReady;
+  const current = await fbGetSharedPin().catch(()=>null);
+  if(current){
+    const cambiar = confirm('Ya hay una clave configurada (compartida entre todos los celulares).\n\nAceptar = cambiarla\nCancelar = quitar la protección');
+    if(cambiar){
+      const old = prompt('Ingresa la clave actual:');
+      if(old===null) return;
+      if(old !== current){ showToast('❌ Clave incorrecta'); return; }
+      const nueva = prompt('Nueva clave:');
+      if(!nueva) return;
+      await fbSetSharedPin(nueva);
+      showToast('✅ Clave actualizada para todos los celulares');
+    } else {
+      const old = prompt('Ingresa la clave actual para quitar la protección:');
+      if(old===null) return;
+      if(old !== current){ showToast('❌ Clave incorrecta'); return; }
+      await fbSetSharedPin(null);
+      showToast('🔓 Protección de eliminación desactivada');
+    }
+  } else {
+    const nueva = prompt('Crea una clave para proteger la eliminación de repuestos y equipos (será la misma en todos los celulares):');
+    if(!nueva) return;
+    const confirmacion = prompt('Confirma la clave:');
+    if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden, inténtalo de nuevo'); return; }
+    await fbSetSharedPin(nueva);
+    showToast('🔒 Clave configurada — se pedirá para eliminar repuestos o equipos');
+  }
+}
+
+/* ═══════════════ BÚSQUEDA GLOBAL ═══════════════ */
+document.getElementById('globalSearch').addEventListener('input', (ev)=>{
+  const q = ev.target.value.trim().toLowerCase();
+  if(!q){ clearSearch(); return; }
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('searchResultsView').style.display = 'block';
+
+  const results = [];
+  DB.forEach(e=>{
+    e.repuestos.forEach(p=>{
+      if((p.r+' '+p.t+' '+p.m+' '+p.d+' '+p.u).toLowerCase().includes(q)){
+        results.push({equipo:e.nombre, equipoId:e.id, ...p});
+      }
+    });
+  });
+
+  document.getElementById('searchResultsTitle').textContent = `${results.length} resultado(s) para "${ev.target.value}"`;
+  document.getElementById('searchResultsBody').innerHTML = results.length ? results.map(p=>{
+    const st = stockStatus(p);
+    return `<tr style="cursor:pointer" onclick="openEquipo('${p.equipoId}')">
+      <td class="part-modelo">${p.equipo}</td>
+      <td class="part-name">${p.r}</td>
+      <td class="part-modelo">${p.m||'—'}</td>
+      <td class="part-desc">${p.d||'—'}</td>
+      <td class="mono">${p.q}</td>
+      <td class="mono">${p.cm}</td>
+      <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">🔍</div>Sin resultados en ningún equipo.</div></td></tr>`;
+});
+
+function clearSearch(){
+  document.getElementById('globalSearch').value = '';
+  document.getElementById('searchResultsView').style.display = 'none';
+  if(currentEquipoId){ document.getElementById('detailView').style.display = 'block'; }
+  else { document.getElementById('homeView').style.display = 'block'; renderHome(); }
+}
+
+/* ═══════════════ EXPORT / IMPORT ═══════════════ */
+function exportFaltantes(){
+  const rows = [];
+  DB.forEach(e=>{
+    e.repuestos.forEach(p=>{
+      const st = stockStatus(p);
+      if(st==='sin' || st==='bajo'){
+        rows.push({ equipo:e.nombre, repuesto:p.r, modelo:p.m||'', stock:p.q, minimo:p.min, estado:stockLabel(st) });
+      }
+    });
+  });
+  if(!rows.length){ showToast('✅ No hay repuestos en falta o bajo stock ahora mismo'); return; }
+  let csv = 'Equipo,Repuesto,Modelo,Stock actual,Minimo,Estado\n';
+  rows.forEach(r=>{ csv += `"${r.equipo}","${r.repuesto}","${r.modelo}",${r.stock??''},${r.minimo??''},"${r.estado}"\n`; });
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'lista_compra_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`🛒 Lista de compra exportada (${rows.length} repuestos)`);
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(DB,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'inventario_repuestos_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇ Respaldo descargado');
+}
+function importData(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!Array.isArray(data)) throw new Error('formato inválido');
+      const fusionar = confirm('¿Cómo quieres cargar este respaldo?\n\nAceptar = SUMAR/fusionar con lo que ya tienes (recomendado si varios técnicos cargan por separado — no duplica, suma cantidades)\nCancelar = REEMPLAZAR todo (borra lo que había)');
+      showLoading('Importando respaldo…');
+      if(fusionar){
+        data.forEach(eq => mergeEquipoInto(DB, eq));
+        for(const e of DB) fbSaveEquipo(e);
+      } else {
+        for(const old of DB) await fbDeleteEquipoDoc(old.id).catch(()=>{});
+        DB = data;
+        for(const e of DB){
+          if(!e.id) e.id = db.collection('equipos').doc().id;
+          fbSaveEquipo(e);
+        }
+      }
+      hideLoading();
+      backHome();
+      showToast(fusionar? '✅ Datos fusionados y sumados' : '✅ Respaldo importado (reemplazado)');
+    }catch(err){ hideLoading(); showToast('❌ Archivo inválido: '+err.message); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+/* ═══════════════ TOAST ═══════════════ */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* ═══════════════ INIT ═══════════════ */
+async function initApp(){
+  fbRenderMiniNav('inventario');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
+}
+async function refreshFromServer(){
+  // Con el listener en tiempo real esto ya no hace falta, pero lo dejamos
+  // como botón de "forzar" por si el usuario quiere confirmar que está al día.
+  await window.fbReady;
+  try{
+    await db.collection('equipos').get({ source: 'server' });
+    showToast('✅ Ya estás al día — la app se actualiza sola en tiempo real');
+  }catch(err){
+    showToast('⚠️ Sin conexión: '+err.message);
+  }
+}
+initApp();
+</script>
+</body>
+</html>

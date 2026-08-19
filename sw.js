@@ -1,6 +1,18 @@
-// Service Worker — Bitácora Mantenimiento 2026
-const CACHE = 'bitacora-v1';
-const ASSETS = ['/', '/index.html', '/manifest.json'];
+// Service Worker — Mantenimiento 2026 (Bitácora + Inventario + Análisis)
+const CACHE = 'mantenimiento-v1';
+const ASSETS = [
+  './',
+  'index.html',
+  'bitacora.html',
+  'inventario.html',
+  'analisis.html',
+  'manifest.json',
+  'firebase-config.js',
+  'firebase-init.js',
+  'tecnicos.json',
+  'icon-192.png',
+  'icon-512.png',
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -19,12 +31,15 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // SharePoint API calls — network only, never cache
-  if (url.hostname.includes('sharepoint.com') || url.pathname.includes('/_api/')) {
-    return; // let it go through normally
-  }
+  // Firebase / Firestore / Storage / Google APIs — siempre red, nunca caché.
+  // Firestore ya maneja su propio modo sin conexión internamente; si el
+  // service worker intercepta estas peticiones se puede romper la
+  // sincronización en tiempo real.
+  const skipHosts = ['googleapis.com', 'gstatic.com', 'firebaseio.com', 'google.com'];
+  if (skipHosts.some(h => url.hostname.includes(h))) return;
+  if (url.origin !== self.location.origin) return; // cualquier otro origen externo: red directa
 
-  // App shell — cache first, fallback to network
+  // Cascarón de la app — caché primero, con respaldo de red
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -34,7 +49,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return resp;
-      }).catch(() => caches.match('/index.html'));
+      }).catch(() => caches.match('index.html'));
     })
   );
 });
