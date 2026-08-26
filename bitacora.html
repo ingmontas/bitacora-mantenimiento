@@ -55,12 +55,15 @@
     .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
     .btn-row { display: flex; gap: 8px; }
     .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
-    .tag-preventivo { background: #10B98122; color: var(--green); border: 1px solid #10B98133; }
-    .tag-correctivo { background: #EF444422; color: var(--red); border: 1px solid #EF444433; }
-    .tag-proyecto { background: #818CF822; color: var(--blue); border: 1px solid #818CF833; }
+    /* Paleta validada (misma familia que Análisis/Inventario): categórica
+       blue/aqua/red para tipo de mantenimiento, y semáforo de estado para
+       urgencia — ver dataviz skill. */
+    .tag-preventivo { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-correctivo { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
+    .tag-proyecto { background: #3987e522; color: #7fb3f5; border: 1px solid #3987e544; }
     .tag-local { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B33; }
-    .tag-synced { background: #10B98122; color: var(--green); border: 1px solid #10B98133; }
-    .tag-paro { background: #EF444422; color: var(--red); border: 1px solid #EF444433; }
+    .tag-synced { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-paro { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
     .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
@@ -124,7 +127,7 @@
     <h1>🔧 Bitácora Mantenimiento</h1>
     <small id="header-sub">2026 · Cargando...</small>
   </div>
-  <div id="sp-status" title="Estado SharePoint">⚙️</div>
+  <div id="sp-status" title="Estado de conexión">⚙️</div>
 </div>
 
 <div id="content">
@@ -194,7 +197,8 @@
         </div>
         <div class="field">
           <label>Equipo</label>
-          <input type="text" id="f-equipo" placeholder="ej: #6"/>
+          <input type="text" id="f-equipo" placeholder="ej: #6" list="equipo-list" autocomplete="off"/>
+          <datalist id="equipo-list"></datalist>
         </div>
       </div>
 
@@ -271,8 +275,9 @@
 
   <!-- SCREEN: HISTORIAL -->
   <div class="screen" id="screen-historial">
-    <div id="search-box">
-      <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()"/>
+    <div id="search-box" style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()" style="flex:1"/>
+      <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryCSV()">📊 Excel</button>
     </div>
     <div id="history-list"></div>
   </div>
@@ -320,15 +325,13 @@
     </div>
 
     <div class="card">
-      <div style="font-weight:700;margin-bottom:8px">📋 Columnas requeridas en SP</div>
-      <div class="code-chips">
-        <span class="code-chip">Title</span><span class="code-chip">SEMANA</span><span class="code-chip">FECHA</span>
-        <span class="code-chip">LINEA_EQUIPO</span><span class="code-chip">TIPO_MAQUINA</span><span class="code-chip">EQUIPO</span>
-        <span class="code-chip">PIEZA</span><span class="code-chip">DESCRIPCION_FALLA</span><span class="code-chip">DESCRIPCION_SOLUCION</span>
-        <span class="code-chip">H_INICIO</span><span class="code-chip">H_TECNICO</span><span class="code-chip">H_FINAL</span>
-        <span class="code-chip">TOTAL_MIN_TECNICO</span><span class="code-chip">TOTAL_MIN_MAQUINA</span>
-        <span class="code-chip">ME</span><span class="code-chip">GENERA_OT</span><span class="code-chip">TIPO_MANTENIMIENTO</span>
-        <span class="code-chip">PARO_PLANTA</span><span class="code-chip">TECNICOS</span>
+      <div style="font-weight:700;margin-bottom:8px">⬇ Respaldo de la bitácora</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Descarga una copia de todas las OTs registradas (formato JSON), por si algún día necesitas restaurar o auditar los datos fuera de la app.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="exportHistoryCSV(true)">📊 Reporte completo a Excel (CSV)</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportBackup()">⬇ Exportar respaldo (JSON)</button>
       </div>
     </div>
 
@@ -377,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadTecnicos();
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
+  document.getElementById('f-linea').addEventListener('change', updateEquipoDatalist);
 
   window.addEventListener('online', () => document.getElementById('offline-bar').classList.remove('show'));
   window.addEventListener('offline', () => document.getElementById('offline-bar').classList.add('show'));
@@ -388,13 +392,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // OT que se cree desde Inventario/Análisis o desde otro celular aparece
   // aquí automáticamente, sin recargar la página.
   window.fbReady.then(() => {
-    db.collection('ots').orderBy('createdAt', 'desc').limit(400)
+    // Sin límite: antes se cortaba en las 400 OTs más recientes y las viejas
+    // "desaparecían" de Historial/Resumen aunque seguían en la nube. Análisis
+    // ya las leía todas, así que esto alinea a Bitácora con Análisis.
+    db.collection('ots').orderBy('createdAt', 'desc')
       .onSnapshot((snap) => {
         allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _pending: doc.metadata.hasPendingWrites }));
         const activeScreen = document.querySelector('.screen.active')?.id;
         if (activeScreen === 'screen-historial') renderHistory();
         if (activeScreen === 'screen-stats') loadStats();
         updateHeaderStatus();
+        updateEquipoDatalist();
       }, (err) => {
         console.error('Error escuchando OTs:', err);
         showToast('⚠️ Error leyendo la base de datos: ' + err.message, 'error');
@@ -456,6 +464,23 @@ function updateHeaderStatus() {
   sub.textContent = `2026 · Firebase ${pending > 0 ? '· '+pending+' sin subir' : '✓'}`;
   icon.textContent = navigator.onLine ? '🟢' : '🟡';
   icon.onclick = () => goTo('config', document.querySelectorAll('.nav-btn')[3]);
+}
+
+// Sugiere equipos ya usados (mismo Área) para evitar que el mismo equipo quede
+// registrado con nombres distintos ("Weaving #17" vs "weaving 17") — eso rompe
+// el cálculo de MTBF en Análisis porque cada variante cuenta como un equipo
+// aparte. No obliga a elegir de la lista, solo autocompleta.
+function updateEquipoDatalist() {
+  const dl = document.getElementById('equipo-list');
+  if (!dl) return;
+  const linea = document.getElementById('f-linea')?.value;
+  const vistos = new Set();
+  allRecords.forEach(r => {
+    if (!r.EQUIPO) return;
+    if (linea && r.LINEA_EQUIPO !== linea) return;
+    vistos.add(r.EQUIPO.trim());
+  });
+  dl.innerHTML = [...vistos].sort().map(v => `<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
 }
 
 // ══════ NAVIGATION ══════
@@ -556,10 +581,18 @@ function exitEditMode() {
 }
 
 // ══════ SUBMIT ══════
+let _submitting = false; // evita registros duplicados por doble-tap (wifi lenta de planta)
 async function submitForm() {
+  if (_submitting) return;
   const linea = document.getElementById('f-linea').value;
   const falla = document.getElementById('f-falla').value.trim();
   if (!linea || !falla) { showToast('⚠️ Completa Área y Descripción de Falla', 'error'); return; }
+
+  _submitting = true;
+  const btn = document.getElementById('submit-btn');
+  const btnTextoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.style.opacity = '.6';
 
   const fecha = document.getElementById('f-fecha').value;
   const hInicio = document.getElementById('f-hinicio').value;
@@ -608,6 +641,8 @@ async function submitForm() {
     showToast(navigator.onLine ? '✅ Cambios guardados' : '💾 Guardado local — se subirá al volver la señal', navigator.onLine ? 'success' : 'warn');
     exitEditMode();
     goTo('historial', document.querySelectorAll('.nav-btn')[1]);
+    _submitting = false;
+    btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
     return;
   }
 
@@ -621,6 +656,8 @@ async function submitForm() {
   showToast(navigator.onLine ? '✅ Registrado en la bitácora compartida' : '📵 Sin conexión — guardado local, se subirá después', navigator.onLine ? 'success' : 'warn');
 
   resetForm();
+  _submitting = false;
+  btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
 }
 
 function resetForm() {
@@ -716,6 +753,44 @@ function loadStats() {
         <div class="bar-track"><div class="bar-fill" style="width:${(v/maxS*100).toFixed(1)}%;background:var(--blue)"></div></div>
       </div>`).join('');
   }
+}
+
+// ══════ EXPORTAR A EXCEL (CSV) ══════
+function csvEscape(v){
+  return '"' + String(v ?? '').replace(/"/g,'""') + '"';
+}
+// Sin argumento: exporta lo que está filtrado en la pantalla de Historial
+// (respeta la caja de búsqueda). Con full=true (botón en Configuración):
+// exporta siempre TODAS las OTs, sin importar el filtro de búsqueda.
+function exportHistoryCSV(full) {
+  const rows = full ? allRecords : ((window._historyCache && window._historyCache.length) ? window._historyCache : allRecords);
+  if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
+  const headers = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Falla','Solución'];
+  let csv = headers.join(',') + '\n';
+  rows.forEach(r=>{
+    csv += [r.Title, r.FECHA, r.SEMANA, r.LINEA_EQUIPO, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION]
+      .map(csvEscape).join(',') + '\n';
+  });
+  const suffix = (!full && document.getElementById('search-input').value.trim()) ? '_filtrado' : '';
+  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'reporte_bitacora'+suffix+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📊 Reporte exportado (' + rows.length + ' OTs) — ábrelo con Excel');
+}
+
+// ══════ RESPALDO ══════
+function exportBackup() {
+  if (!allRecords.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
+  const blob = new Blob([JSON.stringify(allRecords, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'bitacora_respaldo_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs)');
 }
 
 // ══════ CONFIG ══════
