@@ -1,5 +1,11 @@
 // Service Worker — Mantenimiento 2026 (Bitácora + Inventario + Análisis)
-const CACHE = 'mantenimiento-v1';
+// IMPORTANTE: sube este número (v2, v3, v4...) cada vez que subas cambios a
+// bitacora.html/inventario.html/analisis.html/etc. Mientras el nombre de la
+// caché no cambie, el service worker sigue sirviendo la versión vieja de la
+// app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
+// aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
+// notaba hasta borrar la caché a mano.
+const CACHE = 'mantenimiento-v2';
 const ASSETS = [
   './',
   'index.html',
