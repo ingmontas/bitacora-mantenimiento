@@ -32,6 +32,13 @@
     --teal: #35d0b0;
     --teal-dim: #1f4b42;
     --blue: #5b9bf0;
+    /* Paleta validada con el script de accesibilidad del skill de dataviz
+       (contraste + separación para daltonismo), compartida con Inventario. */
+    --cat-blue:#3987e5; --cat-aqua:#199e70; --cat-red:#e66767;
+    --st-good:#0ca30c; --st-good-dim:#0f2e14;
+    --st-warning:#fab219; --st-warning-dim:#3a2f10;
+    --st-serious:#ec835a; --st-serious-dim:#3a2318;
+    --st-critical:#d03b3b; --st-critical-dim:#3a1c1c;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
@@ -70,9 +77,9 @@
   .kaizen-item .kz-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;}
   .kaizen-item .kz-action{font-size:12px;color:var(--text);line-height:1.5;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:7px;padding:9px 11px;}
   .trend-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono',monospace;}
-  .trend-tag.empeorando{background:var(--red-dim);color:#ff8a8a;}
-  .trend-tag.mejorando{background:var(--teal-dim);color:var(--teal);}
-  .trend-tag.estable{background:#2a3a1f;color:#b6e07a;}
+  .trend-tag.empeorando{background:var(--st-critical-dim);color:#ff8a8a;}
+  .trend-tag.mejorando{background:var(--st-good-dim);color:#5fd35f;}
+  .trend-tag.estable{background:#16302c;color:var(--cat-aqua);}
   .trend-tag.insuficiente{background:#2a2f3a;color:var(--muted);}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 16px 14px;position:relative;overflow:hidden;}
   .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
@@ -91,10 +98,10 @@
 
   /* predictive table */
   .risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-  .risk.critico{background:var(--red-dim);color:#ff8a8a;}
-  .risk.alto{background:#4a3419;color:var(--amber);}
-  .risk.medio{background:#2a3a1f;color:#b6e07a;}
-  .risk.bajo{background:var(--teal-dim);color:var(--teal);}
+  .risk.critico{background:var(--st-critical-dim);color:#ff8a8a;}
+  .risk.alto{background:var(--st-serious-dim);color:var(--st-serious);}
+  .risk.medio{background:var(--st-warning-dim);color:var(--st-warning);}
+  .risk.bajo{background:var(--st-good-dim);color:#5fd35f;}
   .risk.na{background:#2a2f3a;color:var(--muted);}
 
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
@@ -131,6 +138,22 @@
 
   .empty{color:var(--muted);font-size:12.5px;padding:20px 0;text-align:center;}
 
+  /* mapa de calor por área — mosaico de celdas de magnitud (no hay coordenadas
+     reales de planta, así que el "mapa" es un heatmap por línea/área) */
+  .risk-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+  .risk-cell{border-radius:9px;padding:13px 14px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:transform .1s,border-color .15s;position:relative;min-height:78px;}
+  .risk-cell:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);}
+  .risk-cell.selected{border-color:#fff;border-width:2px;}
+  .risk-cell .rc-area{font-weight:600;font-size:12.5px;color:#fff;margin-bottom:6px;line-height:1.25;}
+  .risk-cell .rc-meta{font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.82);}
+  .risk-cell .rc-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:2px 7px;border-radius:20px;}
+
+  /* conclusiones automáticas */
+  .concl-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.55;}
+  .concl-item:last-child{border-bottom:none;}
+  .concl-icon{flex:0 0 auto;font-size:15px;}
+  .concl-item b{color:var(--text);}
+
   footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:'IBM Plex Mono',monospace;}
 
   @media(max-width:900px){
@@ -159,6 +182,12 @@
   </div>
 
   <div class="kpis" id="kpiRow"></div>
+
+  <div class="card" style="margin-bottom:16px;" id="conclusionesCard">
+    <h2>Conclusiones</h2>
+    <div class="cardsub">Lectura automática de las gráficas y tablas de este panel, generada a partir de los mismos datos — no reemplaza el criterio de mantenimiento.</div>
+    <div id="conclusionesList"></div>
+  </div>
 
   <div class="card" id="historyCard" style="display:none;margin-bottom:16px;">
     <h2 id="historyTitle">Historial completo del equipo</h2>
@@ -227,6 +256,12 @@
         <tbody id="areaBody"></tbody>
       </table>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Mapa de calor de riesgo por línea/área</h2>
+    <div class="cardsub">Cada celda es una línea/área — el tono rojo se intensifica con el % de correctivos y el número muestra cuántos equipos de esa área están en riesgo alto o crítico. Haz clic en una celda para filtrar todo el panel a esa línea.</div>
+    <div id="riskMap" class="risk-map"></div>
   </div>
 
   <div class="card">
@@ -305,6 +340,11 @@
       <button class="secondary" id="clearFeedBtn">Limpiar cuadro</button>
       <span class="feed-status" id="feedStatus"></span>
     </div>
+  </div>
+
+  <div style="display:flex;justify-content:center;gap:10px;margin:24px 0 0;flex-wrap:wrap;">
+    <button onclick="exportAnalisisCSV()">📊 Exportar reporte a Excel (CSV)</button>
+    <button class="secondary" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
   </div>
 
   <footer>Panel generado a partir de las órdenes de trabajo cargadas · los cálculos de MTBF y riesgo son estimaciones estadísticas, no diagnósticos definitivos</footer>
@@ -728,8 +768,39 @@ function parseRaw(raw){
   return out;
 }
 
+// El campo "Equipo" en Bitácora es texto libre — "Weaving #17", "weaving 17"
+// y "WEAVING  17" son la misma máquina para un técnico, pero contaban como 3
+// equipos distintos para el cálculo de MTBF/riesgo. _equipoCanonMap resuelve
+// cada variante a la forma más usada (mayoría), sin obligar a elegir de una
+// lista rígida. Se recalcula al inicio de cada render() a partir de TODAS
+// las filas, así que hay que llamar buildEquipoCanonMap() antes de usar
+// dayKey()/canonEquipo() en cualquier parte del render.
+function normEq(s){ return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' '); }
+let _equipoCanonMap = {};
+function buildEquipoCanonMap(rows){
+  const counts = {};
+  rows.forEach(r=>{
+    const area = r.area || 'Sin área';
+    const raw = (r.equipo || r.tipoMaquina || 'Equipo sin nombre').toString().trim();
+    if(!raw) return;
+    const k = area + ' | ' + normEq(raw);
+    counts[k] = counts[k] || {};
+    counts[k][raw] = (counts[k][raw]||0) + 1;
+  });
+  const map = {};
+  Object.entries(counts).forEach(([k,variants])=>{
+    map[k] = Object.entries(variants).sort((a,b)=>b[1]-a[1])[0][0];
+  });
+  return map;
+}
+function canonEquipo(equipoRow){
+  const area = equipoRow.area || 'Sin área';
+  const raw = (equipoRow.equipo || equipoRow.tipoMaquina || 'Equipo sin nombre').toString().trim() || 'Equipo sin nombre';
+  const k = area + ' | ' + normEq(raw);
+  return _equipoCanonMap[k] || raw;
+}
 function dayKey(equipoRow){
-  return equipoRow.area + ' | ' + (equipoRow.equipo || equipoRow.tipoMaquina || 'Equipo sin nombre');
+  return (equipoRow.area || 'Sin área') + ' | ' + canonEquipo(equipoRow);
 }
 
 function daysBetween(d1,d2){
@@ -759,6 +830,7 @@ if(typeof ChartDataLabels !== 'undefined'){
 
 function render(){
   const rows = allRows.filter(r=>r.fecha);
+  _equipoCanonMap = buildEquipoCanonMap(rows); // debe ir antes que cualquier uso de dayKey()/canonEquipo()
   const refDate = getRefDate(rows);
   document.getElementById('nowClock').textContent = refDate.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric'});
 
@@ -790,10 +862,22 @@ function render(){
     scopeMode = null;
   }
 
+  // ---- filtros adicionales: se pueden combinar (AND) con el de arriba.
+  // Se activan al hacer clic en la gráfica de tipo de mantenimiento o en la
+  // de tendencia semanal, además de los filtros de tabla que ya existían.
+  const selTipo = window._selectedTipo;
+  const selSemana = window._selectedSemana;
+  const extraLabels = [];
+  if(selTipo){ scopeRows = scopeRows.filter(r => (r.tipoMant||'Sin clasificar') === selTipo); extraLabels.push('Tipo: ' + selTipo); }
+  if(selSemana){ scopeRows = scopeRows.filter(r => r.semana === selSemana); extraLabels.push('Semana ' + selSemana); }
+
+  window._scopeRows = scopeRows; // expuesto para exportAnalisisCSV(): exporta lo que está filtrado en pantalla
+
   const selBanner = document.getElementById('selBanner');
-  if(scopeLabel){
+  const bannerParts = [scopeLabel, ...extraLabels].filter(Boolean);
+  if(bannerParts.length){
     selBanner.style.display = 'flex';
-    selBanner.querySelector('span').textContent = 'Mostrando gráficas de: ' + scopeLabel;
+    selBanner.querySelector('span').textContent = 'Filtrando por: ' + bannerParts.join(' · ');
   } else {
     selBanner.style.display = 'none';
   }
@@ -823,20 +907,38 @@ function render(){
   charts.area = new Chart(document.getElementById('chartArea'),{
     type:'bar',
     data:{ labels: areaSorted.map(a=>a[0]), datasets:[{ data: areaSorted.map(a=>a[1]), backgroundColor:'#f0a930', borderRadius:4 }]},
-    options:{ indexAxis:'y', plugins:{
+    options:{ indexAxis:'y', onClick:(evt,els)=>{
+      if(!els.length) return;
+      const area = areaSorted[els[0].index][0];
+      window._selectedArea = (window._selectedArea===area) ? null : area;
+      window._selectedKey = null; window._selectedTecnico = null;
+      render();
+    }, onHover:(evt,els)=>{ evt.native.target.style.cursor = els.length? 'pointer':'default'; },
+    plugins:{
       legend:{display:false},
       datalabels:{ display:true, anchor:'end', align:'end', color:'#e6ebf1', font:{family:'IBM Plex Mono',size:11,weight:'600'}, formatter:(v)=>v }
     }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'}}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}} } }
   });
 
   /* ---- chart: tipo mantenimiento ---- */
+  // Color fijo por identidad (nunca por posición/ranking) — misma regla que
+  // el resto del panel: rojo=correctivo, aguamarina=preventivo, azul=proyecto,
+  // gris apagado para "sin clasificar" (no es una categoría real).
+  const TIPO_COLORS = { 'Correctivo':'#e66767', 'Preventivo':'#199e70', 'Proyecto':'#3987e5' };
   const tipoCounts = {};
   scopeRows.forEach(r=>{ const k = r.tipoMant || 'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
+  const tipoLabels = Object.keys(tipoCounts);
   if(charts.tipo) charts.tipo.destroy();
   charts.tipo = new Chart(document.getElementById('chartTipo'),{
     type:'doughnut',
-    data:{ labels:Object.keys(tipoCounts), datasets:[{ data:Object.values(tipoCounts), backgroundColor:['#ef4b4b','#35d0b0','#5b9bf0','#8b98ab'], borderColor:'#141a22', borderWidth:2 }]},
-    options:{ plugins:{
+    data:{ labels:tipoLabels, datasets:[{ data:Object.values(tipoCounts), backgroundColor: tipoLabels.map(k=>TIPO_COLORS[k]||'#8b98ab'), borderColor:'#141a22', borderWidth:2 }]},
+    options:{ onClick:(evt,els)=>{
+      if(!els.length) return;
+      const tipo = tipoLabels[els[0].index];
+      window._selectedTipo = (window._selectedTipo===tipo) ? null : tipo;
+      render();
+    }, onHover:(evt,els)=>{ evt.native.target.style.cursor = els.length? 'pointer':'default'; },
+    plugins:{
       legend:{position:'bottom', labels:{color:'#e6ebf1', font:{family:'Space Grotesk', size:11}}},
       datalabels:{ display:true, color:'#0d1117', font:{family:'IBM Plex Mono',size:11,weight:'700'},
         formatter:(value, ctx)=>{
@@ -855,8 +957,14 @@ function render(){
   if(charts.trend) charts.trend.destroy();
   charts.trend = new Chart(document.getElementById('chartTrend'),{
     type:'line',
-    data:{ labels: weeksSorted.map(w=>'Sem '+w), datasets:[{ data: weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930' }]},
-    options:{ plugins:{
+    data:{ labels: weeksSorted.map(w=>'Sem '+w), datasets:[{ data: weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930', pointRadius:5, pointHoverRadius:7 }]},
+    options:{ onClick:(evt,els)=>{
+      if(!els.length) return;
+      const semana = weeksSorted[els[0].index];
+      window._selectedSemana = (window._selectedSemana===semana) ? null : semana;
+      render();
+    }, onHover:(evt,els)=>{ evt.native.target.style.cursor = els.length? 'pointer':'default'; },
+    plugins:{
       legend:{display:false},
       datalabels:{ display:true, align:'top', offset:6, color:'#f0a930', font:{family:'IBM Plex Mono',size:10,weight:'600'}, formatter:(v)=>v }
     }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true} } }
@@ -868,7 +976,7 @@ function render(){
     const d = parseFecha(r.fecha);
     if(!d) return;
     const key = dayKey(r);
-    if(!groups[key]) groups[key] = { area:r.area, equipo: r.equipo||r.tipoMaquina||'Equipo sin nombre', dates:[], downtime:[], entries:[] };
+    if(!groups[key]) groups[key] = { area:r.area, equipo: canonEquipo(r), dates:[], downtime:[], entries:[] };
     groups[key].dates.push(d);
     groups[key].downtime.push(r.minMaquina);
     groups[key].entries.push({ date:d, falla:r.falla, solucion:r.solucion, pieza:r.pieza, tecnicos:r.tecnicos });
@@ -942,6 +1050,65 @@ function render(){
   renderHistoryAndReco(scopeMode, scopeLabel, scopeRows, predictive, selArea, selKey, selTecnico, rows);
   renderTecnicos(scopeRows, scopeLabel);
   renderKaizen(scopeRows, scopeLabel);
+  renderConclusiones({ scopeRows, correctivos, preventivos, totalDowntime, pctCorrectivo, topArea, weeksSorted, weekCounts });
+}
+
+/* ---------- conclusiones automáticas ---------- */
+// Traduce a texto llano lo que ya calculan las gráficas/tablas de arriba —
+// mismos datos, sin diagnósticos nuevos. Sirve como resumen ejecutivo rápido.
+function renderConclusiones(ctx){
+  const cont = document.getElementById('conclusionesList');
+  if(!cont) return;
+  const items = [];
+
+  if(!ctx.scopeRows.length){
+    cont.innerHTML = `<div class="empty">Todavía no hay suficientes datos para generar conclusiones.</div>`;
+    return;
+  }
+
+  // tendencia: últimas semanas vs. las anteriores
+  if(ctx.weeksSorted.length>=4){
+    const n = ctx.weeksSorted.length;
+    const half = Math.floor(n/2);
+    const recientes = ctx.weeksSorted.slice(-Math.min(4,n-half)||n-half);
+    const previas = ctx.weeksSorted.slice(0, n-recientes.length);
+    const avg = (arr)=> arr.length? arr.reduce((s,w)=>s+(ctx.weekCounts[w]||0),0)/arr.length : 0;
+    const aRec = avg(recientes), aPrev = avg(previas);
+    if(previas.length && aPrev>0){
+      const delta = Math.round((aRec-aPrev)/aPrev*100);
+      if(delta >= 15) items.push({icon:'📈', html:`Los correctivos van <b>al alza</b>: promedian ${aRec.toFixed(1)}/semana en las últimas semanas, ${delta}% más que antes — señal de que el mantenimiento preventivo no está alcanzando el ritmo de fallas.`});
+      else if(delta <= -15) items.push({icon:'📉', html:`Los correctivos van <b>a la baja</b>: promedian ${aRec.toFixed(1)}/semana, ${Math.abs(delta)}% menos que antes — buena señal, vale la pena revisar qué cambió y mantenerlo.`});
+      else items.push({icon:'➖', html:`El volumen de correctivos se mantiene <b>estable</b>, alrededor de ${aRec.toFixed(1)}/semana.`});
+    }
+  }
+
+  // % correctivo global
+  items.push({icon: ctx.pctCorrectivo>=60?'🔴':ctx.pctCorrectivo>=35?'🟡':'🟢', html:`<b>${ctx.pctCorrectivo}%</b> de las OTs de este alcance son correctivas (${ctx.correctivos.length} de ${ctx.scopeRows.length}) — ${ctx.pctCorrectivo>=60? 'muy por encima de lo deseable; el trabajo es sobre todo reactivo.' : ctx.pctCorrectivo>=35? 'todavía hay margen para crecer el preventivo.' : 'buena proporción de trabajo planificado.'}`});
+
+  // área más crítica
+  if(ctx.topArea) items.push({icon:'🏭', html:`<b>${ctx.topArea[0]}</b> concentra la mayor cantidad de correctivos (${ctx.topArea[1]}) — es el primer candidato para reforzar preventivo.`});
+
+  // equipos en riesgo
+  const pred = window._predictive || [];
+  const criticos = pred.filter(p=>p.risk==='critico');
+  const altos = pred.filter(p=>p.risk==='alto');
+  if(criticos.length) items.push({icon:'🚨', html:`<b>${criticos.length} equipo(s)</b> están en riesgo <b>crítico</b> (ya deberían haber fallado según su historial) — el más urgente: <b>${criticos[0].equipo}</b> (${criticos[0].area}).`});
+  if(altos.length) items.push({icon:'⚠️', html:`<b>${altos.length} equipo(s)</b> en riesgo <b>alto</b>, con falla estimada dentro de los próximos 7 días.`});
+
+  // técnicos que necesitan atención
+  const tecs = (window._tecnicos||[]).filter(t=>t.desempeno==='atencion');
+  if(tecs.length) items.push({icon:'👷', html:`${tecs.length} técnico(s) muestran señales que ameritan revisión (MTTR alto o % sin resolver alto): <b>${tecs.slice(0,3).map(t=>t.tecnico).join(', ')}</b>${tecs.length>3?' y otros':''}.`});
+
+  // kaizen: piezas que empeoran
+  const kz = (window._kaizenItems||[]).filter(k=>k.trend==='empeorando');
+  if(kz.length) items.push({icon:'🔁', html:`<b>${kz.length} pieza(s)</b> fallan cada vez más seguido en el mismo equipo — la más urgente: <b>${kz[0].pieza}</b> en ${kz[0].equipo} (${kz[0].count} correctivos).`});
+
+  // paro de planta acumulado
+  const horas = (ctx.totalDowntime/60);
+  if(horas>0) items.push({icon:'⏱', html:`El paro de máquina acumulado en este alcance es de <b>${horas.toFixed(0)} horas</b>.`});
+
+  cont.innerHTML = items.map(it=>`<div class="concl-item"><span class="concl-icon">${it.icon}</span><span>${it.html}</span></div>`).join('')
+    || `<div class="empty">No hay señales destacables con los datos actuales.</div>`;
 }
 
 /* ---------- resumen por línea/área ---------- */
@@ -952,7 +1119,7 @@ function computeAreaStats(rows, predictive){
     const g = groups[r.area];
     g.ots++;
     g.downtime += r.minMaquina;
-    g.equipos.add(r.equipo || r.tipoMaquina || 'Equipo sin nombre');
+    g.equipos.add(canonEquipo(r));
     if(r.tipoMant.toLowerCase()==='correctivo') g.correctivos++;
     splitTecnicos(r.tecnicos).forEach(t=>{ g.tecCounts[t]=(g.tecCounts[t]||0)+1; });
   });
@@ -972,7 +1139,40 @@ function computeAreaStats(rows, predictive){
     };
   });
   renderAreaRows();
+  renderAreaMap();
 }
+
+/* ---------- mapa de calor por área ---------- */
+// Rampa secuencial de un solo tono (rojo), clara→oscura según el % de
+// correctivos — regla de la skill de dataviz para magnitudes.
+function heatColor(pct){
+  const t = Math.max(0, Math.min(1, (pct||0)/100));
+  const c0 = [34,28,36], c1 = [208,59,59]; // panel oscuro -> rojo crítico validado
+  const rgb = c0.map((c,i)=>Math.round(c + (c1[i]-c)*t));
+  return `rgb(${rgb.join(',')})`;
+}
+function renderAreaMap(){
+  const list = [...(window._areaStats||[])].sort((a,b)=>b.pct-a.pct || b.ots-a.ots);
+  const selArea = window._selectedArea;
+  const cont = document.getElementById('riskMap');
+  if(!cont) return;
+  if(!list.length){ cont.innerHTML = `<div class="empty">Sin datos todavía.</div>`; return; }
+  cont.innerHTML = list.map(a=>`
+    <div class="risk-cell ${selArea===a.area?'selected':''}" style="background:${heatColor(a.pct)}" data-area="${a.area.replace(/"/g,'&quot;')}" title="${a.area}: ${a.pct}% correctivo, ${a.ots} OTs">
+      ${a.riesgo>0? `<span class="rc-badge">⚠ ${a.riesgo}</span>` : ''}
+      <div class="rc-area">${a.area}</div>
+      <div class="rc-meta">${a.pct}% correctivo · ${a.ots} OTs</div>
+    </div>
+  `).join('');
+}
+document.getElementById('riskMap').addEventListener('click', (e)=>{
+  const cell = e.target.closest('.risk-cell');
+  if(!cell) return;
+  const area = cell.dataset.area;
+  window._selectedArea = (window._selectedArea === area) ? null : area;
+  window._selectedKey = null; window._selectedTecnico = null;
+  render();
+});
 
 function renderAreaRows(){
   const sortKey = window._areaSortKey || 'ots';
@@ -1068,8 +1268,15 @@ function renderTecnicos(rows, scopeLabel){
   if(charts.tecnicos) charts.tecnicos.destroy();
   charts.tecnicos = new Chart(document.getElementById('chartTecnicos'),{
     type:'bar',
-    data:{ labels: top.map(t=>t.tecnico), datasets:[{ label:'OTs atendidas', data: top.map(t=>t.ots), backgroundColor:'#5b9bf0', borderRadius:4 }]},
-    options:{ plugins:{
+    data:{ labels: top.map(t=>t.tecnico), datasets:[{ label:'OTs atendidas', data: top.map(t=>t.ots), backgroundColor:'#3987e5', borderRadius:4 }]},
+    options:{ onClick:(evt,els)=>{
+      if(!els.length) return;
+      const tec = top[els[0].index].tecnico;
+      window._selectedTecnico = (window._selectedTecnico===tec) ? null : tec;
+      window._selectedKey = null; window._selectedArea = null;
+      render();
+    }, onHover:(evt,els)=>{ evt.native.target.style.cursor = els.length? 'pointer':'default'; },
+    plugins:{
       legend:{display:false},
       datalabels:{ display:true, anchor:'end', align:'top', color:'#e6ebf1', font:{family:'IBM Plex Mono',size:10,weight:'600'}, formatter:(v)=>v }
     }, scales:{ x:{ticks:{color:'#8b98ab',font:{family:'IBM Plex Mono',size:10}},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true} } }
@@ -1116,8 +1323,9 @@ function renderKaizen(rows, scopeLabel){
   correctivos.forEach(r=>{
     const d = parseFecha(r.fecha);
     if(!d) return;
-    const key = r.area + ' | ' + (r.equipo||r.tipoMaquina||'Equipo') + ' | ' + r.pieza;
-    if(!groups[key]) groups[key] = { area:r.area, equipo:r.equipo||r.tipoMaquina||'Equipo', pieza:r.pieza, dates:[], fallas:[] };
+    const eq = canonEquipo(r);
+    const key = r.area + ' | ' + eq + ' | ' + r.pieza;
+    if(!groups[key]) groups[key] = { area:r.area, equipo:eq, pieza:r.pieza, dates:[], fallas:[] };
     groups[key].dates.push(d);
     groups[key].fallas.push(r.falla);
   });
@@ -1141,6 +1349,7 @@ function renderKaizen(rows, scopeLabel){
     return { ...g, count:n, first:g.dates[0], last:g.dates[n-1], trend };
   }).sort((a,b)=>b.count-a.count).slice(0,10);
 
+  window._kaizenItems = items;
   const cont = document.getElementById('kaizenList');
   if(!items.length){
     cont.innerHTML = `<div class="empty">No hay piezas que se repitan 2+ veces en el alcance actual — buena señal, o aún falta histórico.</div>`;
@@ -1490,6 +1699,8 @@ document.getElementById('clearSelBtn').addEventListener('click', ()=>{
   window._selectedKey = null;
   window._selectedArea = null;
   window._selectedTecnico = null;
+  window._selectedTipo = null;
+  window._selectedSemana = null;
   render();
 });
 
@@ -1528,6 +1739,42 @@ function otRecordToRow(doc){
     minMaquina: Number(doc.TOTAL_MIN_MAQUINA) || 0, minTecnico: Number(doc.TOTAL_MIN_TECNICO) || 0,
     falla: doc.DESCRIPCION_FALLA || '', solucion: doc.DESCRIPCION_SOLUCION || '',
   };
+}
+
+function exportAnalisisBackup(){
+  if(!allRows.length){ document.getElementById('feedStatus').textContent = 'No hay OTs para exportar.'; return; }
+  const blob = new Blob([JSON.stringify(allRows,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'analisis_respaldo_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* CSV de doble uso: se abre directo en Excel (comillas + BOM UTF-8 para que
+   se vean bien las tildes/ñ). Exporta lo que esté filtrado en pantalla en
+   ese momento (window._scopeRows, seteado en cada render()) — si no hay
+   ningún filtro activo, eso es igual a todas las OTs cargadas. */
+function csvEscape(v){
+  return '"' + String(v ?? '').replace(/"/g,'""') + '"';
+}
+function exportAnalisisCSV(){
+  const rows = (window._scopeRows && window._scopeRows.length) ? window._scopeRows : allRows.filter(r=>r.fecha);
+  if(!rows.length){ document.getElementById('feedStatus').textContent = 'No hay OTs para exportar.'; return; }
+  const headers = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Paro Planta','Técnicos','Min Máquina Parada','Min Técnico','Falla','Solución'];
+  let csv = headers.join(',') + '\n';
+  rows.forEach(r=>{
+    csv += [r.ot, r.fecha, r.semana, r.area, r.tipoMaquina, r.equipo, r.pieza, r.tipoMant, r.me, r.paroPlanta, r.tecnicos, r.minMaquina, r.minTecnico, r.falla, r.solucion]
+      .map(csvEscape).join(',') + '\n';
+  });
+  const suffix = (window._selectedArea||window._selectedKey||window._selectedTecnico||window._selectedTipo||window._selectedSemana) ? '_filtrado' : '';
+  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'reporte_analisis'+suffix+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById('feedStatus').textContent = `📊 Reporte exportado (${rows.length} OTs) — ábrelo con Excel.`;
 }
 
 /* ---------- init ---------- */
