@@ -23,6 +23,12 @@
     --red:#ef4b4b; --red-dim:#3a2020;
     --teal:#35d0b0; --teal-dim:#1a3a33;
     --blue:#5b9bf0;
+    /* Paleta de estado validada (accesible, ver dataviz skill) — reservada
+       para semáforo de riesgo/stock, nunca reutilizada para otra cosa */
+    --st-good:#0ca30c; --st-good-dim:#0f2e14;
+    --st-warning:#fab219; --st-warning-dim:#3a2f10;
+    --st-serious:#ec835a; --st-serious-dim:#3a2318;
+    --st-critical:#d03b3b; --st-critical-dim:#3a1c1c;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
@@ -113,15 +119,16 @@
   .thumb:hover{border-color:var(--amber);}
   .thumb-placeholder{width:34px;height:34px;border-radius:6px;background:var(--panel-2);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted);}
   .gauge-fill{height:100%;border-radius:4px;}
-  .gauge-fill.ok{background:var(--teal);} .gauge-fill.bajo{background:var(--amber);} .gauge-fill.sin{background:var(--red);}
+  .gauge-fill.ok{background:var(--st-good);} .gauge-fill.bajo{background:var(--st-warning);} .gauge-fill.sin{background:var(--st-critical);}
   .gauge-fill.nodata{background:repeating-linear-gradient(45deg,#3a4252,#3a4252 4px,#2a3140 4px,#2a3140 8px);}
   .qty-num{font-family:'IBM Plex Mono';font-weight:600;font-size:12px;min-width:22px;text-align:right;}
 
   .stock-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono';white-space:nowrap;}
-  .stock-badge.ok{background:var(--teal-dim);color:var(--teal);}
-  .stock-badge.bajo{background:var(--amber-dim);color:var(--amber);}
-  .stock-badge.sin{background:var(--red-dim);color:#ff8a8a;}
+  .stock-badge.ok{background:var(--st-good-dim);color:#5fd35f;}
+  .stock-badge.bajo{background:var(--st-warning-dim);color:var(--st-warning);}
+  .stock-badge.sin{background:var(--st-critical-dim);color:#ff8a8a;}
   .stock-badge.nodata{background:#252c38;color:var(--muted);}
+  .stock-badge.revisar{background:var(--st-serious-dim);color:var(--st-serious);}
 
   .row-actions{display:flex;gap:5px;opacity:.4;transition:opacity .12s;}
   tr:hover .row-actions{opacity:1;}
@@ -311,7 +318,7 @@
         </div>
       </div>
       <div class="form-field"><label>Cantidad</label><input id="mov-cantidad" type="number" min="1" value="1"></div>
-      <div class="form-field"><label>Tu nombre (técnico)</label><input id="mov-tecnico" placeholder="Ej: Juan Pérez"></div>
+      <div class="form-field"><label>Técnico</label><select id="mov-tecnico"></select></div>
       <div class="form-field full"><label>Motivo / dónde se usó</label><input id="mov-motivo" placeholder="Ej: Reparación de rodillo, OT-123"></div>
     </div>
     <div class="modal-actions">
@@ -368,8 +375,12 @@ function normalizeKey(str){
   return (str||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 }
 function partKey(p){
-  // dos repuestos se consideran "el mismo" si coinciden nombre + (modelo o, si no hay modelo, descripción)
-  return normalizeKey(p.r) + '|' + normalizeKey(p.m || p.d || '');
+  // dos repuestos se consideran "el mismo" si coinciden nombre + tipo/marca +
+  // (modelo o, si no hay modelo, descripción). Antes NO se comparaba el tipo,
+  // así que dos piezas distintas con el mismo código de "modelo" pero tipo
+  // diferente (ej. un conector TIPO CURVA y uno TIPO RECTO ambos "DE 1/2 A
+  // M16") se fusionaban por error como si fueran la misma pieza.
+  return normalizeKey(p.r) + '|' + normalizeKey(p.t) + '|' + normalizeKey(p.m || p.d || '');
 }
 function mergeRepuestoInto(list, incoming){
   const key = partKey(incoming);
@@ -535,11 +546,37 @@ const SEED = [
   }
 ];
 
+/* ═══════════════ TÉCNICOS (misma lista central que usa Bitácora) ═══════════════ */
+// Antes el técnico de un movimiento de stock era texto libre guardado solo en
+// este celular (localStorage) — eso significaba que "Juan Pérez", "juan perez"
+// y "J. Pérez" contaban como 3 personas distintas entre Inventario y
+// Bitácora/Análisis. Ahora se elige de la misma tecnicos.json.
+const TECNICOS_INV_FALLBACK = [
+  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
+  { "nombre": "ANTONIO SANTANA #805", "corto": "ANTONIO #805" },
+  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
+  { "nombre": "LEBRON", "corto": "LEBRON" },
+  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
+];
+let tecnicosInv = TECNICOS_INV_FALLBACK;
+async function loadTecnicosInventario(){
+  try{
+    const r = await fetch('tecnicos.json?_=' + Date.now());
+    if(r.ok){ const data = await r.json(); if(Array.isArray(data) && data.length) tecnicosInv = data; }
+  }catch(e){ console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message); }
+  const sel = document.getElementById('mov-tecnico');
+  if(sel){
+    sel.innerHTML = '<option value="">Selecciona…</option>' + tecnicosInv.map(t=>`<option value="${t.nombre.replace(/"/g,'&quot;')}">${t.corto||t.nombre}</option>`).join('');
+  }
+}
+
 /* ═══════════════ ESTADO ═══════════════ */
 let DB = [];
 let currentEquipoId = null;
 let editingRepIndex = null;
-let repFilter = 'todos'; // todos | sin | bajo
+let repFilter = 'todos'; // todos | sin | bajo | nodata | revisar
+const PARTS_PAGE_SIZE = 60; // evita meter tablas de 700+ filas de una vez al DOM (celulares viejos se ponen lentos)
+let partsShown = PARTS_PAGE_SIZE;
 
 /* ═══════════════ CONEXIÓN A FIREBASE ═══════════════ */
 function openConfigModal(){
@@ -564,8 +601,21 @@ function fbSanitize(obj){
 // documento de Firestore. No se espera (await) la confirmación del servidor
 // para no bloquear la interfaz si no hay señal — con persistencia offline
 // activada, el cambio se sube solo en cuanto haya conexión.
+// Firestore no permite documentos de más de ~1MB. Como cada equipo guarda
+// TODOS sus repuestos en un solo documento, un catálogo muy grande cargado de
+// una vez a un mismo equipo se puede acercar a ese límite. Avisamos antes de
+// que falle en seco.
+function checkEquipoSize(e){
+  const bytes = new Blob([JSON.stringify(e)]).size;
+  const pct = bytes / (1024*1024);
+  if(pct > 0.85){
+    showToast(`⚠️ "${e.nombre}" pesa ${(bytes/1024).toFixed(0)}KB — cerca del límite de 1MB de Firestore. Si vas a cargar más repuestos, considera dividirlos en otro equipo (ej: por módulo del catálogo) para no perder la carga.`);
+  }
+  return bytes;
+}
 function fbSaveEquipo(e){
   const { id, ...rest } = e;
+  checkEquipoSize(e);
   db.collection('equipos').doc(id).set(fbSanitize({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
     .catch(err => { console.error('Error guardando equipo:', err); showToast('⚠️ No se pudo sincronizar: '+err.message); });
 }
@@ -655,6 +705,13 @@ function minMarkerPct(p){
   if(isNaN(min) || min<=0 || !ref) return null;
   return Math.max(0, Math.min(100, Math.round(min/ref*100)));
 }
+// Señala repuestos cuyo Mínimo quedó en el valor genérico (1) que dejan las
+// cargas masivas de catálogos — no es un error, pero conviene revisarlo a
+// mano antes de confiar en la alerta de "stock bajo" de esa fila.
+function minLooksDefault(p){
+  const m = parseFloat(p.min);
+  return !isNaN(m) && m===1;
+}
 
 /* ═══════════════ RENDER: HOME ═══════════════ */
 function renderHome(){
@@ -705,6 +762,7 @@ async function openEquipo(id){
   document.getElementById('detailView').style.display = 'block';
   document.getElementById('globalSearch').value = '';
   repFilter = 'todos';
+  partsShown = PARTS_PAGE_SIZE;
   renderDetail(); // DB ya se mantiene al día en vivo por el listener de Firestore
 }
 function backHome(){
@@ -731,10 +789,13 @@ function renderDetail(){
     ['Tamaño', e.tamano], ['Peso', e.peso], ['Fase', e.fase], ['Made in', e.madein],
   ];
 
+  const revisar = parts.filter(minLooksDefault).length;
+
   let filtered = parts;
   if(repFilter==='sin') filtered = parts.filter(p=>stockStatus(p)==='sin');
   if(repFilter==='bajo') filtered = parts.filter(p=>stockStatus(p)==='bajo');
   if(repFilter==='nodata') filtered = parts.filter(p=>stockStatus(p)==='nodata');
+  if(repFilter==='revisar') filtered = parts.filter(minLooksDefault);
 
   document.getElementById('detailView').innerHTML = `
     <div class="back-link" onclick="backHome()">← Volver a todos los equipos</div>
@@ -747,6 +808,7 @@ function renderDetail(){
         <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
         <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
         <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
+        <button class="btn secondary sm" onclick="findAndMergeDuplicates()">🧹 Buscar duplicados</button>
         <button class="btn secondary sm" onclick="deleteEquipo()">🗑 Eliminar equipo</button>
         <button class="btn sm" onclick="openRepuestoModal()">＋ Agregar repuesto</button>
       </div>
@@ -775,8 +837,9 @@ function renderDetail(){
           <span class="fchip ${repFilter==='sin'?'active':''}" onclick="setRepFilter('sin')">🔴 Sin stock (${sin})</span>
           <span class="fchip ${repFilter==='bajo'?'active':''}" onclick="setRepFilter('bajo')">🟡 Bajo (${baj})</span>
           ${noData? `<span class="fchip ${repFilter==='nodata'?'active':''}" onclick="setRepFilter('nodata')">⚪ Sin contar (${noData})</span>` : ''}
+          ${revisar? `<span class="fchip ${repFilter==='revisar'?'active':''}" onclick="setRepFilter('revisar')" title="Repuestos con Mínimo=1 (valor genérico dejado por una carga masiva) — conviene revisar cuál debería ser el mínimo real">🔧 Mínimo por revisar (${revisar})</span>` : ''}
         </div>
-        <input type="text" id="localSearch" placeholder="Filtrar en este equipo…" oninput="renderPartsTable()" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:7px 11px;border-radius:7px;font-size:12px;">
+        <input type="text" id="localSearch" placeholder="Filtrar en este equipo…" oninput="partsShown=PARTS_PAGE_SIZE;renderPartsTable()" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:7px 11px;border-radius:7px;font-size:12px;">
       </div>
       <div style="overflow-x:auto;">
         <table>
@@ -792,7 +855,7 @@ function renderDetail(){
   renderPartsTable();
 }
 
-function setRepFilter(f){ repFilter = f; renderDetail(); }
+function setRepFilter(f){ repFilter = f; partsShown = PARTS_PAGE_SIZE; renderDetail(); }
 
 function renderPartsTable(){
   const e = getCurrentEquipo();
@@ -802,6 +865,7 @@ function renderPartsTable(){
   if(repFilter==='sin') list = list.filter(p=>stockStatus(p)==='sin');
   if(repFilter==='bajo') list = list.filter(p=>stockStatus(p)==='bajo');
   if(repFilter==='nodata') list = list.filter(p=>stockStatus(p)==='nodata');
+  if(repFilter==='revisar') list = list.filter(minLooksDefault);
   if(localQ) list = list.filter(p=> (p.r+p.t+p.m+p.d+p.u).toLowerCase().includes(localQ));
 
   const body = document.getElementById('partsBody');
@@ -810,7 +874,10 @@ function renderPartsTable(){
     return;
   }
 
-  body.innerHTML = list.map(p=>{
+  const totalList = list.length;
+  const paginated = list.slice(0, partsShown);
+
+  body.innerHTML = paginated.map(p=>{
     const st = stockStatus(p);
     const pct = gaugePct(p);
     const minPct = minMarkerPct(p);
@@ -833,7 +900,7 @@ function renderPartsTable(){
             </div>
           </div>
         </td>
-        <td class="mono" style="color:var(--muted);font-size:11px;">${minMaxTxt}</td>
+        <td class="mono" style="color:var(--muted);font-size:11px;">${minMaxTxt}${minLooksDefault(p)?' <span class="stock-badge revisar" title="Mínimo genérico (1) dejado por una carga masiva — revísalo">revisar</span>':''}</td>
         <td class="mono">${(p.cm!==null && p.cm!==undefined && p.cm!=='')? p.cm : '—'}</td>
         <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
         <td>
@@ -846,8 +913,12 @@ function renderPartsTable(){
         </td>
       </tr>
     `;
-  }).join('');
+  }).join('') + (totalList>partsShown ? `
+    <tr><td colspan="11" style="text-align:center;padding:16px;">
+      <button class="btn secondary sm" onclick="showMoreParts()">Mostrar más (${totalList-partsShown} restantes) ⌄</button>
+    </td></tr>` : '');
 }
+function showMoreParts(){ partsShown += PARTS_PAGE_SIZE; renderPartsTable(); }
 
 /* ═══════════════ MODALES ═══════════════ */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
@@ -998,6 +1069,7 @@ function openMovimiento(idx, tipo){
   document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null ? p.q : 'sin contar');
   document.getElementById('mov-cantidad').value = 1;
   document.getElementById('mov-motivo').value = '';
+  if(!document.getElementById('mov-tecnico').options.length) loadTecnicosInventario();
   document.getElementById('mov-tecnico').value = localStorage.getItem('inventario_tecnico_actual') || '';
   setMovTipo(tipo || 'entrada');
   openModal('modalMovimiento');
@@ -1088,14 +1160,78 @@ async function bulkImportRepuestos(){
   showToast(`✅ Carga masiva: ${added} nuevos, ${merged} sumados`);
 }
 
+/* ═══════════════ DETECTAR Y FUSIONAR DUPLICADOS ═══════════════ */
+// Agrupa los repuestos de un equipo por partKey (nombre+modelo/descripción
+// normalizado) y fusiona cada grupo de 2+ en una sola fila, sumando el stock.
+// Sirve tanto para limpiar duplicados que ya existían (de antes de esta
+// mejora) como para revisar después de una carga masiva grande.
+function findDuplicateGroups(repuestos){
+  const groups = {};
+  repuestos.forEach((p,i)=>{
+    const key = partKey(p);
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(i);
+  });
+  return Object.values(groups).filter(idxs=>idxs.length>1);
+}
+
+async function findAndMergeDuplicates(){
+  const e = getCurrentEquipo();
+  if(!e) return;
+  const dupGroups = findDuplicateGroups(e.repuestos);
+  if(!dupGroups.length){ showToast('✅ No se encontraron repuestos duplicados en este equipo'); return; }
+
+  const totalFilasDeMas = dupGroups.reduce((s,g)=>s+(g.length-1),0);
+  const preview = dupGroups.slice(0,8).map(idxs=>`• ${e.repuestos[idxs[0]].r} (${idxs.length}×)`).join('\n');
+  const msg = `Se encontraron ${dupGroups.length} repuesto(s) duplicados (mismo nombre+modelo), ${totalFilasDeMas} fila(s) de más:\n\n${preview}${dupGroups.length>8?'\n…y '+(dupGroups.length-8)+' más':''}\n\n¿Fusionar cada grupo en una sola fila, sumando el stock (Qty)? Esta acción no se puede deshacer.`;
+  if(!confirm(msg)) return;
+
+  const nuevos = [];
+  const yaFusionados = new Set();
+  e.repuestos.forEach((p,i)=>{
+    if(yaFusionados.has(i)) return;
+    const key = partKey(p);
+    // reconstruye el grupo completo por key (más simple y robusto que usar índices ya corridos)
+    const mismos = e.repuestos.map((pp,ii)=>({pp,ii})).filter(({pp})=>partKey(pp)===key);
+    if(mismos.length>1 && !yaFusionados.has(mismos[0].ii)){
+      const base = {...mismos[0].pp};
+      let qSum = 0, anyQ = false;
+      mismos.forEach(({pp,ii})=>{
+        yaFusionados.add(ii);
+        if(pp.q!=null && pp.q!==''){ qSum += parseFloat(pp.q)||0; anyQ = true; }
+        ['t','m','d','u'].forEach(k=>{ if(!base[k] && pp[k]) base[k]=pp[k]; });
+        if((base.cm==null||base.cm==='') && pp.cm!=null) base.cm = pp.cm;
+        if((base.min==null||base.min==='') && pp.min!=null) base.min = pp.min;
+        if((base.max==null||base.max==='') && pp.max!=null) base.max = pp.max;
+        if(!base.img && pp.img) base.img = pp.img;
+      });
+      base.q = anyQ ? qSum : null;
+      nuevos.push(base);
+    } else if(!yaFusionados.has(i)){
+      yaFusionados.add(i);
+      nuevos.push(p);
+    }
+  });
+
+  e.repuestos = nuevos;
+  fbSaveEquipo(e);
+  renderDetail();
+  showToast(`🧹 ${dupGroups.length} grupo(s) fusionados — se quitaron ${totalFilasDeMas} fila(s) duplicadas`);
+}
+
 async function deleteEquipo(){
   const e = getCurrentEquipo();
   if(!(await verifyPin())) return;
-  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos? Esta acción no se puede deshacer.`)) return;
+  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos? Tendrás unos segundos para deshacerlo con el botón del aviso.`)) return;
+  const backup = JSON.parse(JSON.stringify(e));
   fbDeleteEquipoDoc(e.id).catch(err=>showToast('⚠️ No se pudo borrar en la nube: '+err.message));
-  DB = DB.filter(x=>x.id!==currentEquipoId);
+  DB = DB.filter(x=>x.id!==backup.id);
   backHome();
-  showToast('🗑 Equipo eliminado');
+  showUndoToast(`🗑 Equipo "${backup.nombre}" eliminado`, ()=>{
+    fbSaveEquipo(backup);
+    DB.push(backup);
+    openEquipo(backup.id);
+  });
 }
 
 let tempImgData = null;
@@ -1205,9 +1341,27 @@ async function saveRepuesto(){
   let toastMsg = '✅ Repuesto agregado';
 
   if(editingRepIndex!=null){
-    // edición explícita de un repuesto puntual: siempre actualiza ese mismo, sin buscar coincidencias
-    e.repuestos[editingRepIndex] = obj;
-    toastMsg = '✅ Repuesto actualizado';
+    // Si al editar, el nombre+modelo quedó igual al de OTRO repuesto que ya
+    // existía en este equipo, no lo dejamos como fila duplicada: se fusiona
+    // con ese otro (sumando stock) y se elimina la fila que se estaba editando.
+    const newKey = partKey(obj);
+    const dupIdx = e.repuestos.findIndex((p,i2)=> i2!==editingRepIndex && partKey(p)===newKey);
+    if(dupIdx>=0){
+      const target = e.repuestos[dupIdx];
+      const prevQ = target.q!=null ? parseFloat(target.q) : null;
+      const addQ = obj.q!=null ? parseFloat(obj.q) : null;
+      if(prevQ!=null || addQ!=null) target.q = (prevQ||0) + (addQ||0);
+      ['t','m','d','u'].forEach(k=>{ if(!target[k] && obj[k]) target[k] = obj[k]; });
+      if((target.cm==null||target.cm==='') && obj.cm!=null) target.cm = obj.cm;
+      if((target.min==null||target.min==='') && obj.min!=null) target.min = obj.min;
+      if((target.max==null||target.max==='') && obj.max!=null) target.max = obj.max;
+      if(!target.img && obj.img) target.img = obj.img;
+      e.repuestos.splice(editingRepIndex,1);
+      toastMsg = `🔗 "${nombre}" ya existía como otro repuesto — se fusionaron en uno solo (stock: ${target.q ?? '—'})`;
+    } else {
+      e.repuestos[editingRepIndex] = obj;
+      toastMsg = '✅ Repuesto actualizado';
+    }
   } else {
     // nuevo repuesto: si ya existe uno igual (mismo nombre+modelo) en este equipo, se suma en vez de duplicarse
     const result = mergeRepuestoInto(e.repuestos, obj);
@@ -1227,32 +1381,51 @@ async function deleteRepuesto(idx){
   if(!(await verifyPin())) return;
   const p = e.repuestos[idx];
   if(!confirm(`¿Eliminar "${p.r}"?`)) return;
-  if(p.img) fbDeleteFile(p.img);
+  const backup = {...p};
   e.repuestos.splice(idx,1);
   fbSaveEquipo(e);
   renderDetail();
-  showToast('🗑 Repuesto eliminado');
+  let undone = false;
+  showUndoToast(`🗑 "${backup.r}" eliminado`, ()=>{
+    undone = true;
+    e.repuestos.splice(Math.min(idx, e.repuestos.length), 0, backup);
+    fbSaveEquipo(e);
+    renderDetail();
+  });
+  // La foto en Storage recién se borra si no se deshizo a tiempo — es lo
+  // único de esta acción que de verdad no se puede recuperar después.
+  setTimeout(()=>{ if(!undone && backup.img) fbDeleteFile(backup.img); }, 5300);
 }
 
 /* ═══════════════ CLAVE DE ELIMINACIÓN (compartida entre todos los celulares) ═══════════════ */
+// La clave se guarda como hash SHA-256 (no en texto plano) para que alguien
+// que llegue a mirar la base de datos de Firestore directamente no pueda
+// leerla tal cual — solo sirve para comparar, no para recuperarla.
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 async function verifyPin(){
   await window.fbReady;
-  let pin;
-  try{ pin = await fbGetSharedPin(); }catch(err){ showToast('⚠️ No se pudo comprobar la clave: '+err.message); return false; }
-  if(!pin){
+  let pinHash;
+  try{ pinHash = await fbGetSharedPin(); }catch(err){ showToast('⚠️ No se pudo comprobar la clave: '+err.message); return false; }
+  if(!pinHash){
     const crear = confirm('Todavía no hay una clave configurada para eliminar (es la misma en todos los celulares).\n\n¿Quieres crearla ahora?');
     if(!crear){ showToast('Eliminación cancelada — no hay clave configurada'); return false; }
     const nueva = prompt('Crea una clave para proteger la eliminación:');
     if(!nueva) return false;
     const confirmacion = prompt('Confirma la clave:');
     if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden — inténtalo de nuevo'); return false; }
-    await fbSetSharedPin(nueva);
+    await fbSetSharedPin(await sha256Hex(nueva));
     showToast('🔒 Clave configurada — vuelve a tocar eliminar para continuar');
     return false; // por seguridad, la primera vez solo configura la clave; hay que volver a intentar eliminar
   }
   const entered = prompt('🔒 Ingresa la clave para eliminar:');
   if(entered===null) return false; // canceló
-  if(entered !== pin){ showToast('❌ Clave incorrecta'); return false; }
+  // Compatibilidad con claves guardadas antes de este cambio (texto plano de <64 hex)
+  const enteredHash = await sha256Hex(entered);
+  if(enteredHash !== pinHash && entered !== pinHash){ showToast('❌ Clave incorrecta'); return false; }
   return true;
 }
 
@@ -1264,15 +1437,17 @@ async function configurePin(){
     if(cambiar){
       const old = prompt('Ingresa la clave actual:');
       if(old===null) return;
-      if(old !== current){ showToast('❌ Clave incorrecta'); return; }
+      const oldHash = await sha256Hex(old);
+      if(oldHash !== current && old !== current){ showToast('❌ Clave incorrecta'); return; }
       const nueva = prompt('Nueva clave:');
       if(!nueva) return;
-      await fbSetSharedPin(nueva);
+      await fbSetSharedPin(await sha256Hex(nueva));
       showToast('✅ Clave actualizada para todos los celulares');
     } else {
       const old = prompt('Ingresa la clave actual para quitar la protección:');
       if(old===null) return;
-      if(old !== current){ showToast('❌ Clave incorrecta'); return; }
+      const oldHash = await sha256Hex(old);
+      if(oldHash !== current && old !== current){ showToast('❌ Clave incorrecta'); return; }
       await fbSetSharedPin(null);
       showToast('🔓 Protección de eliminación desactivada');
     }
@@ -1281,7 +1456,7 @@ async function configurePin(){
     if(!nueva) return;
     const confirmacion = prompt('Confirma la clave:');
     if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden, inténtalo de nuevo'); return; }
-    await fbSetSharedPin(nueva);
+    await fbSetSharedPin(await sha256Hex(nueva));
     showToast('🔒 Clave configurada — se pedirá para eliminar repuestos o equipos');
   }
 }
@@ -1391,16 +1566,34 @@ function importData(ev){
 let toastTimer;
 function showToast(msg){
   const t = document.getElementById('toast');
+  t.innerHTML = '';
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+// Toast con botón "Deshacer" — para borrados, que ahora dan unos segundos de
+// margen antes de que el borrado (sobre todo el de una foto en Storage) sea
+// verdaderamente irreversible.
+function showUndoToast(msg, onUndo, delayMs=5200){
+  const t = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  t.innerHTML = `<span>${msg}</span>`;
+  const btn = document.createElement('button');
+  btn.className = 'btn sm';
+  btn.style.cssText = 'margin-left:12px;padding:4px 10px;';
+  btn.textContent = 'Deshacer';
+  btn.onclick = () => { t.classList.remove('show'); onUndo(); };
+  t.appendChild(btn);
+  t.classList.add('show');
+  toastTimer = setTimeout(()=>t.classList.remove('show'), delayMs);
 }
 
 /* ═══════════════ INIT ═══════════════ */
 async function initApp(){
   fbRenderMiniNav('inventario');
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  loadTecnicosInventario();
   await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
 }
 async function refreshFromServer(){
