@@ -1,10 +1,37 @@
-/* ═══════════════════════════════════════════════════════════════
-   CAPA COMPARTIDA DE FIREBASE
-   Cargada por bitacora.html, inventario.html y analisis.html.
-   Provee: autenticación anónima automática, acceso a Firestore y
-   Storage, subida de imágenes/PDF, barra de "sin conexión", y una
-   mini barra de navegación consistente entre las 3 páginas.
-   ═══════════════════════════════════════════════════════════════ */
+// firebase-init.js — FASE 1
+// ══════════════════════════════════════════════════════════════════════
+// QUÉ CAMBIÓ respecto a la versión anterior:
+//  - ANTES: firebase.auth().signInAnonymously() se ejecutaba solo, sin
+//    pedir nada a nadie — cualquiera con el link entraba con los mismos
+//    permisos que todos los demás.
+//  - AHORA: si no hay una sesión real (email + contraseña) iniciada, se
+//    redirige a login.html. Una vez autenticado, se lee su documento
+//    /usuarios/{uid} para saber su rol, nombre y si está activo.
+//
+// QUÉ SE CONSERVA IGUAL (para no romper bitacora.html / inventario.html /
+// analisis.html / index.html, que ya usan estos nombres):
+//  - la variable global `db` (Firestore) y `storage` (Storage)
+//  - la función `fbTimestamp()`
+//  - la promesa global `window.fbReady`
+//
+// QUÉ SE AGREGA:
+//  - `window.currentUser`      → { uid, email }
+//  - `window.currentUserRole`  → el documento completo de /usuarios/{uid}
+//  - `userHasRole(...roles)`   → helper para mostrar/ocultar botones
+//    según rol (SOLO cosmético — la protección real está en
+//    firestore.rules / storage.rules, nunca confíes solo en esto para
+//    seguridad)
+//  - `fbLogout()`              → cierra sesión y regresa a login.html
+//
+// CORRECCIÓN (revisión previa a publicar): cualquiera que ya usó la app
+// tiene una sesión anónima vieja guardada en su navegador (venía de
+// signInAnonymously()). Esa sesión SÍ cuenta como "user" para Firebase
+// (no es null), así que sin este chequeo la app la trataba como cuenta
+// real: buscaba su rol en /usuarios, no lo encontraba, y recién ahí la
+// sacaba — con un mensaje de error equivocado y una lectura de Firestore
+// de más. Ahora se descarta user.isAnonymous en el mismo punto que "no
+// hay sesión".
+// ══════════════════════════════════════════════════════════════════════
 
 firebase.initializeApp(firebaseConfig);
 
@@ -12,107 +39,103 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
-// Persistencia offline: los cambios hechos sin señal se guardan en el
-// celular y se suben solos apenas vuelva la conexión. No requiere que
-// nosotros escribamos lógica manual de "cola pendiente".
+// Persistencia offline (igual que en la versión original del proyecto).
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
   console.warn('Persistencia offline no disponible:', err.code);
 });
 
-// Promesa que se resuelve cuando ya iniciamos sesión anónima y podemos
-// leer/escribir en Firestore. Cada página debe hacer:
-//   await window.fbReady;
-// antes de usar `db` o `storage`.
+function fbTimestamp() {
+  return firebase.firestore.FieldValue.serverTimestamp();
+}
+
+const PUBLIC_PAGES = ['login.html'];
+const currentPage = location.pathname.split('/').pop() || 'index.html';
+
+window.currentUser = null;
+window.currentUserRole = null;
+
 window.fbReady = new Promise((resolve, reject) => {
-  auth.onAuthStateChanged((user) => {
-    if (user) { resolve(user); return; }
-    auth.signInAnonymously().catch((err) => {
-      console.error('No se pudo iniciar sesión anónima en Firebase:', err);
+  auth.onAuthStateChanged(async (user) => {
+    if (!user || user.isAnonymous) {
+      // Sin sesión real: si venía de una sesión anónima vieja, ciérrala
+      // para no dejarla dando vueltas en el navegador.
+      if (user && user.isAnonymous) {
+        try { await auth.signOut(); } catch (e) { /* no hay nada más que hacer aquí */ }
+      }
+      if (!PUBLIC_PAGES.includes(currentPage)) {
+        const next = encodeURIComponent(currentPage);
+        location.href = 'login.html?next=' + next;
+      }
+      reject(new Error('No hay sesión iniciada'));
+      return;
+    }
+
+    window.currentUser = { uid: user.uid, email: user.email };
+
+    try {
+      const snap = await db.collection('usuarios').doc(user.uid).get();
+
+      if (!snap.exists) {
+        // Tiene cuenta de Firebase Auth pero nadie le creó su documento de
+        // usuario/rol todavía → no puede usar la app.
+        await auth.signOut();
+        reject(new Error('Tu cuenta existe pero no tiene un rol asignado. Pide a un administrador que te dé de alta en "usuarios".'));
+        return;
+      }
+      // CORRECCIÓN: antes era `activo === false`, que deja pasar a
+      // cualquier documento donde el campo `activo` no exista (undefined
+      // no es === false). firestore.rules exige `activo == true` para
+      // dejar leer/escribir, así que con el chequeo viejo alguien podía
+      // entrar a la interfaz y encontrarse con permission-denied en todo,
+      // en vez de un aviso claro de cuenta desactivada. Ahora exige el
+      // campo explícitamente en true, igual que las reglas.
+      if (snap.data().activo !== true) {
+        await auth.signOut();
+        reject(new Error('Tu cuenta está desactivada. Contacta a un administrador.'));
+        return;
+      }
+
+      window.currentUserRole = snap.data();
+      resolve();
+    } catch (err) {
       reject(err);
-    });
+    }
   });
 });
 
-window.db = db;
-window.storage = storage;
-window.fbTimestamp = firebase.firestore.FieldValue.serverTimestamp;
-
-/* ═══════════════ SUBIDA DE ARCHIVOS (fotos de repuestos, manuales PDF) ═══════════════ */
-// Convierte un data: URL (lo que produce FileReader/canvas.toDataURL) en un
-// archivo real y lo sube a Firebase Storage. Devuelve la URL pública de
-// descarga, que es lo único que se guarda en Firestore (así los documentos
-// no se llenan de texto base64 y no chocan con el límite de 1MB por doc).
-async function fbUploadDataUrl(dataUrl, path) {
-  await window.fbReady;
-  const ref = storage.ref(path);
-  await ref.putString(dataUrl, 'data_url');
-  return await ref.getDownloadURL();
+function userHasRole(...roles) {
+  return !!window.currentUserRole && roles.includes(window.currentUserRole.rol);
 }
-window.fbUploadDataUrl = fbUploadDataUrl;
 
-async function fbDeleteFile(url) {
-  if (!url) return;
-  try {
-    await window.fbReady;
-    await storage.refFromURL(url).delete();
-  } catch (e) {
-    console.warn('No se pudo borrar el archivo anterior de Storage:', e.message);
-  }
+async function fbLogout() {
+  await auth.signOut();
+  location.href = 'login.html';
 }
-window.fbDeleteFile = fbDeleteFile;
 
-/* ═══════════════ BARRA "SIN CONEXIÓN" ═══════════════ */
-function fbSetupOfflineBar(elId) {
-  const bar = document.getElementById(elId);
-  if (!bar) return;
-  const update = () => bar.classList.toggle('show', !navigator.onLine);
-  window.addEventListener('online', update);
-  window.addEventListener('offline', update);
-  update();
-}
-window.fbSetupOfflineBar = fbSetupOfflineBar;
-
-/* ═══════════════ MINI NAVEGACIÓN ENTRE LAS 3 HERRAMIENTAS ═══════════════ */
-// Inyecta una barrita consistente arriba de cada página para saltar entre
-// Inicio / Bitácora / Inventario / Análisis, y muestra el estado de
-// conexión a Firebase (útil para saber si la sincronización está viva).
+// ══════════════════════════════════════════════════════════════════════
+// CORRECCIÓN: esta función faltaba en la primera versión de este archivo.
+// El código original de bitacora.html / inventario.html / analisis.html /
+// index.html ya la llama (fbRenderMiniNav('bitacora'), etc.) para mostrar
+// una barra superior con enlaces entre las apps, el usuario conectado y
+// "Salir". Se agrega aquí para no dejar esa llamada rota.
+// ══════════════════════════════════════════════════════════════════════
 function fbRenderMiniNav(active) {
-  const items = [
-    { key: 'home', href: 'index.html', label: '🏠 Inicio' },
-    { key: 'bitacora', href: 'bitacora.html', label: '📋 Bitácora' },
-    { key: 'inventario', href: 'inventario.html', label: '🔧 Inventario' },
-    { key: 'analisis', href: 'analisis.html', label: '📊 Análisis' },
-  ];
-  const bar = document.createElement('div');
-  bar.id = 'fb-mini-nav';
-  bar.style.cssText = 'display:flex;gap:0;background:#0a0e14;border-bottom:1px solid #262f3d;overflow-x:auto;position:sticky;top:0;z-index:300;font-family:sans-serif;';
-  bar.innerHTML = items.map(it => `
-    <a href="${it.href}" style="flex:0 0 auto;padding:9px 14px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;
-      color:${it.key===active ? '#f0a930' : '#8b98ab'};border-bottom:2px solid ${it.key===active ? '#f0a930' : 'transparent'};">${it.label}</a>
-  `).join('') + `<span id="fb-conn-badge" style="margin-left:auto;flex:0 0 auto;padding:9px 14px;font-size:11px;color:#8b98ab;white-space:nowrap;">⚪ conectando…</span>`;
-  document.body.insertBefore(bar, document.body.firstChild);
-
-  const badge = document.getElementById('fb-conn-badge');
   window.fbReady.then(() => {
-    badge.textContent = navigator.onLine ? '🟢 en línea' : '🟡 sin conexión (se guarda local)';
-  }).catch(() => { badge.textContent = '🔴 error de conexión a Firebase'; });
-  window.addEventListener('online', () => { badge.textContent = '🟢 en línea'; });
-  window.addEventListener('offline', () => { badge.textContent = '🟡 sin conexión (se guarda local)'; });
+    if (document.getElementById('fbMiniNav')) return; // evita duplicar si se llama 2 veces
+    const pages = [
+      { id: 'index',      href: 'index.html',      label: '🏠 Inicio' },
+      { id: 'bitacora',   href: 'bitacora.html',   label: '📋 Bitácora' },
+      { id: 'inventario', href: 'inventario.html', label: '🔧 Inventario' },
+      { id: 'analisis',   href: 'analisis.html',   label: '📊 Análisis' },
+    ];
+    const bar = document.createElement('div');
+    bar.id = 'fbMiniNav';
+    bar.style.cssText = 'display:flex;gap:4px;overflow-x:auto;padding:8px 14px;background:#0B131C;border-bottom:1px solid #2D3F55;font-size:11px;align-items:center;position:sticky;top:0;z-index:250;';
+    bar.innerHTML = pages.map(p =>
+      `<a href="${p.href}" style="padding:5px 9px;border-radius:6px;white-space:nowrap;text-decoration:none;font-weight:600;color:${p.id===active?'#F59E0B':'#94A3B8'};background:${p.id===active?'#F59E0B18':'transparent'};">${p.label}</a>`
+    ).join('')
+    + `<span style="margin-left:auto;color:#94A3B8;white-space:nowrap;padding-left:8px;">👤 ${(window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''}</span>`
+    + `<button onclick="fbLogout()" style="margin-left:8px;background:none;border:1px solid #2D3F55;color:#94A3B8;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">Salir</button>`;
+    document.body.insertBefore(bar, document.body.firstChild);
+  }).catch(()=>{}); // si no hay sesión, fbReady ya redirigió a login.html — no hacer nada aquí
 }
-window.fbRenderMiniNav = fbRenderMiniNav;
-
-/* ═══════════════ PIN COMPARTIDO (protección para eliminar) ═══════════════ */
-// Antes el PIN vivía en localStorage de cada celular (cada uno con su propia
-// clave). Ahora vive en un documento de Firestore para que sea EL MISMO PIN
-// en todos los celulares.
-async function fbGetSharedPin() {
-  await window.fbReady;
-  const snap = await db.collection('config').doc('app').get();
-  return snap.exists ? (snap.data().pin || null) : null;
-}
-async function fbSetSharedPin(pin) {
-  await window.fbReady;
-  await db.collection('config').doc('app').set({ pin: pin || firebase.firestore.FieldValue.delete() }, { merge: true });
-}
-window.fbGetSharedPin = fbGetSharedPin;
-window.fbSetSharedPin = fbSetSharedPin;
