@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v2';
+const CACHE = 'mantenimiento-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -15,6 +15,7 @@ const ASSETS = [
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',
+  'login.html',
   'tecnicos.json',
   'icon-192.png',
   'icon-512.png',
