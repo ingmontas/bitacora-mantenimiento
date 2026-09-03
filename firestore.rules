@@ -1,12 +1,63 @@
 rules_version = '2';
+// ══════════════════════════════════════════════════════════════════════
+// FASE 1 — Reglas con roles (reemplaza la regla única "cualquier
+// autenticado puede todo"). El rol de cada usuario vive en su documento
+// /usuarios/{uid}; estas reglas lo consultan con get()/exists() en cada
+// evaluación, siguiendo el patrón oficial de Firebase para control de
+// acceso basado en roles (no requiere Cloud Functions ni custom claims).
+// ══════════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cualquier persona que abra la app queda autenticada de forma anónima
-    // (sin usuario/contraseña, es automático). Estas reglas solo permiten
-    // leer/escribir a quien pase por esa autenticación anónima, para que la
-    // base de datos no quede completamente abierta a cualquiera en internet.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+    function existeUsuario() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+    function usuarioActual() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    function estaActivo() {
+      return existeUsuario() && usuarioActual().activo == true;
+    }
+    function tieneRol(roles) {
+      return estaAutenticado() && existeUsuario() && estaActivo() && usuarioActual().rol in roles;
+    }
+    function esAdmin()            { return tieneRol(['ADMINISTRADOR']); }
+    function esEncargado()        { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO']); }
+    function esSupervisorOMas()   { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR']); }
+    function esTecnicoOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO']); }
+    function esAlmacenOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','ALMACEN']); }
+    match /usuarios/{uid} {
+      allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
+      allow write: if esAdmin();
+    }
+    match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
+    match /areas/{id}   { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /equipos/{id} {
+      allow read: if esTecnicoOMas();
+      allow create, update: if esEncargado();
+      allow delete: if esAdmin();
+    }
+    match /ots/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas();
+      allow update: if esSupervisorOMas() || esTecnicoOMas();
+      allow delete: if esAdmin();
+    }
+    match /movimientos/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esAlmacenOMas() || esTecnicoOMas();
+      allow update, delete: if esAdmin();
+    }
+    match /repuestos/{id}          { allow read: if esTecnicoOMas(); allow write: if esAlmacenOMas(); }
+    match /planes_preventivos/{id} { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /solicitudes_compra/{id} { allow read: if esAlmacenOMas(); allow write: if esAlmacenOMas() || esEncargado(); }
+    match /proveedores/{id}        { allow read: if esAlmacenOMas(); allow write: if esEncargado(); }
+    match /auditoria/{id} {
+      allow read: if esEncargado();
+      allow write: if false;
     }
   }
 }
