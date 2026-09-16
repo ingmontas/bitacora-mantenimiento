@@ -158,35 +158,13 @@
 
       <div class="field">
         <label>Área *</label>
+        <!-- FASE 2 (Módulo 2): las <option> ya no van fijas en el HTML.
+             loadAreas() las pinta desde la colección /areas de Firestore
+             (con una lista local de respaldo si no hay conexión todavía),
+             y Encargado/Admin puede agregar áreas nuevas sin tocar código
+             — ver renderAreaOptions()/onAreaSelectChange() más abajo. -->
         <select id="f-linea">
           <option value="">Seleccionar área...</option>
-          <option>Almacén</option>
-          <option>Oficinas</option>
-          <option>Comedor</option>
-          <option>Baños</option>
-          <option>Área Común</option>
-          <option>Bombas</option>
-          <option>Estructura</option>
-          <option>Compresor de Aire</option>
-          <option>Chiller</option>
-          <option>Ensamble de Válvulas</option>
-          <option>Coating</option>
-          <option>Weaving</option>
-          <option>Tape-Line</option>
-          <option>Reciclaje</option>
-          <option>PE-Film</option>
-          <option>Agua Tratada</option>
-          <option>Transformadores</option>
-          <option>Compactadoras</option>
-          <option>Techo</option>
-          <option>Extractores</option>
-          <option>Montacarga</option>
-          <option>Jardín</option>
-          <option>Extintores</option>
-          <option>Taller</option>
-          <option>Área de Baterías</option>
-          <option>Iluminación</option>
-          <option>Paneles Eléctricos</option>
         </select>
       </div>
 
@@ -378,9 +356,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateHeaderStatus();
   loadTecnicos();
+  loadAreas();
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
-  document.getElementById('f-linea').addEventListener('change', updateEquipoDatalist);
+  document.getElementById('f-linea').addEventListener('change', onAreaSelectChange);
 
   window.addEventListener('online', () => document.getElementById('offline-bar').classList.remove('show'));
   window.addEventListener('offline', () => document.getElementById('offline-bar').classList.add('show'));
@@ -449,6 +428,92 @@ function renderTecGrid(lista) {
   const preview = document.getElementById('tec-actual-list');
   if (preview) {
     preview.innerHTML = lista.map(t => `<span class="code-chip">${t.nombre}</span>`).join('') || '<span style="color:var(--muted);font-size:12px;">Sin técnicos cargados</span>';
+  }
+}
+
+// ══════ LISTA DE ÁREAS (FASE 2 — antes eran 26 <option> fijas en el HTML) ══════
+// Se leen en vivo de la colección /areas de Firestore (firestore.rules:
+// lectura esTecnicoOMas(), escritura esEncargado()) para que Encargado/Admin
+// pueda agregar áreas nuevas desde el celular, sin depender de un despliegue
+// de código. Esta lista es el respaldo si no hay conexión todavía o falla
+// la lectura — son las mismas 26 áreas que estaban escritas en el HTML antes.
+const AREAS_FALLBACK = [
+  'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
+  'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
+  'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
+  'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
+  'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
+];
+let currentAreas = AREAS_FALLBACK.slice();
+
+function renderAreaOptions(lista, valorActual) {
+  const sel = document.getElementById('f-linea');
+  if (!sel) return;
+  const valor = valorActual !== undefined ? valorActual : sel.value;
+  // Agregar áreas nuevas queda reservado a Encargado/Admin (igual que exige
+  // firestore.rules para escribir en /areas) — a un técnico ni se le muestra
+  // la opción, para no dejarlo tocar un botón que Firebase le va a rechazar.
+  const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+  sel.innerHTML = '<option value="">Seleccionar área...</option>'
+    + lista.map(a => `<option${a === valor ? ' selected' : ''}>${a}</option>`).join('')
+    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar área nueva…</option>' : '');
+}
+
+function loadAreas() {
+  // Pinta de inmediato con la lista de respaldo (para no dejar el select
+  // vacío mientras Firebase conecta) y luego escucha /areas en tiempo real,
+  // igual que la lista de OTs: si Encargado/Admin agrega un área desde otro
+  // celular, aparece aquí sola sin recargar la página.
+  renderAreaOptions(currentAreas);
+  window.fbReady.then(() => {
+    db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
+      if (!snap.empty) {
+        currentAreas = snap.docs.map(d => d.data().nombre).filter(Boolean);
+        renderAreaOptions(currentAreas);
+        updateEquipoDatalist();
+      }
+      // Si la colección todavía está vacía (primera vez que corre esto en
+      // este proyecto), se queda mostrando AREAS_FALLBACK — ver seedAreas().
+    }, (err) => {
+      console.warn('No se pudo leer /areas, usando lista local de respaldo:', err.message);
+    });
+  }).catch(() => {}); // sin sesión: fbReady ya redirigió a login.html
+}
+
+// Encargado/Admin elige "➕ Agregar área nueva…" en el mismo <select> del
+// formulario — sin pantalla aparte ni deploy de código nuevo, tal como se
+// pidió ("dame la oportunidad de crearlo en el transcurso"). El técnico no
+// ve esta opción (ver renderAreaOptions).
+async function onAreaSelectChange() {
+  const sel = document.getElementById('f-linea');
+  if (sel.value !== '__nueva__') { updateEquipoDatalist(); return; }
+
+  const nombre = (window.prompt('Nombre de la nueva área (ej: "Zona de Carga"):') || '').trim();
+  if (!nombre) { renderAreaOptions(currentAreas, ''); updateEquipoDatalist(); return; }
+  if (currentAreas.some(a => a.toLowerCase() === nombre.toLowerCase())) {
+    showToast('⚠️ Esa área ya existe', 'error');
+    renderAreaOptions(currentAreas, nombre);
+    updateEquipoDatalist();
+    return;
+  }
+  try {
+    await db.collection('areas').add({
+      nombre,
+      createdAt: fbTimestamp(),
+      creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
+    });
+    showToast('✅ Área "' + nombre + '" agregada', 'success');
+    // El onSnapshot de loadAreas() repinta el <select> solo en cuanto Firebase
+    // confirme el nuevo documento; cuando llegue, deja seleccionada el área
+    // recién creada en vez de dejar el formulario en "Seleccionar área...".
+    setTimeout(() => {
+      const s = document.getElementById('f-linea');
+      if (s && [...s.options].some(o => o.value === nombre)) { s.value = nombre; updateEquipoDatalist(); }
+    }, 400);
+  } catch (e) {
+    showToast('❌ No se pudo agregar el área: ' + e.message, 'error');
+    renderAreaOptions(currentAreas, '');
+    updateEquipoDatalist();
   }
 }
 
