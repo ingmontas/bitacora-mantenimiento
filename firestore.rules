@@ -32,12 +32,25 @@ service cloud.firestore {
       allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
       allow write: if esAdmin();
     }
+    // CORRECCIÓN (revisión previa a publicar): /config/app guarda el PIN
+    // compartido para borrar repuestos/equipos en Inventario. No tenía
+    // regla propia — con las reglas por rol activas habría quedado
+    // bloqueado por defecto y nadie habría podido verificar el PIN.
+    match /config/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
     match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
     match /areas/{id}   { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
     match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    // CORRECCIÓN (revisión previa a publicar): en la app actual, los
+    // repuestos de cada equipo se guardan como un array dentro del propio
+    // documento de /equipos/{id} (no en una colección aparte), y son los
+    // técnicos —no solo Encargado/Admin— quienes cargan/editan repuestos
+    // desde el celular a diario. Restringir "update" a esEncargado()
+    // les habría bloqueado esa función a partir de hoy. Se deja en
+    // esTecnicoOMas() para no romper el uso diario; borrar el equipo
+    // completo sigue reservado a esAdmin().
     match /equipos/{id} {
       allow read: if esTecnicoOMas();
-      allow create, update: if esEncargado();
+      allow create, update: if esTecnicoOMas();
       allow delete: if esAdmin();
     }
     match /ots/{id} {
