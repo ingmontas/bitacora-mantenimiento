@@ -859,14 +859,36 @@ function exportBackup() {
 }
 
 // ══════ CONFIG ══════
+// CORRECCIÓN: este botón solo borraba la persistencia offline de Firestore
+// (db.clearPersistence()), pero NO tocaba el Service Worker (sw.js), que es
+// el que realmente guarda copia de bitacora.html/inventario.html/etc. para
+// que la app funcione sin señal — ese es el caché que se queda "pegado" en
+// una versión vieja cuando se publica un cambio de código (justo lo que pasó
+// con las áreas dinámicas: subir sw.js con nueva versión de caché no basta
+// si el dispositivo del usuario no lo recibe). Ahora este botón también
+// desregistra el service worker y borra su Cache Storage, así queda como un
+// botón real de "traer la versión más nueva de la app" y no hace falta
+// depender de subir un número de versión nuevo cada vez.
 async function clearLocal() {
-  if (!confirm('¿Limpiar el caché local de este celular? Los datos en la nube (Firebase) no se afectan — solo se borra la copia que este dispositivo guarda para funcionar sin señal. La página se recargará.')) return;
+  if (!confirm('¿Limpiar el caché local de este celular? Los datos en la nube (Firebase) no se afectan — solo se borra la copia que este dispositivo guarda para funcionar sin señal (incluyendo la versión guardada de la app). La página se recargará con la versión más reciente.')) return;
   try {
     await db.terminate();
     await db.clearPersistence();
+  } catch (e) {
+    console.warn('No se pudo limpiar la persistencia de Firestore:', e.message);
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
     showToast('🗑 Caché local limpiado — recargando…', 'warn');
   } catch (e) {
-    showToast('⚠️ No se pudo limpiar (cierra todas las pestañas de la app e intenta de nuevo): ' + e.message, 'error');
+    showToast('⚠️ No se pudo limpiar del todo (cierra todas las pestañas de la app e intenta de nuevo): ' + e.message, 'error');
   }
   setTimeout(() => location.reload(), 1200);
 }
