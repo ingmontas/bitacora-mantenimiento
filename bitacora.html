@@ -157,6 +157,16 @@
       </div>
 
       <div class="field">
+        <label>Planta *</label>
+        <!-- FASE 2b (Módulo 2): igual patrón que Área — se lee en vivo de
+             /plantas (Admin puede agregar una planta nueva sin tocar
+             código). El Área se filtra según la planta elegida aquí. -->
+        <select id="f-planta">
+          <option value="">Seleccionar planta...</option>
+        </select>
+      </div>
+
+      <div class="field">
         <label>Área *</label>
         <!-- FASE 2 (Módulo 2): las <option> ya no van fijas en el HTML.
              loadAreas() las pinta desde la colección /areas de Firestore
@@ -165,6 +175,16 @@
              — ver renderAreaOptions()/onAreaSelectChange() más abajo. -->
         <select id="f-linea">
           <option value="">Seleccionar área...</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Línea (opcional)</label>
+        <!-- FASE 2c (Módulo 2): sub-nivel opcional dentro de Área — no
+             todas las áreas tienen líneas todavía. Mismo patrón de
+             autoservicio, reservado a Encargado/Admin para agregar. -->
+        <select id="f-sublinea">
+          <option value="">— Ninguna / No aplica —</option>
         </select>
       </div>
 
@@ -356,10 +376,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateHeaderStatus();
   loadTecnicos();
+  loadPlantas();
   loadAreas();
+  loadLineas();
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
+  document.getElementById('f-planta').addEventListener('change', onPlantaSelectChange);
   document.getElementById('f-linea').addEventListener('change', onAreaSelectChange);
+  document.getElementById('f-sublinea').addEventListener('change', onLineaSelectChange);
 
   window.addEventListener('online', () => document.getElementById('offline-bar').classList.remove('show'));
   window.addEventListener('offline', () => document.getElementById('offline-bar').classList.add('show'));
@@ -431,20 +455,121 @@ function renderTecGrid(lista) {
   }
 }
 
+// ══════ PLANTAS (FASE 2b — nivel superior a Área) ══════
+// Mismo patrón que Área: se lee en vivo de /plantas (firestore.rules: lectura
+// esTecnicoOMas(), escritura esAdmin() — agregar una planta nueva es una
+// decisión más grande que agregar un área, por eso queda solo para Admin).
+// Se recuerda la última planta elegida en este dispositivo (localStorage) para
+// no tener que reseleccionarla en cada entrada nueva — cada celular suele
+// trabajar siempre desde la misma planta.
+const PLANTAS_FALLBACK = ['Planta 1'];
+let currentPlantas = PLANTAS_FALLBACK.slice();
+const PLANTA_LS_KEY = 'mant_planta_actual';
+
+function leerPlantaGuardada() {
+  try { return localStorage.getItem(PLANTA_LS_KEY) || ''; } catch (e) { return ''; }
+}
+function guardarPlantaActual(nombre) {
+  try { localStorage.setItem(PLANTA_LS_KEY, nombre || ''); } catch (e) {}
+}
+
+function renderPlantaOptions(lista, valorActual) {
+  const sel = document.getElementById('f-planta');
+  if (!sel) return;
+  const valor = valorActual !== undefined ? valorActual : sel.value;
+  const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+  sel.innerHTML = '<option value="">Seleccionar planta...</option>'
+    + lista.map(p => `<option${p === valor ? ' selected' : ''}>${p}</option>`).join('')
+    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar planta nueva…</option>' : '');
+}
+
+function loadPlantas() {
+  const guardada = leerPlantaGuardada() || (PLANTAS_FALLBACK.length === 1 ? PLANTAS_FALLBACK[0] : '');
+  renderPlantaOptions(currentPlantas, guardada);
+  refrescarAreaYLinea();
+  window.fbReady.then(() => {
+    db.collection('plantas').orderBy('nombre').onSnapshot((snap) => {
+      if (!snap.empty) {
+        currentPlantas = snap.docs.map(d => d.data().nombre).filter(Boolean);
+        let actual = document.getElementById('f-planta').value || leerPlantaGuardada();
+        if (!actual && currentPlantas.length === 1) actual = currentPlantas[0];
+        renderPlantaOptions(currentPlantas, actual);
+        refrescarAreaYLinea();
+      }
+    }, (err) => {
+      console.warn('No se pudo leer /plantas, usando lista local de respaldo:', err.message);
+    });
+  }).catch(() => {}); // sin sesión: fbReady ya redirigió a login.html
+}
+
+async function onPlantaSelectChange() {
+  const sel = document.getElementById('f-planta');
+  if (sel.value === '__nueva__') {
+    const nombre = (window.prompt('Nombre de la nueva planta (ej: "Planta 2"):') || '').trim();
+    if (!nombre) { renderPlantaOptions(currentPlantas, ''); refrescarAreaYLinea(); return; }
+    if (currentPlantas.some(p => p.toLowerCase() === nombre.toLowerCase())) {
+      showToast('⚠️ Esa planta ya existe', 'error');
+      renderPlantaOptions(currentPlantas, nombre);
+      refrescarAreaYLinea();
+      return;
+    }
+    try {
+      await db.collection('plantas').add({
+        nombre,
+        createdAt: fbTimestamp(),
+        creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
+      });
+      showToast('✅ Planta "' + nombre + '" agregada', 'success');
+      setTimeout(() => {
+        const s = document.getElementById('f-planta');
+        if (s && [...s.options].some(o => o.value === nombre)) s.value = nombre;
+        guardarPlantaActual(nombre);
+        refrescarAreaYLinea();
+      }, 400);
+    } catch (e) {
+      showToast('❌ No se pudo agregar la planta: ' + e.message, 'error');
+      renderPlantaOptions(currentPlantas, '');
+      refrescarAreaYLinea();
+    }
+    return;
+  }
+  guardarPlantaActual(sel.value);
+  refrescarAreaYLinea();
+}
+
+// Repinta Área (filtrada por la planta elegida) y Línea (vacía, hasta elegir
+// área) — se llama cada vez que cambia la planta seleccionada.
+function refrescarAreaYLinea() {
+  const planta = document.getElementById('f-planta')?.value || '';
+  renderAreaOptions(nombresAreasParaPlanta(planta), '');
+  renderLineaOptions([], '');
+  updateEquipoDatalist();
+}
+
 // ══════ LISTA DE ÁREAS (FASE 2 — antes eran 26 <option> fijas en el HTML) ══════
 // Se leen en vivo de la colección /areas de Firestore (firestore.rules:
 // lectura esTecnicoOMas(), escritura esEncargado()) para que Encargado/Admin
 // pueda agregar áreas nuevas desde el celular, sin depender de un despliegue
 // de código. Esta lista es el respaldo si no hay conexión todavía o falla
 // la lectura — son las mismas 26 áreas que estaban escritas en el HTML antes.
+// Cada área ahora también guarda a qué planta pertenece (plantaNombre) — FASE
+// 2b — para poder filtrar el <select> de Área según la planta elegida.
 const AREAS_FALLBACK = [
   'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
   'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
   'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
   'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
   'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
-];
+].map(nombre => ({ nombre, plantaNombre: '' })); // sin planta: aparece igual bajo cualquiera (respaldo)
 let currentAreas = AREAS_FALLBACK.slice();
+
+// Áreas de la planta elegida (una sin plantaNombre asignado se muestra bajo
+// cualquier planta, para nunca esconder un área vieja por un dato faltante).
+function nombresAreasParaPlanta(plantaNombre) {
+  return currentAreas
+    .filter(a => !plantaNombre || !a.plantaNombre || a.plantaNombre === plantaNombre)
+    .map(a => a.nombre);
+}
 
 function renderAreaOptions(lista, valorActual) {
   const sel = document.getElementById('f-linea');
@@ -464,12 +589,12 @@ function loadAreas() {
   // vacío mientras Firebase conecta) y luego escucha /areas en tiempo real,
   // igual que la lista de OTs: si Encargado/Admin agrega un área desde otro
   // celular, aparece aquí sola sin recargar la página.
-  renderAreaOptions(currentAreas);
+  renderAreaOptions(nombresAreasParaPlanta(document.getElementById('f-planta')?.value));
   window.fbReady.then(() => {
     db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
       if (!snap.empty) {
-        currentAreas = snap.docs.map(d => d.data().nombre).filter(Boolean);
-        renderAreaOptions(currentAreas);
+        currentAreas = snap.docs.map(d => ({ nombre: d.data().nombre, plantaNombre: d.data().plantaNombre || '' })).filter(a => a.nombre);
+        renderAreaOptions(nombresAreasParaPlanta(document.getElementById('f-planta')?.value));
         updateEquipoDatalist();
       }
       // Si la colección todavía está vacía (primera vez que corre esto en
@@ -483,22 +608,36 @@ function loadAreas() {
 // Encargado/Admin elige "➕ Agregar área nueva…" en el mismo <select> del
 // formulario — sin pantalla aparte ni deploy de código nuevo, tal como se
 // pidió ("dame la oportunidad de crearlo en el transcurso"). El técnico no
-// ve esta opción (ver renderAreaOptions).
+// ve esta opción (ver renderAreaOptions). El área nueva queda ligada a la
+// planta que esté elegida en ese momento (FASE 2b).
 async function onAreaSelectChange() {
   const sel = document.getElementById('f-linea');
-  if (sel.value !== '__nueva__') { updateEquipoDatalist(); return; }
+  if (sel.value !== '__nueva__') {
+    renderLineaOptions(nombresLineasParaArea(sel.value), '');
+    updateEquipoDatalist();
+    return;
+  }
+
+  const plantaActual = document.getElementById('f-planta').value;
+  if (!plantaActual) {
+    showToast('⚠️ Primero selecciona una Planta', 'error');
+    renderAreaOptions(nombresAreasParaPlanta(''), '');
+    return;
+  }
 
   const nombre = (window.prompt('Nombre de la nueva área (ej: "Zona de Carga"):') || '').trim();
-  if (!nombre) { renderAreaOptions(currentAreas, ''); updateEquipoDatalist(); return; }
-  if (currentAreas.some(a => a.toLowerCase() === nombre.toLowerCase())) {
+  if (!nombre) { renderAreaOptions(nombresAreasParaPlanta(plantaActual), ''); renderLineaOptions([], ''); updateEquipoDatalist(); return; }
+  if (currentAreas.some(a => a.nombre.toLowerCase() === nombre.toLowerCase())) {
     showToast('⚠️ Esa área ya existe', 'error');
-    renderAreaOptions(currentAreas, nombre);
+    renderAreaOptions(nombresAreasParaPlanta(plantaActual), nombre);
+    renderLineaOptions(nombresLineasParaArea(nombre), '');
     updateEquipoDatalist();
     return;
   }
   try {
     await db.collection('areas').add({
       nombre,
+      plantaNombre: plantaActual,
       createdAt: fbTimestamp(),
       creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
     });
@@ -508,12 +647,76 @@ async function onAreaSelectChange() {
     // recién creada en vez de dejar el formulario en "Seleccionar área...".
     setTimeout(() => {
       const s = document.getElementById('f-linea');
-      if (s && [...s.options].some(o => o.value === nombre)) { s.value = nombre; updateEquipoDatalist(); }
+      if (s && [...s.options].some(o => o.value === nombre)) { s.value = nombre; renderLineaOptions([], ''); updateEquipoDatalist(); }
     }, 400);
   } catch (e) {
     showToast('❌ No se pudo agregar el área: ' + e.message, 'error');
-    renderAreaOptions(currentAreas, '');
+    renderAreaOptions(nombresAreasParaPlanta(plantaActual), '');
+    renderLineaOptions([], '');
     updateEquipoDatalist();
+  }
+}
+
+// ══════ LÍNEAS (FASE 2c — sub-nivel opcional dentro de Área) ══════
+// Nueva colección /lineas (firestore.rules: lectura esTecnicoOMas(), escritura
+// esEncargado() — igual que Área). No todas las áreas tienen líneas, por eso
+// el <select> siempre trae "— Ninguna / No aplica —" y no es obligatorio.
+let currentLineas = []; // empieza vacía — no hay respaldo local porque es nueva
+
+function nombresLineasParaArea(areaNombre) {
+  if (!areaNombre) return [];
+  return currentLineas.filter(l => l.areaNombre === areaNombre).map(l => l.nombre);
+}
+
+function renderLineaOptions(lista, valorActual) {
+  const sel = document.getElementById('f-sublinea');
+  if (!sel) return;
+  const valor = valorActual !== undefined ? valorActual : sel.value;
+  const areaElegida = document.getElementById('f-linea')?.value || '';
+  const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO') && areaElegida && areaElegida !== '__nueva__';
+  sel.innerHTML = '<option value="">— Ninguna / No aplica —</option>'
+    + lista.map(l => `<option${l === valor ? ' selected' : ''}>${l}</option>`).join('')
+    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar línea nueva…</option>' : '');
+}
+
+function loadLineas() {
+  window.fbReady.then(() => {
+    db.collection('lineas').orderBy('nombre').onSnapshot((snap) => {
+      currentLineas = snap.docs.map(d => ({ nombre: d.data().nombre, areaNombre: d.data().areaNombre || '' })).filter(l => l.nombre);
+      renderLineaOptions(nombresLineasParaArea(document.getElementById('f-linea')?.value));
+    }, (err) => {
+      console.warn('No se pudo leer /lineas:', err.message);
+    });
+  }).catch(() => {});
+}
+
+async function onLineaSelectChange() {
+  const sel = document.getElementById('f-sublinea');
+  if (sel.value !== '__nueva__') return;
+
+  const areaActual = document.getElementById('f-linea').value;
+  const nombre = (window.prompt('Nombre de la nueva línea (ej: "Línea 2"):') || '').trim();
+  if (!nombre) { renderLineaOptions(nombresLineasParaArea(areaActual), ''); return; }
+  if (currentLineas.some(l => l.areaNombre === areaActual && l.nombre.toLowerCase() === nombre.toLowerCase())) {
+    showToast('⚠️ Esa línea ya existe en esta área', 'error');
+    renderLineaOptions(nombresLineasParaArea(areaActual), nombre);
+    return;
+  }
+  try {
+    await db.collection('lineas').add({
+      nombre,
+      areaNombre: areaActual,
+      createdAt: fbTimestamp(),
+      creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
+    });
+    showToast('✅ Línea "' + nombre + '" agregada', 'success');
+    setTimeout(() => {
+      const s = document.getElementById('f-sublinea');
+      if (s && [...s.options].some(o => o.value === nombre)) s.value = nombre;
+    }, 400);
+  } catch (e) {
+    showToast('❌ No se pudo agregar la línea: ' + e.message, 'error');
+    renderLineaOptions(nombresLineasParaArea(areaActual), '');
   }
 }
 
@@ -610,7 +813,13 @@ function editRecord(idx) {
 function fillFormFromRecord(r) {
   document.getElementById('f-fecha').value = r.FECHA || '';
   document.getElementById('f-semana').value = r.SEMANA || '';
-  document.getElementById('f-linea').value = r.LINEA_EQUIPO || '';
+  // Planta → Área → Línea se repintan en cascada (en vez de asignar .value
+  // directo) para que el <select> de Área muestre las opciones de la planta
+  // correcta del registro, y el de Línea las de esa área — FASE 2b/2c.
+  document.getElementById('f-planta').value = r.PLANTA || '';
+  guardarPlantaActual(r.PLANTA || '');
+  renderAreaOptions(nombresAreasParaPlanta(r.PLANTA || ''), r.LINEA_EQUIPO || '');
+  renderLineaOptions(nombresLineasParaArea(r.LINEA_EQUIPO || ''), r.LINEA || '');
   document.getElementById('f-tipo-maq').value = r.TIPO_MAQUINA || '';
   document.getElementById('f-equipo').value = r.EQUIPO || '';
   document.getElementById('f-pieza').value = r.PIEZA || '';
@@ -649,9 +858,11 @@ function exitEditMode() {
 let _submitting = false; // evita registros duplicados por doble-tap (wifi lenta de planta)
 async function submitForm() {
   if (_submitting) return;
+  const planta = document.getElementById('f-planta').value;
   const linea = document.getElementById('f-linea').value;
+  const sublinea = document.getElementById('f-sublinea').value;
   const falla = document.getElementById('f-falla').value.trim();
-  if (!linea || !falla) { showToast('⚠️ Completa Área y Descripción de Falla', 'error'); return; }
+  if (!planta || !linea || !falla) { showToast('⚠️ Completa Planta, Área y Descripción de Falla', 'error'); return; }
 
   _submitting = true;
   const btn = document.getElementById('submit-btn');
@@ -670,7 +881,9 @@ async function submitForm() {
     Title: window.editingRecord ? window.editingRecord.Title : ('OT-' + Date.now()),
     SEMANA: parseInt(document.getElementById('f-semana').value) || getWeekNumber(new Date()),
     FECHA: fecha,
+    PLANTA: planta,
     LINEA_EQUIPO: linea,
+    LINEA: sublinea,
     TIPO_MAQUINA: document.getElementById('f-tipo-maq').value.trim(),
     EQUIPO: document.getElementById('f-equipo').value.trim(),
     PIEZA: document.getElementById('f-pieza').value.trim(),
@@ -727,10 +940,14 @@ async function submitForm() {
 
 function resetForm() {
   const d = new Date();
-  ['f-linea','f-tipo-maq','f-equipo','f-pieza','f-falla','f-solucion'].forEach(id => {
+  // f-planta NO se limpia a propósito: el mismo celular casi siempre reporta
+  // desde la misma planta, así que se queda seleccionada para la próxima
+  // entrada (ver PLANTA_LS_KEY). Área y Línea sí vuelven a "Seleccionar...".
+  ['f-linea','f-sublinea','f-tipo-maq','f-equipo','f-pieza','f-falla','f-solucion'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  renderLineaOptions([], '');
   const t = d.toTimeString().slice(0,5);
   document.getElementById('f-hinicio').value = t;
   document.getElementById('f-htecnico').value = t;
@@ -769,8 +986,8 @@ function renderHistory() {
     return `<div class="hist-item ${tipo}">
       <div class="hist-header">
         <div>
-          <div class="hist-title">${r.LINEA_EQUIPO||'—'} ${r.EQUIPO ? '· '+r.EQUIPO : ''}</div>
-          <div class="hist-date">📅 ${r.FECHA||''} · Sem.${r.SEMANA||'?'} ${r.TECNICOS ? '· 👷 '+r.TECNICOS.split(',')[0] : ''}</div>
+          <div class="hist-title">${r.LINEA_EQUIPO||'—'}${r.LINEA ? ' · '+r.LINEA : ''} ${r.EQUIPO ? '· '+r.EQUIPO : ''}</div>
+          <div class="hist-date">📅 ${r.FECHA||''} · Sem.${r.SEMANA||'?'} ${r.PLANTA ? '· 🏭 '+r.PLANTA : ''} ${r.TECNICOS ? '· 👷 '+r.TECNICOS.split(',')[0] : ''}</div>
         </div>
         <div class="hist-tags">${tags}</div>
       </div>
@@ -830,10 +1047,10 @@ function csvEscape(v){
 function exportHistoryCSV(full) {
   const rows = full ? allRecords : ((window._historyCache && window._historyCache.length) ? window._historyCache : allRecords);
   if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
-  const headers = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Falla','Solución'];
+  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Falla','Solución'];
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
-    csv += [r.Title, r.FECHA, r.SEMANA, r.LINEA_EQUIPO, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION]
+    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION]
       .map(csvEscape).join(',') + '\n';
   });
   const suffix = (!full && document.getElementById('search-input').value.trim()) ? '_filtrado' : '';

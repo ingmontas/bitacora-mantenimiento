@@ -150,7 +150,7 @@
   .form-field{display:flex;flex-direction:column;gap:5px;}
   .form-field.full{grid-column:1/-1;}
   .form-field label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-family:'IBM Plex Mono';}
-  .form-field input,.form-field textarea{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:'Space Grotesk';}
+  .form-field input,.form-field textarea,.form-field select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:'Space Grotesk';width:100%;}
   .form-field textarea{resize:vertical;min-height:50px;}
   .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
 
@@ -227,7 +227,11 @@
       <div class="form-field"><label>Marca</label><input id="eq-marca"></div>
       <div class="form-field"><label>Modelo</label><input id="eq-modelo"></div>
       <div class="form-field"><label>Serie</label><input id="eq-serie"></div>
-      <div class="form-field"><label>Localidad</label><input id="eq-localidad" placeholder="Ej: PLANTA 1"></div>
+      <!-- FASE 2 (Módulo 2): antes era texto libre; ahora se elige de la
+           misma lista de Áreas que usa Bitácora (/areas en Firestore), para
+           que un equipo quede ligado a un área real y no a texto suelto
+           ("PLANTA 1" vs "Planta 1" vs "planta1"). Ver loadAreasParaEquipos(). -->
+      <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad"><option value="">Seleccionar área...</option></select></div>
       <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
       <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
       <div class="form-field"><label>Tensión</label><input id="eq-tension" placeholder="220 V"></div>
@@ -920,6 +924,45 @@ function renderPartsTable(){
 }
 function showMoreParts(){ partsShown += PARTS_PAGE_SIZE; renderPartsTable(); }
 
+/* ═══════════════ ÁREAS (Módulo 2 — Localidad ahora es un desplegable) ═══
+   Misma colección /areas que usa Bitácora (firestore.rules: lectura
+   esTecnicoOMas()). Aquí solo se lee — agregar un área nueva se hace desde
+   Bitácora, no desde Inventario, para no duplicar ese flujo. */
+const AREAS_INVENTARIO_FALLBACK = [
+  'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
+  'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
+  'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
+  'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
+  'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
+];
+let currentAreasInventario = AREAS_INVENTARIO_FALLBACK.slice();
+
+function renderEquipoLocalidadOptions(valorActual){
+  const sel = document.getElementById('eq-localidad');
+  if(!sel) return;
+  // Si el equipo ya tenía un valor de Localidad de texto libre (ej. "PLANTA
+  // 1", de antes de este cambio) que no está en la lista de Áreas, se agrega
+  // igual como opción para no perder ni esconder ese dato ya guardado.
+  const lista = currentAreasInventario.slice();
+  if (valorActual && !lista.some(a => a.toLowerCase() === valorActual.toLowerCase())) lista.unshift(valorActual);
+  sel.innerHTML = '<option value="">Seleccionar área...</option>'
+    + lista.map(a => `<option${a === valorActual ? ' selected' : ''}>${a}</option>`).join('');
+}
+
+function loadAreasParaEquipos(){
+  renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
+  window.fbReady.then(() => {
+    db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
+      if (!snap.empty) {
+        currentAreasInventario = snap.docs.map(d => d.data().nombre).filter(Boolean);
+        renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
+      }
+    }, (err) => {
+      console.warn('No se pudo leer /areas, usando lista local de respaldo:', err.message);
+    });
+  }).catch(() => {});
+}
+
 /* ═══════════════ MODALES ═══════════════ */
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
@@ -931,6 +974,7 @@ function openNewEquipoModal(){
   editingEquipoId = null;
   document.getElementById('equipoModalTitle').textContent = '➕ Nuevo equipo / máquina';
   EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  renderEquipoLocalidadOptions('');
   openModal('modalEquipo');
 }
 function openEditEquipoModal(){
@@ -941,7 +985,7 @@ function openEditEquipoModal(){
   document.getElementById('eq-marca').value = e.marca||'';
   document.getElementById('eq-modelo').value = e.modelo||'';
   document.getElementById('eq-serie').value = e.serie||'';
-  document.getElementById('eq-localidad').value = e.localidad||'';
+  renderEquipoLocalidadOptions(e.localidad||'');
   document.getElementById('eq-fabricacion').value = e.fabricacion||'';
   document.getElementById('eq-instalacion').value = e.instalacion||'';
   document.getElementById('eq-tension').value = e.tension||'';
@@ -1594,6 +1638,7 @@ async function initApp(){
   fbRenderMiniNav('inventario');
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   loadTecnicosInventario();
+  loadAreasParaEquipos();
   await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
 }
 async function refreshFromServer(){
