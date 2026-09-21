@@ -126,7 +126,8 @@ function fbRenderMiniNav(active) {
       { id: 'index',      href: 'index.html',      label: '🏠 Inicio' },
       { id: 'bitacora',   href: 'bitacora.html',   label: '📋 Bitácora' },
       { id: 'inventario', href: 'inventario.html', label: '🔧 Inventario' },
-      { id: 'analisis',   href: 'analisis.html',   label: '📊 Análisis' },
+      { id: 'analisis',   href: 'analisis.html',   label: '📊 Análisis' },   
+      { id: 'checklist',  href: 'checklist.html',  label: '🩺 Checklist' },
     ];
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
