@@ -37,6 +37,24 @@ service cloud.firestore {
     // regla propia — con las reglas por rol activas habría quedado
     // bloqueado por defecto y nadie habría podido verificar el PIN.
     match /config/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
+    // Módulo de Checklists (17 sep 2026): /config/otFolioCounter guarda el
+    // número correlativo del folio de la próxima OT generada desde un
+    // checklist (OT-0001, OT-0002...). A diferencia de /config/app (el PIN),
+    // cualquier técnico necesita poder incrementarlo al reportar una falla
+    // en su checklist — esta coincidencia de ruta con /config/{id} de arriba
+    // es intencional: Firestore permite ambas reglas y usa la más permisiva
+    // solo para este documento puntual; /config/app sigue protegido igual
+    // que antes.
+    match /config/otFolioCounter { allow read, write: if esTecnicoOMas(); }
+    // /checklists: el técnico llena y guarda el checklist de un equipo
+    // (create); solo Encargado/Admin puede corregir uno ya guardado
+    // (update), y borrarlo queda reservado a Admin, igual que el resto.
+    match /checklists/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas();
+      allow update: if esEncargado();
+      allow delete: if esAdmin();
+    }
     match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
     match /areas/{id}   { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
     match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
