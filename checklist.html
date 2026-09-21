@@ -95,6 +95,14 @@
     .checklist-punto { background: var(--surface); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); }
     .checklist-punto-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     .info-box { background: #F59E0B11; border: 1px solid #F59E0B33; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    /* Modal genérico (carga masiva) — mismo patrón visual que inventario.html */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: center; justify-content: center; padding: 20px; }
+    .modal-bg.open { display: flex; }
+    .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
+    .modal-bg .modal h3 { font-size: 16px; margin-bottom: 4px; }
+    .modal-bg .modal .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+    .modal-bg .modal .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .modal-bg .modal .modal-actions .btn { width: auto; flex: 1; }
   </style>
 </head>
 <body>
@@ -163,12 +171,54 @@
 
   <!-- SCREEN: CONFIG -->
   <div class="screen" id="screen-config">
-    <div class="card-title" style="margin-bottom:4px">⚙️ Configurar Frecuencias</div>
+    <div class="card">
+      <div class="card-title">📝 Puntos del Checklist</div>
+      <div class="card-sub">La lista que se usa al llenar el checklist de cualquier equipo</div>
+      <div id="config-puntos-info"></div>
+      <div id="config-puntos-lista"></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+      <div class="card-title" style="margin-bottom:0;">⚙️ Configurar Frecuencias</div>
+      <button class="btn btn-secondary btn-sm" id="btn-bulk-frecuencias" style="display:none;" onclick="abrirModalBulkFrecuencias()">📋 Carga masiva</button>
+    </div>
     <div class="card-sub" style="margin-bottom:12px">Cada cuántos días se debe revisar cada equipo</div>
     <div id="config-info"></div>
     <div id="config-lista"></div>
   </div>
 
+</div>
+
+<!-- MODAL: carga masiva de frecuencias (pegar tabla, igual que en Inventario) -->
+<div class="modal-bg" id="modalBulkFrecuencias">
+  <div class="modal">
+    <h3>📋 Carga masiva de frecuencias</h3>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel): el nombre del equipo tal como está guardado en Inventario, y cada cuántos días se debe revisar. Los nombres que no coincidan con ningún equipo se listan al final, sin tocar nada.</div>
+    <div class="field">
+      <label>Formato: Nombre del equipo · Días</label>
+      <textarea id="bulkFrecPasteArea" style="min-height:200px;font-family:monospace;font-size:12px;" placeholder="COMPRESOR 1	7
+BANDA TRANSPORTADORA A	15"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalBulkFrecuencias')">Cancelar</button>
+      <button class="btn btn-primary" onclick="bulkImportFrecuencias()">Procesar y cargar</button>
+    </div>
+    <div id="bulkFrecStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- MODAL: puntos del checklist propios de un equipo (no todos se revisan igual) -->
+<div class="modal-bg" id="modalPuntosEquipo">
+  <div class="modal">
+    <h3>📝 Puntos de checklist — <span id="pe-equipo-nombre">—</span></h3>
+    <div class="modal-sub">Esta lista se usa SOLO para este equipo en vez de la lista general. Escribe, agrega o borra puntos, y toca "Guardar" al final. Los checklists ya guardados no cambian.</div>
+    <div id="pe-lista"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalPuntosEquipo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPuntosEquipo()">💾 Guardar</button>
+    </div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="usarListaGeneralParaEquipo()">↩️ Usar la lista general (quitar la propia)</button>
+  </div>
 </div>
 
 <nav id="nav">
@@ -201,7 +251,11 @@
 //     pero sigue pudiéndose revisar manualmente en cualquier momento.
 // ══════════════════════════════════════════════════════════════════════
 
-const CHECKLIST_PUNTOS = [
+// Lista de respaldo (se usa mientras no exista /config/checklistPuntos en
+// Firestore, o si no se puede leer). En cuanto Administrador guarda la
+// lista una vez desde "Config", queda en Firestore y esta constante deja
+// de usarse en la práctica — se conserva solo como resguardo.
+const CHECKLIST_PUNTOS_FALLBACK = [
   'Fugas de aceite/agua/aire',
   'Ruido o vibración anormal',
   'Temperatura anormal',
@@ -211,6 +265,11 @@ const CHECKLIST_PUNTOS = [
   'Conexiones eléctricas/cableado visible en mal estado',
   'Nivel de aceite/lubricación',
 ];
+let checklistPuntosActuales = CHECKLIST_PUNTOS_FALLBACK.slice(); // lista general en uso (Firestore u respaldo)
+let puntosEditState = null;    // copia de trabajo mientras Administrador edita la lista GENERAL en "Config"
+
+let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia se está editando (modal)
+let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se edita
 
 let currentEquipos = [];      // desde /equipos (onSnapshot)
 let currentOts = [];          // desde /ots donde estado in [pendiente, planificada] (onSnapshot)
@@ -226,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEquipos();
     loadOts();
     loadChecklists();
+    loadChecklistPuntos();
     updateHeaderStatus();
     if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('checklist');
   }).catch((err) => {
@@ -349,7 +409,10 @@ function abrirFormChecklist(equipoId) {
   const e = currentEquipos.find(x => x.id === equipoId);
   if (!e) return;
   equipoSeleccionado = e;
-  itemsFormState = CHECKLIST_PUNTOS.map(p => ({ punto: p, resultado: 'ok', nota: '' }));
+  // Si este equipo tiene su propia lista de puntos (distinta a la general,
+  // porque no todos los equipos se revisan igual), se usa esa; si no, la general.
+  const puntosParaEsteEquipo = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos : checklistPuntosActuales;
+  itemsFormState = puntosParaEsteEquipo.map(p => ({ punto: p, resultado: 'ok', nota: '' }));
 
   document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
@@ -569,11 +632,166 @@ async function completarOt(otId) {
   }
 }
 
+// ══════ PUNTOS DEL CHECKLIST (SOLO Administrador) ══════
+// A diferencia de la frecuencia por equipo (Encargado/Admin), editar QUÉ
+// puntos trae el checklist se restringió a Administrador únicamente, a
+// pedido explícito del usuario — no usa esEncargado(), usa esAdmin() en
+// firestore.rules (misma regla que ya protege /plantas).
+function loadChecklistPuntos() {
+  db.collection('config').doc('checklistPuntos').onSnapshot((snap) => {
+    const data = snap.exists ? snap.data() : null;
+    checklistPuntosActuales = (data && Array.isArray(data.puntos) && data.puntos.length) ? data.puntos : CHECKLIST_PUNTOS_FALLBACK.slice();
+    if (puntosEditState === null) puntosEditState = checklistPuntosActuales.slice(); // solo la primera vez, para no pisar una edición en curso
+    renderConfigPuntos();
+  }, (err) => console.warn('Error leyendo config/checklistPuntos:', err.message));
+}
+
+function renderConfigPuntos() {
+  const puedeEditarPuntos = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+  const info = document.getElementById('config-puntos-info');
+  const wrap = document.getElementById('config-puntos-lista');
+  if (!info || !wrap) return;
+
+  if (!puedeEditarPuntos) {
+    info.innerHTML = `<div class="info-box">Solo el Administrador puede cambiar los puntos del checklist. Estos son los que se usan hoy:</div>`;
+    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${p}</div>`).join('')}</div>`;
+    return;
+  }
+
+  info.innerHTML = `<div class="info-box">Escribe, agrega o borra puntos, y toca "Guardar lista" al final. Los checklists ya guardados no cambian — esto solo afecta a los que se llenen de ahora en adelante.</div>`;
+  const lista = puntosEditState || [];
+  wrap.innerHTML = lista.map((p, idx) => `
+    <div class="row" style="margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;">
+        <input type="text" id="punto-edit-${idx}" value="${(p || '').replace(/"/g, '&quot;')}" placeholder="Punto a revisar..."/>
+      </div>
+      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
+        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEdit(${idx})">🗑</button>
+      </div>
+    </div>
+  `).join('') +
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:10px;" onclick="agregarPuntoEdit()">➕ Agregar punto</button>` +
+    `<button class="btn btn-primary" onclick="guardarPuntosChecklist()">💾 Guardar lista</button>`;
+}
+
+function agregarPuntoEdit() {
+  // Guarda primero lo que ya se había escrito en los campos visibles, para
+  // no perderlo al agregar una fila nueva y volver a pintar la lista.
+  sincronizarPuntosEditDesdeInputs();
+  puntosEditState.push('');
+  renderConfigPuntos();
+}
+
+function eliminarPuntoEdit(idx) {
+  sincronizarPuntosEditDesdeInputs();
+  puntosEditState.splice(idx, 1);
+  renderConfigPuntos();
+}
+
+function sincronizarPuntosEditDesdeInputs() {
+  if (!puntosEditState) return;
+  puntosEditState = puntosEditState.map((p, idx) => {
+    const el = document.getElementById('punto-edit-' + idx);
+    return el ? el.value : p;
+  });
+}
+
+async function guardarPuntosChecklist() {
+  sincronizarPuntosEditDesdeInputs();
+  const limpios = puntosEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  if (!limpios.length) { showToast('Agrega al menos un punto', 'warn'); return; }
+  try {
+    await db.collection('config').doc('checklistPuntos').set({ puntos: limpios, actualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '', actualizadoEn: fbTimestamp() });
+    puntosEditState = limpios.slice();
+    showToast('Lista de puntos guardada ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ PUNTOS DE CHECKLIST PROPIOS DE UN EQUIPO (Administrador) ══════
+// No todos los equipos se revisan igual, así que además de la lista general
+// (arriba) un equipo puede tener su propia lista guardada en
+// equipos/{id}.checklistPuntos. Si no la tiene, sigue usando la general —
+// abrirFormChecklist() decide cuál mostrar al llenar el checklist.
+function abrirModalPuntosEquipo(equipoId) {
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  puntosEquipoEditId = equipoId;
+  puntosEquipoEditState = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos.slice() : checklistPuntosActuales.slice();
+  document.getElementById('pe-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  renderModalPuntosEquipo();
+  openModalGeneric('modalPuntosEquipo');
+}
+
+function renderModalPuntosEquipo() {
+  const wrap = document.getElementById('pe-lista');
+  const lista = puntosEquipoEditState || [];
+  wrap.innerHTML = lista.map((p, idx) => `
+    <div class="row" style="margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;">
+        <input type="text" id="pe-punto-${idx}" value="${(p || '').replace(/"/g, '&quot;')}" placeholder="Punto a revisar..."/>
+      </div>
+      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
+        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEquipoEdit(${idx})">🗑</button>
+      </div>
+    </div>
+  `).join('') +
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()">➕ Agregar punto</button>`;
+}
+
+function agregarPuntoEquipoEdit() {
+  sincronizarPuntosEquipoEditDesdeInputs();
+  puntosEquipoEditState.push('');
+  renderModalPuntosEquipo();
+}
+
+function eliminarPuntoEquipoEdit(idx) {
+  sincronizarPuntosEquipoEditDesdeInputs();
+  puntosEquipoEditState.splice(idx, 1);
+  renderModalPuntosEquipo();
+}
+
+function sincronizarPuntosEquipoEditDesdeInputs() {
+  if (!puntosEquipoEditState) return;
+  puntosEquipoEditState = puntosEquipoEditState.map((p, idx) => {
+    const el = document.getElementById('pe-punto-' + idx);
+    return el ? el.value : p;
+  });
+}
+
+async function guardarPuntosEquipo() {
+  if (!puntosEquipoEditId) return;
+  sincronizarPuntosEquipoEditDesdeInputs();
+  const limpios = puntosEquipoEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  if (!limpios.length) { showToast('Agrega al menos un punto, o usa "Usar la lista general"', 'warn'); return; }
+  try {
+    await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
+    showToast('Puntos guardados para este equipo ✅');
+    closeModalGeneric('modalPuntosEquipo');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function usarListaGeneralParaEquipo() {
+  if (!puntosEquipoEditId) return;
+  try {
+    await db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() });
+    showToast('Este equipo vuelve a usar la lista general ✅');
+    closeModalGeneric('modalPuntosEquipo');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
 // ══════ CONFIGURAR FRECUENCIAS (Encargado/Admin) ══════
 function renderConfig() {
   const puedeConfigurar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
   const info = document.getElementById('config-info');
   const wrap = document.getElementById('config-lista');
+  const btnBulk = document.getElementById('btn-bulk-frecuencias');
+  if (btnBulk) btnBulk.style.display = puedeConfigurar ? '' : 'none';
 
   if (!puedeConfigurar) {
     info.innerHTML = `<div class="info-box">Solo Administrador o Encargado de Mantenimiento pueden cambiar las frecuencias de checklist.</div>`;
@@ -582,9 +800,16 @@ function renderConfig() {
   }
   info.innerHTML = `<div class="info-box">Escribe cada cuántos días se debe revisar el equipo y toca "Guardar". Un equipo sin frecuencia no aparece en "Hoy te toca", pero se puede revisar manualmente cuando quieras.</div>`;
 
-  wrap.innerHTML = currentEquipos.map(e => `
+  const puedeEditarPuntosEquipo = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+
+  wrap.innerHTML = currentEquipos.map(e => {
+    const tienePersonalizados = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length > 0;
+    return `
     <div class="item-row" style="cursor:default;">
-      <div class="item-title" style="margin-bottom:8px;">${e.nombre || '(sin nombre)'}</div>
+      <div class="item-header" style="margin-bottom:8px;">
+        <div class="item-title" style="margin-bottom:0;">${e.nombre || '(sin nombre)'}</div>
+        ${tienePersonalizados ? '<span class="tag tag-planificada">Puntos propios</span>' : '<span class="tag" style="background:var(--border);color:var(--muted);">Lista general</span>'}
+      </div>
       <div class="row">
         <div class="field" style="margin-bottom:0;">
           <label>Días</label>
@@ -595,8 +820,9 @@ function renderConfig() {
         </div>
       </div>
       <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + e.checklistProximaFecha : 'Todavía sin próxima fecha calculada'}</div>
+      ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
     </div>
-  `).join('');
+  `; }).join('');
 }
 
 async function guardarFrecuencia(equipoId) {
@@ -610,6 +836,87 @@ async function guardarFrecuencia(equipoId) {
     showToast('Frecuencia guardada ✅');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ CARGA MASIVA DE FRECUENCIAS (Encargado/Admin) ══════
+// Mismo patrón de UX que "Carga masiva de repuestos" en inventario.html:
+// se pega una tabla copiada de Excel (Nombre del equipo <TAB> Días) y se
+// procesa de una sola vez, en vez de tener que escribir y guardar equipo
+// por equipo en la lista de arriba.
+function openModalGeneric(id) { document.getElementById(id).classList.add('open'); }
+function closeModalGeneric(id) { document.getElementById(id).classList.remove('open'); }
+
+function abrirModalBulkFrecuencias() {
+  document.getElementById('bulkFrecPasteArea').value = '';
+  document.getElementById('bulkFrecStatus').textContent = '';
+  openModalGeneric('modalBulkFrecuencias');
+}
+
+function normalizeKeyChecklist(str) {
+  return (str || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function bulkImportFrecuencias() {
+  const raw = document.getElementById('bulkFrecPasteArea').value;
+  const status = document.getElementById('bulkFrecStatus');
+  const lineas = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (!lineas.length) { showToast('Pega al menos una fila', 'warn'); return; }
+
+  const porNombre = new Map();
+  (currentEquipos || []).forEach(e => porNombre.set(normalizeKeyChecklist(e.nombre), e));
+
+  const actualizados = [];
+  const noEncontrados = [];
+  const invalidas = [];
+
+  lineas.forEach((linea) => {
+    let cols = linea.split('\t').map(c => c.trim()).filter(c => c !== '');
+    if (cols.length < 2) {
+      // Por si se pegó sin tabulación real: separar el último número del resto.
+      const m = linea.match(/^(.*\S)\s+(\d+)\s*$/);
+      if (m) cols = [m[1].trim(), m[2].trim()];
+    }
+    if (cols.length < 2) { invalidas.push(linea); return; }
+    const nombre = cols[0];
+    const dias = parseInt(cols[1], 10);
+    if (!dias || dias < 1) { invalidas.push(linea); return; }
+    const equipo = porNombre.get(normalizeKeyChecklist(nombre));
+    if (!equipo) { noEncontrados.push(nombre); return; }
+    actualizados.push({ equipo, dias });
+  });
+
+  if (!actualizados.length) {
+    status.innerHTML = '⚠️ Ningún nombre coincidió con un equipo existente.'
+      + (noEncontrados.length ? '<br>No encontrados: ' + noEncontrados.join(', ') : '');
+    return;
+  }
+
+  try {
+    setLoading(true, 'Cargando frecuencias...');
+    const batch = db.batch();
+    const hoy = todayStr();
+    actualizados.forEach(({ equipo, dias }) => {
+      batch.set(db.collection('equipos').doc(equipo.id), {
+        checklistFrecuenciaDias: dias,
+        checklistProximaFecha: addDaysStr(hoy, dias),
+      }, { merge: true });
+    });
+    await batch.commit();
+
+    let msg = `✅ ${actualizados.length} equipo(s) actualizados`;
+    if (noEncontrados.length) msg += `, ${noEncontrados.length} sin coincidencia`;
+    if (invalidas.length) msg += `, ${invalidas.length} fila(s) con formato inválido`;
+    showToast(msg);
+
+    status.innerHTML = (noEncontrados.length ? '⚠️ No encontrados (revisa el nombre exacto en Inventario): ' + noEncontrados.join(', ') + '<br>' : '')
+      + (invalidas.length ? '⚠️ Filas con formato inválido: ' + invalidas.join(' | ') : '');
+
+    if (!noEncontrados.length && !invalidas.length) closeModalGeneric('modalBulkFrecuencias');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    setLoading(false);
   }
 }
 </script>
