@@ -145,6 +145,7 @@
           </div>
           <button class="btn btn-secondary btn-sm" onclick="cerrarFormChecklist()">✕ Cerrar</button>
         </div>
+        <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()">📝 Agregar/editar puntos de este equipo</button>
         <div id="cf-puntos"></div>
         <div class="field">
           <label>Quién lo hizo</label>
@@ -419,6 +420,9 @@ function abrirFormChecklist(equipoId) {
   renderPuntosForm();
   renderTecGridInto('cf-tec-grid', []);
 
+  const btnEditarPuntos = document.getElementById('cf-btn-editar-puntos');
+  if (btnEditarPuntos) btnEditarPuntos.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR')) ? '' : 'none';
+
   document.getElementById('hoy-lista-wrap').style.display = 'none';
   document.getElementById('checklist-form-wrap').style.display = 'block';
 }
@@ -565,25 +569,47 @@ function loadOts() {
   // no depender de crear un índice compuesto en Firebase solo por combinar
   // where('origen',...) con orderBy('createdAt',...) — con el volumen de
   // OTs que maneja esta planta, ordenar en JS es más que suficiente.
+  //
+  // ESTADOS (21 sep 2026 — flujo de revisión/cierre):
+  //  pendiente → planificada (Encargado/Admin asigna técnico+fecha)
+  //  → en_revision (el técnico marca "trabajo realizado")
+  //  → rechazada (Supervisor/Encargado/Admin dice "no concluido", con nota;
+  //     el técnico corrige y la vuelve a marcar realizada) O
+  //  → validada (Supervisor/Encargado/Admin dice "buena y válida")
+  //  → completada (SOLO Administrador hace el cierre final)
+  // Administrador también puede "Cerrar directo" desde cualquier estado, sin
+  // pasar por los pasos intermedios (pedido explícito del usuario).
   db.collection('ots').where('origen', '==', 'checklist').onSnapshot((snap) => {
     currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .filter(o => o.estado === 'pendiente' || o.estado === 'planificada')
+      .filter(o => ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'].includes(o.estado))
       .sort((a, b) => (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0));
     renderOts();
   }, (err) => console.warn('Error leyendo OTs:', err.message));
 }
 
+const OT_ESTADO_TAG = {
+  pendiente:   { clase: 'tag-pendiente',   texto: 'Pendiente' },
+  planificada: { clase: 'tag-planificada', texto: 'Planificada' },
+  en_revision: { clase: 'tag-planificada', texto: 'En revisión' },
+  rechazada:   { clase: 'tag-falla',       texto: 'No concluida' },
+  validada:    { clase: 'tag-completada',  texto: 'Validada · falta cierre' },
+};
+
 function renderOts() {
   const wrap = document.getElementById('ots-lista');
   const puedePlanificar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+  const puedeRevisar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  const puedeMarcarHecho = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+  const esAdminCierre = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+
   if (!currentOts.length) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">✅</span><p>No hay OTs pendientes por planificar.</p></div>`;
     return;
   }
   wrap.innerHTML = currentOts.map(o => {
-    const tagClase = o.estado === 'pendiente' ? 'tag-pendiente' : 'tag-planificada';
-    const tagTexto = o.estado === 'pendiente' ? 'Pendiente' : 'Planificada';
+    const tag = OT_ESTADO_TAG[o.estado] || { clase: 'tag-pendiente', texto: o.estado || '—' };
     let acciones = '';
+
     if (o.estado === 'pendiente' && puedePlanificar) {
       acciones = `
         <div class="row" style="margin-top:10px;">
@@ -595,15 +621,44 @@ function renderOts() {
           </div>
         </div>
         <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="planificarOt('${o.id}')">📅 Planificar</button>`;
-    } else if (o.estado === 'planificada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · 📅 ${o.fechaPlanificada || '—'}</div>` +
-        `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="completarOt('${o.id}')">✅ Marcar completada</button>`;
+    } else if (o.estado === 'planificada' || o.estado === 'rechazada') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · 📅 ${o.fechaPlanificada || '—'}</div>`;
+      if (o.estado === 'rechazada' && o.notaRevision) {
+        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? o.revisadoPor + ': ' : ''}${o.notaRevision}</div>`;
+      }
+      if (puedeMarcarHecho) {
+        acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="marcarOtRealizada('${o.id}')">${o.estado === 'rechazada' ? '🔁 Marcar corregido, enviar a revisión' : '✅ Marcar trabajo realizado'}</button>`;
+      }
+    } else if (o.estado === 'en_revision') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · Trabajo realizado, en espera de revisión</div>`;
+      if (puedeRevisar) {
+        acciones += `
+          <div class="field" style="margin-top:8px;margin-bottom:6px;">
+            <label>Nota de revisión (obligatoria si no está concluido)</label>
+            <textarea id="ot-nota-rev-${o.id}" placeholder="Qué falta o qué se debe corregir..."></textarea>
+          </div>
+          <div class="row">
+            <button class="btn btn-primary btn-sm" onclick="validarOt('${o.id}')">✅ Buena y válida</button>
+            <button class="btn btn-secondary btn-sm" onclick="rechazarOt('${o.id}')">⚠️ No concluido</button>
+          </div>`;
+      }
+    } else if (o.estado === 'validada') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · Validado por ${o.revisadoPor || '—'}</div>`;
+      if (esAdminCierre) {
+        acciones += `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="cerrarOtFinal('${o.id}')">🔒 Cerrar OT</button>`;
+      }
     }
+
+    // Atajo del Administrador: cerrar de una vez, sin pasar por revisión/validación.
+    if (esAdminCierre && o.estado !== 'completada') {
+      acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
+    }
+
     return `
       <div class="item-row" style="cursor:default;">
         <div class="item-header">
           <div class="item-title">${o.folio || o.id} · ${o.equipoNombre || ''}</div>
-          <span class="tag ${tagClase}">${tagTexto}</span>
+          <span class="tag ${tag.clase}">${tag.texto}</span>
         </div>
         <div class="item-sub">${o.equipoLocalidad ? '📍 ' + o.equipoLocalidad + ' · ' : ''}${o.descripcionFalla || ''}</div>
         ${acciones}
@@ -623,10 +678,128 @@ async function planificarOt(otId) {
   }
 }
 
-async function completarOt(otId) {
+async function marcarOtRealizada(otId) {
   try {
-    await db.collection('ots').doc(otId).update({ estado: 'completada', fechaCompletada: todayStr() });
-    showToast('OT marcada como completada ✅');
+    await db.collection('ots').doc(otId).update({
+      estado: 'en_revision',
+      trabajoRealizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
+      trabajoRealizadoEn: fbTimestamp(),
+    });
+    showToast('Marcado como realizado — pasa a revisión ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function validarOt(otId) {
+  const nota = (document.getElementById('ot-nota-rev-' + otId) || {}).value || '';
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'validada',
+      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      revisadoEn: fbTimestamp(),
+      revisionResultado: 'buena',
+      notaRevision: nota.trim(),
+    });
+    showToast('OT validada — falta el cierre ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function rechazarOt(otId) {
+  const nota = ((document.getElementById('ot-nota-rev-' + otId) || {}).value || '').trim();
+  if (!nota) { showToast('Escribe qué falta o qué se debe corregir', 'warn'); return; }
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'rechazada',
+      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      revisadoEn: fbTimestamp(),
+      revisionResultado: 'rechazada',
+      notaRevision: nota,
+    });
+    showToast('OT regresada como no concluida', 'warn');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ CIERRE FINAL (Administrador) ══════
+// Al cerrar, además de marcar la OT como completada, se cargan los mismos
+// campos que usa Bitácora/Análisis (TIPO_MANTENIMIENTO, EQUIPO, TECNICOS...)
+// para que esta actividad aparezca en el panel de Análisis clasificada como
+// "Preventivo" (a favor, no como correctivo) y con su tiempo de respuesta —
+// desde que se creó la OT (por una falla detectada en el checklist) hasta
+// que se cerró. No se toca TOTAL_MIN_MAQUINA/TOTAL_MIN_TECNICO (quedan en 0)
+// para no alterar los cálculos de paro de máquina que ya existen en
+// Análisis — el tiempo de respuesta se guarda aparte, en su propio campo.
+function calcularTiempoRespuestaMin(ot) {
+  const creado = ot.createdAt && typeof ot.createdAt.toMillis === 'function' ? ot.createdAt.toMillis() : null;
+  if (!creado) return null;
+  return Math.max(0, Math.round((Date.now() - creado) / 60000));
+}
+
+function camposParaAnalisis(ot, tiempoRespuestaMin) {
+  return {
+    Title: ot.folio || ot.id,
+    FECHA: todayStr(),
+    LINEA_EQUIPO: ot.equipoLocalidad || '',
+    TIPO_MAQUINA: '',
+    EQUIPO: ot.equipoNombre || '',
+    TIPO_MANTENIMIENTO: 'Preventivo',
+    TECNICOS: ot.asignadoA || ot.trabajoRealizadoPor || '',
+    DESCRIPCION_FALLA: ot.descripcionFalla || '',
+    DESCRIPCION_SOLUCION: ot.notaRevision || 'Verificado mediante checklist preventivo',
+    ME: 'm',
+    GENERA_OT: 'no',
+    PARO_PLANTA: 'no',
+    TOTAL_MIN_MAQUINA: 0,
+    TOTAL_MIN_TECNICO: 0,
+    TIEMPO_RESPUESTA_MIN: tiempoRespuestaMin,
+  };
+}
+
+async function cerrarOtFinal(otId) {
+  const o = currentOts.find(x => x.id === otId);
+  if (!o) return;
+  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
+  try {
+    await db.collection('ots').doc(otId).set({
+      estado: 'completada',
+      cerradoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      cerradoEn: fbTimestamp(),
+      fechaCompletada: todayStr(),
+      tiempoRespuestaMin,
+      ...camposParaAnalisis(o, tiempoRespuestaMin),
+    }, { merge: true });
+    showToast('OT cerrada ✅ — ya cuenta como preventivo en Análisis');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function cerrarOtDirecto(otId) {
+  const o = currentOts.find(x => x.id === otId);
+  if (!o) return;
+  const nombreAdmin = (window.currentUserRole && window.currentUserRole.nombre) || '';
+  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
+  const payload = {
+    estado: 'completada',
+    cerradoPor: nombreAdmin,
+    cerradoEn: fbTimestamp(),
+    fechaCompletada: todayStr(),
+    tiempoRespuestaMin,
+    ...camposParaAnalisis(o, tiempoRespuestaMin),
+  };
+  // Si nadie la había revisado todavía, el cierre directo también cuenta como la revisión.
+  if (!o.revisadoPor) {
+    payload.revisadoPor = nombreAdmin;
+    payload.revisadoEn = fbTimestamp();
+    payload.revisionResultado = 'buena';
+  }
+  try {
+    await db.collection('ots').doc(otId).set(payload, { merge: true });
+    showToast('OT cerrada directamente ✅');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -768,6 +941,7 @@ async function guardarPuntosEquipo() {
   try {
     await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
     showToast('Puntos guardados para este equipo ✅');
+    refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, limpios);
     closeModalGeneric('modalPuntosEquipo');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
@@ -779,10 +953,26 @@ async function usarListaGeneralParaEquipo() {
   try {
     await db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() });
     showToast('Este equipo vuelve a usar la lista general ✅');
+    refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, checklistPuntosActuales);
     closeModalGeneric('modalPuntosEquipo');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
+}
+
+// Si el formulario de checklist ya está abierto para este mismo equipo,
+// refresca sus puntos al instante (sin perder lo ya marcado en los puntos
+// que sigan igual) en vez de obligar a cerrar y volver a abrir el equipo.
+function editarPuntosDesdeFormulario() {
+  if (!equipoSeleccionado) return;
+  abrirModalPuntosEquipo(equipoSeleccionado.id);
+}
+
+function refrescarFormChecklistSiEsElMismoEquipo(equipoId, nuevaLista) {
+  if (!equipoSeleccionado || equipoSeleccionado.id !== equipoId) return;
+  const anteriorPorTexto = new Map(itemsFormState.map(it => [it.punto, it]));
+  itemsFormState = nuevaLista.map(p => anteriorPorTexto.get(p) || { punto: p, resultado: 'ok', nota: '' });
+  renderPuntosForm();
 }
 
 // ══════ CONFIGURAR FRECUENCIAS (Encargado/Admin) ══════

@@ -304,7 +304,7 @@
 
   <div class="card" style="margin-top:16px;">
     <h2>Evaluación de técnicos</h2>
-    <div class="cardsub" id="tecEvalSub">Desempeño por técnico según las OTs registradas — tiempo promedio de reparación (MTTR), tasa de casos sin resolver y cobertura de áreas.</div>
+    <div class="cardsub" id="tecEvalSub">Desempeño por técnico según las OTs registradas — tiempo promedio de reparación (MTTR), tasa de casos sin resolver y cobertura de áreas. También cuenta a favor el trabajo preventivo cerrado desde un checklist, con su propio tiempo de respuesta.</div>
     <canvas id="chartTecnicos" height="90" style="margin-bottom:18px;"></canvas>
     <div style="overflow-x:auto;">
       <table id="tecTable">
@@ -317,6 +317,8 @@
             <th data-tk="downtime">Paro prom. máquina</th>
             <th data-tk="areas">Áreas cubiertas</th>
             <th data-tk="noresuelto">% sin resolver</th>
+            <th data-tk="preventivos">Preventivos (checklist)</th>
+            <th data-tk="respuesta">Tiempo resp. prom.</th>
             <th data-tk="desempeno">Desempeño</th>
           </tr>
         </thead>
@@ -892,6 +894,16 @@ function render(){
   correctivos.forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
   const topArea = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1])[0];
 
+  // Trabajo preventivo nacido de un Checklist (Checklist → OT → revisión →
+  // cierre en checklist.html): se identifica porque trae tiempoRespuestaMin
+  // (solo lo trae ese flujo). Cuenta a favor en "% Preventivo" de arriba, y
+  // además se le mide su propio tiempo de respuesta (creación de la OT →
+  // cierre), aparte del MTTR de correctivos para no mezclarlos.
+  const preventivosChecklist = preventivos.filter(r=>r.tiempoRespuestaMin!=null);
+  const avgRespuestaChecklist = preventivosChecklist.length
+    ? preventivosChecklist.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/preventivosChecklist.length
+    : null;
+
   const kpiRow = document.getElementById('kpiRow');
   kpiRow.innerHTML = `
     <div class="kpi"><div class="lbl">Total OTs</div><div class="val">${scopeRows.length}</div><div class="foot">registros válidos analizados</div></div>
@@ -899,6 +911,7 @@ function render(){
     <div class="kpi accent-teal"><div class="lbl">% Preventivo</div><div class="val">${scopeRows.length? Math.round(preventivos.length/scopeRows.length*100):0}%</div><div class="foot">${preventivos.length} órdenes planificadas</div></div>
     <div class="kpi accent-amber"><div class="lbl">Paro de máquina acumulado</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min totales registrados</div></div>
     <div class="kpi"><div class="lbl">${selKey? 'Área del equipo' : 'Área más crítica'}</div><div class="val" style="font-size:19px;">${topArea? topArea[0]:'—'}</div><div class="foot">${topArea? topArea[1]+' correctivos registrados':''}</div></div>
+    <div class="kpi accent-teal"><div class="lbl">Tiempo de respuesta (Checklist)</div><div class="val" style="font-size:19px;">${avgRespuestaChecklist!=null? fmtRespuesta(avgRespuestaChecklist) : '—'}</div><div class="foot">${preventivosChecklist.length} actividad(es) preventivas cerradas desde un checklist</div></div>
   `;
 
   /* ---- chart: fallas por área ---- */
@@ -1216,7 +1229,7 @@ function getTecnicoStats(rows){
     const tecs = splitTecnicos(r.tecnicos);
     if(!tecs.length) return;
     tecs.forEach(t=>{
-      if(!map[t]) map[t] = { ots:0, correctivos:0, mttrSum:0, mttrN:0, downtimeSum:0, areas:new Set(), noResuelto:0 };
+      if(!map[t]) map[t] = { ots:0, correctivos:0, mttrSum:0, mttrN:0, downtimeSum:0, areas:new Set(), noResuelto:0, preventivosChecklist:0, respSum:0, respN:0 };
       const m = map[t];
       m.ots++;
       m.areas.add(r.area);
@@ -1229,6 +1242,12 @@ function getTecnicoStats(rows){
           m.noResuelto++;
         }
       }
+      // Trabajo preventivo cerrado desde un checklist (trae tiempoRespuestaMin) —
+      // cuenta a favor del técnico, aparte de sus correctivos/MTTR.
+      if(r.tipoMant.toLowerCase()==='preventivo' && r.tiempoRespuestaMin!=null){
+        m.preventivosChecklist++;
+        m.respSum += r.tiempoRespuestaMin; m.respN++;
+      }
     });
   });
 
@@ -1239,7 +1258,9 @@ function getTecnicoStats(rows){
     mttr: m.mttrN? m.mttrSum/m.mttrN : null,
     avgDowntime: m.ots? m.downtimeSum/m.ots : 0,
     areas: m.areas.size,
-    noResueltoPct: m.correctivos? Math.round(m.noResuelto/m.correctivos*100) : 0
+    noResueltoPct: m.correctivos? Math.round(m.noResuelto/m.correctivos*100) : 0,
+    preventivosChecklist: m.preventivosChecklist,
+    respuestaProm: m.respN? m.respSum/m.respN : null,
   })).filter(x=>x.ots>0);
 
   const validMttrs = list.filter(x=>x.mttr!=null).map(x=>x.mttr);
@@ -1298,6 +1319,8 @@ function renderTecTable(){
     if(sortKey==='downtime') return b.avgDowntime-a.avgDowntime;
     if(sortKey==='areas') return b.areas-a.areas;
     if(sortKey==='noresuelto') return b.noResueltoPct-a.noResueltoPct;
+    if(sortKey==='preventivos') return b.preventivosChecklist-a.preventivosChecklist;
+    if(sortKey==='respuesta') return (a.respuestaProm??1e9)-(b.respuestaProm??1e9);
     if(sortKey==='tecnico') return a.tecnico.localeCompare(b.tecnico);
     return 0;
   });
@@ -1311,9 +1334,11 @@ function renderTecTable(){
       <td class="numcell">${fmtHM(t.avgDowntime)}</td>
       <td class="numcell">${t.areas}</td>
       <td class="numcell">${t.correctivos? t.noResueltoPct+'%' : '—'}</td>
+      <td class="numcell">${t.preventivosChecklist || '—'}</td>
+      <td class="numcell">${t.respuestaProm!=null? fmtRespuesta(t.respuestaProm) : '—'}</td>
       <td><span class="risk ${desempenoRiskClass(t.desempeno)}">${desempenoLabel(t.desempeno)}</span></td>
     </tr>
-  `).join('') || `<tr><td colspan="8" class="empty">Sin datos de técnicos para este alcance.</td></tr>`;
+  `).join('') || `<tr><td colspan="10" class="empty">Sin datos de técnicos para este alcance.</td></tr>`;
 }
 
 /* ---------- mejora continua (kaizen) ---------- */
@@ -1374,6 +1399,18 @@ function fmtHM(mins){
   if(mins==null || isNaN(mins)) return '—';
   const h = Math.floor(mins/60), m = Math.round(mins%60);
   return h>0? `${h}h ${m}m` : `${m}m`;
+}
+
+// Igual que fmtHM pero pasa a días cuando el tiempo de respuesta es largo
+// (normal en preventivo: la OT puede esperar días a que alguien la revise y
+// cierre) — así no se ve un número de horas gigante y difícil de leer.
+function fmtRespuesta(mins){
+  if(mins==null || isNaN(mins)) return '—';
+  if(mins>=1440){
+    const d = Math.floor(mins/1440), h = Math.round((mins%1440)/60);
+    return h>0? `${d}d ${h}h` : `${d}d`;
+  }
+  return fmtHM(mins);
 }
 
 function renderHistoryAndReco(mode, label, historyRows, predictive, selArea, selKey, selTecnico, allRowsFull){
@@ -1728,6 +1765,7 @@ function rowToOtRecord(r){
     TOTAL_MIN_MAQUINA: r.minMaquina || 0, TOTAL_MIN_TECNICO: r.minTecnico || 0,
     ME: r.me || 'm', GENERA_OT: 'no', TIPO_MANTENIMIENTO: r.tipoMant || 'Sin clasificar',
     PARO_PLANTA: r.paroPlanta || 'no', TECNICOS: r.tecnicos || '',
+    TIEMPO_RESPUESTA_MIN: (r.tiempoRespuestaMin!=null ? r.tiempoRespuestaMin : null),
   };
 }
 function otRecordToRow(doc){
@@ -1738,6 +1776,10 @@ function otRecordToRow(doc){
     paroPlanta: doc.PARO_PLANTA || '', tecnicos: doc.TECNICOS || '',
     minMaquina: Number(doc.TOTAL_MIN_MAQUINA) || 0, minTecnico: Number(doc.TOTAL_MIN_TECNICO) || 0,
     falla: doc.DESCRIPCION_FALLA || '', solucion: doc.DESCRIPCION_SOLUCION || '',
+    // Tiempo de respuesta de trabajo preventivo nacido de un checklist (Checklist →
+    // OT → revisión → cierre): desde que se creó la OT hasta que se cerró. Solo
+    // existe en OTs cerradas desde checklist.html — para las demás queda null.
+    tiempoRespuestaMin: (doc.TIEMPO_RESPUESTA_MIN != null && doc.TIEMPO_RESPUESTA_MIN !== '') ? Number(doc.TIEMPO_RESPUESTA_MIN) : null,
   };
 }
 
