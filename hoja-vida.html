@@ -284,13 +284,18 @@ function mostrarHojaDeVida(equipoOrId) {
   document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('eq-sub').textContent = [e.localidad, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—';
 
-  // Historial: OTs cuyo campo EQUIPO coincide con el nombre del equipo — el
-  // mismo campo que ya llenan tanto Bitácora como Checklist al cerrar una
-  // OT (ver comentario "CIERRE FINAL" en checklist.html), así que este
-  // historial junta ambas fuentes automáticamente.
-  const nombreNorm = (e.nombre || '').trim().toLowerCase();
+  // Historial: TODAS las OTs de /ots (sin límite, misma colección completa
+  // que usa Análisis) cuyo equipo coincide con este — juntando Bitácora y
+  // los Checklist ya cerrados/realizados (ver "CIERRE FINAL" en
+  // checklist.html) automáticamente, porque ambos escriben los mismos
+  // campos en mayúsculas. Se compara con el mismo fallback y la misma
+  // normalización (minúsculas + espacios colapsados) que usa
+  // canonEquipo()/normEq() en analisis.html, para que "Hoja de Vida" nunca
+  // muestre menos historial del que ya se ve en Análisis para este equipo.
+  const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+  const nombreNorm = normEq(e.nombre);
   historialActual = currentOts
-    .filter(o => (o.EQUIPO || '').trim().toLowerCase() === nombreNorm)
+    .filter(o => normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm)
     .map(o => ({
       folio: o.Title || o.id,
       fecha: o.FECHA || '',
