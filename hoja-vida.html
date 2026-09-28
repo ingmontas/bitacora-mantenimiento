@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Hoja de Vida"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Hoja de Vida del Equipo 2026</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <!-- QR por equipo, mismo patrón que checklist.html: solo dibuja el QR,
+       cualquier cámara de celular ya lo reconoce y ofrece abrir la URL. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Exportar a Excel con dashboard, generado en el navegador (sin backend).
+       ExcelJS escribe fórmulas reales + formato condicional; los dos
+       gráficos del dashboard se insertan como imagen (ExcelJS no puede
+       crear gráficos nativos editables desde el navegador), dibujada con
+       Chart.js justo antes de exportar. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       NOTA (28 sep 2026): módulo NUEVO e INDEPENDIENTE — "Hoja de Vida"
+       (historial completo de un equipo + exportar a Excel con dashboard).
+       Mismo sistema de diseño que bitacora/inventario/analisis/checklist.
+       Acceso: 4ta entrada del menú superior, o directo por código QR propio
+       (hoja-vida.html?equipo=ID), independiente del QR de Checklist.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #sp-status { font-size: 20px; cursor: pointer; }
+    #content { padding: 14px 14px 40px; }
+    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+    .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    input:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .btn:active { opacity: .8; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
+    .row-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+    .row-actions .btn { flex: 1; }
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .tag-preventivo { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-correctivo { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .kpi-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
+    .kpi-tile .kpi-label { font-size: 9px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+    .kpi-tile .kpi-val { font-size: 20px; font-weight: 800; }
+    .kpi-tile.k0 .kpi-val { color: var(--blue); }
+    .kpi-tile.k1 .kpi-val { color: var(--orange); }
+    .kpi-tile.k2 .kpi-val { color: #1BAF7A; }
+    .kpi-tile.k3 .kpi-val { color: var(--accent); }
+    .item-row { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); cursor: pointer; }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 8px; }
+    .item-title { font-weight: 700; font-size: 14px; }
+    .item-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .item-sol { font-size: 11px; color: #35d0b0; margin-top: 4px; line-height: 1.5; }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 8px; }
+    .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+    .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .empty p { font-size: 14px; line-height: 1.6; }
+    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error { background: var(--red); }
+    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading.show { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; display: none; }
+    #offline-bar.show { display: block; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: center; justify-content: center; padding: 20px; }
+    .modal-bg.open { display: flex; }
+    .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .modal-actions .btn { width: auto; flex: 1; }
+    @media print {
+      body * { visibility: hidden; }
+      #qr-print-area, #qr-print-area * { visibility: visible; }
+      #qr-print-area { position: fixed; top: 30px; left: 0; right: 0; margin: 0 auto; color: #000; }
+      #qr-equipo-sub2 { color: #000 !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="offline-bar">📵 Sin conexión — viendo datos guardados en el celular</div>
+
+<div id="header">
+  <div>
+    <h1>🗂️ Hoja de Vida del Equipo</h1>
+    <small id="header-sub">2026 · Cargando...</small>
+  </div>
+  <div id="sp-status" title="Estado de conexión">⚙️</div>
+</div>
+
+<div id="content">
+
+  <!-- SCREEN: elegir equipo (si no se llegó por QR con ?equipo=) -->
+  <div id="screen-picker">
+    <div class="card">
+      <div class="card-title">🔍 Elige un equipo</div>
+      <div class="card-sub">Verás su historial completo de mantenimiento</div>
+      <input type="text" id="picker-buscar" placeholder="Buscar equipo..." oninput="renderPicker()"/>
+    </div>
+    <div id="picker-lista"></div>
+  </div>
+
+  <!-- SCREEN: hoja de vida del equipo elegido -->
+  <div id="screen-hoja" style="display:none;">
+    <div class="row-actions">
+      <button class="btn btn-secondary btn-sm" onclick="volverAlPicker()">← Cambiar equipo</button>
+      <button class="btn btn-secondary btn-sm" onclick="mostrarQrHojaVida()">📱 Código QR</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title" id="eq-nombre">—</div>
+      <div class="card-sub" id="eq-sub" style="margin-bottom:0;">—</div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-tile k0"><div class="kpi-label">Total OTs</div><div class="kpi-val" id="kpi-total">—</div></div>
+      <div class="kpi-tile k1"><div class="kpi-label">Min. totales</div><div class="kpi-val" id="kpi-min">—</div></div>
+      <div class="kpi-tile k2"><div class="kpi-label">Min. promedio</div><div class="kpi-val" id="kpi-prom">—</div></div>
+      <div class="kpi-tile k3"><div class="kpi-label">% Preventivo</div><div class="kpi-val" id="kpi-prev">—</div></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="exportarExcel()">📊 Exportar a Excel (con dashboard)</button>
+
+    <div class="section-title">Historial — más reciente primero</div>
+    <div id="historial"></div>
+  </div>
+
+</div>
+
+<!-- MODAL: código QR de este equipo → abre esta misma hoja de vida directo -->
+<div class="modal-bg" id="modalQrHojaVida">
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <div id="qr-print-area">
+      <h3 id="qr-equipo-nombre2" style="margin-bottom:2px;">—</h3>
+      <div id="qr-equipo-sub2" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+      <div id="qr-canvas-wrap2" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">Escanea con la cámara del celular para ver la hoja de vida de este equipo directo.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalQrHojaVida')">Cerrar</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><div id="loading-text" style="color:var(--muted);font-size:13px;">Cargando...</div></div>
+<div id="toast"></div>
+
+<script>
+let currentEquipos = [];   // desde /equipos
+let currentOts = [];       // desde /ots (todas — se filtra en el cliente por EQUIPO, igual que analisis.html)
+let equipoActual = null;   // equipo actualmente mostrado en la hoja de vida
+let historialActual = [];  // OTs ya filtradas + ordenadas del equipo actual
+
+document.addEventListener('DOMContentLoaded', () => {
+  window.fbReady.then(() => {
+    document.getElementById('header-sub').textContent =
+      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
+    if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('hoja-vida');
+    cargarDatos();
+    updateHeaderStatus();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  }).catch((err) => console.warn('Sin sesión activa:', err.message));
+
+  window.addEventListener('online', updateHeaderStatus);
+  window.addEventListener('offline', updateHeaderStatus);
+});
+
+function updateHeaderStatus() {
+  const bar = document.getElementById('offline-bar');
+  const icon = document.getElementById('sp-status');
+  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
+  else { bar.classList.add('show'); icon.textContent = '📵'; }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function setLoading(on, texto) {
+  document.getElementById('loading-text').textContent = texto || 'Cargando...';
+  document.getElementById('loading').classList.toggle('show', !!on);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ══════ Carga de datos: /equipos y /ots (misma fuente compartida que ══════
+// bitacora/checklist/analisis — se filtra por nombre de equipo en el
+// cliente, igual patrón que ya usa analisis.html).
+let _qrAutoAbrioHV = false;
+function cargarDatos() {
+  setLoading(true, 'Cargando equipos...');
+  db.collection('equipos').orderBy('nombre').onSnapshot((snap) => {
+    currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPicker();
+    intentarAbrirDesdeQrHV();
+  }, (err) => { console.warn('Error leyendo equipos:', err.message); showToast('Error cargando equipos: ' + err.message, 'error'); });
+
+  db.collection('ots').onSnapshot((snap) => {
+    currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setLoading(false);
+    if (equipoActual) mostrarHojaDeVida(equipoActual); // refresca si ya hay uno abierto
+  }, (err) => { console.warn('Error leyendo ots:', err.message); setLoading(false); showToast('Error cargando historial: ' + err.message, 'error'); });
+}
+
+function intentarAbrirDesdeQrHV() {
+  if (_qrAutoAbrioHV) return;
+  const params = new URLSearchParams(location.search);
+  const equipoId = params.get('equipo');
+  if (!equipoId) return;
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return; // puede que /equipos aún no haya llegado — se reintenta en el próximo snapshot
+  _qrAutoAbrioHV = true;
+  mostrarHojaDeVida(e);
+}
+
+// ══════ Screen: elegir equipo ══════
+function renderPicker() {
+  const wrap = document.getElementById('picker-lista');
+  const busca = (document.getElementById('picker-buscar').value || '').toLowerCase().trim();
+  const lista = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  if (!lista.length) {
+    wrap.innerHTML = `<div class="empty"><span class="emoji">🔍</span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = lista.map(e => `
+    <div class="item-row" onclick="mostrarHojaDeVida('${String(e.id).replace(/'/g, "\\'")}')">
+      <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad : ''}</div>
+    </div>
+  `).join('');
+}
+
+function volverAlPicker() {
+  equipoActual = null;
+  historialActual = [];
+  history.replaceState(null, '', location.pathname);
+  document.getElementById('screen-hoja').style.display = 'none';
+  document.getElementById('screen-picker').style.display = 'block';
+}
+
+// ══════ Screen: hoja de vida ══════
+// EQUIPO puede llegar como id (desde el picker/QR) o ya como objeto.
+function mostrarHojaDeVida(equipoOrId) {
+  const e = typeof equipoOrId === 'string' ? currentEquipos.find(x => x.id === equipoOrId) : equipoOrId;
+  if (!e) { showToast('Equipo no encontrado', 'error'); return; }
+  equipoActual = e;
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('equipo') !== e.id) history.replaceState(null, '', location.pathname + '?equipo=' + encodeURIComponent(e.id));
+
+  document.getElementById('screen-picker').style.display = 'none';
+  document.getElementById('screen-hoja').style.display = 'block';
+
+  document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('eq-sub').textContent = [e.localidad, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—';
+
+  // Historial: OTs cuyo campo EQUIPO coincide con el nombre del equipo — el
+  // mismo campo que ya llenan tanto Bitácora como Checklist al cerrar una
+  // OT (ver comentario "CIERRE FINAL" en checklist.html), así que este
+  // historial junta ambas fuentes automáticamente.
+  const nombreNorm = (e.nombre || '').trim().toLowerCase();
+  historialActual = currentOts
+    .filter(o => (o.EQUIPO || '').trim().toLowerCase() === nombreNorm)
+    .map(o => ({
+      folio: o.Title || o.id,
+      fecha: o.FECHA || '',
+      area: o.LINEA_EQUIPO || '',
+      equipo: o.EQUIPO || '',
+      tecnico: o.TECNICOS || '—',
+      min: Number(o.TOTAL_MIN_TECNICO) || Number(o.TIEMPO_RESPUESTA_MIN) || 0,
+      tipo: o.TIPO_MANTENIMIENTO || '—',
+      causa: o.CAUSA_FALLA || '',
+      falla: o.DESCRIPCION_FALLA || '',
+      solucion: o.DESCRIPCION_SOLUCION || '',
+      _createdAtMs: o.createdAt && typeof o.createdAt.toMillis === 'function' ? o.createdAt.toMillis() : 0,
+    }))
+    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b._createdAtMs - a._createdAtMs));
+
+  renderKpis();
+  renderHistorial();
+}
+
+function renderKpis() {
+  const n = historialActual.length;
+  const totalMin = historialActual.reduce((s, r) => s + r.min, 0);
+  const prom = n ? totalMin / n : 0;
+  const preventivos = historialActual.filter(r => r.tipo === 'Preventivo').length;
+  const pct = n ? (preventivos / n * 100) : 0;
+  document.getElementById('kpi-total').textContent = n;
+  document.getElementById('kpi-min').textContent = totalMin;
+  document.getElementById('kpi-prom').textContent = prom.toFixed(1);
+  document.getElementById('kpi-prev').textContent = pct.toFixed(0) + '%';
+}
+
+function fmtFechaHV(f) {
+  if (!f || f.indexOf('-') === -1) return f || '—';
+  const [y, m, d] = f.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function renderHistorial() {
+  const wrap = document.getElementById('historial');
+  if (!historialActual.length) {
+    wrap.innerHTML = `<div class="empty"><span class="emoji">🗂️</span><p>Este equipo todavía no tiene OTs registradas en Bitácora ni Checklist.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = historialActual.map(r => `
+    <div class="item-row" style="cursor:default;border-left-color:${r.tipo === 'Correctivo' ? 'var(--red)' : 'var(--green)'}">
+      <div class="item-header">
+        <div class="item-title">${r.folio} · ${fmtFechaHV(r.fecha)}</div>
+        <span class="tag ${r.tipo === 'Correctivo' ? 'tag-correctivo' : 'tag-preventivo'}">${r.tipo}</span>
+      </div>
+      <div class="item-sub">${r.area ? '📍 ' + r.area + ' · ' : ''}👤 ${r.tecnico} · ⏱ ${r.min} min</div>
+      ${r.falla ? `<div class="item-sub"><strong style="color:var(--text)">Falla:</strong> ${r.causa ? '[' + r.causa + '] ' : ''}${r.falla}</div>` : ''}
+      ${r.solucion ? `<div class="item-sol"><strong>✓ Solución:</strong> ${r.solucion}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ══════ QR propio de la Hoja de Vida (independiente del QR de Checklist) ══════
+function mostrarQrHojaVida() {
+  if (!equipoActual) return;
+  document.getElementById('qr-equipo-nombre2').textContent = equipoActual.nombre || '(sin nombre)';
+  document.getElementById('qr-equipo-sub2').textContent = equipoActual.localidad ? '📍 ' + equipoActual.localidad : '';
+  const wrap = document.getElementById('qr-canvas-wrap2');
+  wrap.innerHTML = '';
+  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'hoja-vida.html?equipo=' + encodeURIComponent(equipoActual.id);
+  new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  openModal('modalQrHojaVida');
+}
+
+// ══════ Exportar a Excel con dashboard (generado en el navegador) ══════
+const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA100' };
+
+function chartToImage(config, w, h) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const chart = new Chart(canvas.getContext('2d'), config);
+  const url = canvas.toDataURL('image/png');
+  chart.destroy();
+  return url.split(',')[1];
+}
+
+async function exportarExcel() {
+  if (!historialActual.length) { showToast('Este equipo no tiene historial todavía', 'error'); return; }
+  setLoading(true, 'Generando Excel...');
+  try {
+    const DATA = historialActual;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Hoja de Vida', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+
+    ws.columns = [
+      { header: 'N° Orden', key: 'folio', width: 12 },
+      { header: 'Fecha', key: 'fecha', width: 12 },
+      { header: 'Área', key: 'area', width: 12 },
+      { header: 'Equipo', key: 'equipo', width: 16 },
+      { header: 'Técnico', key: 'tecnico', width: 18 },
+      { header: 'Tiempo de trabajo (min)', key: 'min', width: 14 },
+      { header: 'Tipo', key: 'tipo', width: 12 },
+      { header: 'Descripción', key: 'desc', width: 42 },
+      { header: 'Solución', key: 'sol', width: 42 },
+    ];
+    DATA.forEach(r => {
+      const row = { folio: r.folio, area: r.area, equipo: r.equipo, tecnico: r.tecnico, min: r.min, tipo: r.tipo, desc: r.falla, sol: r.solucion };
+      row.fecha = r.fecha ? new Date(r.fecha + 'T00:00:00') : '';
+      ws.addRow(row);
+    });
+    ws.getColumn('fecha').numFmt = 'DD/MM/YYYY';
+    const lastRow = DATA.length + 1;
+
+    ws.getRow(1).eachCell(c => {
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + PALETTE.blue } };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    ws.autoFilter = { from: 'A1', to: `I${lastRow}` };
+    ws.addConditionalFormatting({
+      ref: `F2:F${lastRow}`,
+      rules: [{ type: 'dataBar', gradient: true, color: { argb: 'FF' + PALETTE.blue }, cfvo: [{ type: 'min' }, { type: 'max' }] }],
+    });
+
+    // ── Dashboard ──
+    const dash = wb.addWorksheet('Dashboard', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    ['A','B','C','D','E','F','G','H'].forEach((c, i) => dash.getColumn(c).width = [16,12,18,14,14,14,14,14][i]);
+    dash.mergeCells('A1:H1');
+    dash.getCell('A1').value = 'DASHBOARD — ' + (equipoActual.nombre || '');
+    dash.getCell('A1').font = { size: 14, bold: true };
+
+    const kpis = [
+      { label: 'Total de OTs', formula: `COUNTA('Hoja de Vida'!A2:A${lastRow})`, fmt: '0', color: PALETTE.blue },
+      { label: 'Tiempo total (min)', formula: `SUM('Hoja de Vida'!F2:F${lastRow})`, fmt: '0', color: PALETTE.orange },
+      { label: 'Tiempo promedio (min)', formula: `AVERAGE('Hoja de Vida'!F2:F${lastRow})`, fmt: '0.0', color: PALETTE.aqua },
+      { label: '% Preventivo', formula: `COUNTIF('Hoja de Vida'!G2:G${lastRow},"Preventivo")/COUNTA('Hoja de Vida'!G2:G${lastRow})`, fmt: '0.0%', color: PALETTE.yellow },
+    ];
+    kpis.forEach((k, i) => {
+      const col = i * 2;
+      const c1 = String.fromCharCode(65 + col), c2 = String.fromCharCode(65 + col + 1);
+      dash.mergeCells(`${c1}3:${c2}3`); dash.mergeCells(`${c1}4:${c2}4`);
+      const lab = dash.getCell(`${c1}3`);
+      lab.value = k.label; lab.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
+      lab.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + k.color } };
+      lab.alignment = { horizontal: 'center', vertical: 'middle' };
+      const val = dash.getCell(`${c1}4`);
+      val.value = { formula: k.formula }; val.numFmt = k.fmt;
+      val.font = { bold: true, size: 18 }; val.alignment = { horizontal: 'center', vertical: 'middle' };
+      val.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0EFEC' } };
+    });
+
+    const tecnicos = [...new Set(DATA.map(r => r.tecnico).filter(Boolean))];
+    dash.getCell('A7').value = 'Técnico'; dash.getCell('B7').value = 'N° de OTs'; dash.getCell('C7').value = 'Tiempo total (min)';
+    ['A7','B7','C7'].forEach(a => dash.getCell(a).font = { bold: true });
+    tecnicos.forEach((t, i) => {
+      const r = 8 + i;
+      dash.getCell(`A${r}`).value = t;
+      dash.getCell(`B${r}`).value = { formula: `COUNTIF('Hoja de Vida'!$E$2:$E$${lastRow},A${r})` };
+      dash.getCell(`C${r}`).value = { formula: `SUMIF('Hoja de Vida'!$E$2:$E$${lastRow},A${r},'Hoja de Vida'!$F$2:$F$${lastRow})` };
+    });
+    const tecLastRow = 7 + tecnicos.length;
+
+    const tipoHdrRow = tecLastRow + 2;
+    dash.getCell(`A${tipoHdrRow}`).value = 'Tipo'; dash.getCell(`B${tipoHdrRow}`).value = 'N° de OTs';
+    ['A','B'].forEach(c => dash.getCell(`${c}${tipoHdrRow}`).font = { bold: true });
+    ['Correctivo','Preventivo'].forEach((t, i) => {
+      const r = tipoHdrRow + 1 + i;
+      dash.getCell(`A${r}`).value = t;
+      dash.getCell(`B${r}`).value = { formula: `COUNTIF('Hoja de Vida'!$G$2:$G$${lastRow},A${r})` };
+    });
+
+    const countByTec = tecnicos.map(t => DATA.filter(r => r.tecnico === t).length);
+    const countCorrectivo = DATA.filter(r => r.tipo === 'Correctivo').length;
+    const countPreventivo = DATA.filter(r => r.tipo === 'Preventivo').length;
+
+    if (tecnicos.length) {
+      const barImg = chartToImage({
+        type: 'bar',
+        data: { labels: tecnicos, datasets: [{ data: countByTec, backgroundColor: '#' + PALETTE.blue }] },
+        options: { responsive: false, animation: false, plugins: { legend: { display: false }, title: { display: true, text: 'OTs por técnico' } } },
+      }, 480, 280);
+      const barImgId = wb.addImage({ base64: barImg, extension: 'png' });
+      dash.addImage(barImgId, { tl: { col: 4, row: 6 }, ext: { width: 340, height: 200 } });
+    }
+    if (countCorrectivo + countPreventivo > 0) {
+      const pieImg = chartToImage({
+        type: 'pie',
+        data: { labels: ['Correctivo','Preventivo'], datasets: [{ data: [countCorrectivo, countPreventivo], backgroundColor: ['#' + PALETTE.blue, '#' + PALETTE.orange] }] },
+        options: { responsive: false, animation: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Correctivo vs Preventivo' } } },
+      }, 360, 280);
+      const pieImgId = wb.addImage({ base64: pieImg, extension: 'png' });
+      dash.addImage(pieImgId, { tl: { col: 0, row: tipoHdrRow + 3 }, ext: { width: 260, height: 200 } });
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Hoja_de_vida_${(equipoActual.nombre || 'equipo').replace(/\s+/g, '_')}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Excel descargado');
+  } catch (err) {
+    console.error(err);
+    showToast('Error generando el Excel: ' + err.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+</script>
+</body>
+</html>

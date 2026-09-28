@@ -13,6 +13,7 @@ const ASSETS = [
   'inventario.html',
   'analisis.html',
   'checklist.html',
+  'hoja-vida.html',
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',

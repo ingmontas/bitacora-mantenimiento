@@ -131,6 +131,7 @@ function fbRenderMiniNav(active) {
       { id: 'inventario', href: 'inventario.html', label: '🔧 Inventario' },
       { id: 'analisis',   href: 'analisis.html',   label: '📊 Análisis' },   
       { id: 'checklist',  href: 'checklist.html',  label: '🩺 Checklist' },
+      { id: 'hoja-vida',  href: 'hoja-vida.html',  label: '🗂️ Hoja de Vida' },
     ];
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
