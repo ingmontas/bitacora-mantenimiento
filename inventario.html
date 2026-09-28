@@ -203,6 +203,7 @@
 
     <div class="section-hdr">
       <h2>Equipos / Máquinas</h2>
+      <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
     </div>
     <div class="equipo-grid" id="equipoGrid"></div>
   </div>
@@ -361,6 +362,23 @@
       <button class="btn" onclick="bulkImportRepuestos()">Procesar y cargar</button>
     </div>
     <div id="bulkStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- Modal: carga masiva de equipos (pegar tabla) -->
+<div class="modal-bg" id="modalBulkEquipos">
+  <div class="modal" style="max-width:720px;">
+    <h3>📋 Carga masiva de equipos</h3>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por equipo. Si un equipo ya existe (mismo nombre), se completan solo los datos que tenía vacíos — nunca se borra nada que ya estaba cargado. La frecuencia de checklist es opcional.</div>
+    <div class="form-field full">
+      <label>Formato de columnas: Nombre* · Marca · Modelo · Serie · Área (Localidad) · Frecuencia de checklist (días, opcional)</label>
+      <textarea id="bulkEquiposPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Sala de máquinas	7"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalBulkEquipos')">Cancelar</button>
+      <button class="btn" onclick="bulkImportEquipos()">Procesar y cargar</button>
+    </div>
+    <div id="bulkEquiposStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
   </div>
 </div>
 
@@ -1202,6 +1220,90 @@ async function bulkImportRepuestos(){
   document.getElementById('bulkPasteArea').value = '';
   renderDetail();
   showToast(`✅ Carga masiva: ${added} nuevos, ${merged} sumados`);
+}
+
+/* ═══════════════ CARGA MASIVA DE EQUIPOS ═══════════════
+   Mismo patrón de "pegar tabla" que la carga masiva de repuestos, pero para
+   dar de alta o completar varios equipos de una sola vez (pedido del
+   usuario: "cómo puedo seguir entrando equipos"). Si el nombre ya existe,
+   SOLO se completan los campos que el equipo tenía vacíos — nunca se
+   sobrescribe un dato que ya estaba cargado a mano. La frecuencia de
+   checklist es opcional y, si viene, también deja el equipo listo para
+   aparecer en "Hoy te toca" dentro de checklist.html. */
+function openBulkEquiposModal(){
+  document.getElementById('bulkEquiposPasteArea').value = '';
+  document.getElementById('bulkEquiposStatus').textContent = '';
+  openModal('modalBulkEquipos');
+}
+
+function addDaysStrInv(baseStr, dias){
+  const base = baseStr ? new Date(baseStr + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + Number(dias || 0));
+  return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+}
+
+async function bulkImportEquipos(){
+  const text = document.getElementById('bulkEquiposPasteArea').value;
+  const status = document.getElementById('bulkEquiposStatus');
+  if(!text.trim()){ showToast('⚠️ Pega la tabla primero'); return; }
+  const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim());
+
+  await window.fbReady;
+  const hoy = new Date();
+  const hoyStr = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');
+
+  const batch = db.batch();
+  let nuevos = 0, actualizados = 0;
+  const invalidas = [];
+
+  for(const line of lines){
+    const c = line.split('\t');
+    const nombre = (c[0] || '').trim();
+    if(!nombre){ invalidas.push(line); continue; }
+
+    const datos = {
+      marca: (c[1] || '').trim(),
+      modelo: (c[2] || '').trim(),
+      serie: (c[3] || '').trim(),
+      localidad: (c[4] || '').trim(),
+    };
+    const dias = (c[5] || '').trim() ? parseInt(c[5], 10) : null;
+    if(dias && dias > 0){
+      datos.checklistFrecuenciaDias = dias;
+      datos.checklistProximaFecha = addDaysStrInv(hoyStr, dias);
+    }
+
+    const existente = DB.find(e => normalizeKey(e.nombre) === normalizeKey(nombre));
+    if(existente){
+      const cambios = {};
+      Object.keys(datos).forEach(k => { if(!existente[k] && datos[k]) cambios[k] = datos[k]; });
+      if(Object.keys(cambios).length){
+        batch.set(db.collection('equipos').doc(existente.id), fbSanitize({ ...cambios, updatedAt: fbTimestamp() }), { merge: true });
+        actualizados++;
+      }
+    } else {
+      const ref = db.collection('equipos').doc();
+      batch.set(ref, fbSanitize({ nombre, ...datos, repuestos: [], updatedAt: fbTimestamp() }));
+      nuevos++;
+    }
+  }
+
+  if(!nuevos && !actualizados){
+    status.innerHTML = '⚠️ No se cargó nada.' + (invalidas.length ? ' Filas sin nombre (columna 1 vacía): ' + invalidas.length : '');
+    return;
+  }
+
+  try{
+    await batch.commit();
+    let msg = `✅ ${nuevos} equipo(s) nuevo(s)`;
+    if(actualizados) msg += `, ${actualizados} completado(s)`;
+    if(invalidas.length) msg += `, ${invalidas.length} fila(s) sin nombre (omitidas)`;
+    showToast(msg);
+    status.textContent = invalidas.length ? `Se omitieron ${invalidas.length} fila(s) sin nombre en la columna 1.` : '';
+    closeModal('modalBulkEquipos');
+  } catch(err){
+    showToast('⚠️ Error al guardar: ' + err.message);
+  }
 }
 
 /* ═══════════════ DETECTAR Y FUSIONAR DUPLICADOS ═══════════════ */
