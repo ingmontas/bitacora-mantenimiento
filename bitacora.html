@@ -64,6 +64,7 @@
     .tag-local { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B33; }
     .tag-synced { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
     .tag-paro { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
+    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
     .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
@@ -205,8 +206,17 @@
         <input type="text" id="f-pieza" placeholder="ej: rodamiento, filtro..."/>
       </div>
 
+      <!-- Comparación con Maximo/SAP (28 sep 2026): además de la descripción libre,
+           una causa estructurada de una lista corta permite después contestar en
+           Análisis "¿cuál es la causa de falla más común?" sin tener que leer
+           notas de texto una por una. Ver CAUSAS_FALLA_FALLBACK. -->
       <div class="field">
-        <label>Descripción de la Falla (Causa) *</label>
+        <label>Causa (categoría)</label>
+        <select id="f-causa"><option value="">Seleccionar causa...</option></select>
+      </div>
+
+      <div class="field">
+        <label>Descripción de la Falla (detalle) *</label>
         <textarea id="f-falla" placeholder="¿Qué pasó?"></textarea>
       </div>
 
@@ -257,6 +267,17 @@
         <div class="toggle-row" id="paro-group">
           <button class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)" style="color:var(--red)">🚨 Sí, paró</button>
           <button class="toggle-btn sel" data-val="no" onclick="selectToggle('paro-group',this)">No</button>
+        </div>
+      </div>
+
+      <!-- Comparación con Maximo/SAP (28 sep 2026): prioridad simple para poder
+           distinguir en Análisis/listas qué se atiende primero. -->
+      <div class="field">
+        <label>Prioridad</label>
+        <div class="toggle-row" id="prioridad-group">
+          <button class="toggle-btn" data-val="alta" onclick="selectToggle('prioridad-group',this)" style="color:var(--red)">🔴 Alta</button>
+          <button class="toggle-btn sel" data-val="media" onclick="selectToggle('prioridad-group',this)">🟡 Media</button>
+          <button class="toggle-btn" data-val="baja" onclick="selectToggle('prioridad-group',this)">🟢 Baja</button>
         </div>
       </div>
 
@@ -379,6 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPlantas();
   loadAreas();
   loadLineas();
+  renderCausasOptions('');
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
   document.getElementById('f-planta').addEventListener('change', onPlantaSelectChange);
@@ -417,6 +439,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${err.message}. Revisa <code>firebase-config.js</code>.`;
   });
 });
+
+// ══════ CAUSAS DE FALLA (catálogo fijo — comparación con Maximo/SAP, 28 sep 2026) ══════
+// Lista corta y fija (mismo criterio que se usó con los puntos de checklist:
+// una lista fija es preferible a una pantalla de edición hasta que haya uso
+// real que lo justifique). Se guarda como texto simple en CAUSA_FALLA, así
+// que agregar categorías después no rompe los registros ya guardados.
+const CAUSAS_FALLA = [
+  'Fuga', 'Desgaste', 'Falta de lubricación', 'Cuerpo extraño / contaminación',
+  'Eléctrico', 'Descalibración', 'Sobrecalentamiento', 'Corrosión',
+  'Rotura de pieza', 'Error de operación', 'Otro',
+];
+function renderCausasOptions(valorActual) {
+  const sel = document.getElementById('f-causa');
+  if (!sel) return;
+  const lista = CAUSAS_FALLA.slice();
+  if (valorActual && !lista.includes(valorActual)) lista.unshift(valorActual);
+  sel.innerHTML = '<option value="">Seleccionar causa...</option>'
+    + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${c}</option>`).join('');
+}
 
 // ══════ LISTA DE TÉCNICOS (centralizada en tecnicos.json) ══════
 const TECNICOS_FALLBACK = [
@@ -823,6 +864,7 @@ function fillFormFromRecord(r) {
   document.getElementById('f-tipo-maq').value = r.TIPO_MAQUINA || '';
   document.getElementById('f-equipo').value = r.EQUIPO || '';
   document.getElementById('f-pieza').value = r.PIEZA || '';
+  renderCausasOptions(r.CAUSA_FALLA || '');
   document.getElementById('f-falla').value = r.DESCRIPCION_FALLA || '';
   document.getElementById('f-solucion').value = r.DESCRIPCION_SOLUCION || '';
   document.getElementById('f-hinicio').value = r.H_INICIO || '';
@@ -834,6 +876,7 @@ function fillFormFromRecord(r) {
   selectToggleByValue('me-group', r.ME || 'm');
   selectToggleByValue('ot-group', r.GENERA_OT || 'no');
   selectToggleByValue('paro-group', r.PARO_PLANTA || 'no');
+  selectToggleByValue('prioridad-group', r.PRIORIDAD || 'media');
 
   const tecsSeleccionados = (r.TECNICOS || '').split(',').map(s => s.trim()).filter(Boolean);
   document.querySelectorAll('#tec-grid .tec-chip').forEach(chip => {
@@ -887,6 +930,7 @@ async function submitForm() {
     TIPO_MAQUINA: document.getElementById('f-tipo-maq').value.trim(),
     EQUIPO: document.getElementById('f-equipo').value.trim(),
     PIEZA: document.getElementById('f-pieza').value.trim(),
+    CAUSA_FALLA: document.getElementById('f-causa').value,
     DESCRIPCION_FALLA: falla,
     DESCRIPCION_SOLUCION: document.getElementById('f-solucion').value.trim(),
     H_INICIO: hInicio,
@@ -896,6 +940,7 @@ async function submitForm() {
     TOTAL_MIN_TECNICO: minTec,
     ME: getToggle('me-group') || 'm',
     GENERA_OT: getToggle('ot-group') || 'no',
+    PRIORIDAD: getToggle('prioridad-group') || 'media',
     TIPO_MANTENIMIENTO: getToggle('tipo-mto-group') || 'Correctivo',
     PARO_PLANTA: getToggle('paro-group') || 'no',
     TECNICOS: getSelectedTecs().join(', '),
@@ -958,6 +1003,7 @@ function resetForm() {
   selectToggle('me-group', document.querySelector('#me-group [data-val="m"]'));
   selectToggle('ot-group', document.querySelector('#ot-group [data-val="no"]'));
   selectToggle('paro-group', document.querySelector('#paro-group [data-val="no"]'));
+  selectToggle('prioridad-group', document.querySelector('#prioridad-group [data-val="media"]'));
 }
 
 // ══════ HISTORY ══════
@@ -982,7 +1028,8 @@ function renderHistory() {
     const esParo = r.PARO_PLANTA === 'si';
     const tags = `<span class="tag tag-${tipo}">${r.TIPO_MANTENIMIENTO||'—'}</span>
       ${r._pending ? '<span class="tag tag-local">SIN SUBIR</span>' : '<span class="tag tag-synced">☁️ ✓</span>'}
-      ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}`;
+      ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}
+      ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta">🔴 ALTA</span>' : ''}`;
     return `<div class="hist-item ${tipo}">
       <div class="hist-header">
         <div>
@@ -991,7 +1038,7 @@ function renderHistory() {
         </div>
         <div class="hist-tags">${tags}</div>
       </div>
-      <div class="hist-desc"><strong>Falla:</strong> ${r.DESCRIPCION_FALLA||'—'}</div>
+      <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+r.CAUSA_FALLA+'] ' : ''}${r.DESCRIPCION_FALLA||'—'}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${r.DESCRIPCION_SOLUCION}</div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
         ${r.TOTAL_MIN_MAQUINA > 0 ? `<div style="font-size:11px;color:var(--muted);">⏱ ${r.TOTAL_MIN_MAQUINA} min máquina</div>` : '<div></div>'}
@@ -1047,10 +1094,10 @@ function csvEscape(v){
 function exportHistoryCSV(full) {
   const rows = full ? allRecords : ((window._historyCache && window._historyCache.length) ? window._historyCache : allRecords);
   if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
-  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Falla','Solución'];
+  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad'];
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
-    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION]
+    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD]
       .map(csvEscape).join(',') + '\n';
   });
   const suffix = (!full && document.getElementById('search-input').value.trim()) ? '_filtrado' : '';

@@ -235,6 +235,11 @@
       <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad"><option value="">Seleccionar área...</option></select></div>
       <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
       <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): rastrear compra/garantía por
+           equipo evita mandar a comprar un repuesto pagado cuando la pieza
+           todavía está cubierta. -->
+      <div class="form-field"><label>Fecha de compra</label><input id="eq-compra" type="date"></div>
+      <div class="form-field"><label>Garantía hasta</label><input id="eq-garantia" type="date"></div>
       <div class="form-field"><label>Tensión</label><input id="eq-tension" placeholder="220 V"></div>
       <div class="form-field"><label>Potencia</label><input id="eq-potencia" placeholder="3 KW"></div>
       <div class="form-field"><label>Frecuencia</label><input id="eq-frecuencia" placeholder="50/60 HZ"></div>
@@ -421,7 +426,7 @@ function mergeRepuestoInto(list, incoming){
 function mergeEquipoInto(targetList, importedEquipo){
   let existing = targetList.find(e => normalizeKey(e.nombre) === normalizeKey(importedEquipo.nombre));
   if(!existing){ targetList.push(JSON.parse(JSON.stringify(importedEquipo))); return; }
-  ['marca','modelo','serie','localidad','fabricacion','instalacion','tension','potencia','frecuencia','tamano','peso','fase','madein'].forEach(k=>{
+  ['marca','modelo','serie','localidad','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein'].forEach(k=>{
     if(!existing[k] && importedEquipo[k]) existing[k] = importedEquipo[k];
   });
   if(!existing.manualUrl && importedEquipo.manualUrl){ existing.manualUrl = importedEquipo.manualUrl; existing.manualNombre = importedEquipo.manualNombre; }
@@ -804,9 +809,18 @@ function renderDetail(){
   const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
   const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
 
+  // Comparación con Maximo/SAP (28 sep 2026): garantía vigente/vencida se marca
+  // aquí mismo comparando contra la fecha de hoy — así se ve de un vistazo sin
+  // tener que calcular nada al mandar a comprar un repuesto.
+  let garantiaTxt = e.garantiaHasta || '';
+  if (e.garantiaHasta) {
+    const vencida = new Date(e.garantiaHasta + 'T00:00:00') < new Date(new Date().toDateString());
+    garantiaTxt = e.garantiaHasta + (vencida ? ' · ⚠️ Vencida' : ' · ✅ Vigente');
+  }
   const specs = [
     ['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie], ['Localidad', e.localidad],
     ['Fecha fabricación', e.fabricacion], ['Fecha instalación', e.instalacion],
+    ['Fecha de compra', e.fechaCompra], ['Garantía hasta', garantiaTxt],
     ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia],
     ['Tamaño', e.tamano], ['Peso', e.peso], ['Fase', e.fase], ['Made in', e.madein],
   ];
@@ -986,7 +1000,7 @@ function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 let editingEquipoId = null;
-const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein'];
+const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-compra','eq-garantia','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein'];
 
 function openNewEquipoModal(){
   editingEquipoId = null;
@@ -1006,6 +1020,8 @@ function openEditEquipoModal(){
   renderEquipoLocalidadOptions(e.localidad||'');
   document.getElementById('eq-fabricacion').value = e.fabricacion||'';
   document.getElementById('eq-instalacion').value = e.instalacion||'';
+  document.getElementById('eq-compra').value = e.fechaCompra||'';
+  document.getElementById('eq-garantia').value = e.garantiaHasta||'';
   document.getElementById('eq-tension').value = e.tension||'';
   document.getElementById('eq-potencia').value = e.potencia||'';
   document.getElementById('eq-frecuencia').value = e.frecuencia||'';
@@ -1030,6 +1046,8 @@ async function saveEquipo(){
     localidad: document.getElementById('eq-localidad').value.trim(),
     fabricacion: document.getElementById('eq-fabricacion').value,
     instalacion: document.getElementById('eq-instalacion').value,
+    fechaCompra: document.getElementById('eq-compra').value,
+    garantiaHasta: document.getElementById('eq-garantia').value,
     tension: document.getElementById('eq-tension').value.trim(),
     potencia: document.getElementById('eq-potencia').value.trim(),
     frecuencia: document.getElementById('eq-frecuencia').value.trim(),

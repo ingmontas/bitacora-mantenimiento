@@ -67,6 +67,9 @@
     .tag-pendiente { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
     .tag-planificada { background: #3987e522; color: #7fb3f5; border: 1px solid #3987e544; }
     .tag-completada { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
+    .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
+    .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
     .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
@@ -267,6 +270,27 @@ const CHECKLIST_PUNTOS_FALLBACK = [
   'Nivel de aceite/lubricación',
 ];
 let checklistPuntosActuales = CHECKLIST_PUNTOS_FALLBACK.slice(); // lista general en uso (Firestore u respaldo)
+
+// ══════ CAUSAS DE FALLA Y PRIORIDAD (comparación con Maximo/SAP, 28 sep 2026) ══════
+// Mismo catálogo fijo de causas que bitacora.html (lista corta, no editable
+// desde la app por ahora — igual criterio que se usó con los puntos de
+// checklist en su momento: fijarla es preferible a sobre-construir una
+// pantalla de edición antes de tener uso real).
+const CAUSAS_FALLA = [
+  'Fuga', 'Desgaste', 'Falta de lubricación', 'Cuerpo extraño / contaminación',
+  'Eléctrico', 'Descalibración', 'Sobrecalentamiento', 'Corrosión',
+  'Rotura de pieza', 'Error de operación', 'Otro',
+];
+// Prioridad sugerida automáticamente según el texto del punto que falló —
+// el técnico la puede cambiar igual desde el formulario. Sirve para no
+// dejar una guarda de seguridad rota mezclada visualmente con "limpieza
+// pendiente" en la pantalla de OTs.
+function inferirPrioridad(punto) {
+  const p = (punto || '').toLowerCase();
+  if (/guarda|seguridad|el[eé]ctric|cableado/.test(p)) return 'alta';
+  if (/limpieza/.test(p)) return 'baja';
+  return 'media';
+}
 let puntosEditState = null;    // copia de trabajo mientras Administrador edita la lista GENERAL en "Config"
 
 let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia se está editando (modal)
@@ -413,7 +437,7 @@ function abrirFormChecklist(equipoId) {
   // Si este equipo tiene su propia lista de puntos (distinta a la general,
   // porque no todos los equipos se revisan igual), se usa esa; si no, la general.
   const puntosParaEsteEquipo = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos : checklistPuntosActuales;
-  itemsFormState = puntosParaEsteEquipo.map(p => ({ punto: p, resultado: 'ok', nota: '' }));
+  itemsFormState = puntosParaEsteEquipo.map(p => ({ punto: p, resultado: 'ok', nota: '', causa: '', prioridad: inferirPrioridad(p) }));
 
   document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
@@ -444,7 +468,23 @@ function renderPuntosForm() {
         <button type="button" class="toggle-btn${it.resultado === 'ok' ? ' sel-ok' : ''}" onclick="setItemResultado(${idx},'ok')">✅ OK</button>
         <button type="button" class="toggle-btn${it.resultado === 'falla' ? ' sel-falla' : ''}" onclick="setItemResultado(${idx},'falla')">⚠️ Falla</button>
       </div>
-      ${it.resultado === 'falla' ? `<textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${it.nota || ''}</textarea>` : ''}
+      ${it.resultado === 'falla' ? `
+        <div class="row" style="margin-top:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Causa</label>
+            <select onchange="itemsFormState[${idx}].causa=this.value">
+              <option value="">Seleccionar causa...</option>
+              ${CAUSAS_FALLA.map(c => `<option${it.causa === c ? ' selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;max-width:130px;">
+            <label>Prioridad</label>
+            <select onchange="itemsFormState[${idx}].prioridad=this.value">
+              ${['alta','media','baja'].map(pr => `<option value="${pr}"${it.prioridad === pr ? ' selected' : ''}>${pr === 'alta' ? '🔴 Alta' : pr === 'media' ? '🟡 Media' : '🟢 Baja'}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${it.nota || ''}</textarea>` : ''}
     </div>
   `).join('');
 }
@@ -497,6 +537,8 @@ async function submitChecklist() {
         equipoNombre: equipoSeleccionado.nombre || '',
         equipoLocalidad: equipoSeleccionado.localidad || '',
         descripcionFalla: f.punto + (f.nota ? ' — ' + f.nota : ''),
+        causaFalla: f.causa || '',
+        prioridad: f.prioridad || 'media',
         checklistId: checklistRef.id,
         asignadoA: null,
         fechaPlanificada: null,
@@ -580,9 +622,17 @@ function loadOts() {
   // Administrador también puede "Cerrar directo" desde cualquier estado, sin
   // pasar por los pasos intermedios (pedido explícito del usuario).
   db.collection('ots').where('origen', '==', 'checklist').onSnapshot((snap) => {
+    // Orden: primero por prioridad (alta arriba de todo), y dentro de cada
+    // prioridad, la más reciente primero — así una guarda de seguridad rota
+    // no se pierde debajo de diez limpiezas pendientes.
+    const rangoPrioridad = { alta: 0, media: 1, baja: 2 };
     currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .filter(o => ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'].includes(o.estado))
-      .sort((a, b) => (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0));
+      .sort((a, b) => {
+        const rp = (rangoPrioridad[a.prioridad] ?? 1) - (rangoPrioridad[b.prioridad] ?? 1);
+        if (rp !== 0) return rp;
+        return (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0);
+      });
     renderOts();
   }, (err) => console.warn('Error leyendo OTs:', err.message));
 }
@@ -658,9 +708,12 @@ function renderOts() {
       <div class="item-row" style="cursor:default;">
         <div class="item-header">
           <div class="item-title">${o.folio || o.id} · ${o.equipoNombre || ''}</div>
-          <span class="tag ${tag.clase}">${tag.texto}</span>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+            ${o.prioridad ? `<span class="tag tag-prioridad-${o.prioridad}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${o.prioridad}</span>` : ''}
+            <span class="tag ${tag.clase}">${tag.texto}</span>
+          </div>
         </div>
-        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + o.equipoLocalidad + ' · ' : ''}${o.descripcionFalla || ''}</div>
+        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + o.equipoLocalidad + ' · ' : ''}${o.causaFalla ? '[' + o.causaFalla + '] ' : ''}${o.descripcionFalla || ''}</div>
         ${acciones}
       </div>`;
   }).join('');
