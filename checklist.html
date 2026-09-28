@@ -16,6 +16,14 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <!-- Comparación con Maximo/SAP (28 sep 2026): QR por equipo para abrir su
+       checklist directo desde el celular, sin buscarlo en la lista — con 26
+       máquinas de Weaving casi idénticas entre sí, el riesgo de llenar el
+       checklist del equipo equivocado es real. Librería pequeña, sin
+       dependencias, solo para DIBUJAR el QR (no hace falta cámara/escáner:
+       la cámara normal del celular ya reconoce QRs con una URL y ofrece
+       abrirla sola). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        NOTA (17 sep 2026): este archivo es un módulo NUEVO e INDEPENDIENTE
@@ -106,6 +114,14 @@
     .modal-bg .modal .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
     .modal-bg .modal .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
     .modal-bg .modal .modal-actions .btn { width: auto; flex: 1; }
+    /* Al imprimir el QR, se oculta todo lo demás — el usuario pega esta
+       etiqueta en la máquina, así que no debe salir el resto de la app. */
+    @media print {
+      body * { visibility: hidden; }
+      #qr-print-area, #qr-print-area * { visibility: visible; }
+      #qr-print-area { position: fixed; top: 30px; left: 0; right: 0; margin: 0 auto; color: #000; }
+      #qr-equipo-sub, #qr-print-area > div:last-child { color: #000 !important; }
+    }
   </style>
 </head>
 <body>
@@ -222,6 +238,23 @@ BANDA TRANSPORTADORA A	15"></textarea>
       <button class="btn btn-primary" onclick="guardarPuntosEquipo()">💾 Guardar</button>
     </div>
     <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="usarListaGeneralParaEquipo()">↩️ Usar la lista general (quitar la propia)</button>
+  </div>
+</div>
+
+<!-- MODAL: código QR de un equipo — se pega/imprime en la máquina; al
+     escanearlo con la cámara normal del celular abre directo su checklist. -->
+<div class="modal-bg" id="modalQrEquipo">
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <div id="qr-print-area">
+      <h3 id="qr-equipo-nombre" style="margin-bottom:2px;">—</h3>
+      <div id="qr-equipo-sub" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+      <div id="qr-canvas-wrap" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">Escanea con la cámara del celular para abrir el checklist de este equipo directo.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalQrEquipo')">Cerrar</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
   </div>
 </div>
 
@@ -398,6 +431,7 @@ function loadEquipos() {
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderHoy();
     renderConfig();
+    intentarAbrirDesdeQr();
   }, (err) => console.warn('Error leyendo equipos:', err.message));
 }
 
@@ -423,7 +457,10 @@ function itemRowHtml(e, marcarVencido) {
     <div class="item-row${marcarVencido ? ' due' : ''}" onclick="abrirFormChecklist('${e.id}')">
       <div class="item-header">
         <div class="item-title">${e.nombre || '(sin nombre)'}</div>
-        ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
+          <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
+        </div>
       </div>
       <div class="item-sub">${e.localidad ? '📍 ' + e.localidad + ' · ' : ''}${prox}</div>
     </div>`;
@@ -940,6 +977,39 @@ async function guardarPuntosChecklist() {
 // (arriba) un equipo puede tener su propia lista guardada en
 // equipos/{id}.checklistPuntos. Si no la tiene, sigue usando la general —
 // abrirFormChecklist() decide cuál mostrar al llenar el checklist.
+// ══════ QR POR EQUIPO (comparación con Maximo/SAP, 28 sep 2026) ══════
+// La URL codificada en el QR apunta a este mismo archivo con ?equipo=<id> —
+// no hace falta ningún escáner dentro de la app: la cámara normal del
+// celular ya reconoce un QR con una URL y ofrece abrirla directo.
+function mostrarQrEquipo(equipoId, ev) {
+  if (ev) ev.stopPropagation();
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  document.getElementById('qr-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('qr-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  const wrap = document.getElementById('qr-canvas-wrap');
+  wrap.innerHTML = '';
+  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'checklist.html?equipo=' + encodeURIComponent(equipoId);
+  new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  openModalGeneric('modalQrEquipo');
+}
+
+// Si se abre esta página con ?equipo=<id> en la URL (viene de escanear el QR
+// pegado en la máquina), abre directo su formulario de checklist en cuanto
+// los equipos ya cargaron — una sola vez, para no interrumpir si el usuario
+// después navega a otra pantalla.
+let _qrAutoAbrioIntentado = false;
+function intentarAbrirDesdeQr() {
+  if (_qrAutoAbrioIntentado) return;
+  const params = new URLSearchParams(location.search);
+  const equipoId = params.get('equipo');
+  if (!equipoId) return;
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return; // puede que /equipos aún no haya llegado — se reintenta en el próximo snapshot
+  _qrAutoAbrioIntentado = true;
+  abrirFormChecklist(equipoId);
+}
+
 function abrirModalPuntosEquipo(equipoId) {
   const e = currentEquipos.find(x => x.id === equipoId);
   if (!e) return;
@@ -1063,7 +1133,10 @@ function renderConfig() {
         </div>
       </div>
       <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + e.checklistProximaFecha : 'Todavía sin próxima fecha calculada'}</div>
-      ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
+      <div class="row" style="margin-top:10px;gap:8px;">
+        ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="mostrarQrEquipo('${e.id}')">📱 Código QR</button>
+      </div>
     </div>
   `; }).join('');
 }
