@@ -290,12 +290,25 @@ function mostrarHojaDeVida(equipoOrId) {
   // checklist.html) automáticamente, porque ambos escriben los mismos
   // campos en mayúsculas. Se compara con el mismo fallback y la misma
   // normalización (minúsculas + espacios colapsados) que usa
-  // canonEquipo()/normEq() en analisis.html, para que "Hoja de Vida" nunca
-  // muestre menos historial del que ya se ve en Análisis para este equipo.
+  // canonEquipo()/normEq() en analisis.html.
+  //
+  // 28 sep 2026 — caso real detectado con el usuario: en líneas donde el
+  // equipo registrado ES la línea completa (ej. "COATING", que es la única
+  // máquina de la línea/área "Coating"), los técnicos anotan en Bitácora
+  // partes/tareas sueltas ("bomba", "mantenimiento", "1"...) en el campo
+  // Equipo en vez de repetir "COATING" — pero esas OTs sí son de esa
+  // máquina. Por eso ahora también se incluye cualquier OT cuya
+  // LINEA_EQUIPO (el área/línea, campo de un <select> controlado, no texto
+  // libre) coincida con el nombre del equipo — así "Hoja de Vida" nunca
+  // muestra menos que el total real de esa línea en Análisis. En líneas
+  // con muchas máquinas distintas (ej. "Weaving", con 29 telares) esto no
+  // afecta nada, porque el área se llama "Weaving" y ningún equipo se
+  // llama igual que el área — solo coincide cuando, como en Coating, el
+  // área y la máquina comparten el mismo nombre.
   const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
   const nombreNorm = normEq(e.nombre);
   historialActual = currentOts
-    .filter(o => normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm)
+    .filter(o => normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm || normEq(o.LINEA_EQUIPO) === nombreNorm)
     .map(o => ({
       folio: o.Title || o.id,
       fecha: o.FECHA || '',
