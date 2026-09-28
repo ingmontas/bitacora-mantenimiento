@@ -12,6 +12,7 @@ const ASSETS = [
   'bitacora.html',
   'inventario.html',
   'analisis.html',
+  'checklist.html',
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',
