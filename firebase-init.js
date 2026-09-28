@@ -63,7 +63,10 @@ window.fbReady = new Promise((resolve, reject) => {
         try { await auth.signOut(); } catch (e) { /* no hay nada más que hacer aquí */ }
       }
       if (!PUBLIC_PAGES.includes(currentPage)) {
-        const next = encodeURIComponent(currentPage);
+        // Se incluye location.search (no solo el nombre del archivo) para no
+        // perder parámetros como ?equipo=<id> del QR de checklist.html si el
+        // técnico todavía no había iniciado sesión al escanearlo — 28 sep 2026.
+        const next = encodeURIComponent(currentPage + location.search);
         location.href = 'login.html?next=' + next;
       }
       reject(new Error('No hay sesión iniciada'));
