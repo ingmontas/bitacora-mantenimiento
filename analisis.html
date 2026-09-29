@@ -931,14 +931,34 @@ function render(){
   // muestran TODAS las áreas (el orden de mayor a menor no cambia, así que
   // sigue priorizando igual), y el canvas crece de alto según cuántas
   // áreas haya para que quepan sin amontonarse.
-  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]);
+  //
+  // FIX (29 sep 2026, "los gráficos de barra se están moviendo"): esta
+  // pantalla escucha /ots en tiempo real (onSnapshot) y llama render() cada
+  // vez que CUALQUIER OT cambia en toda la planta, aunque no tenga nada que
+  // ver con esta gráfica. Dos causas se combinaban para que las barras
+  // parecieran "moverse solas" sin que Kelvin tocara nada:
+  //   1) Cuando dos áreas empataban en cantidad de correctivos, el orden
+  //      entre ellas dependía del orden en que Firestore entregaba los
+  //      documentos en ESA snapshot en particular — que no está garantizado
+  //      igual entre una entrega y la siguiente sin un orderBy(). Con datos
+  //      idénticos, el empate se podía resolver distinto cada vez y las
+  //      barras empatadas se intercambiaban de posición.
+  //   2) Cada render() destruye y vuelve a crear el gráfico desde cero, así
+  //      que la animación de "crecer desde 0" de Chart.js se repetía en
+  //      cada actualización en tiempo real (cada vez que un técnico guarda
+  //      algo en cualquier parte de la app), no solo la primera vez.
+  // Se agrega un criterio de empate estable (orden alfabético) para que el
+  // orden nunca cambie sin que los datos cambien de verdad, y se apaga la
+  // animación de "crecer" en esta gráfica para que una actualización en
+  // tiempo real no se vea como si las barras estuvieran temblando/moviéndose.
+  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]));
   const chartAreaEl = document.getElementById('chartArea');
   chartAreaEl.style.height = Math.max(230, areaSorted.length * 26) + 'px';
   if(charts.area) charts.area.destroy();
   charts.area = new Chart(chartAreaEl,{
     type:'bar',
     data:{ labels: areaSorted.map(a=>a[0]), datasets:[{ data: areaSorted.map(a=>a[1]), backgroundColor:'#f0a930', borderRadius:4 }]},
-    options:{ indexAxis:'y', maintainAspectRatio:false, onClick:(evt,els)=>{
+    options:{ indexAxis:'y', maintainAspectRatio:false, animation:false, onClick:(evt,els)=>{
       if(!els.length) return;
       const area = areaSorted[els[0].index][0];
       window._selectedArea = (window._selectedArea===area) ? null : area;
@@ -1007,9 +1027,14 @@ function render(){
   // viejas, de antes de ese catálogo, o sin causa marcada quedan fuera del
   // conteo en vez de aparecer como una barra "Sin causa" que no ayuda a
   // priorizar nada.
+  // Mismo criterio de empate estable y misma animación apagada que la
+  // gráfica de "Fallas por área" de arriba, y por la misma razón: con solo
+  // 11 causas posibles, es todavía más fácil que dos causas empaten en
+  // cantidad, y esta gráfica también se reconstruye en cada actualización
+  // en tiempo real de /ots.
   const causaCounts = {};
   scopeRows.forEach(r=>{ if(r.causa) causaCounts[r.causa]=(causaCounts[r.causa]||0)+1; });
-  const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1]);
+  const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]));
   const causaCard = document.getElementById('causaCard');
   const chartCausaEl = document.getElementById('chartCausa');
   if(!causaSorted.length){
@@ -1021,7 +1046,7 @@ function render(){
     charts.causa = new Chart(chartCausaEl,{
       type:'bar',
       data:{ labels: causaSorted.map(c=>c[0]), datasets:[{ data: causaSorted.map(c=>c[1]), backgroundColor:'#3987e5', borderRadius:4 }]},
-      options:{ indexAxis:'y', maintainAspectRatio:false, onClick:(evt,els)=>{
+      options:{ indexAxis:'y', maintainAspectRatio:false, animation:false, onClick:(evt,els)=>{
         if(!els.length) return;
         const causa = causaSorted[els[0].index][0];
         window._selectedCausa = (window._selectedCausa===causa) ? null : causa;
