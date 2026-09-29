@@ -211,7 +211,7 @@
   <div id="detailView" style="display:none;"></div>
 
   <div class="footer-actions">
-    <button class="btn secondary sm" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
+    <button class="btn secondary sm" id="btnListaCompra" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
     <button class="btn secondary sm" onclick="exportData()">⬇ Exportar respaldo (JSON)</button>
     <button class="btn secondary sm" onclick="document.getElementById('importFile').click()">⬆ Importar respaldo</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
@@ -268,6 +268,10 @@
       <div class="form-field full"><label>Uso / dónde se usa</label><input id="rp-uso" placeholder="Ej: POSICIÓN DE CILINDRO"></div>
       <div class="form-field"><label>Stock actual (Qty)</label><input id="rp-qty" type="number" min="0" placeholder="Déjalo vacío si aún no lo cuentas"></div>
       <div class="form-field"><label>Cantidad en máquina</label><input id="rp-cm" type="number" min="0" placeholder="Opcional"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): costo unitario opcional —
+           permite después calcular cuánto cuestan en repuestos las OTs y el
+           valor total del inventario, sin obligar a llenarlo de una vez. -->
+      <div class="form-field"><label>Costo unitario (opcional)</label><input id="rp-precio" type="number" min="0" step="0.01" placeholder="Ej: 25.50"></div>
       <div class="form-field"><label>Mínimo (alerta stock bajo)</label><input id="rp-min" type="number" min="0" placeholder="Ej: 5"></div>
       <div class="form-field"><label>Máximo (tope a comprar)</label><input id="rp-max" type="number" min="0" placeholder="Ej: 30"></div>
       <div class="form-field full">
@@ -329,7 +333,11 @@
       </div>
       <div class="form-field"><label>Cantidad</label><input id="mov-cantidad" type="number" min="1" value="1"></div>
       <div class="form-field"><label>Técnico</label><select id="mov-tecnico"></select></div>
-      <div class="form-field full"><label>Motivo / dónde se usó</label><input id="mov-motivo" placeholder="Ej: Reparación de rodillo, OT-123"></div>
+      <div class="form-field full"><label>Motivo / dónde se usó</label><input id="mov-motivo" placeholder="Ej: Reparación de rodillo"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): folio de OT opcional —
+           si se llena, checklist.html puede sumar el costo de los repuestos
+           consumidos en esa OT (cantidad × costo unitario). -->
+      <div class="form-field full"><label>Folio de OT (opcional)</label><input id="mov-otfolio" placeholder="Ej: OT-0012"></div>
     </div>
     <div class="modal-actions">
       <button class="btn secondary" onclick="closeModal('modalMovimiento')">Cancelar</button>
@@ -418,6 +426,7 @@ function mergeRepuestoInto(list, incoming){
   if(prevQ!=null || addQ!=null) existing.q = (prevQ||0) + (addQ||0);
   ['t','m','d','u'].forEach(k=>{ if(!existing[k] && incoming[k]) existing[k] = incoming[k]; });
   if((existing.cm==null||existing.cm==='') && incoming.cm!=null) existing.cm = incoming.cm;
+  if((existing.pu==null||existing.pu==='') && incoming.pu!=null) existing.pu = incoming.pu;
   if((existing.min==null||existing.min==='') && incoming.min!=null) existing.min = incoming.min;
   if((existing.max==null||existing.max==='') && incoming.max!=null) existing.max = incoming.max;
   if(!existing.img && incoming.img) existing.img = incoming.img;
@@ -791,12 +800,25 @@ async function openEquipo(id){
   repFilter = 'todos';
   partsShown = PARTS_PAGE_SIZE;
   renderDetail(); // DB ya se mantiene al día en vivo por el listener de Firestore
+  updateBtnListaCompra();
 }
 function backHome(){
   currentEquipoId = null;
   document.getElementById('detailView').style.display = 'none';
   document.getElementById('homeView').style.display = 'block';
   renderHome();
+  updateBtnListaCompra();
+}
+// El botón "Lista de compra" vive en el pie de página, fuera de homeView/
+// detailView (visible siempre) — este texto avisa si al tocarlo se va a
+// descargar la lista de TODA la planta o solo del equipo que se está viendo
+// (29 sep 2026: antes descargaba siempre todos los equipos aunque se
+// estuviera dentro de uno solo, y eso confundía).
+function updateBtnListaCompra(){
+  const btn = document.getElementById('btnListaCompra');
+  if(!btn) return;
+  const e = currentEquipoId ? getCurrentEquipo() : null;
+  btn.textContent = e ? `🛒 Lista de compra — ${e.nombre}` : '🛒 Lista de compra (faltantes)';
 }
 
 function getCurrentEquipo(){ return DB.find(e=>e.id===currentEquipoId); }
@@ -922,7 +944,7 @@ function renderPartsTable(){
     return `
       <tr>
         <td>${p.img ? `<img src="${p.img}" class="thumb" onclick="openLightbox('${p.img}')">` : `<div class="thumb-placeholder">📦</div>`}</td>
-        <td class="part-name">${p.r}</td>
+        <td class="part-name">${p.r}${(p.pu!==null && p.pu!==undefined && p.pu!=='') ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
         <td class="part-modelo">${p.t||'—'}</td>
         <td class="part-modelo">${p.m||'—'}</td>
         <td class="part-desc">${p.d||'—'}</td>
@@ -1149,6 +1171,7 @@ function openMovimiento(idx, tipo){
   document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null ? p.q : 'sin contar');
   document.getElementById('mov-cantidad').value = 1;
   document.getElementById('mov-motivo').value = '';
+  document.getElementById('mov-otfolio').value = '';
   if(!document.getElementById('mov-tecnico').options.length) loadTecnicosInventario();
   document.getElementById('mov-tecnico').value = localStorage.getItem('inventario_tecnico_actual') || '';
   setMovTipo(tipo || 'entrada');
@@ -1162,6 +1185,7 @@ async function confirmMovimiento(){
   if(!cant || cant<=0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
   const tecnico = document.getElementById('mov-tecnico').value.trim();
   const motivo = document.getElementById('mov-motivo').value.trim();
+  const otFolio = document.getElementById('mov-otfolio').value.trim();
   if(tecnico) localStorage.setItem('inventario_tecnico_actual', tecnico);
 
   const prevQ = p.q!=null ? parseFloat(p.q) : 0;
@@ -1170,7 +1194,8 @@ async function confirmMovimiento(){
 
   p.q = newQ;
   fbSaveEquipo(e);
-  logMovimiento({ tecnico:tecnico||'—', equipo:e.nombre, repuesto:p.r, tipo:movTipo, cantidad:cant, motivo, quedaEn:newQ });
+  const costoTotal = (movTipo==='salida' && p.pu!=null) ? Number((cant * p.pu).toFixed(2)) : null;
+  logMovimiento({ tecnico:tecnico||'—', equipo:e.nombre, repuesto:p.r, tipo:movTipo, cantidad:cant, motivo, quedaEn:newQ, otFolio: otFolio||null, costoUnitario: p.pu!=null?p.pu:null, costoTotal });
 
   closeModal('modalMovimiento');
   renderDetail();
@@ -1205,7 +1230,7 @@ async function showMovimientos(){
       <td><span class="stock-badge ${m.tipo==='entrada'?'ok':'sin'}">${m.tipo==='entrada'?'📥 Entrada':'📤 Salida'}</span></td>
       <td class="mono">${m.cantidad}</td>
       <td class="mono">${m.quedaEn}</td>
-      <td class="part-desc">${m.motivo||'—'}</td>
+      <td class="part-desc">${m.motivo||'—'}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${m.otFolio}${m.costoTotal!=null?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
     </tr>`).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
 }
 
@@ -1416,12 +1441,13 @@ function openRepuestoModal(idx){
     document.getElementById('rp-uso').value = p.u;
     document.getElementById('rp-qty').value = (p.q===null||p.q===undefined)? '' : p.q;
     document.getElementById('rp-cm').value = (p.cm===null||p.cm===undefined)? '' : p.cm;
+    document.getElementById('rp-precio').value = (p.pu===null||p.pu===undefined)? '' : p.pu;
     document.getElementById('rp-min').value = (p.min===null||p.min===undefined)? '' : p.min;
     document.getElementById('rp-max').value = (p.max===null||p.max===undefined)? '' : p.max;
     if(p.img){ tempImgData = p.img; showImagePreview(p.img); } else { hideImagePreview(); }
   } else {
     title.textContent = '➕ Nuevo repuesto';
-    ['rp-nombre','rp-tipo','rp-modelo','rp-descripcion','rp-uso','rp-qty','rp-cm','rp-min','rp-max'].forEach(id=>document.getElementById(id).value='');
+    ['rp-nombre','rp-tipo','rp-modelo','rp-descripcion','rp-uso','rp-qty','rp-cm','rp-precio','rp-min','rp-max'].forEach(id=>document.getElementById(id).value='');
     hideImagePreview();
   }
   openModal('modalRepuesto');
@@ -1487,6 +1513,7 @@ async function saveRepuesto(){
 
   const qtyRaw = document.getElementById('rp-qty').value.trim();
   const cmRaw = document.getElementById('rp-cm').value.trim();
+  const precioRaw = document.getElementById('rp-precio').value.trim();
   const minRaw = document.getElementById('rp-min').value.trim();
   const maxRaw = document.getElementById('rp-max').value.trim();
   const obj = {
@@ -1497,6 +1524,7 @@ async function saveRepuesto(){
     u: document.getElementById('rp-uso').value.trim(),
     q: qtyRaw==='' ? null : (parseFloat(qtyRaw)||0),
     cm: cmRaw==='' ? null : (parseFloat(cmRaw)||0),
+    pu: precioRaw==='' ? null : (parseFloat(precioRaw)||0),
     min: minRaw==='' ? null : (parseFloat(minRaw)||0),
     max: maxRaw==='' ? null : (parseFloat(maxRaw)||0),
     img: tempImgData || null,
@@ -1665,9 +1693,19 @@ function clearSearch(){
 }
 
 /* ═══════════════ EXPORT / IMPORT ═══════════════ */
+// CORRECCIÓN (29 sep 2026): este botón vive en el pie de página, visible
+// tanto en la vista de "todos los equipos" como dentro del detalle de UNO
+// solo — pero antes exportaba SIEMPRE los repuestos faltantes de TODA la
+// planta, sin importar si el usuario estaba viendo un equipo específico.
+// Ahora, si hay un equipo abierto (currentEquipoId), la lista se limita a
+// ESE equipo — igual que updateBtnListaCompra() ya avisa en el texto del
+// botón. Si no hay ningún equipo abierto (vista general), se comporta
+// igual que siempre: toda la planta.
 function exportFaltantes(){
+  const equipoActual = currentEquipoId ? getCurrentEquipo() : null;
+  const equiposAExportar = equipoActual ? [equipoActual] : DB;
   const rows = [];
-  DB.forEach(e=>{
+  equiposAExportar.forEach(e=>{
     e.repuestos.forEach(p=>{
       const st = stockStatus(p);
       if(st==='sin' || st==='bajo'){
@@ -1675,16 +1713,20 @@ function exportFaltantes(){
       }
     });
   });
-  if(!rows.length){ showToast('✅ No hay repuestos en falta o bajo stock ahora mismo'); return; }
+  if(!rows.length){
+    showToast(equipoActual ? `✅ "${equipoActual.nombre}" no tiene repuestos en falta o bajo stock ahora mismo` : '✅ No hay repuestos en falta o bajo stock ahora mismo');
+    return;
+  }
   let csv = 'Equipo,Repuesto,Modelo,Stock actual,Minimo,Estado\n';
   rows.forEach(r=>{ csv += `"${r.equipo}","${r.repuesto}","${r.modelo}",${r.stock??''},${r.minimo??''},"${r.estado}"\n`; });
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'lista_compra_'+new Date().toISOString().slice(0,10)+'.csv';
+  const sufijoArchivo = equipoActual ? '_' + equipoActual.nombre.replace(/[^a-z0-9]+/gi, '_') : '';
+  a.href = url; a.download = 'lista_compra' + sufijoArchivo + '_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`🛒 Lista de compra exportada (${rows.length} repuestos)`);
+  showToast(`🛒 Lista de compra exportada (${rows.length} repuestos)` + (equipoActual ? ` — solo ${equipoActual.nombre}` : ''));
 }
 
 function exportData(){

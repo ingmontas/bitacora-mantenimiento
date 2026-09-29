@@ -915,12 +915,21 @@ function render(){
   `;
 
   /* ---- chart: fallas por área ---- */
-  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  // ANTES: .slice(0,12) recortaba a las 12 áreas con más correctivos y
+  // descartaba el resto sin avisar — con más de 12 áreas distintas, la suma
+  // de las barras visibles ya no coincidía con el total de "Correctivo" de
+  // la dona de al lado (el usuario lo notó: "no coinciden"). Ahora se
+  // muestran TODAS las áreas (el orden de mayor a menor no cambia, así que
+  // sigue priorizando igual), y el canvas crece de alto según cuántas
+  // áreas haya para que quepan sin amontonarse.
+  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]);
+  const chartAreaEl = document.getElementById('chartArea');
+  chartAreaEl.style.height = Math.max(230, areaSorted.length * 26) + 'px';
   if(charts.area) charts.area.destroy();
-  charts.area = new Chart(document.getElementById('chartArea'),{
+  charts.area = new Chart(chartAreaEl,{
     type:'bar',
     data:{ labels: areaSorted.map(a=>a[0]), datasets:[{ data: areaSorted.map(a=>a[1]), backgroundColor:'#f0a930', borderRadius:4 }]},
-    options:{ indexAxis:'y', onClick:(evt,els)=>{
+    options:{ indexAxis:'y', maintainAspectRatio:false, onClick:(evt,els)=>{
       if(!els.length) return;
       const area = areaSorted[els[0].index][0];
       window._selectedArea = (window._selectedArea===area) ? null : area;
@@ -1840,7 +1849,23 @@ window.fbReady.then(async ()=>{
   }
 
   otsRef.onSnapshot((snap)=>{
-    allRows = snap.docs.map(doc => otRecordToRow(doc.data()));
+    const rows = snap.docs.map(doc => otRecordToRow(doc.data()));
+    // CORRECCIÓN (29 sep 2026): dos documentos de Firestore separados pueden
+    // terminar con el MISMO número de OT (Title) — ej. bitacora.html genera
+    // 'OT-' + Date.now(), y un doble-toque en "Guardar" o un reintento por
+    // mala señal puede crear dos documentos en el mismo milisegundo. Antes
+    // eso los contaba y mostraba dos veces en toda la app (tablas, KPIs,
+    // gráficas, export CSV) — aquí se cuenta solo el PRIMERO de cada número
+    // de OT repetido. Esto NUNCA borra nada de Firestore, solo evita
+    // contar/mostrar dos veces el mismo número de OT en pantalla.
+    const vistos = new Set();
+    allRows = rows.filter(r => {
+      const key = (r.ot || '').trim();
+      if (!key) return true; // sin número de OT: no se puede comparar, se deja pasar
+      if (vistos.has(key)) return false;
+      vistos.add(key);
+      return true;
+    });
     render();
   }, (err)=>{
     console.error('Error escuchando OTs:', err);

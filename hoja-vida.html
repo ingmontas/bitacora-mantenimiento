@@ -226,7 +226,21 @@ function cargarDatos() {
   }, (err) => { console.warn('Error leyendo equipos:', err.message); showToast('Error cargando equipos: ' + err.message, 'error'); });
 
   db.collection('ots').onSnapshot((snap) => {
-    currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // CORRECCIÓN (29 sep 2026) — mismo caso que analisis.html: dos
+    // documentos de Firestore pueden terminar con el mismo número de OT
+    // (Title), ej. por un doble-toque en "Guardar" en Bitácora. Se cuenta
+    // solo el PRIMERO de cada número repetido, para que el total de Hoja
+    // de Vida siga coincidiendo con Análisis (nunca se borra nada de
+    // Firestore, solo se evita mostrarlo/contarlo dos veces aquí).
+    const vistos = new Set();
+    currentOts = docs.filter(o => {
+      const key = (o.Title || o.id || '').trim();
+      if (!key) return true;
+      if (vistos.has(key)) return false;
+      vistos.add(key);
+      return true;
+    });
     setLoading(false);
     if (equipoActual) mostrarHojaDeVida(equipoActual); // refresca si ya hay uno abierto
   }, (err) => { console.warn('Error leyendo ots:', err.message); setLoading(false); showToast('Error cargando historial: ' + err.message, 'error'); });
