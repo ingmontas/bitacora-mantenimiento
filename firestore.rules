@@ -97,7 +97,12 @@ service cloud.firestore {
         request.resource.data.origen == 'operador' &&
         !('TECNICOS' in request.resource.data) &&
         !('TOTAL_MIN_TECNICO' in request.resource.data));
-      allow update: if esSupervisorOMas() || esTecnicoOMas();
+      // (29 sep 2026: "esSupervisorOMas() || esTecnicoOMas()" era lógica
+      // muerta — esTecnicoOMas() ya incluye a Supervisor y a todos los
+      // roles de arriba, así que el || nunca cambiaba el resultado.
+      // Simplificado sin cambiar a quién permite: sigue siendo cualquiera
+      // de Técnico para arriba.)
+      allow update: if esTecnicoOMas();
       allow delete: if esAdmin();
     }
     match /movimientos/{id} {

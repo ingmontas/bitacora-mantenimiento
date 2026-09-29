@@ -214,6 +214,7 @@
   <div class="footer-actions">
     <button class="btn secondary sm" id="btnListaCompra" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
     <button class="btn secondary sm" onclick="exportData()">⬇ Exportar respaldo (JSON)</button>
+    <button class="btn secondary sm" id="btnExportHistorial" style="display:none;" onclick="exportHistorialCompleto()" title="Movimientos de repuestos, reubicaciones y auditoría — hoy no tienen ningún respaldo aparte">⬇ Respaldo de movimientos/reubicaciones/auditoría</button>
     <button class="btn secondary sm" onclick="document.getElementById('importFile').click()">⬆ Importar respaldo</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
   </div>
@@ -683,8 +684,34 @@ function checkEquipoSize(e){
 function fbSaveEquipo(e){
   const { id, ...rest } = e;
   checkEquipoSize(e);
+  const localUpdatedAt = e.updatedAt; // snapshot ANTES de que este guardado cambie updatedAt
   db.collection('equipos').doc(id).set(fbSanitize({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
     .catch(err => { console.error('Error guardando equipo:', err); showToast('⚠️ No se pudo sincronizar: '+err.message); });
+  warnIfEquipoChangedSinceLoad(id, e.nombre, localUpdatedAt);
+}
+
+// (29 sep 2026) Cada guardado de un equipo sube el arreglo COMPLETO de
+// repuestos (y todos sus demás campos), no solo lo que cambió -- así que
+// si dos personas editan el MISMO equipo casi al mismo tiempo (una
+// registrando una entrada de un repuesto, otra agregando uno distinto),
+// el segundo guardado puede sobrescribir sin avisar el cambio del primero.
+// Esta verificación no evita esa sobrescritura de raíz -- evitarla del
+// todo requeriría mover cada repuesto a su propio documento en Firestore
+// en vez de un solo arreglo, un cambio de esquema más grande que se dejó
+// aparte, a propósito, para no migrar datos reales de golpe sin probarlo
+// primero -- pero sí avisa cuando pasó, en vez de que nadie se entere.
+// Nunca bloquea ni retrasa el guardado: es una lectura aparte, en
+// paralelo, que se salta sola si no hay conexión o si algo falla.
+async function warnIfEquipoChangedSinceLoad(equipoId, equipoNombre, localUpdatedAt){
+  if (!navigator.onLine || !localUpdatedAt || typeof localUpdatedAt.toMillis !== 'function') return;
+  try {
+    const remoteSnap = await db.collection('equipos').doc(equipoId).get({ source: 'server' });
+    if (!remoteSnap.exists) return;
+    const remoteUpdatedAt = remoteSnap.data().updatedAt;
+    if (remoteUpdatedAt && typeof remoteUpdatedAt.toMillis === 'function' && remoteUpdatedAt.toMillis() > localUpdatedAt.toMillis()) {
+      showToast(`⚠️ "${equipoNombre}" fue editado por otra persona justo antes de tu guardado — revisa el "🕒 Historial" o "🕵️ Auditoría" de este equipo para confirmar que no se perdió nada.`);
+    }
+  } catch (err) { console.error('No se pudo verificar si el equipo cambió mientras tanto:', err); }
 }
 function fbDeleteEquipoDoc(id){
   return db.collection('equipos').doc(id).delete();
@@ -1260,7 +1287,13 @@ async function confirmMovimiento(){
 // compartido entre todos los celulares — ya no es solo de este dispositivo.
 function logMovimiento(mov){
   db.collection('movimientos').add({ ...mov, fecha: fbTimestamp() })
-    .catch(err => console.error('Error guardando movimiento:', err));
+    .catch(err => {
+      console.error('Error guardando movimiento:', err);
+      // (29 sep 2026) antes esto fallaba en silencio -- el stock ya había
+      // cambiado y se mostraba el toast de éxito, pero si el registro de
+      // "quién lo hizo" no se guardaba, nadie se enteraba nunca.
+      showToast('⚠️ El stock se actualizó, pero no se pudo guardar el registro de movimiento: ' + err.message);
+    });
 }
 
 async function showMovimientos(){
@@ -1305,7 +1338,10 @@ function logReubicacion(equipo, ubicacionAnterior, ubicacionNueva){
     ubicacionNueva: ubicacionNueva || '(sin ubicación)',
     quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
     fecha: fbTimestamp(),
-  }).catch(err => console.error('Error guardando reubicación:', err));
+  }).catch(err => {
+    console.error('Error guardando reubicación:', err);
+    showToast('⚠️ La ubicación se actualizó, pero no se pudo guardar el historial de reubicación: ' + err.message); // (29 sep 2026)
+  });
 }
 
 async function showReubicaciones(){
@@ -1349,7 +1385,10 @@ function logAuditoria(categoria, equipoId, equipoNombre, cambios){
     categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
     quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
     fecha: fbTimestamp(),
-  }).catch(err => console.error('Error guardando auditoría:', err));
+  }).catch(err => {
+    console.error('Error guardando auditoría:', err);
+    showToast('⚠️ El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message); // (29 sep 2026)
+  });
 }
 
 const AUDITORIA_CATEGORIA_LABEL = {
@@ -1885,6 +1924,45 @@ function exportData(){
   URL.revokeObjectURL(url);
   showToast('⬇ Respaldo descargado');
 }
+
+// (29 sep 2026) hasta ahora, /movimientos, /reubicaciones y /auditoria no
+// tenían NINGÚN respaldo exportable -- solo existían dentro de Firebase.
+// Este botón (visible solo para Encargado/Administrador) descarga las tres
+// colecciones completas en un solo archivo JSON, igual patrón que
+// exportData()/exportBackup() de arriba.
+async function exportHistorialCompleto(){
+  showToast('⏳ Generando respaldo de movimientos, reubicaciones y auditoría…');
+  try{
+    await window.fbReady;
+    const [movSnap, reubSnap, audSnap] = await Promise.all([
+      db.collection('movimientos').get(),
+      db.collection('reubicaciones').get(),
+      db.collection('auditoria').get(),
+    ]);
+    const toPlain = (snap) => snap.docs.map(d => {
+      const data = d.data();
+      // fecha puede venir como Timestamp de Firestore -- se convierte a ISO
+      // para que el JSON exportado sea legible fuera de Firebase también.
+      if (data.fecha && typeof data.fecha.toDate === 'function') data.fecha = data.fecha.toDate().toISOString();
+      return { id: d.id, ...data };
+    });
+    const respaldo = {
+      generadoEn: new Date().toISOString(),
+      movimientos: toPlain(movSnap),
+      reubicaciones: toPlain(reubSnap),
+      auditoria: toPlain(audSnap),
+    };
+    const blob = new Blob([JSON.stringify(respaldo, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'respaldo_movimientos_reubicaciones_auditoria_' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`⬇ Respaldo descargado — ${respaldo.movimientos.length} movimientos, ${respaldo.reubicaciones.length} reubicaciones, ${respaldo.auditoria.length} auditorías`);
+  }catch(err){
+    showToast('⚠️ No se pudo generar el respaldo: ' + err.message);
+  }
+}
 function importData(ev){
   const file = ev.target.files[0];
   if(!file) return;
@@ -1952,8 +2030,14 @@ async function initApp(){
   // (mismo criterio que esEncargado() en firestore.rules) — cosmético
   // nada más, la protección real ya está en las reglas.
   window.fbReady.then(()=>{
+    const esEncargadoOMas = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO'));
     const btn = document.getElementById('auditoriaBtn');
-    if (btn) btn.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO')) ? '' : 'none';
+    if (btn) btn.style.display = esEncargadoOMas ? '' : 'none';
+    // (29 sep 2026) mismo criterio de visibilidad que el botón de Auditoría
+    // -- el botón es cosmético, la protección real de lectura ya está en
+    // firestore.rules (esEncargado() para /auditoria).
+    const btnHist = document.getElementById('btnExportHistorial');
+    if (btnHist) btnHist.style.display = esEncargadoOMas ? '' : 'none';
   }).catch(()=>{});
   await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
 }

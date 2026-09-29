@@ -183,6 +183,7 @@
   <div class="screen" id="screen-historial">
     <div class="card-title" style="margin-bottom:4px">📂 Historial de Checklists</div>
     <div class="card-sub" style="margin-bottom:12px">Últimos checklists guardados</div>
+    <button class="btn secondary sm" onclick="exportChecklistsBackup()" style="margin-bottom:12px;" title="Descarga TODO el historial de checklists, no solo los últimos 30 que se ven arriba">⬇ Exportar respaldo completo (JSON)</button>
     <div id="historial-lista"></div>
   </div>
 
@@ -320,6 +321,7 @@ const CHECKLIST_PUNTOS_FALLBACK = [
   'Nivel de aceite/lubricación',
 ];
 let checklistPuntosActuales = CHECKLIST_PUNTOS_FALLBACK.slice(); // lista general en uso (Firestore u respaldo)
+let checklistPuntosActualizadoEn = null; // (29 sep 2026) para poder avisar si alguien más la cambió mientras se estaba editando -- ver warnIfDocChangedSinceLoad()
 
 // ══════ CAUSAS DE FALLA Y PRIORIDAD (comparación con Maximo/SAP, 28 sep 2026) ══════
 // Mismo catálogo fijo de causas que bitacora.html (lista corta, no editable
@@ -396,6 +398,34 @@ function showToast(msg, type) {
 function setLoading(on, texto) {
   document.getElementById('loading-text').textContent = texto || 'Guardando...';
   document.getElementById('loading').classList.toggle('show', !!on);
+}
+
+// (29 sep 2026) hasta ahora checklist.html no tenía ningún botón de
+// respaldo -- solo bitacora.html/inventario.html/analisis.html lo tenían.
+// La pantalla de Historial solo guarda en memoria los últimos 30
+// (.limit(30) en el listener de arriba), así que este botón hace su propia
+// consulta completa, sin límite, para que el respaldo sea de verdad
+// completo, no solo de lo que se ve en pantalla.
+async function exportChecklistsBackup(){
+  showToast('⏳ Generando respaldo completo de checklists…');
+  try{
+    await window.fbReady;
+    const snap = await db.collection('checklists').orderBy('createdAt', 'desc').get();
+    const rows = snap.docs.map(d => {
+      const data = d.data();
+      if (data.createdAt && typeof data.createdAt.toDate === 'function') data.createdAt = data.createdAt.toDate().toISOString();
+      return { id: d.id, ...data };
+    });
+    const blob = new Blob([JSON.stringify({ generadoEn: new Date().toISOString(), checklists: rows }, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'respaldo_checklists_' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`⬇ Respaldo descargado — ${rows.length} checklists`);
+  }catch(err){
+    showToast('⚠️ No se pudo generar el respaldo: ' + err.message, 'error');
+  }
 }
 
 function todayStr() {
@@ -703,7 +733,11 @@ async function generarFolio() {
     });
     return 'OT-' + String(nuevo).padStart(4, '0');
   } catch (e) {
-    return 'OT-PEND-' + Date.now().toString().slice(-6);
+    // Folio provisional sin conexión (29 sep 2026): se le agrega un sufijo
+    // aleatorio corto además del milisegundo — dos celulares sin señal al
+    // mismo tiempo (ej. un apagón de wifi en toda la planta) ya no generan
+    // el mismo folio "OT-PEND-xxxxxx" solo por coincidir en el milisegundo.
+    return 'OT-PEND-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
   }
 }
 
@@ -999,6 +1033,7 @@ function loadChecklistPuntos() {
   db.collection('config').doc('checklistPuntos').onSnapshot((snap) => {
     const data = snap.exists ? snap.data() : null;
     checklistPuntosActuales = (data && Array.isArray(data.puntos) && data.puntos.length) ? data.puntos : CHECKLIST_PUNTOS_FALLBACK.slice();
+    checklistPuntosActualizadoEn = (data && data.actualizadoEn) ? data.actualizadoEn : null;
     if (puntosEditState === null) puntosEditState = checklistPuntosActuales.slice(); // solo la primera vez, para no pisar una edición en curso
     renderConfigPuntos();
   }, (err) => console.warn('Error leyendo config/checklistPuntos:', err.message));
@@ -1054,12 +1089,33 @@ function sincronizarPuntosEditDesdeInputs() {
   });
 }
 
+// (29 sep 2026) Los puntos de checklist (esta lista general, y la de cada
+// equipo en guardarPuntosEquipo() más abajo) se guardan reemplazando el
+// arreglo completo -- si dos personas los editan casi al mismo tiempo, el
+// segundo guardado puede sobrescribir sin avisar el cambio del primero.
+// Esto no evita esa sobrescritura de raíz (se edita poco, así que el
+// riesgo real es bajo), pero al menos avisa cuando pasó en vez de que
+// nadie se entere -- nunca bloquea ni retrasa el guardado, es una
+// verificación aparte, en paralelo, que se salta sola si no hay conexión.
+async function warnIfDocChangedSinceLoad(ref, localTimestamp, mensaje){
+  if (!navigator.onLine || !localTimestamp || typeof localTimestamp.toMillis !== 'function') return;
+  try {
+    const snap = await ref.get({ source: 'server' });
+    if (!snap.exists) return;
+    const remoteTimestamp = snap.data().updatedAt || snap.data().actualizadoEn;
+    if (remoteTimestamp && typeof remoteTimestamp.toMillis === 'function' && remoteTimestamp.toMillis() > localTimestamp.toMillis()) {
+      showToast(mensaje, 'warn');
+    }
+  } catch (err) { console.error('No se pudo verificar cambios recientes:', err); }
+}
+
 async function guardarPuntosChecklist() {
   sincronizarPuntosEditDesdeInputs();
   const limpios = puntosEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
   if (!limpios.length) { showToast('Agrega al menos un punto', 'warn'); return; }
   const antes = (checklistPuntosActuales || []).join(' | ');
   const despues = limpios.join(' | ');
+  const localActualizadoEn = checklistPuntosActualizadoEn; // snapshot ANTES de este guardado
   try {
     await db.collection('config').doc('checklistPuntos').set({ puntos: limpios, actualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '', actualizadoEn: fbTimestamp() });
     // Auditoría (29 sep 2026): esta lista es general (no de un equipo en
@@ -1070,6 +1126,8 @@ async function guardarPuntosChecklist() {
     }
     puntosEditState = limpios.slice();
     showToast('Lista de puntos guardada ✅');
+    warnIfDocChangedSinceLoad(db.collection('config').doc('checklistPuntos'), localActualizadoEn,
+      '⚠️ Otra persona había cambiado la lista general de puntos justo antes de tu guardado — revisa que quedó como querías.');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1193,6 +1251,7 @@ async function guardarPuntosEquipo() {
   const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
   const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : '(usaba la lista general)';
   const despues = limpios.join(' | ');
+  const localUpdatedAt = equipoActual && equipoActual.updatedAt; // snapshot ANTES de este guardado
   try {
     await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
     if (antes !== despues) {
@@ -1202,6 +1261,8 @@ async function guardarPuntosEquipo() {
     showToast('Puntos guardados para este equipo ✅');
     refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, limpios);
     closeModalGeneric('modalPuntosEquipo');
+    warnIfDocChangedSinceLoad(db.collection('equipos').doc(puntosEquipoEditId), localUpdatedAt,
+      `⚠️ "${equipoActual ? equipoActual.nombre : 'Este equipo'}" fue editado por otra persona justo antes de tu guardado — revisa que no se haya perdido ningún cambio.`);
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1317,7 +1378,10 @@ function logAuditoria(categoria, equipoId, equipoNombre, cambios){
     categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
     quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
     fecha: fbTimestamp(),
-  }).catch(err => console.error('Error guardando auditoría:', err));
+  }).catch(err => {
+    console.error('Error guardando auditoría:', err);
+    showToast('⚠️ El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message, 'warn'); // (29 sep 2026)
+  });
 }
 
 async function guardarFrecuencia(equipoId) {

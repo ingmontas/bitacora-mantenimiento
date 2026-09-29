@@ -400,6 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPlantas();
   loadAreas();
   loadLineas();
+  loadEquiposCanonicos();
   renderCausasOptions('');
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
@@ -775,15 +776,52 @@ function updateHeaderStatus() {
   icon.onclick = () => goTo('config', document.querySelectorAll('.nav-btn')[3]);
 }
 
+// (29 sep 2026) El campo Equipo es texto libre a propósito — a diferencia
+// de checklist.html/reportar.html, que sí obligan a elegir de /equipos,
+// aquí se necesita poder anotar algo aunque todavía no esté cargado en
+// Inventario. Pero el texto libre puro fragmenta el MTBF en Análisis:
+// "Weaving 5", "weaving5" y "Weaving  5" contaban como 3 equipos distintos.
+// Se agrega /equipos como fuente de nombres CANÓNICOS (los mismos que usa
+// Inventario/Checklist), y normalizarNombreEquipo() en submitForm() corrige
+// en silencio cualquier variante de mayúsculas/espacios que coincida con
+// uno ya cargado — sin bloquear ni cambiar cómo se escribe, solo evita que
+// la misma máquina quede partida en varios nombres por un typo de forma.
+let _equiposCanonicos = []; // [{nombre, localidad}] desde /equipos
+function loadEquiposCanonicos() {
+  window.fbReady.then(() => {
+    db.collection('equipos').onSnapshot((snap) => {
+      _equiposCanonicos = snap.docs.map(d => ({ nombre: d.data().nombre || '', localidad: d.data().localidad || '' })).filter(e => e.nombre);
+      updateEquipoDatalist();
+    }, (err) => console.warn('No se pudo leer /equipos (solo afecta las sugerencias de nombre, no bloquea nada):', err.message));
+  }).catch(() => {});
+}
+// (29 sep 2026) OJO: se quitan TODOS los espacios (no solo se colapsan a
+// uno) para que "Weaving 5" y "weaving5" (sin espacio) coincidan en la
+// misma clave -- ese es justo el ejemplo real que motivó este arreglo.
+function normEqKey(s) { return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ''); }
+function normalizarNombreEquipo(valorTipeado) {
+  const key = normEqKey(valorTipeado);
+  if (!key) return valorTipeado;
+  const canon = _equiposCanonicos.find(e => normEqKey(e.nombre) === key);
+  return canon ? canon.nombre : valorTipeado; // si no hay match, se deja tal como se escribió (equipo nuevo, aún no cargado en Inventario)
+}
+
 // Sugiere equipos ya usados (mismo Área) para evitar que el mismo equipo quede
 // registrado con nombres distintos ("Weaving #17" vs "weaving 17") — eso rompe
 // el cálculo de MTBF en Análisis porque cada variante cuenta como un equipo
-// aparte. No obliga a elegir de la lista, solo autocompleta.
+// aparte. No obliga a elegir de la lista, solo autocompleta. Los nombres
+// canónicos de /equipos (29 sep 2026) van primero, para que la sugerencia
+// que se ve al escribir sea la forma correcta, no la primera variante que
+// alguien haya tipeado antes.
 function updateEquipoDatalist() {
   const dl = document.getElementById('equipo-list');
   if (!dl) return;
   const linea = document.getElementById('f-linea')?.value;
   const vistos = new Set();
+  _equiposCanonicos.forEach(e => {
+    if (linea && e.localidad && e.localidad !== linea) return;
+    vistos.add(e.nombre.trim());
+  });
   allRecords.forEach(r => {
     if (!r.EQUIPO) return;
     if (linea && r.LINEA_EQUIPO !== linea) return;
@@ -928,7 +966,7 @@ async function submitForm() {
     LINEA_EQUIPO: linea,
     LINEA: sublinea,
     TIPO_MAQUINA: document.getElementById('f-tipo-maq').value.trim(),
-    EQUIPO: document.getElementById('f-equipo').value.trim(),
+    EQUIPO: normalizarNombreEquipo(document.getElementById('f-equipo').value.trim()), // (29 sep 2026) corrige en silencio variantes de mayúsculas/espacios de un equipo ya cargado en Inventario
     PIEZA: document.getElementById('f-pieza').value.trim(),
     CAUSA_FALLA: document.getElementById('f-causa').value,
     DESCRIPCION_FALLA: falla,
@@ -1059,7 +1097,10 @@ function loadStats() {
 
   const byLinea = {};
   data.forEach(r => { const k = r.LINEA_EQUIPO||'?'; byLinea[k]=(byLinea[k]||0)+1; });
-  const top = Object.entries(byLinea).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  // Desempate estable (29 sep 2026, mismo bug corregido en analisis.html):
+  // sin el localeCompare, dos áreas empatadas en cantidad podían
+  // intercambiar de posición solas en cada actualización en tiempo real.
+  const top = Object.entries(byLinea).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,6);
   if (top.length) {
     document.getElementById('lineas-card').style.display = 'block';
     const max = top[0][1];

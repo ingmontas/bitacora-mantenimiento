@@ -358,7 +358,10 @@ async function generarFolio() {
     });
     return 'OT-' + String(nuevo).padStart(4, '0');
   } catch (e) {
-    return 'OT-PEND-' + Date.now().toString().slice(-6);
+    // Mismo fix que checklist.html (29 sep 2026): sufijo aleatorio extra
+    // para que dos celulares sin señal al mismo tiempo no generen el mismo
+    // folio provisional solo por coincidir en el milisegundo.
+    return 'OT-PEND-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
   }
 }
 </script>
