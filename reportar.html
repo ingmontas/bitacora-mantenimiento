@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Reportar Falla"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Reportar Falla — Mantenimiento 2026</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       ROL OPERADOR (29 sep 2026) — página NUEVA e INDEPENDIENTE.
+       Cualquier trabajador de planta (no solo técnicos) puede reportar
+       que un equipo falló, sin pasar por el flujo completo de Bitácora —
+       la misma diferencia que hay en Maximo/SAP entre una "notificación"
+       (cualquiera la crea) y una "orden de trabajo" (el planificador la
+       arma). Aquí solo se elige el equipo y se describe la falla; un
+       Encargado/Técnico la planifica después desde Checklist → "OTs por
+       Planificar", exactamente como ya pasa con las fallas detectadas en
+       un checklist.
+
+       A propósito esta página NO se agrega a la barra de navegación
+       compartida (fbMiniNav): el rol Operador no tiene permiso de lectura
+       para Bitácora/Inventario/Análisis/Checklist/Hoja de Vida (solo
+       puede leer /equipos y crear en /ots), así que mostrarle esos
+       enlaces solo lo llevaría a pantallas con error de permisos. Se
+       llega aquí por un enlace directo o un código QR pegado en la
+       planta — igual estilo visual que el resto de la app.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    #header h1 { font-size: 16px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #sp-status { font-size: 20px; cursor: pointer; }
+    #content { padding: 14px 14px 40px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+    .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+    .field { margin-bottom: 13px; }
+    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    textarea { resize: vertical; min-height: 90px; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .btn:active { opacity: .8; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
+    .btn[disabled] { opacity: .5; cursor: default; }
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
+    .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
+    .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .toggle-row { display: flex; gap: 6px; }
+    .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .toggle-btn.sel-alta { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
+    .toggle-btn.sel-media { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .toggle-btn.sel-baja { border-color: var(--green); background: #10B98118; color: var(--green); }
+    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error { background: var(--red); }
+    #toast.warn { background: var(--orange); }
+    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading.show { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .item-row { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); cursor: pointer; }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 8px; }
+    .item-title { font-weight: 700; font-size: 14px; }
+    .item-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+    .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .empty p { font-size: 14px; line-height: 1.6; }
+    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; display: none; }
+    #offline-bar.show { display: block; }
+    .exito-wrap { text-align: center; padding: 30px 10px; }
+    .exito-wrap .emoji { font-size: 56px; display: block; margin-bottom: 14px; }
+    .exito-wrap h2 { font-size: 19px; margin-bottom: 8px; }
+    .exito-wrap p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 4px; }
+    .exito-wrap .folio { font-size: 22px; font-weight: 800; color: var(--accent); margin: 14px 0; }
+  </style>
+</head>
+<body>
+
+<div id="offline-bar">📵 Sin conexión — el reporte se guardará en cuanto vuelva la señal</div>
+
+<div id="header">
+  <div>
+    <h1>🚨 Reportar Falla</h1>
+    <small id="header-sub">2026 · Cargando...</small>
+  </div>
+  <div id="sp-status" title="Estado de conexión">⚙️</div>
+</div>
+
+<div id="content">
+
+  <!-- SCREEN: ELEGIR EQUIPO -->
+  <div class="screen active" id="screen-elegir">
+    <div class="card">
+      <div class="card-title">🚨 Reportar una falla</div>
+      <div class="card-sub">Elige el equipo que falló. Un encargado o técnico planificará el trabajo después.</div>
+      <input type="text" id="buscar-equipo" placeholder="Buscar equipo..." oninput="renderListaEquipos()" style="margin-bottom:10px;"/>
+      <div id="lista-equipos"></div>
+    </div>
+  </div>
+
+  <!-- SCREEN: DESCRIBIR FALLA -->
+  <div class="screen" id="screen-form">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div class="card-title" id="rf-equipo-nombre">—</div>
+          <div class="card-sub" id="rf-equipo-sub" style="margin-bottom:0;">—</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="cerrarForm()">✕ Cambiar</button>
+      </div>
+      <div class="field" style="margin-top:14px;">
+        <label>¿Qué le pasa al equipo?</label>
+        <textarea id="rf-descripcion" placeholder="Describe la falla: qué se ve, se oye o se siente raro..."></textarea>
+      </div>
+      <div class="field">
+        <label>¿Qué tan urgente es?</label>
+        <div class="toggle-row" id="rf-prioridad-grid">
+          <button type="button" class="toggle-btn" data-pr="alta" onclick="setPrioridad('alta')">🔴 Alta</button>
+          <button type="button" class="toggle-btn sel-media" data-pr="media" onclick="setPrioridad('media')">🟡 Media</button>
+          <button type="button" class="toggle-btn" data-pr="baja" onclick="setPrioridad('baja')">🟢 Baja</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Tu nombre</label>
+        <input type="text" id="rf-nombre" placeholder="¿Quién reporta?"/>
+      </div>
+      <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()">🚨 Reportar falla</button>
+    </div>
+  </div>
+
+  <!-- SCREEN: CONFIRMACIÓN -->
+  <div class="screen" id="screen-exito">
+    <div class="card">
+      <div class="exito-wrap">
+        <span class="emoji">✅</span>
+        <h2>Reporte enviado</h2>
+        <p>Un encargado o técnico lo va a planificar pronto.</p>
+        <div class="folio" id="exito-folio">—</div>
+        <p id="exito-equipo" style="margin-bottom:20px;">—</p>
+        <button class="btn btn-primary" onclick="nuevoReporte()">➕ Reportar otra falla</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<div id="loading"><div class="spinner"></div><div id="loading-text" style="font-size:13px;color:var(--muted)">Enviando...</div></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// REPORTAR FALLA (rol Operador) — página nueva e independiente (29 sep 2026)
+//
+// Qué hace:
+//  1. Cualquier usuario con rol OPERADOR (o superior) elige un equipo de
+//     /equipos, escribe qué le pasa y opcionalmente su nombre y prioridad.
+//  2. Al enviar, crea una OT en /ots con exactamente la misma forma que
+//     usa checklist.html para las fallas detectadas en un checklist
+//     (mismo generarFolio(), mismos campos: estado 'pendiente', sin
+//     técnico ni tiempo trabajado) — así aparece automáticamente en
+//     Checklist → "OTs por Planificar" sin tocar ese código.
+//  3. Se agrega origen:'operador' (en vez de 'checklist') para poder
+//     distinguir de dónde vino cada OT en el historial/análisis.
+//  4. firestore.rules exige que estos campos vengan así para el rol
+//     OPERADOR — esta página nunca intenta escribir TECNICOS ni
+//     TOTAL_MIN_TECNICO, así que siempre cumple esa regla.
+// ══════════════════════════════════════════════════════════════════════
+
+let currentEquipos = [];       // desde /equipos (onSnapshot)
+let equipoSeleccionado = null; // {id, nombre, localidad}
+let prioridadSeleccionada = 'media';
+
+document.addEventListener('DOMContentLoaded', () => {
+  window.fbReady.then(() => {
+    document.getElementById('header-sub').textContent =
+      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
+    // Nota a propósito: NO se llama fbRenderMiniNav() aquí — el rol
+    // Operador no tiene permiso de lectura para las otras pantallas
+    // (Bitácora/Inventario/Análisis/Checklist/Hoja de Vida), así que esos
+    // enlaces solo lo llevarían a pantallas con error de permisos.
+    loadEquipos();
+    updateHeaderStatus();
+    // Si llega desde un QR con ?equipo=<id>, salta directo al formulario.
+    const qEquipo = new URLSearchParams(location.search).get('equipo');
+    if (qEquipo) intentarAbrirDesdeQuery(qEquipo);
+  }).catch((err) => {
+    console.warn('Sin sesión activa:', err.message);
+  });
+
+  window.addEventListener('online', updateHeaderStatus);
+  window.addEventListener('offline', updateHeaderStatus);
+});
+
+function updateHeaderStatus() {
+  const bar = document.getElementById('offline-bar');
+  const icon = document.getElementById('sp-status');
+  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
+  else { bar.classList.add('show'); icon.textContent = '📵'; }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function setLoading(on, texto) {
+  document.getElementById('loading-text').textContent = texto || 'Enviando...';
+  document.getElementById('loading').classList.toggle('show', !!on);
+}
+
+function goToScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ══════ EQUIPOS (colección compartida con el resto de la app) ══════
+let equipoQueryPendiente = null;
+function loadEquipos() {
+  db.collection('equipos').orderBy('nombre').onSnapshot((snap) => {
+    currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderListaEquipos();
+    if (equipoQueryPendiente) {
+      const pend = equipoQueryPendiente;
+      equipoQueryPendiente = null;
+      intentarAbrirDesdeQuery(pend);
+    }
+  }, (err) => {
+    console.warn('Error leyendo equipos:', err.message);
+    document.getElementById('lista-equipos').innerHTML =
+      `<div class="empty"><span class="emoji">⚠️</span><p>No se pudo cargar la lista de equipos. Verifica tu conexión o pide ayuda a un administrador.</p></div>`;
+  });
+}
+
+function intentarAbrirDesdeQuery(equipoId) {
+  if (!currentEquipos.length) { equipoQueryPendiente = equipoId; return; }
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (e) abrirForm(e.id);
+}
+
+function renderListaEquipos() {
+  const busca = (document.getElementById('buscar-equipo').value || '').trim().toLowerCase();
+  const wrap = document.getElementById('lista-equipos');
+  const filtrados = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  wrap.innerHTML = filtrados.length ? filtrados.map(e => `
+    <div class="item-row" onclick="abrirForm('${e.id}')">
+      <div class="item-header">
+        <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+      </div>
+      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad : ''}</div>
+    </div>`).join('') :
+    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
+}
+
+// ══════ FORMULARIO ══════
+function abrirForm(equipoId) {
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  equipoSeleccionado = e;
+  document.getElementById('rf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('rf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  document.getElementById('rf-descripcion').value = '';
+  document.getElementById('rf-nombre').value = (window.currentUserRole && window.currentUserRole.nombre) || '';
+  setPrioridad('media');
+  goToScreen('screen-form');
+}
+
+function cerrarForm() {
+  equipoSeleccionado = null;
+  goToScreen('screen-elegir');
+}
+
+function setPrioridad(pr) {
+  prioridadSeleccionada = pr;
+  document.querySelectorAll('#rf-prioridad-grid .toggle-btn').forEach(b => {
+    b.classList.remove('sel-alta', 'sel-media', 'sel-baja');
+    if (b.dataset.pr === pr) b.classList.add('sel-' + pr);
+  });
+}
+
+async function enviarReporte() {
+  if (!equipoSeleccionado) return;
+  const descripcion = (document.getElementById('rf-descripcion').value || '').trim();
+  if (!descripcion) { showToast('Describe qué le pasa al equipo', 'warn'); return; }
+  const nombreReporta = (document.getElementById('rf-nombre').value || '').trim();
+
+  setLoading(true, 'Enviando reporte...');
+  try {
+    const folio = await generarFolio();
+    await db.collection('ots').doc().set({
+      origen: 'operador',
+      estado: 'pendiente',
+      folio: folio,
+      equipoId: equipoSeleccionado.id,
+      equipoNombre: equipoSeleccionado.nombre || '',
+      equipoLocalidad: equipoSeleccionado.localidad || '',
+      descripcionFalla: descripcion,
+      prioridad: prioridadSeleccionada,
+      checklistId: null,
+      asignadoA: null,
+      fechaPlanificada: null,
+      creadoPor: nombreReporta || (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
+      createdAt: fbTimestamp(),
+    });
+
+    setLoading(false);
+    document.getElementById('exito-folio').textContent = folio;
+    document.getElementById('exito-equipo').textContent = equipoSeleccionado.nombre || '';
+    goToScreen('screen-exito');
+  } catch (e) {
+    setLoading(false);
+    showToast('Error al enviar: ' + e.message, 'error');
+  }
+}
+
+function nuevoReporte() {
+  equipoSeleccionado = null;
+  document.getElementById('buscar-equipo').value = '';
+  renderListaEquipos();
+  goToScreen('screen-elegir');
+}
+
+// ══════ FOLIO DE OT (OT-0001, OT-0002...) — mismo patrón que checklist.html ══════
+async function generarFolio() {
+  try {
+    const ref = db.collection('config').doc('otFolioCounter');
+    const nuevo = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const actual = (snap.exists && typeof snap.data().ultimo === 'number') ? snap.data().ultimo : 0;
+      const siguiente = actual + 1;
+      tx.set(ref, { ultimo: siguiente }, { merge: true });
+      return siguiente;
+    });
+    return 'OT-' + String(nuevo).padStart(4, '0');
+  } catch (e) {
+    return 'OT-PEND-' + Date.now().toString().slice(-6);
+  }
+}
+</script>
+</body>
+</html>

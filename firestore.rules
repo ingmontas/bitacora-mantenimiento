@@ -28,6 +28,16 @@ service cloud.firestore {
     function esSupervisorOMas()   { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR']); }
     function esTecnicoOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO']); }
     function esAlmacenOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','ALMACEN']); }
+    // Rol Operador (29 sep 2026): cualquier trabajador de planta, NO solo
+    // técnicos, necesita poder reportar una falla desde su celular sin
+    // pasar por el flujo completo de Bitácora — igual que la diferencia
+    // Maximo/SAP entre "notificación" (cualquiera) y "orden de trabajo"
+    // (planificador/técnico). Operador es el rol MÁS restringido de todos:
+    // solo puede leer /equipos (para elegir cuál falló) y crear una OT
+    // "pendiente" con datos mínimos — no puede leer la cola de OTs, ni
+    // checklists, ni análisis, ni nada más.
+    function esOperadorOMas() { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','OPERADOR']); }
+    function esOperador()     { return tieneRol(['OPERADOR']); }
     match /usuarios/{uid} {
       allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
       allow write: if esAdmin();
@@ -45,7 +55,9 @@ service cloud.firestore {
     // es intencional: Firestore permite ambas reglas y usa la más permisiva
     // solo para este documento puntual; /config/app sigue protegido igual
     // que antes.
-    match /config/otFolioCounter { allow read, write: if esTecnicoOMas(); }
+    // Operador también necesita generar folio (OT-0001...) al reportar una
+    // falla — mismo contador que usan Checklist y Bitácora.
+    match /config/otFolioCounter { allow read, write: if esOperadorOMas(); }
     // /checklists: el técnico llena y guarda el checklist de un equipo
     // (create); solo Encargado/Admin puede corregir uno ya guardado
     // (update), y borrarlo queda reservado a Admin, igual que el resto.
@@ -67,13 +79,24 @@ service cloud.firestore {
     // esTecnicoOMas() para no romper el uso diario; borrar el equipo
     // completo sigue reservado a esAdmin().
     match /equipos/{id} {
-      allow read: if esTecnicoOMas();
+      // Operador necesita ver la lista de equipos para elegir cuál falló
+      // (solo lectura — crear/editar/borrar equipos sigue igual que antes).
+      allow read: if esOperadorOMas();
       allow create, update: if esTecnicoOMas();
       allow delete: if esAdmin();
     }
     match /ots/{id} {
+      // Operador NO puede leer la cola de OTs (esTecnicoOMas() se queda
+      // igual) — solo crear una nueva, y solo con forma restringida: sin
+      // técnico ni tiempo trabajado (eso lo llena Encargado/Técnico al
+      // planificarla), estado fijo en "pendiente" y origen "operador" para
+      // distinguirla en el historial.
       allow read: if esTecnicoOMas();
-      allow create: if esTecnicoOMas();
+      allow create: if esTecnicoOMas() || (esOperador() &&
+        request.resource.data.estado == 'pendiente' &&
+        request.resource.data.origen == 'operador' &&
+        !('TECNICOS' in request.resource.data) &&
+        !('TOTAL_MIN_TECNICO' in request.resource.data));
       allow update: if esSupervisorOMas() || esTecnicoOMas();
       allow delete: if esAdmin();
     }
