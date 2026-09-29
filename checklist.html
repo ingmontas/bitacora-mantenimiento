@@ -166,6 +166,10 @@
         </div>
         <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()">📝 Agregar/editar puntos de este equipo</button>
         <div id="cf-puntos"></div>
+        <div class="field" id="cf-horometro-field" style="display:none;">
+          <label>Lectura actual del horómetro (horas)</label>
+          <input type="number" min="0" id="cf-horometro" placeholder="ej: 1250"/>
+        </div>
         <div class="field">
           <label>Quién lo hizo</label>
           <div class="tec-grid" id="cf-tec-grid"></div>
@@ -187,6 +191,18 @@
     <div class="card-title" style="margin-bottom:4px">🛠 OTs por Planificar</div>
     <div class="card-sub" style="margin-bottom:12px">Generadas automáticamente cuando un checklist marca "Falla"</div>
     <div id="ots-lista"></div>
+  </div>
+
+  <!-- SCREEN: HORÓMETRO (29 sep 2026) — mantenimiento por horas de uso, no
+       solo por días calendario. Solo aparecen aquí los equipos que un
+       Encargado/Admin activó desde Config → "⏱ Horómetro" de ese equipo.
+       Cualquiera con acceso al checklist puede anotar la lectura actual sin
+       tener que abrir el checklist completo — igual de rápido que pasar y
+       apuntar el número en la máquina. -->
+  <div class="screen" id="screen-horometro">
+    <div class="card-title" style="margin-bottom:4px">⏱ Horómetro</div>
+    <div class="card-sub" style="margin-bottom:12px">Anota la lectura actual de las máquinas que se revisan por horas de uso, no por días</div>
+    <div id="horometro-lista"></div>
   </div>
 
   <!-- SCREEN: CONFIG -->
@@ -262,6 +278,7 @@ BANDA TRANSPORTADORA A	15"></textarea>
   <button class="nav-btn active" onclick="goTo('hoy',this)"><span>🔔</span>Hoy</button>
   <button class="nav-btn" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
   <button class="nav-btn" onclick="goTo('ots',this)"><span>🛠</span>OTs</button>
+  <button class="nav-btn" id="nav-btn-horometro" style="display:none;" onclick="goTo('horometro',this)"><span>⏱</span>Horómetro</button>
   <button class="nav-btn" onclick="goTo('config',this)"><span>⚙️</span>Config</button>
 </nav>
 
@@ -431,8 +448,40 @@ function loadEquipos() {
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderHoy();
     renderConfig();
+    renderHorometro();
     intentarAbrirDesdeQr();
+    // El tab "⏱ Horómetro" en la barra inferior solo se muestra si algún
+    // equipo lo tiene activado (29 sep 2026) — para no mostrar una pantalla
+    // vacía a plantas donde nadie usa mantenimiento por horas todavía.
+    const navBtnHorometro = document.getElementById('nav-btn-horometro');
+    if (navBtnHorometro) navBtnHorometro.style.display = currentEquipos.some(e => e.checklistFrecuenciaHoras) ? '' : 'none';
   }, (err) => console.warn('Error leyendo equipos:', err.message));
+}
+
+// ══════ MANTENIMIENTO POR HORÓMETRO (29 sep 2026) ══════
+// Además de la frecuencia por días (calendario), un equipo puede tener una
+// frecuencia por horas de uso (checklistFrecuenciaHoras) — pensado para
+// máquinas como el montacargas o el compresor de aire, donde lo que importa
+// es cuánto ha trabajado, no cuántos días han pasado. Un equipo puede tener
+// una, la otra, ninguna o ambas activas a la vez (el que se cumpla primero
+// lo marca "vencido"); esto lo activa Encargado/Admin equipo por equipo
+// desde Config, igual que ya se hace con los puntos propios (10.3).
+//
+// horometroActual: la última lectura conocida de la máquina (se actualiza
+// desde el checklist o desde la pantalla "⏱ Horómetro").
+// horometroUltimoService: la lectura que tenía la máquina quando se hizo el
+// último checklist — el "cero" desde el que se cuentan las horas para el
+// próximo servicio. Se reinicia cada vez que se guarda un checklist de ese
+// equipo (igual patrón que checklistUltimaFecha/checklistProximaFecha).
+function horasDesdeUltimoServicio(e) {
+  if (!e.checklistFrecuenciaHoras) return null;
+  const actual = Number(e.horometroActual) || 0;
+  const base = Number(e.horometroUltimoService) || 0;
+  return actual - base;
+}
+function horometroVencido(e) {
+  const horas = horasDesdeUltimoServicio(e);
+  return horas !== null && horas >= e.checklistFrecuenciaHoras;
 }
 
 function renderHoy() {
@@ -440,7 +489,9 @@ function renderHoy() {
   const hoy = todayStr();
   const busca = (document.getElementById('hoy-buscar').value || '').trim().toLowerCase();
 
-  const vencidos = currentEquipos.filter(e => e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoy));
+  const vencidos = currentEquipos.filter(e =>
+    (e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoy)) || horometroVencido(e)
+  );
   const wrapV = document.getElementById('hoy-vencidos');
   wrapV.innerHTML = vencidos.length ? vencidos.map(e => itemRowHtml(e, true)).join('') :
     `<div class="empty" style="padding:20px 10px;"><span class="emoji">✅</span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
@@ -453,6 +504,13 @@ function renderHoy() {
 
 function itemRowHtml(e, marcarVencido) {
   const prox = e.checklistProximaFecha ? 'Próxima: ' + e.checklistProximaFecha : (e.checklistFrecuenciaDias ? 'Próxima: hoy' : 'Sin frecuencia configurada');
+  let horometroTxt = '';
+  if (e.checklistFrecuenciaHoras) {
+    const horas = horasDesdeUltimoServicio(e);
+    horometroTxt = horometroVencido(e)
+      ? ` · ⏱ Vencido por horómetro (${horas}/${e.checklistFrecuenciaHoras} h)`
+      : ` · ⏱ ${horas}/${e.checklistFrecuenciaHoras} h`;
+  }
   return `
     <div class="item-row${marcarVencido ? ' due' : ''}" onclick="abrirFormChecklist('${e.id}')">
       <div class="item-header">
@@ -462,7 +520,7 @@ function itemRowHtml(e, marcarVencido) {
           <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
         </div>
       </div>
-      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad + ' · ' : ''}${prox}</div>
+      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad + ' · ' : ''}${prox}${horometroTxt}</div>
     </div>`;
 }
 
@@ -483,6 +541,19 @@ function abrirFormChecklist(equipoId) {
 
   const btnEditarPuntos = document.getElementById('cf-btn-editar-puntos');
   if (btnEditarPuntos) btnEditarPuntos.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR')) ? '' : 'none';
+
+  // Si este equipo usa mantenimiento por horómetro, se pide la lectura
+  // actual en el mismo formulario — ya que de todas formas alguien está
+  // parado frente a la máquina haciendo el checklist.
+  const campoHorometro = document.getElementById('cf-horometro-field');
+  const inputHorometro = document.getElementById('cf-horometro');
+  if (e.checklistFrecuenciaHoras) {
+    campoHorometro.style.display = '';
+    inputHorometro.value = e.horometroActual ?? '';
+  } else {
+    campoHorometro.style.display = 'none';
+    inputHorometro.value = '';
+  }
 
   document.getElementById('hoy-lista-wrap').style.display = 'none';
   document.getElementById('checklist-form-wrap').style.display = 'block';
@@ -536,6 +607,18 @@ async function submitChecklist() {
   const tecnicos = getSelectedTecsFrom('cf-tec-grid');
   if (!tecnicos.length) { showToast('Selecciona quién hizo el checklist', 'warn'); return; }
 
+  // Si el equipo usa horómetro, la lectura es obligatoria — sin ella no se
+  // puede reiniciar el conteo de horas para el próximo servicio.
+  let lecturaHorometro = null;
+  if (equipoSeleccionado.checklistFrecuenciaHoras) {
+    const val = document.getElementById('cf-horometro').value;
+    lecturaHorometro = Number(val);
+    if (val === '' || isNaN(lecturaHorometro) || lecturaHorometro < 0) {
+      showToast('Escribe la lectura actual del horómetro', 'warn');
+      return;
+    }
+  }
+
   setLoading(true, 'Guardando checklist...');
   const hoy = todayStr();
   const fallas = itemsFormState.filter(it => it.resultado === 'falla');
@@ -556,11 +639,18 @@ async function submitChecklist() {
     });
 
     // Actualiza la próxima fecha del equipo si tiene frecuencia configurada
+    // (por días y/o por horómetro — un equipo puede tener las dos a la vez).
+    const actualizacionEquipo = {};
     if (equipoSeleccionado.checklistFrecuenciaDias) {
-      await db.collection('equipos').doc(equipoSeleccionado.id).set({
-        checklistUltimaFecha: hoy,
-        checklistProximaFecha: addDaysStr(hoy, equipoSeleccionado.checklistFrecuenciaDias),
-      }, { merge: true });
+      actualizacionEquipo.checklistUltimaFecha = hoy;
+      actualizacionEquipo.checklistProximaFecha = addDaysStr(hoy, equipoSeleccionado.checklistFrecuenciaDias);
+    }
+    if (lecturaHorometro !== null) {
+      actualizacionEquipo.horometroActual = lecturaHorometro;
+      actualizacionEquipo.horometroUltimoService = lecturaHorometro; // reinicia el conteo de horas
+    }
+    if (Object.keys(actualizacionEquipo).length) {
+      await db.collection('equipos').doc(equipoSeleccionado.id).set(actualizacionEquipo, { merge: true });
     }
 
     // Por cada punto en "Falla", crea una OT pendiente para planificar
@@ -752,6 +842,11 @@ function renderOts() {
         </div>
         <div class="item-sub">${o.equipoLocalidad ? '📍 ' + o.equipoLocalidad + ' · ' : ''}${o.causaFalla ? '[' + o.causaFalla + '] ' : ''}${o.descripcionFalla || ''}</div>
         ${acciones}
+        ${o.folio ? `
+        <div style="margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="verCostoRepuestosOt('${o.folio}','${o.id}')">💰 Ver costo de repuestos</button>
+          <div id="costo-ot-${o.id}" class="item-sub" style="margin-top:6px;"></div>
+        </div>` : ''}
       </div>`;
   }).join('');
 }
@@ -977,6 +1072,32 @@ async function guardarPuntosChecklist() {
 // (arriba) un equipo puede tener su propia lista guardada en
 // equipos/{id}.checklistPuntos. Si no la tiene, sigue usando la general —
 // abrirFormChecklist() decide cuál mostrar al llenar el checklist.
+// ══════ COSTO DE REPUESTOS POR OT (comparación con Maximo/SAP, 28 sep 2026) ══════
+// Lee /movimientos (misma colección que usa inventario.html para entradas/
+// salidas de stock) filtrando por el folio de esta OT. Solo cuenta las
+// salidas que tenían costo unitario cargado en Inventario — si un repuesto
+// no tiene precio, se avisa cuántos quedaron fuera en vez de mostrar un
+// total incompleto como si fuera el real.
+async function verCostoRepuestosOt(folio, otId) {
+  const el = document.getElementById('costo-ot-' + otId);
+  if (!el) return;
+  el.textContent = 'Buscando repuestos de esta OT...';
+  try {
+    const snap = await db.collection('movimientos').where('otFolio', '==', folio).get();
+    const movs = snap.docs.map(d => d.data()).filter(m => m.tipo === 'salida');
+    if (!movs.length) {
+      el.textContent = 'Sin repuestos registrados con este folio todavía (se cargan desde Inventario → Movimiento → Folio de OT).';
+      return;
+    }
+    let total = 0, sinPrecio = 0;
+    movs.forEach(m => { if (m.costoTotal != null) total += m.costoTotal; else sinPrecio++; });
+    el.innerHTML = `📦 ${movs.length} repuesto(s) · Total: $${total.toFixed(2)}` +
+      (sinPrecio ? ` <span style="color:var(--accent)">(${sinPrecio} sin costo unitario cargado)</span>` : '');
+  } catch (e) {
+    el.textContent = 'Error al buscar: ' + e.message;
+  }
+}
+
 // ══════ QR POR EQUIPO (comparación con Maximo/SAP, 28 sep 2026) ══════
 // La URL codificada en el QR apunta a este mismo archivo con ?equipo=<id> —
 // no hace falta ningún escáner dentro de la app: la cámara normal del
@@ -1111,12 +1232,13 @@ function renderConfig() {
     wrap.innerHTML = '';
     return;
   }
-  info.innerHTML = `<div class="info-box">Escribe cada cuántos días se debe revisar el equipo y toca "Guardar". Un equipo sin frecuencia no aparece en "Hoy te toca", pero se puede revisar manualmente cuando quieras.</div>`;
+  info.innerHTML = `<div class="info-box">Escribe cada cuántos días se debe revisar el equipo y toca "Guardar". Un equipo sin frecuencia no aparece en "Hoy te toca", pero se puede revisar manualmente cuando quieras. También puedes activar "⏱ Horómetro" en un equipo puntual (ej. montacargas, compresor de aire) para que además se revise por horas de uso, no solo por días.</div>`;
 
   const puedeEditarPuntosEquipo = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
 
   wrap.innerHTML = currentEquipos.map(e => {
     const tienePersonalizados = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length > 0;
+    const usaHorometro = !!e.checklistFrecuenciaHoras;
     return `
     <div class="item-row" style="cursor:default;">
       <div class="item-header" style="margin-bottom:8px;">
@@ -1133,6 +1255,26 @@ function renderConfig() {
         </div>
       </div>
       <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + e.checklistProximaFecha : 'Todavía sin próxima fecha calculada'}</div>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <label>⏱ Horómetro ${usaHorometro ? '<span class="tag tag-planificada" style="margin-left:4px;">Activado</span>' : ''}</label>
+        <div class="row" style="margin-top:4px;">
+          <div class="field" style="margin-bottom:0;">
+            <label style="text-transform:none;font-weight:400;color:var(--muted);">Frecuencia (horas)</label>
+            <input type="number" min="1" id="cfg-horas-${e.id}" value="${e.checklistFrecuenciaHoras || ''}" placeholder="ej: 250"/>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label style="text-transform:none;font-weight:400;color:var(--muted);">Lectura actual</label>
+            <input type="number" min="0" id="cfg-lectura-${e.id}" value="${e.horometroActual ?? ''}" placeholder="ej: 1200"/>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="guardarHorometroConfig('${e.id}')">💾 ${usaHorometro ? 'Actualizar' : 'Activar'} horómetro</button>
+          ${usaHorometro ? `<button class="btn btn-secondary btn-sm" onclick="desactivarHorometro('${e.id}')">✕ Desactivar</button>` : ''}
+        </div>
+        ${usaHorometro ? `<div class="item-sub" style="margin-top:6px;">${horasDesdeUltimoServicio(e)}/${e.checklistFrecuenciaHoras} h desde el último servicio</div>` : ''}
+      </div>
+
       <div class="row" style="margin-top:10px;gap:8px;">
         ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="mostrarQrEquipo('${e.id}')">📱 Código QR</button>
@@ -1150,6 +1292,94 @@ async function guardarFrecuencia(equipoId) {
       checklistProximaFecha: addDaysStr(todayStr(), dias),
     }, { merge: true });
     showToast('Frecuencia guardada ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// Activa o recalibra el horómetro de un equipo (Encargado/Admin, misma
+// pantalla que la frecuencia por días). A diferencia de la lectura que se
+// pide en el propio checklist, aquí SÍ se reinicia el conteo de horas
+// (horometroUltimoService = la lectura escrita) — es la forma de decirle
+// al sistema "a partir de esta hora empieza a contar de nuevo", útil tanto
+// para activarlo la primera vez como para corregirlo si alguien se equivocó.
+async function guardarHorometroConfig(equipoId) {
+  const horas = Number(document.getElementById('cfg-horas-' + equipoId).value || 0);
+  const lecturaInput = document.getElementById('cfg-lectura-' + equipoId).value;
+  const lectura = Number(lecturaInput);
+  if (!horas || horas < 1) { showToast('Escribe una frecuencia en horas válida', 'warn'); return; }
+  if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe la lectura actual del horómetro', 'warn'); return; }
+  try {
+    await db.collection('equipos').doc(equipoId).set({
+      checklistFrecuenciaHoras: horas,
+      horometroActual: lectura,
+      horometroUltimoService: lectura,
+    }, { merge: true });
+    showToast('Horómetro activado ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function desactivarHorometro(equipoId) {
+  if (!confirm('¿Quitar el mantenimiento por horómetro de este equipo? Sigue funcionando por días si tiene frecuencia configurada.')) return;
+  try {
+    await db.collection('equipos').doc(equipoId).update({
+      checklistFrecuenciaHoras: firebase.firestore.FieldValue.delete(),
+      horometroActual: firebase.firestore.FieldValue.delete(),
+      horometroUltimoService: firebase.firestore.FieldValue.delete(),
+    });
+    showToast('Horómetro desactivado ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ PANTALLA "⏱ HORÓMETRO" — actualizar solo la lectura, abierta a ══════
+// cualquiera con acceso al checklist (no solo Encargado/Admin), para que
+// cualquiera que pase por la máquina pueda anotar el número sin tener que
+// hacer el checklist completo. A diferencia de guardarHorometroConfig(),
+// esto NUNCA reinicia horometroUltimoService — solo actualiza la lectura
+// actual, así que si ya se pasó de las horas configuradas, el equipo
+// aparece "vencido" en Hoy hasta que alguien le haga el checklist.
+function renderHorometro() {
+  const wrap = document.getElementById('horometro-lista');
+  if (!wrap) return;
+  const equiposConHorometro = currentEquipos.filter(e => e.checklistFrecuenciaHoras);
+  if (!equiposConHorometro.length) {
+    wrap.innerHTML = `<div class="empty" style="padding:20px 10px;"><span class="emoji">⏱</span><p>Ningún equipo tiene horómetro activado todavía. Se activa por equipo desde "⚙️ Config".</p></div>`;
+    return;
+  }
+  wrap.innerHTML = equiposConHorometro.map(e => {
+    const vencido = horometroVencido(e);
+    const horas = horasDesdeUltimoServicio(e);
+    return `
+    <div class="item-row" style="cursor:default;">
+      <div class="item-header">
+        <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+        ${vencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
+      </div>
+      <div class="item-sub" style="margin-bottom:8px;">${horas}/${e.checklistFrecuenciaHoras} h desde el último servicio</div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <label>Lectura actual</label>
+          <input type="number" min="0" id="hm-lectura-${e.id}" value="${e.horometroActual ?? ''}"/>
+        </div>
+        <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="guardarLecturaHorometro('${e.id}')">💾 Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function guardarLecturaHorometro(equipoId) {
+  const lecturaInput = document.getElementById('hm-lectura-' + equipoId).value;
+  const lectura = Number(lecturaInput);
+  if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe una lectura válida', 'warn'); return; }
+  try {
+    await db.collection('equipos').doc(equipoId).set({ horometroActual: lectura }, { merge: true });
+    showToast('Lectura guardada ✅');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
