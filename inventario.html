@@ -181,6 +181,7 @@
       <span class="icon">🔍</span>
       <input type="text" id="globalSearch" placeholder="Buscar repuesto en TODOS los equipos… (nombre, modelo, descripción)">
     </div>
+    <button class="btn secondary sm" id="auditoriaBtn" style="display:none;" onclick="openAuditoria()" title="Quién cambió qué en los datos maestros (equipo, frecuencia, puntos de checklist)">🕵️ Auditoría</button>
     <button class="btn secondary sm" id="pinBtn" onclick="configurePin()" title="Proteger la eliminación con una clave">🔒 Clave</button>
     <button class="btn secondary sm" id="refreshBtn" onclick="refreshFromServer()" title="Confirmar que estás al día (la sincronización ya es automática)">🔄 Actualizar</button>
     <button class="btn secondary sm" id="syncStatusBtn" onclick="openConfigModal()" title="Estado de la conexión a Firebase">⚪ Conectando…</button>
@@ -343,6 +344,36 @@
       <button class="btn secondary" onclick="closeModal('modalMovimiento')">Cancelar</button>
       <button class="btn" onclick="confirmMovimiento()">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: historial de reubicaciones (29 sep 2026) -->
+<div class="modal-bg" id="modalReubicaciones">
+  <div class="modal" style="max-width:700px;">
+    <h3>🧭 Historial de reubicaciones</h3>
+    <div class="modal-sub" id="reubHistSub"></div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Ubicación anterior</th><th>Ubicación nueva</th><th>Quién</th></tr></thead>
+        <tbody id="reubHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalReubicaciones')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal: auditoría de cambios en datos maestros (29 sep 2026, solo Encargado/Admin) -->
+<div class="modal-bg" id="modalAuditoria">
+  <div class="modal" style="max-width:920px;">
+    <h3>🕵️ Auditoría de cambios</h3>
+    <div class="modal-sub">Quién cambió qué en los datos maestros (datos del equipo, frecuencia de checklist, puntos de checklist) — últimos 200 registros, de más reciente a más antiguo.</div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Quién</th><th>Categoría</th><th>Equipo</th><th>Qué cambió</th></tr></thead>
+        <tbody id="audHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalAuditoria')">Cerrar</button></div>
   </div>
 </div>
 
@@ -865,6 +896,7 @@ function renderDetail(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
         <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
+        <button class="btn secondary sm" onclick="showReubicaciones()">🧭 Reubicaciones</button>
         <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
         <button class="btn secondary sm" onclick="findAndMergeDuplicates()">🧹 Buscar duplicados</button>
         <button class="btn secondary sm" onclick="deleteEquipo()">🗑 Eliminar equipo</button>
@@ -1079,8 +1111,25 @@ async function saveEquipo(){
     madein: document.getElementById('eq-madein').value.trim(),
   };
 
+  // Etiquetas legibles para la auditoría — mismas claves que `datos` arriba.
+  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in' };
+
   if(editingEquipoId){
     const e = DB.find(x=>x.id===editingEquipoId);
+    // Reubicación (29 sep 2026): si cambió la Localidad, se guarda como un
+    // renglón aparte ANTES de sobrescribir — ver logReubicacion() arriba.
+    if((e.localidad||'') !== (datos.localidad||'')){
+      logReubicacion(e, e.localidad, datos.localidad);
+    }
+    // Auditoría (29 sep 2026): se compara cada campo del formulario contra
+    // su valor anterior y solo se registran los que de verdad cambiaron.
+    const cambios = [];
+    Object.keys(datos).forEach(k=>{
+      const antes = e[k] || '';
+      const despues = datos[k] || '';
+      if(antes !== despues) cambios.push({ campo: EQ_FIELD_LABELS[k]||k, anterior: antes, nuevo: despues });
+    });
+    logAuditoria('especificaciones_equipo', e.id, e.nombre, cambios);
     Object.assign(e, datos);
     fbSaveEquipo(e);
     closeModal('modalEquipo');
@@ -1093,6 +1142,11 @@ async function saveEquipo(){
   const ref = db.collection('equipos').doc(); // id generado localmente, sin esperar al servidor
   const nuevo = { id: ref.id, ...datos, repuestos: [] };
   fbSaveEquipo(nuevo);
+  // Reubicación: un equipo nuevo con Localidad ya asignada cuenta como su
+  // "instalación inicial" en el historial (arranca desde "sin ubicación").
+  if(datos.localidad){
+    logReubicacion(nuevo, '', datos.localidad);
+  }
   DB.push(nuevo);
   closeModal('modalEquipo');
   EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
@@ -1232,6 +1286,99 @@ async function showMovimientos(){
       <td class="mono">${m.quedaEn}</td>
       <td class="part-desc">${m.motivo||'—'}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${m.otFolio}${m.costoTotal!=null?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
     </tr>`).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
+}
+
+// ═══════════════ REUBICACIÓN DE EQUIPO ENTRE ÁREAS (29 sep 2026) ═══════════════
+// Antes, cambiar la "Localidad" de un equipo en "✏️ Editar datos" simplemente
+// sobrescribía el valor — no quedaba ningún rastro de que el equipo estuvo
+// antes en otra área, cuándo se movió, ni quién lo hizo (comparación con
+// Maximo/SAP, sección 12.3 #7: esos sistemas guardan cada instalación/
+// reubicación/desmontaje, no solo la ubicación actual). Se guarda cada
+// cambio en su propia colección compartida ("reubicaciones"), mismo patrón
+// que "movimientos" arriba — nunca se borra ni se sobrescribe, solo se
+// agrega un renglón nuevo por cambio. Ver saveEquipo() para dónde se llama.
+function logReubicacion(equipo, ubicacionAnterior, ubicacionNueva){
+  db.collection('reubicaciones').add({
+    equipoId: equipo.id,
+    equipo: equipo.nombre,
+    ubicacionAnterior: ubicacionAnterior || '(sin ubicación)',
+    ubicacionNueva: ubicacionNueva || '(sin ubicación)',
+    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    fecha: fbTimestamp(),
+  }).catch(err => console.error('Error guardando reubicación:', err));
+}
+
+async function showReubicaciones(){
+  const e = getCurrentEquipo();
+  document.getElementById('reubHistSub').textContent = `Cargando historial de "${e.nombre}"…`;
+  document.getElementById('reubHistBody').innerHTML = '';
+  openModal('modalReubicaciones');
+  await window.fbReady;
+  let log = [];
+  try{
+    const snap = await db.collection('reubicaciones').where('equipoId','==', e.id).limit(200).get();
+    log = snap.docs.map(d=>d.data());
+    log.sort((a,b)=> (b.fecha?.toMillis?.()||0) - (a.fecha?.toMillis?.()||0));
+  }catch(err){ showToast('⚠️ No se pudo cargar el historial: '+err.message); }
+  document.getElementById('reubHistSub').textContent = log.length
+    ? `${log.length} cambio(s) de ubicación registrados para "${e.nombre}".`
+    : `"${e.nombre}" no ha cambiado de ubicación desde que se activó este registro (29 sep 2026) — los cambios de antes de esa fecha no quedaron guardados.`;
+  document.getElementById('reubHistBody').innerHTML = log.length ? log.map(m=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${m.ubicacionAnterior}</td>
+      <td>${m.ubicacionNueva}</td>
+      <td>${m.quien}</td>
+    </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="big">📭</div>Sin reubicaciones registradas todavía.</div></td></tr>`;
+}
+
+// ═══════════════ AUDITORÍA DE CAMBIOS EN DATOS MAESTROS (29 sep 2026) ═══════════════
+// Comparación con Maximo/SAP, sección 12.3 #9: hoy editar los datos de un
+// equipo (o su frecuencia/puntos de checklist, en checklist.html) sobrescribe
+// el documento sin dejar ningún rastro de quién lo cambió ni qué tenía antes.
+// Se guarda un renglón por cada edición REAL (solo los campos que de verdad
+// cambiaron, nunca la lista completa, para no generar ruido) en la colección
+// compartida "auditoria" — de solo-creación por firestore.rules (nunca se
+// puede editar ni borrar un renglón ya escrito, para que el rastro sea
+// confiable). checklist.html escribe aquí también, para las otras dos
+// categorías (frecuencia y puntos de checklist) — por eso el visor de abajo
+// vive en Inventario pero muestra las tres.
+function logAuditoria(categoria, equipoId, equipoNombre, cambios){
+  if(!cambios || !cambios.length) return; // nada cambió de verdad -- no generar ruido
+  db.collection('auditoria').add({
+    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
+    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    fecha: fbTimestamp(),
+  }).catch(err => console.error('Error guardando auditoría:', err));
+}
+
+const AUDITORIA_CATEGORIA_LABEL = {
+  especificaciones_equipo: '🔧 Datos del equipo',
+  frecuencia_checklist: '🗓 Frecuencia de checklist',
+  puntos_checklist_general: '📝 Puntos de checklist (lista general)',
+  puntos_checklist_equipo: '📝 Puntos de checklist (propios del equipo)',
+};
+
+async function openAuditoria(){
+  document.getElementById('audHistBody').innerHTML = '';
+  openModal('modalAuditoria');
+  await window.fbReady;
+  let log = [];
+  try{
+    const snap = await db.collection('auditoria').orderBy('fecha','desc').limit(200).get();
+    log = snap.docs.map(d=>d.data());
+  }catch(err){
+    document.getElementById('audHistBody').innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="big">🔒</div>No se pudo cargar — esto es solo para Encargado/Administrador. (${err.message})</div></td></tr>`;
+    return;
+  }
+  document.getElementById('audHistBody').innerHTML = log.length ? log.map(m=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${m.quien}</td>
+      <td>${AUDITORIA_CATEGORIA_LABEL[m.categoria]||m.categoria}</td>
+      <td>${m.equipoNombre||'—'}</td>
+      <td>${(m.cambios||[]).map(c=>`<div style="margin-bottom:2px;"><b>${c.campo}</b>: <span style="color:var(--muted);">${c.anterior||'—'}</span> → ${c.nuevo||'—'}</div>`).join('')}</td>
+    </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><div class="big">📭</div>Sin cambios registrados todavía.</div></td></tr>`;
 }
 
 /* ═══════════════ CARGA MASIVA (pegar tabla) ═══════════════ */
@@ -1801,6 +1948,13 @@ async function initApp(){
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   loadTecnicosInventario();
   loadAreasParaEquipos();
+  // Auditoría (29 sep 2026): botón visible solo para Encargado/Administrador
+  // (mismo criterio que esEncargado() en firestore.rules) — cosmético
+  // nada más, la protección real ya está en las reglas.
+  window.fbReady.then(()=>{
+    const btn = document.getElementById('auditoriaBtn');
+    if (btn) btn.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO')) ? '' : 'none';
+  }).catch(()=>{});
   await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
 }
 async function refreshFromServer(){

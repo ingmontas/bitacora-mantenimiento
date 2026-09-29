@@ -206,6 +206,7 @@
             <th>Técnico(s)</th>
             <th>Paro planta</th>
             <th>Paro máq. (min)</th>
+            <th>Causa</th>
             <th>Descripción de falla</th>
             <th>Solución aplicada</th>
           </tr>
@@ -234,6 +235,12 @@
     <h2>Tendencia semanal de correctivos</h2>
     <div class="cardsub">Volumen de fallas correctivas por semana — una línea ascendente sostenida anticipa saturación del equipo de mantenimiento</div>
     <canvas id="chartTrend" height="110"></canvas>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;" id="causaCard">
+    <h2>Causas de falla más comunes</h2>
+    <div class="cardsub">Solo cuenta las OTs con causa registrada (catálogo fijo de Bitácora/Checklist) — haz clic en una barra para filtrar todo el panel a esa causa.</div>
+    <canvas id="chartCausa" height="230"></canvas>
   </div>
 
   <div class="card" style="margin-bottom:16px;">
@@ -872,6 +879,8 @@ function render(){
   const extraLabels = [];
   if(selTipo){ scopeRows = scopeRows.filter(r => (r.tipoMant||'Sin clasificar') === selTipo); extraLabels.push('Tipo: ' + selTipo); }
   if(selSemana){ scopeRows = scopeRows.filter(r => r.semana === selSemana); extraLabels.push('Semana ' + selSemana); }
+  const selCausa = window._selectedCausa;
+  if(selCausa){ scopeRows = scopeRows.filter(r => r.causa === selCausa); extraLabels.push('Causa: ' + selCausa); }
 
   window._scopeRows = scopeRows; // expuesto para exportAnalisisCSV(): exporta lo que está filtrado en pantalla
 
@@ -991,6 +1000,39 @@ function render(){
       datalabels:{ display:true, align:'top', offset:6, color:'#f0a930', font:{family:'IBM Plex Mono',size:10,weight:'600'}, formatter:(v)=>v }
     }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true} } }
   });
+
+  /* ---- chart: causas de falla más comunes (29 sep 2026) ---- */
+  // Solo se cuentan las OTs que traen causa registrada (bitacora.html y
+  // checklist.html la piden desde el catálogo fijo de 11 causas) — las OTs
+  // viejas, de antes de ese catálogo, o sin causa marcada quedan fuera del
+  // conteo en vez de aparecer como una barra "Sin causa" que no ayuda a
+  // priorizar nada.
+  const causaCounts = {};
+  scopeRows.forEach(r=>{ if(r.causa) causaCounts[r.causa]=(causaCounts[r.causa]||0)+1; });
+  const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1]);
+  const causaCard = document.getElementById('causaCard');
+  const chartCausaEl = document.getElementById('chartCausa');
+  if(!causaSorted.length){
+    causaCard.style.display = 'none';
+  } else {
+    causaCard.style.display = '';
+    chartCausaEl.style.height = Math.max(230, causaSorted.length * 28) + 'px';
+    if(charts.causa) charts.causa.destroy();
+    charts.causa = new Chart(chartCausaEl,{
+      type:'bar',
+      data:{ labels: causaSorted.map(c=>c[0]), datasets:[{ data: causaSorted.map(c=>c[1]), backgroundColor:'#3987e5', borderRadius:4 }]},
+      options:{ indexAxis:'y', maintainAspectRatio:false, onClick:(evt,els)=>{
+        if(!els.length) return;
+        const causa = causaSorted[els[0].index][0];
+        window._selectedCausa = (window._selectedCausa===causa) ? null : causa;
+        render();
+      }, onHover:(evt,els)=>{ evt.native.target.style.cursor = els.length? 'pointer':'default'; },
+      plugins:{
+        legend:{display:false},
+        datalabels:{ display:true, anchor:'end', align:'end', color:'#e6ebf1', font:{family:'IBM Plex Mono',size:11,weight:'600'}, formatter:(v)=>v }
+      }, scales:{ x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'}}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}} } }
+    });
+  }
 
   /* ---- predictive analysis by equipo ---- */
   const groups = {};
@@ -1505,6 +1547,7 @@ function renderHistoryAndReco(mode, label, historyRows, predictive, selArea, sel
       ${mode!=='tecnico'? `<td>${r.tecnicos||'—'}</td>` : ''}
       <td class="numcell">${(r.paroPlanta||'').toLowerCase()==='si'? 'Sí' : 'No'}</td>
       <td class="numcell">${r.minMaquina||0}</td>
+      <td style="color:var(--muted);">${r.causa||'—'}</td>
       <td style="max-width:220px;">${r.falla||'—'}</td>
       <td style="max-width:220px;color:var(--muted);">${r.solucion||'—'}</td>
     </tr>
@@ -1518,7 +1561,7 @@ function renderHistoryAndReco(mode, label, historyRows, predictive, selArea, sel
     ${mode==='tecnico'? '<th>Área</th><th>Equipo</th>' : ''}
     <th>Tipo</th>
     ${mode!=='tecnico'? '<th>Técnico(s)</th>' : ''}
-    <th>Paro planta</th><th>Paro máq. (min)</th><th>Descripción de falla</th><th>Solución aplicada</th>
+    <th>Paro planta</th><th>Paro máq. (min)</th><th>Causa</th><th>Descripción de falla</th><th>Solución aplicada</th>
   `;
 
   /* ---- recomendación basada en buenas prácticas de confiabilidad ---- */
@@ -1785,6 +1828,11 @@ function otRecordToRow(doc){
     paroPlanta: doc.PARO_PLANTA || '', tecnicos: doc.TECNICOS || '',
     minMaquina: Number(doc.TOTAL_MIN_MAQUINA) || 0, minTecnico: Number(doc.TOTAL_MIN_TECNICO) || 0,
     falla: doc.DESCRIPCION_FALLA || '', solucion: doc.DESCRIPCION_SOLUCION || '',
+    // Causa de falla estructurada (29 sep 2026, reporte de "causa más común"):
+    // bitacora.html la guarda como CAUSA_FALLA (mayúsculas, catálogo fijo de
+    // 11 causas); las OTs que nacen de un checklist la guardan como
+    // causaFalla (minúsculas, mismo catálogo) — se aceptan ambas.
+    causa: doc.CAUSA_FALLA || doc.causaFalla || '',
     // Tiempo de respuesta de trabajo preventivo nacido de un checklist (Checklist →
     // OT → revisión → cierre): desde que se creó la OT hasta que se cerró. Solo
     // existe en OTs cerradas desde checklist.html — para las demás queda null.

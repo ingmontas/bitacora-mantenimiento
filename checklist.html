@@ -1058,8 +1058,16 @@ async function guardarPuntosChecklist() {
   sincronizarPuntosEditDesdeInputs();
   const limpios = puntosEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
   if (!limpios.length) { showToast('Agrega al menos un punto', 'warn'); return; }
+  const antes = (checklistPuntosActuales || []).join(' | ');
+  const despues = limpios.join(' | ');
   try {
     await db.collection('config').doc('checklistPuntos').set({ puntos: limpios, actualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '', actualizadoEn: fbTimestamp() });
+    // Auditoría (29 sep 2026): esta lista es general (no de un equipo en
+    // particular), así que equipoId/equipoNombre quedan en null a propósito.
+    if (antes !== despues) {
+      logAuditoria('puntos_checklist_general', null, null,
+        [{ campo: 'Lista general de puntos', anterior: antes || '(vacía)', nuevo: despues }]);
+    }
     puntosEditState = limpios.slice();
     showToast('Lista de puntos guardada ✅');
   } catch (e) {
@@ -1182,8 +1190,15 @@ async function guardarPuntosEquipo() {
   sincronizarPuntosEquipoEditDesdeInputs();
   const limpios = puntosEquipoEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
   if (!limpios.length) { showToast('Agrega al menos un punto, o usa "Usar la lista general"', 'warn'); return; }
+  const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : '(usaba la lista general)';
+  const despues = limpios.join(' | ');
   try {
     await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
+    if (antes !== despues) {
+      logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
+        [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: despues }]);
+    }
     showToast('Puntos guardados para este equipo ✅');
     refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, limpios);
     closeModalGeneric('modalPuntosEquipo');
@@ -1194,8 +1209,14 @@ async function guardarPuntosEquipo() {
 
 async function usarListaGeneralParaEquipo() {
   if (!puntosEquipoEditId) return;
+  const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : null;
   try {
     await db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() });
+    if (antes){
+      logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
+        [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: '(vuelve a usar la lista general)' }]);
+    }
     showToast('Este equipo vuelve a usar la lista general ✅');
     refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, checklistPuntosActuales);
     closeModalGeneric('modalPuntosEquipo');
@@ -1283,14 +1304,38 @@ function renderConfig() {
   `; }).join('');
 }
 
+// ═══════════════ AUDITORÍA DE CAMBIOS EN DATOS MAESTROS (29 sep 2026) ═══════════════
+// Misma colección compartida "auditoria" que usa inventario.html (ver ese
+// archivo para la explicación completa y el visor "🕵️ Auditoría") — aquí
+// solo se escribe, para las dos categorías que se editan desde esta
+// pantalla de Config: frecuencia de checklist y puntos de checklist
+// (general y por equipo). firestore.rules solo permite "create", nunca
+// editar ni borrar un renglón ya escrito.
+function logAuditoria(categoria, equipoId, equipoNombre, cambios){
+  if(!cambios || !cambios.length) return; // nada cambió de verdad -- no generar ruido
+  db.collection('auditoria').add({
+    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
+    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    fecha: fbTimestamp(),
+  }).catch(err => console.error('Error guardando auditoría:', err));
+}
+
 async function guardarFrecuencia(equipoId) {
   const dias = Number(document.getElementById('cfg-dias-' + equipoId).value || 0);
   if (!dias || dias < 1) { showToast('Escribe un número de días válido', 'warn'); return; }
+  const equipoActual = currentEquipos.find(x => x.id === equipoId);
+  const diasAntes = equipoActual ? (equipoActual.checklistFrecuenciaDias || null) : null;
   try {
     await db.collection('equipos').doc(equipoId).set({
       checklistFrecuenciaDias: dias,
       checklistProximaFecha: addDaysStr(todayStr(), dias),
     }, { merge: true });
+    // Auditoría (29 sep 2026): solo se registra si el número de días de
+    // verdad cambió (evita ruido si alguien toca "Guardar" sin editar nada).
+    if (diasAntes !== dias) {
+      logAuditoria('frecuencia_checklist', equipoId, equipoActual ? equipoActual.nombre : null,
+        [{ campo: 'Frecuencia (días)', anterior: diasAntes != null ? String(diasAntes) : '(sin configurar)', nuevo: String(dias) }]);
+    }
     showToast('Frecuencia guardada ✅');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');

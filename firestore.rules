@@ -105,13 +105,32 @@ service cloud.firestore {
       allow create: if esAlmacenOMas() || esTecnicoOMas();
       allow update, delete: if esAdmin();
     }
+    // Reubicación de equipo entre áreas (29 sep 2026): cada vez que cambia
+    // la Localidad de un equipo en Inventario se agrega un renglón nuevo
+    // aquí (nunca se sobrescribe ni se borra) — mismo criterio que
+    // "movimientos" arriba, pero para dónde está instalado el equipo en
+    // vez de su stock de repuestos.
+    match /reubicaciones/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas();
+      allow update, delete: if esAdmin();
+    }
     match /repuestos/{id}          { allow read: if esTecnicoOMas(); allow write: if esAlmacenOMas(); }
     match /planes_preventivos/{id} { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
     match /solicitudes_compra/{id} { allow read: if esAlmacenOMas(); allow write: if esAlmacenOMas() || esEncargado(); }
     match /proveedores/{id}        { allow read: if esAlmacenOMas(); allow write: if esEncargado(); }
+    // Auditoría de cambios en datos maestros (29 sep 2026): ANTES esta regla
+    // bloqueaba TODA escritura ("allow write: if false"), así que la
+    // colección nunca se pudo usar — no hay backend/Cloud Functions en este
+    // proyecto que pudiera saltarse esa regla y escribir por su cuenta.
+    // Ahora permite crear (nunca editar ni borrar, para que el rastro sea
+    // confiable) a cualquier técnico o más — igual que /equipos y /checklists,
+    // las únicas colecciones que en verdad generan estos registros desde
+    // inventario.html y checklist.html.
     match /auditoria/{id} {
       allow read: if esEncargado();
-      allow write: if false;
+      allow create: if esTecnicoOMas();
+      allow update, delete: if false;
     }
   }
 }
