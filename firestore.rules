@@ -91,7 +91,11 @@ service cloud.firestore {
       // técnico ni tiempo trabajado (eso lo llena Encargado/Técnico al
       // planificarla), estado fijo en "pendiente" y origen "operador" para
       // distinguirla en el historial.
-      allow read: if esTecnicoOMas();
+      // (1 oct 2026) Producción (Operador) puede LEER los reportes de
+      // operador para ver en vivo si su parada está esperando técnico, en
+      // atención o resuelta. Solo esos: la consulta de reportar.html filtra
+      // where('origen','==','operador'), que es lo que esta regla exige.
+      allow read: if esTecnicoOMas() || (esOperador() && resource.data.origen == 'operador');
       allow create: if esTecnicoOMas() || (esOperador() &&
         request.resource.data.estado == 'pendiente' &&
         request.resource.data.origen == 'operador' &&
