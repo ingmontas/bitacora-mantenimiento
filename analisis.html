@@ -411,11 +411,26 @@ function render(){
   /* gráfica: tendencia semanal (semana calculada desde la fecha) */
   const weekCounts = {};
   correctivos.forEach(r=>{ const w=weekOf(r); if(w) weekCounts[w]=(weekCounts[w]||0)+1; });
-  const weeksSorted = Object.keys(weekCounts).sort();
+  // Todas las semanas del rango (incluidas las que tuvieron 0 correctivos): antes solo
+  // aparecían las semanas con fallas, lo que inflaba el promedio y deformaba la tendencia.
+  const weeksSorted = [];
+  const scopeFechas = scopeRows.map(r=>parseFecha(r.fecha)).filter(Boolean);
+  if (scopeFechas.length){
+    const fin = new Date(Math.max(...scopeFechas));
+    const d = new Date(Math.min(...scopeFechas));
+    d.setDate(d.getDate() - ((d.getDay()+6)%7)); // lunes de la primera semana
+    for (; d <= fin; d.setDate(d.getDate()+7)){
+      const k = isoWeekKey(d);
+      if (weeksSorted[weeksSorted.length-1] !== k) weeksSorted.push(k);
+      if (!(k in weekCounts)) weekCounts[k] = 0;
+    }
+  }
+  const multiYear = new Set(weeksSorted.map(k=>k.split('-')[0])).size > 1;
+  const trendLabel = k => multiYear ? weekLabel(k)+' ’'+k.slice(2,4) : weekLabel(k);
   if (charts.trend) charts.trend.destroy();
   charts.trend = new Chart(document.getElementById('chartTrend'),{
     type:'line',
-    data:{labels:weeksSorted.map(weekLabel), datasets:[{data:weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930', pointRadius:5, pointHoverRadius:7}]},
+    data:{labels:weeksSorted.map(trendLabel), datasets:[{data:weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930', pointRadius:5, pointHoverRadius:7}]},
     options:{
       onClick:(e,els)=>{ if(!els.length) return; const s=weeksSorted[els[0].index]; window._selectedSemana=(window._selectedSemana===s)?null:s; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
