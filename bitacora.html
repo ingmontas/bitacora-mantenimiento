@@ -157,6 +157,19 @@
     .ms-ot .meta { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
     .ms-ot .sol { color: #35d0b0; font-size: 11.5px; margin-top: 3px; line-height: 1.45; }
     .ms-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
+    /* ══ Avisos de producción — 1 oct 2026 ══ */
+    .nav-btn { position: relative; }
+    .nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 6px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; padding: 0 5px; text-align: center; }
+    .av-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
+    .av-card.pendiente { border-left-color: var(--red); }
+    .av-card.pendiente.parada { box-shadow: 0 0 0 1px #EF444455; }
+    .av-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .av-eq { font-weight: 800; font-size: 15px; }
+    .av-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .av-desc { font-size: 13px; margin: 8px 0 4px; line-height: 1.5; }
+    .av-timer { text-align: right; font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .av-timer b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+    .av-timer.tarde b { color: var(--red); }
   </style>
 </head>
 <body>
@@ -406,6 +419,14 @@
   </div>
 
   <!-- SCREEN: CONFIGURACIÓN -->
+  <!-- SCREEN: AVISOS DE PRODUCCIÓN -->
+  <div class="screen" id="screen-avisos">
+    <div class="card-title" style="margin-bottom:4px">🚨 Avisos de producción</div>
+    <div class="card-sub">Paradas y fallas reportadas desde planta. Se actualiza solo.</div>
+    <button class="btn btn-secondary" id="avisos-activar" style="margin-bottom:12px;" onclick="activarAvisos()">🔔 Activar sonido y notificaciones en este celular</button>
+    <div id="avisos-lista"></div>
+  </div>
+
   <div class="screen" id="screen-config">
     <div class="card-title" style="margin-bottom:4px">⚙️ Configuración</div>
     <div class="card-sub">Base de datos central (Firebase)</div>
@@ -456,10 +477,11 @@
 </div>
 
 <nav id="nav">
-  <button class="nav-btn active" onclick="goTo('nuevo',this)"><span>➕</span>Nuevo</button>
-  <button class="nav-btn" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
-  <button class="nav-btn" onclick="goTo('stats',this)"><span>📊</span>Resumen</button>
-  <button class="nav-btn" onclick="goTo('config',this)"><span>⚙️</span>Configurar</button>
+  <button class="nav-btn active" id="nav-nuevo" onclick="goTo('nuevo',this)"><span>➕</span>Nuevo</button>
+  <button class="nav-btn" id="nav-avisos" onclick="goTo('avisos',this)"><span>🚨</span>Avisos<b class="nav-badge" id="avisos-badge" style="display:none">0</b></button>
+  <button class="nav-btn" id="nav-historial" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
+  <button class="nav-btn" id="nav-stats" onclick="goTo('stats',this)"><span>📊</span>Resumen</button>
+  <button class="nav-btn" id="nav-config" onclick="goTo('config',this)"><span>⚙️</span>Configurar</button>
 </nav>
 
 <div id="toast"></div>
@@ -497,6 +519,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!navigator.onLine) document.getElementById('offline-bar').classList.add('show');
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  // Al tocar una notificación de parada se abre bitacora.html#avisos
+  if (location.hash === '#avisos') goTo('avisos', document.getElementById('nav-avisos'));
 
   // Escucha en vivo la colección compartida de órdenes de trabajo. Cualquier
   // OT que se cree desde Inventario/Análisis o desde otro celular aparece
@@ -507,7 +531,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // ya las leía todas, así que esto alinea a Bitácora con Análisis.
     db.collection('ots').orderBy('createdAt', 'desc')
       .onSnapshot((snap) => {
-        allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _pending: doc.metadata.hasPendingWrites }));
+        const docsOts = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _pending: doc.metadata.hasPendingWrites }));
+        // Historial y Resumen muestran solo trabajo registrado: los avisos de
+        // producción y las fallas de checklist que siguen abiertas no son OTs
+        // terminadas todavía (antes aparecían como filas vacías y sumaban al total).
+        allRecords = docsOts.filter(r => !(['operador', 'checklist'].includes(r.origen) && r.estado !== 'completada'));
+        procesarAvisos(docsOts);
         const activeScreen = document.querySelector('.screen.active')?.id;
         if (activeScreen === 'screen-historial') renderHistory();
         if (activeScreen === 'screen-stats') loadStats();
@@ -859,7 +888,7 @@ function updateHeaderStatus() {
   const pending = allRecords.filter(r => r._pending).length;
   sub.textContent = `2026 · Firebase ${pending > 0 ? '· '+pending+' sin subir' : '✓'}`;
   icon.textContent = navigator.onLine ? '🟢' : '🟡';
-  icon.onclick = () => goTo('config', document.querySelectorAll('.nav-btn')[3]);
+  icon.onclick = () => goTo('config', document.getElementById('nav-config'));
 }
 
 // (29 sep 2026) El campo Equipo es texto libre a propósito — a diferencia
@@ -924,6 +953,7 @@ function goTo(screen, btn) {
   btn.classList.add('active');
   if (screen === 'historial') renderHistory();
   if (screen === 'stats') loadStats();
+  if (screen === 'avisos') renderAvisos();
   if (screen === 'config') updateHeaderStatus();
 }
 
@@ -971,7 +1001,7 @@ function editRecord(idx) {
   document.getElementById('form-sub').textContent = 'Corrige los datos y guarda';
   document.getElementById('submit-btn').textContent = '💾 Guardar Cambios';
 
-  goTo('nuevo', document.querySelectorAll('.nav-btn')[0]);
+  goTo('nuevo', document.getElementById('nav-nuevo'));
   window.scrollTo(0,0);
 }
 
@@ -1014,6 +1044,8 @@ function cancelEdit() {
 
 function exitEditMode() {
   window.editingRecord = null;
+  document.querySelector('#edit-banner p').textContent = '✏️ Editando registro existente';
+  document.querySelector('#edit-banner small').textContent = 'Los cambios reemplazarán la entrada original';
   document.getElementById('edit-banner').style.display = 'none';
   document.getElementById('form-title').textContent = '📋 Nueva Entrada';
   document.getElementById('form-sub').textContent = 'Registra el trabajo realizado';
@@ -1045,7 +1077,7 @@ async function submitForm() {
   const minTec = hFinal ? Math.max(0, timeToMin(hFinal) - timeToMin(hTecnico)) : 0;
 
   const record = {
-    Title: window.editingRecord ? window.editingRecord.Title : ('OT-' + Date.now()),
+    Title: window.editingRecord ? (window.editingRecord.Title || window.editingRecord.folio || ('OT-' + Date.now())) : ('OT-' + Date.now()),
     SEMANA: parseInt(document.getElementById('f-semana').value) || getWeekNumber(new Date()),
     FECHA: fecha,
     PLANTA: planta,
@@ -1076,6 +1108,10 @@ async function submitForm() {
   // ═══ MODO EDICIÓN: actualizar un registro ya existente ═══
   if (window.editingRecord) {
     const editing = window.editingRecord;
+    // Cerrar un aviso de producción: el mismo documento pasa a OT completada.
+    if (editing.origen === 'operador' && editing.estado !== 'completada') {
+      Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: avHoy() });
+    }
     // No esperamos (await) la confirmación del servidor: con la persistencia
     // offline de Firestore, el cambio se ve al instante en este celular y se
     // sube solo en cuanto haya señal — no queremos que la app se quede
@@ -1087,7 +1123,7 @@ async function submitForm() {
     document.getElementById('loading').classList.remove('show');
     showToast(navigator.onLine ? '✅ Cambios guardados' : '💾 Guardado local — se subirá al volver la señal', navigator.onLine ? 'success' : 'warn');
     exitEditMode();
-    goTo('historial', document.querySelectorAll('.nav-btn')[1]);
+    goTo('historial', document.getElementById('nav-historial'));
     _submitting = false;
     btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
     return;
@@ -1412,6 +1448,141 @@ function renderMsOts(rows) {
       ${r.DESCRIPCION_SOLUCION ? `<div class="sol">✓ ${msEsc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
     </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px 0;">Sin OTs registradas en esta semana.</div>';
+}
+
+// ══════ AVISOS DE PRODUCCIÓN (1 oct 2026) ══════
+// Producción reporta desde reportar.html (origen 'operador'). Aquí el técnico:
+//  1. ve la cola en vivo, con el tiempo que lleva parada cada máquina;
+//  2. toca "Voy" → estado 'en_atencion', queda su nombre y su hora de llegada;
+//  3. toca "Cerrar" → se abre el formulario ya lleno (H_INICIO = hora de
+//     parada, H_TECNICO = llegada, H_FINAL = ahora) y al guardar ESE MISMO
+//     documento se convierte en la OT completada (no se duplica).
+// Al llegar un aviso nuevo: mensaje en pantalla, vibración, sonido y, si se
+// activaron en este celular, notificación del sistema.
+let avisos = [];
+let _avisosVistos = null; // null = todavía no llegó la primera lectura
+let _audioCtx = null;
+const avEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const avHoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const avAhora = () => new Date().toTimeString().slice(0, 5);
+function avMinDesde(fecha, hora) {
+  if (!fecha || !hora) return null;
+  const [y, m, d] = fecha.split('-').map(Number), [hh, mm] = hora.split(':').map(Number);
+  return Math.max(0, Math.round((Date.now() - new Date(y, m - 1, d, hh, mm).getTime()) / 60000));
+}
+const avFmt = m => m == null ? '—' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min';
+function avMiNombre() {
+  try { const t = msTecnicoDelUsuario(msListaTecnicos()); if (t) return t; } catch (e) {}
+  return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || 'Técnico';
+}
+
+// Se llama desde el listener de /ots con TODOS los documentos.
+function procesarAvisos(docs) {
+  avisos = docs.filter(r => r.origen === 'operador' && ['pendiente', 'en_atencion'].includes(r.estado));
+  const pendientes = avisos.filter(r => r.estado === 'pendiente');
+  if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));
+  else pendientes.forEach(r => { if (!_avisosVistos.has(r.id)) { _avisosVistos.add(r.id); alertarAviso(r); } });
+  const badge = document.getElementById('avisos-badge');
+  if (badge) { badge.textContent = pendientes.length; badge.style.display = pendientes.length ? '' : 'none'; }
+  if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos();
+}
+
+function alertarAviso(r) {
+  const txt = `🚨 ${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${r.equipoNombre || ''}${r.equipoLocalidad ? ' (' + r.equipoLocalidad + ')' : ''}`;
+  showToast(txt, 'error');
+  try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+  try {
+    if (_audioCtx) {
+      [0, 0.35].forEach(t => {
+        const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(_audioCtx.destination);
+        g.gain.setValueAtTime(0.25, _audioCtx.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + t + 0.3);
+        o.start(_audioCtx.currentTime + t); o.stop(_audioCtx.currentTime + t + 0.3);
+      });
+    }
+  } catch (e) {}
+  try {
+    if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
+      navigator.serviceWorker.ready.then(reg => reg.showNotification('Nueva parada reportada', {
+        body: `${r.equipoNombre || ''} — ${r.descripcionFalla || ''}`, tag: 'aviso-' + r.id, renotify: true,
+        icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [300, 150, 300], data: { url: 'bitacora.html#avisos' } }));
+    }
+  } catch (e) {}
+}
+
+async function activarAvisos() {
+  try { _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)(); await _audioCtx.resume(); } catch (e) {}
+  let estado = 'sonido activado';
+  if ('Notification' in window) {
+    try { const p = await Notification.requestPermission(); estado = p === 'granted' ? 'notificaciones y sonido activados' : 'sonido activado (el celular bloqueó las notificaciones)'; } catch (e) {}
+  }
+  try { localStorage.setItem('mant_avisos_on', '1'); } catch (e) {}
+  showToast('🔔 Avisos: ' + estado);
+  renderAvisos();
+}
+// El navegador solo deja sonar audio después de un toque: se prepara con el primero.
+document.addEventListener('click', () => { if (!_audioCtx) { try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }, { once: true });
+
+function renderAvisos() {
+  const wrap = document.getElementById('avisos-lista');
+  const yo = avMiNombre();
+  const permiso = 'Notification' in window ? Notification.permission : 'unsupported';
+  document.getElementById('avisos-activar').style.display = permiso === 'granted' ? 'none' : '';
+  const orden = { pendiente: 0, en_atencion: 1 };
+  const lista = [...avisos].sort((a, b) => (orden[a.estado] - orden[b.estado]) || ((b.maquinaParada ? 1 : 0) - (a.maquinaParada ? 1 : 0))
+    || ({ alta: 0, media: 1, baja: 2 }[a.prioridad] ?? 1) - ({ alta: 0, media: 1, baja: 2 }[b.prioridad] ?? 1)
+    || ((a.fechaReporte || '') + (a.horaParada || '')).localeCompare((b.fechaReporte || '') + (b.horaParada || '')));
+  if (!lista.length) { wrap.innerHTML = '<div class="empty" style="padding:40px 10px;"><span class="emoji" style="font-size:40px;display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>'; return; }
+  wrap.innerHTML = lista.map(r => {
+    const min = avMinDesde(r.fechaReporte, r.horaParada);
+    const mio = r.asignadoA && r.asignadoA === yo;
+    const acciones = r.estado === 'pendiente'
+      ? `<button class="btn btn-primary" onclick="atenderAviso('${r.id}')">🏃 Voy a atenderlo</button>`
+      : `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${r.id}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${r.id}')">↩ Soltar</button>` : ''}</div>`;
+    return `<div class="av-card ${r.estado} ${r.maquinaParada ? 'parada' : ''}">
+      <div class="av-top"><div><div class="av-eq">${avEsc(r.equipoNombre || '—')}</div><div class="av-meta">📍 ${avEsc(r.equipoLocalidad || '—')} · ${avEsc(r.folio || '')} · reportó ${avEsc(r.creadoPor || '—')}</div></div>
+        <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '⛔ parada' : '⚠️ falla'}<b>${avFmt(min)}</b></div></div>
+      <div class="av-desc">${avEsc(r.descripcionFalla || '')}</div>
+      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + avEsc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + avEsc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--accent)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + avEsc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + avEsc(r.horaLlegada) : ''}</b>` : ''}</div>
+      ${acciones}
+    </div>`;
+  }).join('');
+}
+setInterval(() => { if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos(); }, 30000);
+
+function atenderAviso(id) {
+  db.collection('ots').doc(id).update({ estado: 'en_atencion', asignadoA: avMiNombre(), horaLlegada: avAhora(), atendidoEn: fbTimestamp() })
+    .catch(e => showToast('❌ No se pudo tomar el aviso: ' + e.message, 'error'));
+  showToast('🏃 Aviso tomado — producción ya ve que vas en camino');
+}
+function soltarAviso(id) {
+  db.collection('ots').doc(id).update({ estado: 'pendiente', asignadoA: null, horaLlegada: null })
+    .catch(e => showToast('❌ ' + e.message, 'error'));
+}
+function cerrarAviso(id) {
+  const r = avisos.find(x => x.id === id);
+  if (!r) return;
+  const fecha = r.fechaReporte || avHoy();
+  const tec = r.asignadoA || avMiNombre();
+  const pseudo = {
+    FECHA: fecha, SEMANA: getWeekNumber(new Date(fecha + 'T00:00:00')),
+    PLANTA: leerPlantaGuardada() || document.getElementById('f-planta').value || (currentPlantas.length === 1 ? currentPlantas[0] : ''),
+    LINEA_EQUIPO: r.equipoLocalidad || '', EQUIPO: r.equipoNombre || '',
+    DESCRIPCION_FALLA: r.descripcionFalla || '', CAUSA_FALLA: r.causaFalla || '',
+    H_INICIO: r.horaParada || '', H_TECNICO: r.horaLlegada || avAhora(), H_FINAL: avAhora(),
+    TIPO_MANTENIMIENTO: 'Correctivo', PARO_PLANTA: 'no', PRIORIDAD: r.prioridad || 'media', TECNICOS: tec,
+  };
+  window.editingRecord = r;
+  fillFormFromRecord(pseudo);
+  document.getElementById('edit-banner').style.display = 'flex';
+  document.querySelector('#edit-banner p').textContent = `🚨 Cerrando aviso ${r.folio || ''} — ${r.equipoNombre || ''}`;
+  document.querySelector('#edit-banner small').textContent = 'Revisa área, pieza, causa y escribe la solución. Al guardar, producción verá el aviso como resuelto.';
+  document.getElementById('form-title').textContent = '✅ Cerrar aviso de producción';
+  document.getElementById('form-sub').textContent = 'Las horas ya vienen del reporte';
+  document.getElementById('submit-btn').textContent = '✅ Guardar y cerrar aviso';
+  goTo('nuevo', document.getElementById('nav-nuevo'));
+  window.scrollTo(0, 0);
+  setTimeout(() => { const s = document.getElementById('f-solucion'); if (s) s.focus(); }, 300);
 }
 
 // ══════ STATS ══════

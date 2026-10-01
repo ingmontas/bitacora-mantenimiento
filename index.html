@@ -57,6 +57,13 @@
         <p>Registrar órdenes de trabajo, fallas y soluciones del día a día.</p>
       </div>
     </a>
+    <a class="tile" href="reportar.html">
+      <div class="icon">🚨</div>
+      <div class="info">
+        <h2>Reportar parada</h2>
+        <p>Producción avisa una máquina parada o con falla; el técnico recibe el aviso al momento.</p>
+      </div>
+    </a>
     <a class="tile" href="inventario.html">
       <div class="icon">🧰</div>
       <div class="info">
@@ -91,6 +98,8 @@
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 window.fbReady.then(()=>{
+  // Producción (rol Operador) solo puede reportar paradas: va directo ahí.
+  if (window.currentUserRole && window.currentUserRole.rol === 'OPERADOR') { location.replace('reportar.html'); return; }
   document.getElementById('fbStatus').innerHTML = `🟢 Conectado a Firebase (proyecto <b>${firebaseConfig.projectId}</b>)`;
 }).catch((err)=>{
   document.getElementById('fbStatus').innerHTML = `🔴 No se pudo conectar a Firebase — revisa <code>firebase-config.js</code>`;

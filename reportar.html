@@ -96,6 +96,19 @@
     .exito-wrap h2 { font-size: 19px; margin-bottom: 8px; }
     .exito-wrap p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 4px; }
     .exito-wrap .folio { font-size: 22px; font-weight: 800; color: var(--accent); margin: 14px 0; }
+    /* estado de los reportes (1 oct 2026) */
+    .toggle-btn.sel-si { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
+    .toggle-btn.sel-no { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .rep-row { background: var(--card); border-radius: 10px; padding: 12px 13px; margin-bottom: 10px; border-left: 4px solid var(--border); }
+    .rep-row.pendiente { border-left-color: var(--red); }
+    .rep-row.en_atencion { border-left-color: var(--accent); }
+    .rep-row.completada { border-left-color: var(--green); }
+    .rep-estado { font-size: 12.5px; font-weight: 700; margin-top: 6px; }
+    .rep-estado.pendiente { color: #ff8a8a; } .rep-estado.en_atencion { color: var(--accent); } .rep-estado.completada { color: var(--green); }
+    .rep-sol { font-size: 12px; color: #35d0b0; margin-top: 4px; line-height: 1.5; }
+    .seg-dia { display: flex; gap: 6px; margin-bottom: 10px; }
+    .seg-dia button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 600; font-size: 12.5px; cursor: pointer; }
+    .seg-dia button.on { border-color: var(--accent); color: var(--accent); background: #F59E0B18; }
   </style>
 </head>
 <body>
@@ -104,7 +117,7 @@
 
 <div id="header">
   <div>
-    <h1>🚨 Reportar Falla</h1>
+    <h1>🚨 Reportar Parada</h1>
     <small id="header-sub">2026 · Cargando...</small>
   </div>
   <div id="sp-status" title="Estado de conexión">⚙️</div>
@@ -115,8 +128,9 @@
   <!-- SCREEN: ELEGIR EQUIPO -->
   <div class="screen active" id="screen-elegir">
     <div class="card">
-      <div class="card-title">🚨 Reportar una falla</div>
-      <div class="card-sub">Elige el equipo que falló. Un encargado o técnico planificará el trabajo después.</div>
+      <div class="card-title">🚨 Reportar una parada o falla</div>
+      <div class="card-sub">Elige el equipo. Los técnicos reciben el aviso en su celular al momento.</div>
+      <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="verEstado()">📋 Ver estado de los reportes <span id="estado-badge"></span></button>
       <input type="text" id="buscar-equipo" placeholder="Buscar equipo..." oninput="renderListaEquipos()" style="margin-bottom:10px;"/>
       <div id="lista-equipos"></div>
     </div>
@@ -133,6 +147,17 @@
         <button class="btn btn-secondary btn-sm" onclick="cerrarForm()">✕ Cambiar</button>
       </div>
       <div class="field" style="margin-top:14px;">
+        <label>¿La máquina está parada?</label>
+        <div class="toggle-row" id="rf-parada-grid">
+          <button type="button" class="toggle-btn sel-si" data-v="si" onclick="setParada('si')">⛔ Sí, está parada</button>
+          <button type="button" class="toggle-btn" data-v="no" onclick="setParada('no')">⚠️ No, sigue trabajando</button>
+        </div>
+      </div>
+      <div class="field">
+        <label id="rf-hora-label">¿Desde qué hora está parada?</label>
+        <input type="time" id="rf-hora"/>
+      </div>
+      <div class="field">
         <label>¿Qué le pasa al equipo?</label>
         <textarea id="rf-descripcion" placeholder="Describe la falla: qué se ve, se oye o se siente raro..."></textarea>
       </div>
@@ -148,8 +173,25 @@
         <label>Tu nombre</label>
         <input type="text" id="rf-nombre" placeholder="¿Quién reporta?"/>
       </div>
-      <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()">🚨 Reportar falla</button>
+      <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()">🚨 Enviar reporte</button>
     </div>
+  </div>
+
+  <!-- SCREEN: ESTADO DE LOS REPORTES (en vivo) -->
+  <div class="screen" id="screen-estado">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div><div class="card-title">📋 Estado de los reportes</div>
+        <div class="card-sub" style="margin-bottom:10px;">Se actualiza solo. Rojo: esperando técnico · Amarillo: en atención · Verde: resuelto.</div></div>
+        <button class="btn btn-secondary btn-sm" onclick="nuevoReporte()">← Volver</button>
+      </div>
+      <div class="seg-dia" id="seg-dia">
+        <button class="on" data-d="0" onclick="setDiasEstado(0)">Hoy</button>
+        <button data-d="2" onclick="setDiasEstado(2)">3 días</button>
+        <button data-d="6" onclick="setDiasEstado(6)">7 días</button>
+      </div>
+    </div>
+    <div id="estado-lista"></div>
   </div>
 
   <!-- SCREEN: CONFIRMACIÓN -->
@@ -158,10 +200,11 @@
       <div class="exito-wrap">
         <span class="emoji">✅</span>
         <h2>Reporte enviado</h2>
-        <p>Un encargado o técnico lo va a planificar pronto.</p>
+        <p>Los técnicos ya recibieron el aviso. Puedes seguir el estado aquí.</p>
         <div class="folio" id="exito-folio">—</div>
         <p id="exito-equipo" style="margin-bottom:20px;">—</p>
-        <button class="btn btn-primary" onclick="nuevoReporte()">➕ Reportar otra falla</button>
+        <button class="btn btn-primary" onclick="verEstado()" style="margin-bottom:8px;">📋 Ver estado del reporte</button>
+        <button class="btn btn-secondary" onclick="nuevoReporte()">➕ Reportar otra falla</button>
       </div>
     </div>
   </div>
@@ -203,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // (Bitácora/Inventario/Análisis/Checklist/Hoja de Vida), así que esos
     // enlaces solo lo llevarían a pantallas con error de permisos.
     loadEquipos();
+    escucharReportes();
     updateHeaderStatus();
     // Si llega desde un QR con ?equipo=<id>, salta directo al formulario.
     const qEquipo = new URLSearchParams(location.search).get('equipo');
@@ -287,6 +331,8 @@ function abrirForm(equipoId) {
   document.getElementById('rf-descripcion').value = '';
   document.getElementById('rf-nombre').value = (window.currentUserRole && window.currentUserRole.nombre) || '';
   setPrioridad('media');
+  setParada('si');
+  document.getElementById('rf-hora').value = horaAhora();
   goToScreen('screen-form');
 }
 
@@ -303,10 +349,28 @@ function setPrioridad(pr) {
   });
 }
 
+// ══════ ¿Máquina parada? + hora (1 oct 2026) ══════
+// La hora de parada pasa a ser H_INICIO de la OT cuando el técnico la cierra,
+// así el tiempo de respuesta (llegada del técnico − parada) queda medido.
+let paradaSeleccionada = 'si';
+function setParada(v) {
+  paradaSeleccionada = v;
+  document.querySelectorAll('#rf-parada-grid .toggle-btn').forEach(b => {
+    b.classList.remove('sel-si', 'sel-no');
+    if (b.dataset.v === v) b.classList.add('sel-' + v);
+  });
+  document.getElementById('rf-hora-label').textContent = v === 'si' ? '¿Desde qué hora está parada?' : '¿Desde qué hora se nota la falla?';
+}
+const horaAhora = () => new Date().toTimeString().slice(0, 5);
+const fechaHoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const escR = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 async function enviarReporte() {
   if (!equipoSeleccionado) return;
   const descripcion = (document.getElementById('rf-descripcion').value || '').trim();
   if (!descripcion) { showToast('Describe qué le pasa al equipo', 'warn'); return; }
+  let horaParada = document.getElementById('rf-hora').value || horaAhora();
+  if (horaParada > horaAhora()) horaParada = horaAhora(); // no puede estar en el futuro
   const nombreReporta = (document.getElementById('rf-nombre').value || '').trim();
 
   setLoading(true, 'Enviando reporte...');
@@ -325,6 +389,10 @@ async function enviarReporte() {
       asignadoA: null,
       fechaPlanificada: null,
       creadoPor: nombreReporta || (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
+      creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
+      maquinaParada: paradaSeleccionada === 'si',
+      fechaReporte: fechaHoy(),
+      horaParada: horaParada,
       createdAt: fbTimestamp(),
     });
 
@@ -336,6 +404,67 @@ async function enviarReporte() {
     setLoading(false);
     showToast('Error al enviar: ' + e.message, 'error');
   }
+}
+
+// ══════ ESTADO DE LOS REPORTES — en vivo (1 oct 2026) ══════
+// Producción ve todos los reportes de operador (requiere la regla de
+// firestore.rules que le permite leer /ots con origen 'operador').
+let reportes = [];
+let diasEstado = 0;
+let estadoEscuchando = false;
+function escucharReportes() {
+  if (estadoEscuchando) return;
+  estadoEscuchando = true;
+  db.collection('ots').where('origen', '==', 'operador').onSnapshot((snap) => {
+    reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderEstado();
+  }, (err) => {
+    console.warn('Error leyendo reportes:', err.message);
+    document.getElementById('estado-lista').innerHTML = `<div class="empty"><span class="emoji">🔒</span><p>No se pudo leer el estado de los reportes (${escR(err.code || err.message)}). Pide al administrador que publique las reglas nuevas de Firestore.</p></div>`;
+  });
+  setInterval(renderEstado, 60000); // refresca los "hace X min"
+}
+function verEstado() { goToScreen('screen-estado'); renderEstado(); }
+function setDiasEstado(d) {
+  diasEstado = d;
+  document.querySelectorAll('#seg-dia button').forEach(b => b.classList.toggle('on', Number(b.dataset.d) === d));
+  renderEstado();
+}
+function minDesde(fecha, hora) {
+  if (!fecha || !hora) return null;
+  const [y, m, d] = fecha.split('-').map(Number), [hh, mm] = hora.split(':').map(Number);
+  return Math.round((Date.now() - new Date(y, m - 1, d, hh, mm).getTime()) / 60000);
+}
+const fmtMinR = m => m == null ? '' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+function renderEstado() {
+  const abiertos = reportes.filter(r => ['pendiente', 'en_atencion'].includes(r.estado)).length;
+  const badge = document.getElementById('estado-badge');
+  if (badge) badge.textContent = abiertos ? `(${abiertos} abierto${abiertos === 1 ? '' : 's'})` : '';
+  const wrap = document.getElementById('estado-lista');
+  if (!wrap || !document.getElementById('screen-estado').classList.contains('active')) return;
+  const desde = new Date(); desde.setHours(0, 0, 0, 0); desde.setDate(desde.getDate() - diasEstado);
+  const lim = desde.getFullYear() + '-' + String(desde.getMonth() + 1).padStart(2, '0') + '-' + String(desde.getDate()).padStart(2, '0');
+  const fechaDe = r => r.fechaReporte || r.FECHA || (r.createdAt && r.createdAt.toDate ? (d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(r.createdAt.toDate()) : '');
+  const orden = { pendiente: 0, en_atencion: 1 };
+  const lista = reportes.filter(r => ['pendiente', 'en_atencion'].includes(r.estado) || fechaDe(r) >= lim)
+    .sort((a, b) => (orden[a.estado] ?? 2) - (orden[b.estado] ?? 2) || (fechaDe(b) + (b.horaParada || '')).localeCompare(fechaDe(a) + (a.horaParada || '')));
+  if (!lista.length) { wrap.innerHTML = '<div class="empty"><span class="emoji">✅</span><p>No hay reportes en este período.</p></div>'; return; }
+  wrap.innerHTML = lista.map(r => {
+    const espera = minDesde(fechaDe(r), r.horaParada);
+    let estado;
+    if (r.estado === 'pendiente') estado = `⏳ Esperando técnico${espera != null ? ' · ' + fmtMinR(espera) : ''}`;
+    else if (r.estado === 'en_atencion') estado = `🔧 En atención por ${escR(r.asignadoA || 'un técnico')}${r.horaLlegada ? ' · llegó ' + escR(r.horaLlegada) : ''}`;
+    else if (r.estado === 'completada') estado = `✅ Resuelto${r.H_FINAL ? ' a las ' + escR(r.H_FINAL) : ''}${r.TECNICOS ? ' por ' + escR(r.TECNICOS) : ''}`;
+    else estado = '📌 ' + escR(r.estado || '—');
+    const cls = ['pendiente', 'en_atencion', 'completada'].includes(r.estado) ? r.estado : '';
+    return `<div class="rep-row ${cls}">
+      <div class="item-header"><div class="item-title">${escR(r.equipoNombre || r.EQUIPO || '—')}</div><span class="tag tag-prioridad-${escR(r.prioridad || 'media')}">${escR(r.folio || '')}</span></div>
+      <div class="item-sub">${r.equipoLocalidad ? '📍 ' + escR(r.equipoLocalidad) + ' · ' : ''}${r.maquinaParada ? '⛔ Parada' : '⚠️ Trabajando'}${r.horaParada ? ' desde ' + escR(r.horaParada) : ''} · reportó ${escR(r.creadoPor || '—')}</div>
+      <div class="item-sub" style="color:var(--text);margin-top:4px;">${escR(r.descripcionFalla || r.DESCRIPCION_FALLA || '')}</div>
+      <div class="rep-estado ${cls}">${estado}</div>
+      ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div class="rep-sol">✓ ${escR(r.DESCRIPCION_SOLUCION)}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 function nuevoReporte() {
