@@ -117,6 +117,46 @@
     .method-tab.active { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
     .method-panel { display: none; }
     .method-panel.active { display: block; }
+    /* ══ Resumen del técnico ("Mi semana") — 1 oct 2026 ══ */
+    .ms-weeknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+    .ms-weeknav button { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 38px; height: 34px; font-size: 18px; font-weight: 700; cursor: pointer; }
+    .ms-weeknav button:disabled { opacity: .3; cursor: default; }
+    .ms-weeknav .lbl { text-align: center; font-size: 13px; font-weight: 700; line-height: 1.3; }
+    .ms-weeknav .lbl small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+    .ms-kpis { grid-template-columns: 1fr 1fr; }
+    .ms-kpis .stat-box { padding: 12px 8px; }
+    .ms-kpis .stat-num { font-size: 24px; }
+    .ms-kpis .stat-foot { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+    .ms-day { display: grid; grid-template-columns: 42px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px; }
+    .ms-day .d { font-weight: 700; color: var(--muted); }
+    .ms-day .d.hoy { color: var(--accent); }
+    .ms-day .track { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: var(--surface); }
+    .ms-day .w { background: var(--green); }
+    .ms-day .i { background: repeating-linear-gradient(45deg, #EF444455 0 4px, #EF444522 4px 8px); }
+    .ms-day .x { background: var(--blue); }
+    .ms-day .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .ms-day .v b { color: var(--text); }
+    .ms-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .ms-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+    .ms-cfg { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .ms-cfg select { width: auto; padding: 5px 8px; font-size: 12px; }
+    .ms-cfg input[type=checkbox] { width: auto; appearance: auto; margin-right: 4px; vertical-align: -2px; }
+    .ms-metric { display: grid; grid-template-columns: 1fr 76px auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .ms-metric:last-child { border-bottom: none; }
+    .ms-metric .name { font-size: 13px; font-weight: 600; }
+    .ms-metric .name small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+    .ms-spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
+    .ms-spark i { flex: 1; background: #94A3B855; border-radius: 2px 2px 0 0; min-height: 2px; }
+    .ms-spark i.cur { background: var(--accent); }
+    .ms-delta { font-size: 12px; font-weight: 700; text-align: right; white-space: nowrap; }
+    .ms-delta.bien { color: var(--green); } .ms-delta.mal { color: var(--red); } .ms-delta.neutro { color: var(--muted); }
+    .ms-insight { background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin-bottom: 8px; }
+    .ms-ot { background: var(--surface); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; border-left: 3px solid var(--border); font-size: 12.5px; }
+    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--blue); }
+    .ms-ot .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; margin-bottom: 3px; }
+    .ms-ot .meta { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+    .ms-ot .sol { color: #35d0b0; font-size: 11.5px; margin-top: 3px; line-height: 1.45; }
+    .ms-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
   </style>
 </head>
 <body>
@@ -304,7 +344,51 @@
   <!-- SCREEN: ESTADÍSTICAS -->
   <div class="screen" id="screen-stats">
     <div class="card-title" style="margin-bottom:4px">📊 Resumen</div>
-    <div class="card-sub">Todos los registros</div>
+    <div class="card-sub">Tu semana y la de toda la planta</div>
+    <!-- ══ Resumen del técnico: lo que hizo en la semana, día por día, y su avance ══ -->
+    <div class="card" id="ms-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div>
+          <div style="font-weight:800;font-size:16px;">👷 <span id="ms-nombre">Mi semana</span></div>
+          <div class="card-sub" id="ms-sub" style="margin:2px 0 0;">Lo que realizaste esta semana</div>
+        </div>
+      </div>
+      <select id="ms-tecnico" style="margin-top:10px;display:none;" onchange="msTec=this.value; renderMiSemana()"></select>
+      <div class="ms-weeknav">
+        <button onclick="msMoverSemana(-1)" aria-label="Semana anterior">‹</button>
+        <div class="lbl" id="ms-semana-lbl">—</div>
+        <button id="ms-next" onclick="msMoverSemana(1)" aria-label="Semana siguiente">›</button>
+      </div>
+      <div class="stat-grid ms-kpis" id="ms-kpis"></div>
+      <div style="font-weight:700;margin:4px 0 10px;">📆 Día por día</div>
+      <div id="ms-dias"></div>
+      <div class="ms-legend">
+        <span style="--c:var(--green)">Trabajado en OTs</span>
+        <span style="--c:#EF444477">Sin OT registrada (inactivo)</span>
+        <span style="--c:var(--blue)">Horas extra</span>
+      </div>
+      <div class="ms-cfg">
+        Jornada:
+        <select id="ms-jornada" onchange="msGuardarCfg()"><option value="8">8 h</option><option value="9">9 h</option><option value="10">10 h</option><option value="12">12 h</option></select>
+        <span><input type="checkbox" id="ms-sabado" onchange="msGuardarCfg()">Trabaja sábado</span>
+      </div>
+      <div class="hint" id="ms-nota" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
+    </div>
+
+    <div class="card" id="ms-avance-card">
+      <div style="font-weight:700;margin-bottom:2px;">📈 Avance de mejora</div>
+      <div class="card-sub">Últimas 8 semanas (la barra naranja es la semana elegida). Cada valor se compara con el promedio de las 4 semanas anteriores; si la semana va a la mitad, los totales se comparan a la misma altura.</div>
+      <div id="ms-insights"></div>
+      <div id="ms-trend"></div>
+    </div>
+
+    <div class="card" id="ms-ots-card">
+      <div style="font-weight:700;margin-bottom:10px;">🧾 OTs de la semana <span id="ms-ots-n" style="color:var(--muted);font-weight:500;"></span></div>
+      <div id="ms-ots"></div>
+    </div>
+
+    <div class="ms-section-title">🏭 Toda la planta</div>
+    <div class="card-sub" style="margin-top:-4px">Todos los registros</div>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
       <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
@@ -481,7 +565,9 @@ async function loadTecnicos() {
   } catch (e) {
     console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message);
   }
+  window._tecLista = lista;
   renderTecGrid(lista);
+  if (document.getElementById('screen-stats').classList.contains('active')) renderMiSemana();
 }
 
 function renderTecGrid(lista) {
@@ -1086,8 +1172,251 @@ function renderHistory() {
   }).join('');
 }
 
+// ══════ RESUMEN DEL TÉCNICO ("Mi semana") — 1 oct 2026 ══════
+// Usa los campos que ya guarda cada OT: H_INICIO (paró la máquina),
+// H_TECNICO (llegó el técnico), H_FINAL (terminó) y TOTAL_MIN_TECNICO.
+//  · Tiempo trabajado por día = unión de los intervalos H_TECNICO→H_FINAL
+//    (si dos OTs se solapan, ese tiempo no se cuenta dos veces). Si una OT no
+//    tiene horas, se usa TOTAL_MIN_TECNICO.
+//  · Tiempo inactivo = jornada del día − tiempo trabajado, solo en días
+//    laborables ya transcurridos. Es tiempo SIN OT REGISTRADA: puede incluir
+//    trabajo que no se anotó, permisos o ausencias.
+//  · Tiempo de respuesta = H_TECNICO − H_INICIO (cuánto esperó la máquina).
+// Una OT hecha entre dos técnicos cuenta completa para cada uno.
+let msTec = '';
+let msOffset = 0; // 0 = semana actual, -1 = la anterior...
+const MS_CFG_KEY = 'mant_ms_cfg';
+const MS_DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const MS_MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function msCfg() {
+  let c = { jornada: 8, sabado: false };
+  try { Object.assign(c, JSON.parse(localStorage.getItem(MS_CFG_KEY) || '{}')); } catch (e) {}
+  return c;
+}
+function msGuardarCfg() {
+  const c = { jornada: Number(document.getElementById('ms-jornada').value) || 8, sabado: document.getElementById('ms-sabado').checked };
+  try { localStorage.setItem(MS_CFG_KEY, JSON.stringify(c)); } catch (e) {}
+  renderMiSemana();
+}
+const msEsc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const msNorm = s => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+const msSplit = s => (s || '').split(',').map(x => x.trim()).filter(Boolean);
+const msFecha = f => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(f || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+const msHoy = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const msLunes = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const msAddDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const msKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const msHM = m => { if (m == null || isNaN(m)) return '—'; m = Math.round(m); const h = Math.floor(m / 60), mm = m % 60; return h ? `${h}h ${String(mm).padStart(2, '0')}m` : `${mm}m`; };
+const msNoResuelto = s => { s = msNorm(s); return ['no solucionado','no solucionada','no resuelto','sin solucionar','no terminado','pendiente'].some(x => s.includes(x)); };
+const msTipo = r => (r.TIPO_MANTENIMIENTO || '').toLowerCase();
+
+// Lista de técnicos: tecnicos.json + cualquier nombre que aparezca en las OTs.
+function msListaTecnicos() {
+  const set = new Set((window._tecLista || []).map(t => t.nombre));
+  allRecords.forEach(r => msSplit(r.TECNICOS).forEach(t => set.add(t)));
+  return [...set].filter(t => t && t !== '—').sort((a, b) => a.localeCompare(b));
+}
+// Relaciona el usuario que inició sesión con su nombre de técnico en las OTs:
+// 1) campo "tecnico" en su documento /usuarios (el más exacto), 2) mismo
+// nombre, 3) mismo código (#777), 4) mismo primer nombre si es único.
+function msTecnicoDelUsuario(lista) {
+  const u = window.currentUserRole || {};
+  if (u.tecnico) return u.tecnico;
+  const n = msNorm(u.nombre);
+  if (!n) return '';
+  let hit = lista.find(t => msNorm(t) === n);
+  if (hit) return hit;
+  const cod = (n.match(/#\s*\d+/) || [''])[0].replace(/\s/g, '');
+  if (cod) { hit = lista.find(t => msNorm(t).replace(/\s/g, '').includes(cod)); if (hit) return hit; }
+  const primero = n.split(' ')[0];
+  const cands = lista.filter(t => msNorm(t).split(' ')[0] === primero);
+  return cands.length === 1 ? cands[0] : '';
+}
+
+function msStatsSemana(tec, lunes, cfg) {
+  const fin = msAddDias(lunes, 7), hoy = msHoy();
+  const rows = allRecords.filter(r => { const d = msFecha(r.FECHA); return d && d >= lunes && d < fin && msSplit(r.TECNICOS).includes(tec); });
+  const nDias = cfg.sabado ? 6 : 5, jMin = cfg.jornada * 60;
+  const dias = [];
+  for (let i = 0; i < 7; i++) {
+    const d = msAddDias(lunes, i);
+    const delDia = rows.filter(r => r.FECHA === msKey(d));
+    // unión de intervalos H_TECNICO (o H_INICIO) → H_FINAL
+    const ivs = [];
+    let sinHoras = 0;
+    delDia.forEach(r => {
+      const a = timeToMin(r.H_TECNICO || r.H_INICIO), b = timeToMin(r.H_FINAL);
+      if ((r.H_TECNICO || r.H_INICIO) && r.H_FINAL && b > a) ivs.push([a, b]);
+      else sinHoras += Number(r.TOTAL_MIN_TECNICO) || 0;
+    });
+    ivs.sort((x, y) => x[0] - y[0]);
+    let trab = 0, cur = null;
+    ivs.forEach(iv => { if (!cur || iv[0] > cur[1]) { if (cur) trab += cur[1] - cur[0]; cur = iv.slice(); } else cur[1] = Math.max(cur[1], iv[1]); });
+    if (cur) trab += cur[1] - cur[0];
+    trab = Math.min(trab + sinHoras, 1440);
+    const laborable = i < nDias, transcurrido = d <= hoy, esHoy = d.getTime() === hoy.getTime();
+    // el día de hoy suma lo trabajado, pero no se cuenta como inactivo hasta que termine
+    const cuenta = laborable && d < hoy;
+    dias.push({ fecha: d, ots: delDia.length, trab, laborable, transcurrido, esHoy, inact: cuenta ? Math.max(0, jMin - trab) : 0, extra: laborable ? Math.max(0, trab - jMin) : trab, jornada: cuenta ? jMin : 0 });
+  }
+  const corr = rows.filter(r => msTipo(r) === 'correctivo');
+  const corrT = corr.filter(r => Number(r.TOTAL_MIN_TECNICO) > 0);
+  const resp = rows.map(r => (r.H_INICIO && r.H_TECNICO) ? timeToMin(r.H_TECNICO) - timeToMin(r.H_INICIO) : null).filter(v => v != null && v >= 0 && v < 720);
+  const trab = dias.reduce((s, d) => s + d.trab, 0);
+  const jornada = dias.reduce((s, d) => s + d.jornada, 0);
+  const inact = dias.reduce((s, d) => s + d.inact, 0);
+  return {
+    rows, dias, trab, jornada, inact,
+    // % de la jornada usado en OTs: solo días laborables ya terminados (igual que el inactivo)
+    util: jornada ? Math.min(100, dias.reduce((s, d) => s + (d.jornada ? d.trab : 0), 0) / jornada * 100) : null,
+    ots: rows.length, corr: corr.length, prev: rows.filter(r => msTipo(r) === 'preventivo').length,
+    reparacion: corrT.length ? corrT.reduce((s, r) => s + Number(r.TOTAL_MIN_TECNICO), 0) / corrT.length : null,
+    respuesta: resp.length ? resp.reduce((a, b) => a + b, 0) / resp.length : null,
+    noRes: corr.length ? corr.filter(r => msNoResuelto(r.DESCRIPCION_SOLUCION)).length / corr.length * 100 : null,
+    sinFinal: rows.filter(r => !r.H_FINAL).length,
+    // fracción de la semana laboral ya transcurrida (1 = semana completa)
+    frac: dias.filter(d => d.laborable).length ? dias.filter(d => d.laborable && d.transcurrido && !d.esHoy).length / dias.filter(d => d.laborable).length : 1,
+    inactPct: jornada ? inact / jornada * 100 : null,
+  };
+}
+
+function msMoverSemana(n) { msOffset = Math.min(0, msOffset + n); renderMiSemana(); }
+
+function renderMiSemana() {
+  const card = document.getElementById('ms-card');
+  if (!card) return;
+  const cfg = msCfg();
+  document.getElementById('ms-jornada').value = String(cfg.jornada);
+  document.getElementById('ms-sabado').checked = !!cfg.sabado;
+
+  const lista = msListaTecnicos();
+  const propio = msTecnicoDelUsuario(lista);
+  const rol = (window.currentUserRole && window.currentUserRole.rol) || '';
+  const sel = document.getElementById('ms-tecnico');
+  // Un técnico identificado ve solo su propio resumen; supervisores y
+  // administradores (o un técnico que aún no se pudo relacionar) eligen.
+  const bloqueado = rol === 'TECNICO' && !!propio;
+  if (!msTec || !lista.includes(msTec)) msTec = propio || lista[0] || '';
+  if (bloqueado) msTec = propio;
+  sel.style.display = bloqueado ? 'none' : '';
+  sel.innerHTML = lista.map(t => `<option value="${msEsc(t)}">${msEsc(t)}${t === propio ? ' (yo)' : ''}</option>`).join('');
+  sel.value = msTec;
+
+  document.getElementById('ms-nombre').textContent = msTec || 'Sin técnicos';
+  document.getElementById('ms-sub').textContent = msTec === propio ? 'Lo que realizaste en la semana' : 'Lo que realizó en la semana';
+  if (!msTec) return;
+
+  const lunes = msAddDias(msLunes(msHoy()), msOffset * 7);
+  const dom = msAddDias(lunes, 6);
+  const sem = getWeekNumber(lunes);
+  const rango = `${lunes.getDate()} ${MS_MESES[lunes.getMonth()]} – ${dom.getDate()} ${MS_MESES[dom.getMonth()]} ${dom.getFullYear()}`;
+  document.getElementById('ms-semana-lbl').innerHTML = `${msOffset === 0 ? 'Esta semana' : msOffset === -1 ? 'Semana pasada' : 'Semana ' + sem}<small>Sem. ${sem} · ${rango}</small>`;
+  document.getElementById('ms-next').disabled = msOffset >= 0;
+
+  const S = msStatsSemana(msTec, lunes, cfg);
+  // promedio del equipo esa misma semana (para comparar el tiempo de reparación)
+  const equipo = lista.map(t => t === msTec ? S : msStatsSemana(t, lunes, cfg)).filter(x => x.ots > 0);
+  const eqRep = equipo.filter(x => x.reparacion != null);
+  const repEquipo = eqRep.length ? eqRep.reduce((s, x) => s + x.reparacion, 0) / eqRep.length : null;
+
+  const k = [
+    { n: S.ots, c: 'var(--accent)', l: 'OTs realizadas', f: `${S.corr} correctivas · ${S.prev} preventivas · ${S.dias.filter(d => d.ots).length} día(s) con OTs` },
+    { n: msHM(S.trab), c: 'var(--green)', l: 'Tiempo trabajado', f: S.jornada ? `${Math.round(S.util)}% de la jornada (${msHM(S.jornada)})` : 'sin días laborables aún' },
+    { n: msHM(S.inact), c: 'var(--red)', l: 'Tiempo inactivo', f: 'jornada sin OT registrada' + (S.inactPct != null ? ` · ${Math.round(S.inactPct)}%` : '') },
+    { n: msHM(S.respuesta), c: 'var(--blue)', l: 'Tiempo de respuesta', f: 'promedio desde que paró la máquina' },
+    { n: msHM(S.reparacion), c: 'var(--orange)', l: 'Reparación promedio', f: repEquipo != null && S.reparacion != null ? `equipo: ${msHM(repEquipo)}` : 'por correctivo' },
+    { n: S.noRes != null ? Math.round(S.noRes) + '%' : '—', c: S.noRes > 20 ? 'var(--red)' : 'var(--text)', l: 'Sin resolver', f: 'de sus correctivos' },
+  ];
+  document.getElementById('ms-kpis').innerHTML = k.map(x => `<div class="stat-box"><div class="stat-num" style="color:${x.c}">${x.n}</div><div class="stat-lbl">${x.l}</div><div class="stat-foot">${x.f}</div></div>`).join('');
+
+  const hoyK = msKey(msHoy());
+  const escala = Math.max(cfg.jornada * 60, ...S.dias.map(d => d.trab));
+  document.getElementById('ms-dias').innerHTML = S.dias.filter(d => d.laborable || d.trab > 0).map(d => {
+    const base = Math.min(d.trab, d.laborable ? cfg.jornada * 60 : 0);
+    const futuro = !d.transcurrido;
+    return `<div class="ms-day">
+      <div class="d ${msKey(d.fecha) === hoyK ? 'hoy' : ''}">${MS_DIAS[(d.fecha.getDay() + 6) % 7]} ${d.fecha.getDate()}</div>
+      <div class="track" title="${d.ots} OT(s)">${futuro ? '' : `<div class="w" style="width:${base / escala * 100}%"></div><div class="i" style="width:${d.inact / escala * 100}%"></div><div class="x" style="width:${d.extra / escala * 100}%"></div>`}</div>
+      <div class="v">${futuro ? '—' : `<b>${msHM(d.trab)}</b> · ${d.ots}`}${d.esHoy ? '<div style="font-size:10px;color:var(--accent)">en curso</div>' : ''}</div></div>`;
+  }).join('');
+
+  const notas = [];
+  if (S.sinFinal) notas.push(`${S.sinFinal} OT(s) de esta semana no tienen hora final: no suman tiempo trabajado y aumentan el inactivo.`);
+  notas.push('"Inactivo" es tiempo de la jornada sin OT registrada en días ya terminados: también incluye trabajo no anotado, permisos o ausencias. El día de hoy no cuenta como inactivo hasta que termine.');
+  document.getElementById('ms-nota').textContent = notas.join(' ');
+
+  renderMsAvance(lunes, cfg);
+  renderMsOts(S.rows);
+}
+
+function renderMsAvance(lunes, cfg) {
+  const N = 8, ANT = 4;
+  const sems = [];
+  for (let i = N + ANT - 1; i >= 0; i--) sems.push(msStatsSemana(msTec, msAddDias(lunes, -7 * i), cfg));
+  const vis = sems.slice(ANT); // las 8 que se dibujan; las 4 primeras solo sirven de base
+  const actual = sems[sems.length - 1];
+  const previas = sems.slice(-1 - ANT, -1).filter(s => s.ots > 0);
+  const M = [
+    { k: 'ots', l: 'OTs realizadas', sub: 'por semana', fmt: v => Math.round(v), mejor: 'neutro', vol: true },
+    { k: 'trab', l: 'Tiempo trabajado', sub: 'horas en OTs', fmt: msHM, mejor: 'alto', vol: true },
+    { k: 'inactPct', l: 'Tiempo inactivo', sub: '% de la jornada', fmt: v => Math.round(v) + '%', mejor: 'bajo' },
+    { k: 'reparacion', l: 'Reparación promedio', sub: 'minutos por correctivo', fmt: msHM, mejor: 'bajo' },
+    { k: 'respuesta', l: 'Tiempo de respuesta', sub: 'hasta llegar a la máquina', fmt: msHM, mejor: 'bajo' },
+    { k: 'noRes', l: 'Correctivos sin resolver', sub: '% de sus correctivos', fmt: v => Math.round(v) + '%', mejor: 'bajo' },
+  ];
+  const insights = [];
+  document.getElementById('ms-trend').innerHTML = M.map(m => {
+    const vals = vis.map(s => s[m.k]);
+    const max = Math.max(1, ...vals.filter(v => v != null));
+    const cur = actual[m.k];
+    const base = previas.map(s => s[m.k]).filter(v => v != null);
+    let prom = base.length ? base.reduce((a, b) => a + b, 0) / base.length : null;
+    // semana en curso: los totales (OTs, horas) se comparan contra la parte
+    // proporcional de una semana normal, no contra una semana completa
+    if (m.vol && prom != null && actual.frac < 1) prom = prom * actual.frac;
+    let delta = '<span class="ms-delta neutro">—</span>';
+    if (cur != null && prom != null && prom > 0) {
+      const pct = Math.round((cur - prom) / prom * 100);
+      const cls = m.mejor === 'neutro' || Math.abs(pct) < 5 ? 'neutro' : ((pct < 0) === (m.mejor === 'bajo') ? 'bien' : 'mal');
+      delta = `<span class="ms-delta ${cls}">${pct > 0 ? '▲' : pct < 0 ? '▼' : '='} ${Math.abs(pct)}%</span>`;
+      if (cls !== 'neutro' && Math.abs(pct) >= 15) insights.push({ cls, pct: Math.abs(pct), txt: `${m.l}: ${m.fmt(cur)} vs. ${m.fmt(prom)} en promedio las 4 semanas anteriores${m.vol && actual.frac < 1 ? ' (a esta altura de la semana)' : ''}` });
+    }
+    return `<div class="ms-metric">
+      <div class="name">${m.l}<small>${m.sub} · esta semana: <b style="color:var(--text)">${cur != null ? m.fmt(cur) : '—'}</b></small></div>
+      <div class="ms-spark" title="Últimas 8 semanas">${vals.map((v, i) => `<i class="${i === vals.length - 1 ? 'cur' : ''}" style="height:${v == null ? 2 : Math.max(2, v / max * 28)}px"></i>`).join('')}</div>
+      ${delta}</div>`;
+  }).join('');
+  insights.sort((a, b) => b.pct - a.pct);
+  const buenas = insights.filter(i => i.cls === 'bien').slice(0, 2), malas = insights.filter(i => i.cls === 'mal').slice(0, 2);
+  document.getElementById('ms-insights').innerHTML = !previas.length
+    ? '<div class="ms-insight">Todavía no hay semanas anteriores con OTs para comparar.</div>'
+    : (buenas.map(i => `<div class="ms-insight">✅ <b>Mejoró</b> — ${msEsc(i.txt)}.</div>`).join('')
+      + malas.map(i => `<div class="ms-insight">⚠️ <b>A revisar</b> — ${msEsc(i.txt)}.</div>`).join('')
+      || '<div class="ms-insight">➖ Semana estable: ningún indicador cambió más de 15% frente a las 4 semanas anteriores.</div>');
+}
+
+function renderMsOts(rows) {
+  document.getElementById('ms-ots-n').textContent = rows.length ? `(${rows.length})` : '';
+  const orden = [...rows].sort((a, b) => (b.FECHA || '').localeCompare(a.FECHA || '') || (b.H_TECNICO || '').localeCompare(a.H_TECNICO || ''));
+  document.getElementById('ms-ots').innerHTML = orden.length ? orden.map(r => {
+    const d = msFecha(r.FECHA), tipo = msTipo(r);
+    const otros = msSplit(r.TECNICOS).filter(t => t !== msTec);
+    const eq = [r.TIPO_MAQUINA, r.EQUIPO].filter(Boolean).join(' ') || '—';
+    const horas = r.H_TECNICO || r.H_FINAL ? `${r.H_TECNICO || '?'}–${r.H_FINAL || '?'}` : '';
+    const resp = r.H_INICIO && r.H_TECNICO ? timeToMin(r.H_TECNICO) - timeToMin(r.H_INICIO) : null;
+    return `<div class="ms-ot ${tipo}">
+      <div class="top"><span>${d ? MS_DIAS[(d.getDay() + 6) % 7] + ' ' + d.getDate() : msEsc(r.FECHA)} · ${msEsc(eq)}</span><span style="color:var(--muted);font-weight:600;">${msEsc(r.TIPO_MANTENIMIENTO || '')}</span></div>
+      <div class="meta">📍 ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · 🕐 ' + horas : ''} · ⏱ ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--orange)">sin hora final</span>' : ''}</div>
+      <div class="meta" style="color:var(--text);margin-top:3px;">${r.CAUSA_FALLA ? '[' + msEsc(r.CAUSA_FALLA) + '] ' : ''}${msEsc(r.DESCRIPCION_FALLA || '')}</div>
+      ${r.DESCRIPCION_SOLUCION ? `<div class="sol">✓ ${msEsc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px 0;">Sin OTs registradas en esta semana.</div>';
+}
+
 // ══════ STATS ══════
 function loadStats() {
+  renderMiSemana();
   const data = allRecords;
 
   document.getElementById('s-total').textContent = data.length;
