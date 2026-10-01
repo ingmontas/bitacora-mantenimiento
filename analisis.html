@@ -17,29 +17,114 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-:root{--bg:#0d1117;--panel:#141a22;--panel-2:#1b2330;--line:#262f3d;--text:#e6ebf1;--muted:#8b98ab;--amber:#f0a930;--amber-dim:#7a5a1f;--red:#ef4b4b;--red-dim:#4a2323;--teal:#35d0b0;--teal-dim:#1f4b42;--cat-aqua:#199e70;--st-good-dim:#0f2e14;--st-warning:#fab219;--st-warning-dim:#3a2f10;--st-serious:#ec835a;--st-serious-dim:#3a2318;--st-critical-dim:#3a1c1c;}
+:root{--bg:#0d1117;--panel:#141a22;--panel-2:#1b2330;--line:#262f3d;--text:#e6ebf1;--muted:#8b98ab;--amber:#f0a930;--amber-dim:#7a5a1f;--red:#ef4b4b;--red-dim:#4a2323;--teal:#35d0b0;--teal-dim:#1f4b42;--cat-aqua:#199e70;--st-good-dim:#0f2e14;--st-warning:#fab219;--st-warning-dim:#3a2f10;--st-serious:#ec835a;--st-serious-dim:#3a2318;--st-critical-dim:#3a1c1c;--nav-h:0px;}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
-.wrap{max-width:1320px;margin:0 auto;padding:28px 24px 80px;}
-.hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px;gap:20px;flex-wrap:wrap;}
+.wrap{max-width:1320px;margin:0 auto;padding:22px 24px 80px;}
+
+/* encabezado */
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:14px;gap:20px;flex-wrap:wrap;}
 .hdr-title{display:flex;align-items:center;gap:14px;}
-.dot{width:11px;height:11px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 2.4s infinite;}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 2.4s infinite;flex-shrink:0;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
-h1{font-size:22px;font-weight:700;margin:0;}
-.sub{color:var(--muted);font-size:12.5px;margin-top:3px;font-family:'IBM Plex Mono',monospace;}
-.clock{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);text-align:right;}
+h1{font-size:21px;font-weight:700;margin:0;}
+.sub{color:var(--muted);font-size:12px;margin-top:3px;font-family:'IBM Plex Mono',monospace;}
+.clock{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);text-align:right;}
 .clock b{color:var(--text);font-size:14px;display:block;}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px;}
-.sel-banner{display:flex;align-items:center;justify-content:space-between;background:#2a2410;border:1px solid var(--amber-dim);color:var(--amber);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;}
-.history-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 18px;}
-.hs{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;}
-.hs .hlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace;}
-.hs .hval{font-size:19px;font-weight:700;margin-top:4px;}
-.reco-box{margin-top:20px;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:9px;padding:16px 18px;}
-.reco-box h3{margin:0 0 8px;font-size:13px;color:var(--teal);}
-.reco-box p{margin:0 0 8px;font-size:12.5px;line-height:1.55;}
-.reco-box p:last-child{margin-bottom:0;}
-.std-tag{display:inline-block;background:#123832;color:var(--teal);border-radius:4px;padding:1px 7px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;margin-right:5px;}
+
+/* barra de filtros fija */
+.filterbar{position:sticky;top:var(--nav-h);z-index:200;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:rgba(13,17,23,.95);backdrop-filter:blur(6px);padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+.filterbar .flbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;margin-right:2px;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{display:inline-flex;gap:6px;align-items:center;background:#2a2410;border:1px solid var(--amber-dim);color:var(--amber);border-radius:20px;padding:4px 6px 4px 11px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;}
+.chip button{background:none;color:var(--amber);padding:0 4px;font-size:13px;line-height:1;}
+#clearSelBtn{margin-left:auto;}
+
+/* pestañas */
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin:4px 0 20px;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{background:none;color:var(--muted);border:none;border-bottom:2px solid transparent;border-radius:0;padding:12px 16px 10px;font-size:13px;font-weight:600;white-space:nowrap;display:flex;gap:7px;align-items:center;}
+.tab:hover{color:var(--text);filter:none;}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber);}
+.tab .cnt{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--red-dim);color:#ff8a8a;border-radius:20px;padding:1px 7px;}
+.tabpanel{display:none;}
+.tabpanel.active{display:block;}
+.section-intro{font-size:12.5px;color:var(--muted);margin:-6px 0 16px;line-height:1.5;}
+
+/* tarjetas y KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px 13px;}
+.kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
+.kpi .val{font-size:27px;font-weight:700;margin-top:6px;line-height:1.1;}
+.kpi .foot{font-size:11.5px;color:var(--muted);margin-top:5px;}
+.kpi.accent-amber{border-color:var(--amber-dim);} .kpi.accent-amber .val{color:var(--amber);}
+.kpi.accent-red{border-color:var(--red-dim);} .kpi.accent-red .val{color:var(--red);}
+.kpi.accent-teal .val{color:var(--teal);}
+.kpi.clickable{cursor:pointer;} .kpi.clickable:hover{border-color:var(--muted);}
+.grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;margin-bottom:16px;}
+.grid2.even{grid-template-columns:1fr 1fr;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0;}
+.card.mb{margin-bottom:16px;}
+.card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
+.cardsub{font-size:11.5px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;line-height:1.45;}
+.chart-box{position:relative;width:100%;}
+canvas{max-width:100%;}
+
+/* riesgo */
+.risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+.risk.critico{background:var(--st-critical-dim);color:#ff8a8a;}
+.risk.alto{background:var(--st-serious-dim);color:var(--st-serious);}
+.risk.medio{background:var(--st-warning-dim);color:var(--st-warning);}
+.risk.bajo{background:var(--st-good-dim);color:#5fd35f;}
+.risk.inactivo{background:#17253a;color:#86aee0;}
+.risk.na{background:#2a2f3a;color:var(--muted);}
+
+/* tablas */
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;user-select:none;white-space:nowrap;}
+thead th:hover{color:var(--text);}
+thead th.sorted{color:var(--amber);}
+tbody td{padding:9px 10px;border-bottom:1px solid #1b212b;vertical-align:top;}
+tbody tr:hover{background:#171e28;}
+tbody tr[data-key],tbody tr[data-area],tbody tr[data-tec]{cursor:pointer;}
+.tec-link{cursor:pointer;text-decoration:underline dotted;text-decoration-color:var(--muted);}
+.tec-link:hover{color:var(--amber);}
+tbody tr.selected-row{background:#241d0c;box-shadow:inset 3px 0 0 var(--amber);}
+.eqname{font-weight:600;}
+.areaname{color:var(--muted);font-size:11px;}
+.numcell{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+.numcell .sub-txt{white-space:normal;color:var(--muted);font-size:11px;margin-top:3px;max-width:220px;min-width:160px;font-family:'Space Grotesk',sans-serif;}
+#predTable td:last-child{min-width:280px;}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.toolbar .grow{flex:1;min-width:200px;}
+select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:7px;font-size:12.5px;font-family:'Space Grotesk',sans-serif;}
+select:focus,input:focus{outline:1px solid var(--amber);}
+.empty{color:var(--muted);font-size:12.5px;padding:20px 0;text-align:center;}
+
+/* prioridades */
+.prio-item{display:grid;grid-template-columns:86px 1fr auto;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:6px;}
+.prio-item:last-child{border-bottom:none;}
+.prio-item:hover{background:#171e28;}
+.prio-eq{font-weight:600;font-size:13px;}
+.prio-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+.prio-when{font-family:'IBM Plex Mono',monospace;font-size:11.5px;text-align:right;white-space:nowrap;}
+.prio-foot{font-size:11.5px;color:var(--muted);margin-top:10px;}
+.linkbtn{background:none;color:var(--amber);padding:0;font-size:12px;font-weight:600;}
+
+/* conclusiones */
+.concl-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.55;}
+.concl-item:last-child{border-bottom:none;}
+
+/* mapa de calor */
+.risk-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+.risk-cell{border-radius:9px;padding:13px 14px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:transform .1s,border-color .15s;position:relative;min-height:78px;}
+.risk-cell:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);}
+.risk-cell.selected{border-color:#fff;border-width:2px;}
+.rc-area{font-weight:600;font-size:12.5px;color:#fff;margin-bottom:6px;line-height:1.25;padding-right:34px;}
+.rc-meta{font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.82);}
+.rc-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:2px 7px;border-radius:20px;}
+
+/* kaizen */
 .kaizen-item{border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-bottom:10px;background:var(--panel-2);}
 .kz-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
 .kz-title{font-weight:600;font-size:13px;}
@@ -50,63 +135,39 @@ h1{font-size:22px;font-weight:700;margin:0;}
 .trend-tag.mejorando{background:var(--st-good-dim);color:#5fd35f;}
 .trend-tag.estable{background:#16302c;color:var(--cat-aqua);}
 .trend-tag.insuficiente{background:#2a2f3a;color:var(--muted);}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 16px 14px;}
-.kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
-.kpi .val{font-size:28px;font-weight:700;margin-top:6px;}
-.kpi .foot{font-size:11.5px;color:var(--muted);margin-top:4px;}
-.kpi.accent-amber{border-color:var(--amber-dim);} .kpi.accent-amber .val{color:var(--amber);}
-.kpi.accent-red{border-color:var(--red-dim);} .kpi.accent-red .val{color:var(--red);}
-.kpi.accent-teal .val{color:var(--teal);}
-.grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-bottom:16px;}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0;}
-.card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
-.cardsub{font-size:11.5px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;}
-.chart-box{position:relative;width:100%;}
-canvas{max-width:100%;}
-.risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-.risk.critico{background:var(--st-critical-dim);color:#ff8a8a;}
-.risk.alto{background:var(--st-serious-dim);color:var(--st-serious);}
-.risk.medio{background:var(--st-warning-dim);color:var(--st-warning);}
-.risk.bajo{background:var(--st-good-dim);color:#5fd35f;}
-.risk.na{background:#2a2f3a;color:var(--muted);}
-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;user-select:none;}
-thead th:hover{color:var(--text);}
-tbody td{padding:9px 10px;border-bottom:1px solid #1b212b;vertical-align:top;}
-tbody tr:hover{background:#171e28;}
-tbody tr[data-key],tbody tr[data-area],tbody tr[data-tec]{cursor:pointer;}
-.tec-link{cursor:pointer;text-decoration:underline dotted;text-decoration-color:var(--muted);}
-.tec-link:hover{color:var(--amber);}
-tbody tr.selected-row{background:#241d0c;box-shadow:inset 3px 0 0 var(--amber);}
-.eqname{font-weight:600;}
-.areaname{color:var(--muted);font-size:11px;}
-.numcell{font-family:'IBM Plex Mono',monospace;}
-.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
-select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:7px;font-size:12.5px;font-family:'Space Grotesk',sans-serif;}
-select:focus,input:focus{outline:1px solid var(--amber);}
-.feed-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--muted);font-size:12.5px;font-family:'IBM Plex Mono',monospace;margin:26px 0 10px;}
-.feed-toggle:hover{color:var(--text);}
-.feed-body{display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:20px;}
-.feed-body.open{display:block;}
+
+/* ficha lateral */
+.drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:none;}
+.drawer-bg.open{display:block;}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(780px,100%);background:var(--bg);border-left:1px solid var(--line);z-index:401;overflow-y:auto;transform:translateX(105%);transition:transform .2s ease;padding:0 22px 40px;}
+.drawer.open{transform:none;}
+.drawer-head{position:sticky;top:0;background:var(--bg);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 0 12px;border-bottom:1px solid var(--line);margin-bottom:14px;z-index:2;}
+.drawer-kind{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
+.drawer-title{font-size:17px;font-weight:700;margin-top:3px;}
+.drawer-actions{display:flex;gap:8px;flex-shrink:0;}
+.history-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:0 0 18px;}
+.hs{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;}
+.hs .hlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace;}
+.hs .hval{font-size:18px;font-weight:700;margin-top:4px;}
+.reco-box{margin:0 0 20px;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:9px;padding:16px 18px;}
+.reco-box h3{margin:0 0 8px;font-size:13px;color:var(--teal);}
+.reco-box p{margin:0 0 8px;font-size:12.5px;line-height:1.55;}
+.reco-box p:last-child{margin-bottom:0;}
+.std-tag{display:inline-block;background:#123832;color:var(--teal);border-radius:4px;padding:1px 7px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;margin-right:5px;}
+.drawer h3.sec{font-size:13px;margin:4px 0 10px;}
+
+/* datos */
 textarea{width:100%;min-height:140px;background:#0a0e14;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;resize:vertical;}
-.feed-actions{display:flex;gap:10px;margin-top:10px;align-items:center;}
+.feed-actions{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+.feed-status{font-size:12px;color:var(--teal);font-family:'IBM Plex Mono',monospace;}
+.hint{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.5;}
+
 button{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;cursor:pointer;font-family:'Space Grotesk',sans-serif;}
 button.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+button.small{padding:6px 12px;font-size:11.5px;}
 button:hover{filter:brightness(1.08);}
-.feed-status{font-size:12px;color:var(--teal);font-family:'IBM Plex Mono',monospace;}
-.hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;}
-.empty{color:var(--muted);font-size:12.5px;padding:20px 0;text-align:center;}
-.risk-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
-.risk-cell{border-radius:9px;padding:13px 14px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:transform .1s,border-color .15s;position:relative;min-height:78px;}
-.risk-cell:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);}
-.risk-cell.selected{border-color:#fff;border-width:2px;}
-.rc-area{font-weight:600;font-size:12.5px;color:#fff;margin-bottom:6px;line-height:1.25;}
-.rc-meta{font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.82);}
-.rc-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:2px 7px;border-radius:20px;}
-.concl-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.55;}
-.concl-item:last-child{border-bottom:none;}
 footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:'IBM Plex Mono',monospace;}
-@media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+@media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
 </style>
 </head>
 <body>
@@ -115,129 +176,188 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <div class="hdr-title"><div class="dot"></div><div>
       <h1>Panel de Mantenimiento &mdash; Análisis Preventivo &amp; Predictivo</h1>
       <div class="sub" id="rangeInfo">cargando datos…</div></div></div>
-    <div class="clock"><b id="nowClock">--</b>fecha de referencia del análisis</div>
+    <div class="clock"><b id="nowClock">--</b>fecha de referencia (hoy)</div>
   </div>
 
-  <div class="sel-banner" id="selBanner" style="display:none;"><span></span>
-    <button class="secondary" id="clearSelBtn" style="padding:4px 12px;font-size:11px;">Quitar filtro ✕</button></div>
-
-  <div class="kpis" id="kpiRow"></div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <h2>Conclusiones</h2>
-    <div class="cardsub">Lectura automática de las gráficas y tablas de este panel — no reemplaza el criterio de mantenimiento.</div>
-    <div id="conclusionesList"></div>
+  <!-- Filtros globales: afectan a todas las pestañas -->
+  <div class="filterbar" id="filterBar">
+    <span class="flbl">Filtros</span>
+    <select id="fPeriodo" aria-label="Período">
+      <option value="todo">Todo el historial</option>
+      <option value="30">Últimos 30 días</option>
+      <option value="90">Últimos 90 días</option>
+      <option value="180">Últimos 6 meses</option>
+      <option value="365">Últimos 12 meses</option>
+    </select>
+    <select id="fArea" aria-label="Área"><option value="">Todas las áreas</option></select>
+    <select id="fTecnico" aria-label="Técnico"><option value="">Todos los técnicos</option></select>
+    <select id="fTipo" aria-label="Tipo"><option value="">Todos los tipos</option></select>
+    <div class="chips" id="chipBox"></div>
+    <button class="secondary small" id="clearSelBtn">Limpiar filtros</button>
   </div>
 
-  <div class="card" id="historyCard" style="display:none;margin-bottom:16px;">
-    <h2 id="historyTitle">Historial completo</h2>
-    <div class="cardsub">Todas las órdenes de trabajo registradas, en orden cronológico.</div>
-    <div id="historySummary" class="history-summary"></div>
-    <div id="tecEquipoBreakdown" style="display:none;"></div>
-    <div style="overflow-x:auto;"><table>
-      <thead><tr id="historyHeadRow"></tr></thead>
-      <tbody id="historyBody"></tbody></table></div>
-    <div class="reco-box" id="recoBox"></div>
-  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="resumen">Resumen</button>
+    <button class="tab" data-tab="equipos">Equipos y predicción <span class="cnt" id="tabRiskCnt" style="display:none;"></span></button>
+    <button class="tab" data-tab="areas">Áreas</button>
+    <button class="tab" data-tab="tecnicos">Técnicos</button>
+    <button class="tab" data-tab="datos">Datos</button>
+  </nav>
 
-  <div class="grid2">
-    <div class="card">
-      <h2>Fallas correctivas por línea/área</h2>
-      <div class="cardsub">Ordenado de mayor a menor incidencia — haz clic en una barra para filtrar</div>
-      <div class="chart-box" id="chartAreaBox" style="height:230px"><canvas id="chartArea"></canvas></div>
+  <!-- ═════════ RESUMEN ═════════ -->
+  <section class="tabpanel active" id="tab-resumen">
+    <div class="kpis" id="kpiRow"></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Prioridades: equipos en riesgo</h2>
+        <div class="cardsub">Equipos en riesgo Crítico o Alto según su MTBF. Clic para abrir la ficha del equipo.</div>
+        <div id="prioList"></div>
+      </div>
+      <div class="card">
+        <h2>Conclusiones</h2>
+        <div class="cardsub">Lectura automática del panel — no reemplaza el criterio de mantenimiento.</div>
+        <div id="conclusionesList"></div>
+      </div>
+    </div>
+    <div class="card mb">
+      <h2>Tendencia semanal de correctivos</h2>
+      <div class="cardsub">Incluye las semanas con 0 correctivos. Clic en un punto para filtrar por esa semana.</div>
+      <div class="chart-box" style="height:250px"><canvas id="chartTrend"></canvas></div>
+    </div>
+    <div class="grid2 even">
+      <div class="card">
+        <h2>Distribución por tipo de mantenimiento</h2>
+        <div class="cardsub">Correctivo vs. Preventivo vs. Proyecto — clic para filtrar</div>
+        <div class="chart-box" style="height:250px"><canvas id="chartTipo"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Causas de falla más comunes</h2>
+        <div class="cardsub">Solo OTs con causa registrada — clic para filtrar</div>
+        <div class="chart-box" id="chartCausaBox" style="height:250px"><canvas id="chartCausa"></canvas></div>
+        <div class="empty" id="causaEmpty" style="display:none;">Ninguna OT de este alcance tiene causa registrada.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════ EQUIPOS ═════════ -->
+  <section class="tabpanel" id="tab-equipos">
+    <p class="section-intro">MTBF = intervalo promedio entre fallas correctivas en días distintos (mínimo 3). Se calcula con todo el historial del equipo, sin aplicar el período ni los filtros de tipo, semana o causa. "Sin fallas recientes" = lleva más del doble de su MTBF (y al menos 30 días más) sin fallar.</p>
+    <div class="card mb">
+      <h2>Análisis predictivo por equipo (MTBF)</h2>
+      <div class="cardsub">Clic en un equipo para ver su ficha completa; clic en un técnico para ver la suya.</div>
+      <div class="toolbar">
+        <input type="text" id="searchBox" class="grow" placeholder="Buscar equipo, área o pieza…">
+        <select id="riskFilter">
+          <option value="">Todos los niveles de riesgo</option>
+          <option value="critico">Crítico (vencido)</option><option value="alto">Alto (≤7 días)</option>
+          <option value="medio">Medio (≤30 días)</option><option value="bajo">Bajo</option>
+          <option value="inactivo">Sin fallas recientes</option><option value="na">Datos insuficientes</option></select>
+      </div>
+      <div style="overflow-x:auto;"><table id="predTable">
+        <thead><tr>
+          <th data-k="area">Área</th><th data-k="equipo">Equipo / Pieza</th><th data-k="tecnico">Técnico habitual</th>
+          <th data-k="fallas">Correctivos</th><th data-k="mtbf">MTBF (días)</th><th data-k="last">Última falla</th>
+          <th data-k="next">Próxima falla estimada</th><th data-k="downtime">Paro prom. (min)</th>
+          <th data-k="risk">Riesgo</th><th data-k="plan">Plan recomendado</th></tr></thead>
+        <tbody id="predBody"></tbody></table>
+        <div class="empty" id="predEmpty" style="display:none;">No hay equipos que coincidan con el filtro.</div></div>
     </div>
     <div class="card">
-      <h2>Distribución por tipo de mantenimiento</h2>
-      <div class="cardsub">Correctivo vs. Preventivo vs. Proyecto</div>
-      <div class="chart-box" style="height:260px"><canvas id="chartTipo"></canvas></div>
+      <h2>Oportunidades de mejora continua</h2>
+      <div class="cardsub">Piezas que se repiten en varios correctivos del mismo equipo. Ciclo PDCA/Kaizen: Plan → Do → Check → Act.</div>
+      <div id="kaizenList"></div>
     </div>
-  </div>
+  </section>
 
-  <div class="card" style="margin-bottom:16px;">
-    <h2>Tendencia semanal de correctivos</h2>
-    <div class="cardsub">Una línea ascendente sostenida anticipa saturación del equipo de mantenimiento</div>
-    <div class="chart-box" style="height:260px"><canvas id="chartTrend"></canvas></div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;" id="causaCard">
-    <h2>Causas de falla más comunes</h2>
-    <div class="cardsub">Solo OTs con causa registrada — haz clic en una barra para filtrar todo el panel.</div>
-    <div class="chart-box" id="chartCausaBox" style="height:230px"><canvas id="chartCausa"></canvas></div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <h2>Medición por línea/área</h2>
-    <div class="cardsub">Haz clic en una fila para ver el detalle completo de esa línea/área.</div>
-    <div style="overflow-x:auto;"><table id="areaTable">
-      <thead><tr>
-        <th data-ak="area">Área / línea</th><th data-ak="equipos">Equipos distintos</th><th data-ak="ots">Total OTs</th>
-        <th data-ak="correctivos">Correctivos</th><th data-ak="pct">% Correctivo</th><th data-ak="downtime">Paro total</th>
-        <th data-ak="tecnico">Técnico principal</th><th data-ak="riesgo">Equipos en riesgo alto/crítico</th></tr></thead>
-      <tbody id="areaBody"></tbody></table></div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <h2>Mapa de calor de riesgo por línea/área</h2>
-    <div class="cardsub">El tono rojo crece con el % de correctivos; el número indica equipos en riesgo alto o crítico.</div>
-    <div id="riskMap" class="risk-map"></div>
-  </div>
-
-  <div class="card">
-    <h2>Análisis predictivo por equipo (MTBF)</h2>
-    <div class="cardsub">Intervalo promedio entre fallas correctivas por equipo (días distintos). Mínimo 3 fallas. Se calcula sobre el historial completo del alcance equipo/área/técnico, sin los filtros de tipo, semana o causa.</div>
-    <div class="toolbar">
-      <input type="text" id="searchBox" placeholder="Buscar equipo, área o pieza…">
-      <select id="areaFilter"><option value="">Todas las áreas</option></select>
-      <select id="riskFilter">
-        <option value="">Todos los niveles de riesgo</option>
-        <option value="critico">Crítico (vencido)</option><option value="alto">Alto (≤7 días)</option>
-        <option value="medio">Medio (≤30 días)</option><option value="bajo">Bajo</option></select>
+  <!-- ═════════ ÁREAS ═════════ -->
+  <section class="tabpanel" id="tab-areas">
+    <div class="grid2">
+      <div class="card">
+        <h2>Fallas correctivas por línea/área</h2>
+        <div class="cardsub">De mayor a menor — clic en una barra para filtrar todo el panel</div>
+        <div class="chart-box" id="chartAreaBox" style="height:230px"><canvas id="chartArea"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Mapa de calor de riesgo</h2>
+        <div class="cardsub">Rojo según % de correctivos; ⚠ = equipos en riesgo alto o crítico. Clic para abrir la ficha del área.</div>
+        <div id="riskMap" class="risk-map"></div>
+      </div>
     </div>
-    <div style="overflow-x:auto;"><table id="predTable">
-      <thead><tr>
-        <th data-k="area">Área</th><th data-k="equipo">Equipo / Pieza</th><th data-k="tecnico">Técnico habitual</th>
-        <th data-k="fallas">Correctivos</th><th data-k="mtbf">MTBF (días)</th><th data-k="last">Última falla</th>
-        <th data-k="next">Próxima falla estimada</th><th data-k="downtime">Paro prom. (min)</th>
-        <th data-k="risk">Riesgo</th><th data-k="plan">Plan recomendado</th></tr></thead>
-      <tbody id="predBody"></tbody></table>
-      <div class="empty" id="predEmpty" style="display:none;">No hay equipos que coincidan con el filtro.</div></div>
-  </div>
+    <div class="card">
+      <h2>Medición por línea/área</h2>
+      <div class="cardsub">Clic en una fila para abrir la ficha del área. Clic en un encabezado para ordenar.</div>
+      <div style="overflow-x:auto;"><table id="areaTable">
+        <thead><tr>
+          <th data-ak="area">Área / línea</th><th data-ak="equipos">Equipos distintos</th><th data-ak="ots">Total OTs</th>
+          <th data-ak="correctivos">Correctivos</th><th data-ak="pct">% Correctivo</th><th data-ak="downtime">Paro total</th>
+          <th data-ak="tecnico">Técnico principal</th><th data-ak="riesgo">Equipos en riesgo alto/crítico</th></tr></thead>
+        <tbody id="areaBody"></tbody></table></div>
+    </div>
+  </section>
 
-  <div class="card" style="margin-top:16px;">
-    <h2>Evaluación de técnicos</h2>
-    <div class="cardsub" id="tecEvalSub"></div>
-    <div class="chart-box" style="height:280px;margin-bottom:18px;"><canvas id="chartTecnicos"></canvas></div>
-    <div style="overflow-x:auto;"><table id="tecTable">
-      <thead><tr>
-        <th data-tk="tecnico">Técnico</th><th data-tk="ots">OTs atendidas</th><th data-tk="correctivos">Correctivos</th>
-        <th data-tk="mttr">MTTR prom.</th><th data-tk="downtime">Paro prom. máquina</th><th data-tk="areas">Áreas cubiertas</th>
-        <th data-tk="noresuelto">% sin resolver</th><th data-tk="preventivos">Preventivos (checklist)</th>
-        <th data-tk="respuesta">Tiempo resp. prom.</th><th data-tk="desempeno">Desempeño</th></tr></thead>
-      <tbody id="tecBody"></tbody></table></div>
-  </div>
+  <!-- ═════════ TÉCNICOS ═════════ -->
+  <section class="tabpanel" id="tab-tecnicos">
+    <div class="card mb">
+      <h2>OTs atendidas por técnico</h2>
+      <div class="cardsub">Top 10 — clic en una barra para filtrar todo el panel por ese técnico</div>
+      <div class="chart-box" style="height:260px;"><canvas id="chartTecnicos"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Evaluación de técnicos</h2>
+      <div class="cardsub" id="tecEvalSub"></div>
+      <div style="overflow-x:auto;"><table id="tecTable">
+        <thead><tr>
+          <th data-tk="tecnico">Técnico</th><th data-tk="ots">OTs atendidas</th><th data-tk="correctivos">Correctivos</th>
+          <th data-tk="mttr">MTTR prom.</th><th data-tk="downtime">Paro prom. máquina</th><th data-tk="areas">Áreas cubiertas</th>
+          <th data-tk="noresuelto">% sin resolver</th><th data-tk="preventivos">Preventivos (checklist)</th>
+          <th data-tk="respuesta">Tiempo resp. prom.</th><th data-tk="desempeno">Desempeño</th></tr></thead>
+        <tbody id="tecBody"></tbody></table></div>
+    </div>
+  </section>
 
-  <div class="card" style="margin-top:16px;">
-    <h2>Oportunidades de mejora continua</h2>
-    <div class="cardsub">Piezas que se repiten en varios correctivos del mismo equipo. Ciclo PDCA/Kaizen: Plan → Do → Check → Act.</div>
-    <div id="kaizenList"></div>
-  </div>
+  <!-- ═════════ DATOS ═════════ -->
+  <section class="tabpanel" id="tab-datos">
+    <div class="card mb">
+      <h2>Exportar</h2>
+      <div class="cardsub">El CSV respeta los filtros activos; el respaldo JSON incluye todas las OTs.</div>
+      <div class="feed-actions">
+        <button onclick="exportAnalisisCSV()">📊 Exportar reporte a Excel (CSV)</button>
+        <button class="secondary" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
+        <span class="feed-status" id="exportStatus"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Cargar OTs antiguas en bloque</h2>
+      <p class="hint">El panel se alimenta en vivo desde la Bitácora. Usa esto solo para cargar de una vez OTs viejas de Excel: una OT por línea, columnas separadas por tabulación, fecha en formato AAAA-MM-DD.</p>
+      <textarea id="feedArea" placeholder="OT-XXXXXXXXXX	semana	fecha	linea-equipos	tipo de maquina	Equipo	pieza	H-INICIO	H-TECNICO	H-FINAL	M-E	GENERA-OT	TIPO-MANTENIMIENTO	PARO-PLANTA	TECNICOS	TOTAL-MIN-MAQUINA	TOTAL-MIN-TECNICO	DESCRIPCION-FALLA	DESCRIPCION-SOLUCION"></textarea>
+      <div class="feed-actions">
+        <button id="appendBtn">Subir a la base de datos compartida</button>
+        <button class="secondary" id="clearFeedBtn">Limpiar cuadro</button>
+        <span class="feed-status" id="feedStatus"></span></div>
+    </div>
+  </section>
 
-  <div class="feed-toggle" id="feedToggle">▸ Cargar OTs antiguas en bloque (pegar filas separadas por tabulaciones)</div>
-  <div class="feed-body" id="feedBody">
-    <div class="hint">El panel se alimenta en vivo desde la Bitácora. Usa esto solo para cargar de una vez OTs viejas de Excel. Una OT por línea, columnas separadas por tabulación.</div>
-    <textarea id="feedArea" placeholder="OT-XXXXXXXXXX	semana	fecha	linea-equipos	tipo de maquina	Equipo	pieza	H-INICIO	H-TECNICO	H-FINAL	M-E	GENERA-OT	TIPO-MANTENIMIENTO	PARO-PLANTA	TECNICOS	TOTAL-MIN-MAQUINA	TOTAL-MIN-TECNICO	DESCRIPCION-FALLA	DESCRIPCION-SOLUCION"></textarea>
-    <div class="feed-actions">
-      <button id="appendBtn">Subir a la base de datos compartida</button>
-      <button class="secondary" id="clearFeedBtn">Limpiar cuadro</button>
-      <span class="feed-status" id="feedStatus"></span></div>
-  </div>
-
-  <div style="display:flex;justify-content:center;gap:10px;margin:24px 0 0;flex-wrap:wrap;">
-    <button onclick="exportAnalisisCSV()">📊 Exportar reporte a Excel (CSV)</button>
-    <button class="secondary" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
-  </div>
   <footer>Los cálculos de MTBF y riesgo son estimaciones estadísticas, no diagnósticos definitivos</footer>
 </div>
+
+<!-- Ficha lateral (equipo / área / técnico) -->
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div><div class="drawer-kind" id="drawerKind"></div><div class="drawer-title" id="historyTitle"></div></div>
+    <div class="drawer-actions">
+      <button class="secondary small" id="drawerFilterBtn" style="display:none;">Filtrar el panel</button>
+      <button class="secondary small" id="drawerClose">Cerrar ✕</button>
+    </div>
+  </div>
+  <div id="historySummary" class="history-summary"></div>
+  <div class="reco-box" id="recoBox"></div>
+  <div id="tecEquipoBreakdown" style="display:none;"></div>
+  <h3 class="sec">Historial completo</h3>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr id="historyHeadRow"></tr></thead>
+    <tbody id="historyBody"></tbody></table></div>
+</aside>
 
 <script>
 /* Semilla inicial: solo se usa si la colección "ots" de Firestore está vacía.
@@ -246,6 +366,7 @@ const RAW = ``;
 
 let allRows = [];
 const charts = {};
+const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 if (typeof ChartDataLabels !== 'undefined') {
@@ -299,8 +420,9 @@ function canonEquipo(r){
 const dayKey = r => (r.area||'Sin área') + ' | ' + canonEquipo(r);
 
 /* ---------- fechas y semanas ---------- */
-function parseFecha(s){ const d = new Date(s+'T00:00:00'); return isNaN(d.getTime()) ? null : d; }
+function parseFecha(s){ if (!s) return null; const d = new Date(s+'T00:00:00'); return isNaN(d.getTime()) ? null : d; }
 const daysBetween = (a,b) => Math.round((b-a)/86400000);
+function today0(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
 function isoWeekKey(d){
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const n = t.getUTCDay()||7;
@@ -311,11 +433,7 @@ function isoWeekKey(d){
 }
 const weekOf = r => { const d = parseFecha(r.fecha); return d ? isoWeekKey(d) : ''; };
 const weekLabel = k => 'Sem ' + parseInt(k.split('-')[1],10);
-function getRefDate(rows){
-  let max = null;
-  rows.forEach(r=>{ const d = parseFecha(r.fecha); if (d && (!max||d>max)) max = d; });
-  return max || new Date();
-}
+const fmtDate = d => d ? d.toLocaleDateString('es-DO') : '—';
 
 /* ---------- formatos ---------- */
 function fmtHM(m){ if (m==null||isNaN(m)) return '—'; const h=Math.floor(m/60), mm=Math.round(m%60); return h>0?`${h}h ${mm}m`:`${mm}m`; }
@@ -324,100 +442,153 @@ function fmtRespuesta(m){
   if (m>=1440){ const d=Math.floor(m/1440), h=Math.round((m%1440)/60); return h>0?`${d}d ${h}h`:`${d}d`; }
   return fmtHM(m);
 }
-const riskLabel = r => ({critico:'Crítico',alto:'Alto',medio:'Medio',bajo:'Bajo',na:'Datos insuf.'}[r]||'—');
+const RISK_ORDER = {critico:0,alto:1,medio:2,bajo:3,inactivo:4,na:5};
+const riskLabel = r => ({critico:'Crítico',alto:'Alto',medio:'Medio',bajo:'Bajo',inactivo:'Sin fallas recientes',na:'Datos insuf.'}[r]||'—');
 const isNoResuelto = sol => { sol=(sol||'').toLowerCase(); return ['no solucionado','no solucionada','no resuelto','sin solucionar','no terminado','aún no','pendiente'].some(x=>sol.includes(x)); };
 const splitTecnicos = s => s ? s.split(',').map(x=>x.trim()).filter(Boolean) : [];
-const isCorr = r => r.tipoMant.toLowerCase()==='correctivo';
-const isPrev = r => r.tipoMant.toLowerCase()==='preventivo';
+const isCorr = r => (r.tipoMant||'').toLowerCase()==='correctivo';
+const isPrev = r => (r.tipoMant||'').toLowerCase()==='preventivo';
+
+/* ---------- estado de filtros y ficha ---------- */
+const F = { periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'' };
+let ficha = null; // {mode:'equipo'|'area'|'tecnico', val}
+
+/* ---------- motor predictivo (MTBF) ---------- */
+const topFreq = list => {
+  const c = {}; list.forEach(v=>{ if(v) c[v]=(c[v]||0)+1; });
+  const s = Object.entries(c).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  return s.length ? {value:s[0][0], count:s[0][1]} : null;
+};
+function buildPlan(risk, pieza, mtbf, daysSince){
+  let b;
+  if (risk==='critico') b='Intervención inmediata: según el historial, esta falla ya debió repetirse. Programar inspección esta semana.';
+  else if (risk==='alto') b='Programar mantenimiento preventivo en los próximos 7 días, antes de la fecha estimada de falla.';
+  else if (risk==='medio') b='Incluir en el plan de mantenimiento preventivo del próximo mes.';
+  else if (risk==='bajo') b='Mantener en monitoreo rutinario; el intervalo entre fallas es amplio ('+(mtbf?mtbf.toFixed(0):'?')+' días).';
+  else if (risk==='inactivo') b='Sin fallas correctivas en '+daysSince+' días (más del doble de su MTBF). Verifica si la causa se eliminó y documenta qué funcionó; el pronóstico se recalcula con la próxima falla.';
+  else b='Registrar más eventos correctivos de este equipo para una recomendación confiable (mínimo 3 días distintos con falla).';
+  if (risk!=='inactivo' && pieza && pieza.count>=2) b += ' Enfocar la revisión en: '+pieza.value+' (repite en '+pieza.count+' fallas).';
+  return b;
+}
+function computePredictive(rows, refDate){
+  const groups = {};
+  rows.filter(isCorr).forEach(r=>{
+    const d = parseFecha(r.fecha); if (!d) return;
+    const key = dayKey(r);
+    if (!groups[key]) groups[key] = {area:r.area, equipo:canonEquipo(r), dates:[], downtime:[], entries:[]};
+    groups[key].dates.push(d);
+    groups[key].downtime.push(r.minMaquina);
+    groups[key].entries.push({date:d, falla:r.falla, pieza:r.pieza, tecnicos:r.tecnicos});
+  });
+  return Object.values(groups).map(g=>{
+    g.entries.sort((a,b)=>a.date-b.date);
+    // días distintos: varias OTs del mismo equipo el mismo día cuentan como un solo evento
+    const uniq = [...new Set(g.dates.map(d=>d.getTime()))].sort((a,b)=>a-b).map(t=>new Date(t));
+    const n = uniq.length, lastD = uniq[n-1];
+    const daysSince = daysBetween(lastD, refDate);
+    let mtbf=null, nextDate=null, daysUntil=null, risk='na';
+    if (n>=3){
+      let s=0; for(let i=1;i<n;i++) s+=daysBetween(uniq[i-1],uniq[i]);
+      mtbf = s/(n-1);
+      nextDate = new Date(lastD.getTime()+mtbf*86400000);
+      daysUntil = daysBetween(refDate, nextDate);
+      // un equipo que dejó de fallar no se queda en "Crítico" para siempre
+      if (daysSince > Math.max(2*mtbf, mtbf+30)) risk = 'inactivo';
+      else risk = daysUntil<0?'critico':daysUntil<=7?'alto':daysUntil<=30?'medio':'bajo';
+    }
+    const last = g.entries[g.entries.length-1];
+    const tec = topFreq(g.entries.map(e=>e.tecnicos));
+    return {area:g.area, equipo:g.equipo, key:g.area+' | '+g.equipo, fallas:g.dates.length, mtbf, nextDate, daysUntil, daysSince, risk, last:lastD,
+      avgDowntime:g.downtime.reduce((s,x)=>s+x,0)/g.downtime.length, lastFalla:last?last.falla:'',
+      tecnico:tec?tec.value:'—', plan:buildPlan(risk, topFreq(g.entries.map(e=>e.pieza)), mtbf, daysSince)};
+  });
+}
 
 /* ---------- render principal ---------- */
+function fillSelect(id, values, allLabel, cur){
+  const vals = [...values]; if (cur && !vals.includes(cur)) vals.push(cur);
+  $(id).innerHTML = `<option value="">${allLabel}</option>` + vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  $(id).value = cur || '';
+}
+
 function render(){
-  const rows = allRows.filter(r=>r.fecha);
-  _canon = buildCanon(rows);
-  const refDate = getRefDate(rows);
-  document.getElementById('nowClock').textContent = refDate.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric'});
-  const fechas = rows.map(r=>parseFecha(r.fecha)).filter(Boolean);
-  document.getElementById('rangeInfo').textContent = rows.length + ' órdenes de trabajo cargadas' +
-    (fechas.length ? ' · del ' + new Date(Math.min(...fechas)).toLocaleDateString('es-DO') + ' al ' + new Date(Math.max(...fechas)).toLocaleDateString('es-DO') : '');
+  const ref = today0();
+  const withDate = allRows.filter(r=>parseFecha(r.fecha));
+  const invalid = allRows.length - withDate.length;
+  const rowsAll = withDate;
+  window._rowsAll = rowsAll;
+  _canon = buildCanon(rowsAll);
 
-  const selKey = window._selectedKey, selArea = window._selectedArea, selTec = window._selectedTecnico;
-  let baseRows = rows, scopeLabel = null, scopeMode = null;
-  if (selKey){ baseRows = rows.filter(r=>dayKey(r)===selKey); scopeLabel = selKey.replace(' | ',' — '); scopeMode = 'equipo'; }
-  else if (selArea){ baseRows = rows.filter(r=>r.area===selArea); scopeLabel = 'Línea/área: '+selArea; scopeMode = 'area'; }
-  else if (selTec){ baseRows = rows.filter(r=>splitTecnicos(r.tecnicos).includes(selTec)); scopeLabel = 'Técnico: '+selTec; scopeMode = 'tecnico'; }
+  $('nowClock').textContent = ref.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric'});
+  const fechas = rowsAll.map(r=>parseFecha(r.fecha).getTime());
+  const fmin = fechas.length ? new Date(fechas.reduce((a,b)=>Math.min(a,b))) : null;
+  const fmax = fechas.length ? new Date(fechas.reduce((a,b)=>Math.max(a,b))) : null;
+  $('rangeInfo').textContent = rowsAll.length + ' órdenes de trabajo' + (fmin ? ' · del '+fmtDate(fmin)+' al '+fmtDate(fmax) : '')
+    + (invalid ? ' · '+invalid+' sin fecha válida, p. ej. reportes pendientes (no se incluyen)' : '');
 
-  let scopeRows = baseRows;
-  const extra = [];
-  if (window._selectedTipo){ scopeRows = scopeRows.filter(r=>(r.tipoMant||'Sin clasificar')===window._selectedTipo); extra.push('Tipo: '+window._selectedTipo); }
-  if (window._selectedSemana){ scopeRows = scopeRows.filter(r=>weekOf(r)===window._selectedSemana); extra.push(weekLabel(window._selectedSemana)+' ('+window._selectedSemana.split('-')[0]+')'); }
-  if (window._selectedCausa){ scopeRows = scopeRows.filter(r=>r.causa===window._selectedCausa); extra.push('Causa: '+window._selectedCausa); }
+  fillSelect('fArea', [...new Set(rowsAll.map(r=>r.area))].sort(), 'Todas las áreas', F.area);
+  fillSelect('fTecnico', [...new Set(rowsAll.flatMap(r=>splitTecnicos(r.tecnicos)))].sort(), 'Todos los técnicos', F.tecnico);
+  fillSelect('fTipo', [...new Set(rowsAll.map(r=>r.tipoMant||'Sin clasificar'))].sort(), 'Todos los tipos', F.tipo);
+  $('fPeriodo').value = F.periodo;
+
+  /* filtros: cada gráfica que filtra se dibuja SIN su propio filtro, y resalta lo elegido */
+  const periodRows = F.periodo==='todo' ? rowsAll : rowsAll.filter(r=>daysBetween(parseFecha(r.fecha), ref) <= +F.periodo);
+  const preds = {
+    area: r=>!F.area || r.area===F.area,
+    tecnico: r=>!F.tecnico || splitTecnicos(r.tecnicos).includes(F.tecnico),
+    tipo: r=>!F.tipo || (r.tipoMant||'Sin clasificar')===F.tipo,
+    semana: r=>!F.semana || weekOf(r)===F.semana,
+    causa: r=>!F.causa || r.causa===F.causa,
+  };
+  const rowsExcept = k => periodRows.filter(r=>Object.entries(preds).every(([kk,f])=>kk===k || f(r)));
+  const scopeRows = rowsExcept(null);
   window._scopeRows = scopeRows;
-  window._hasFilter = !!(scopeLabel || extra.length);
+  window._hasFilter = F.periodo!=='todo' || ['area','tecnico','tipo','semana','causa'].some(k=>F[k]);
 
-  const banner = document.getElementById('selBanner');
-  const parts = [scopeLabel, ...extra].filter(Boolean);
-  if (parts.length){ banner.style.display='flex'; banner.querySelector('span').textContent = 'Filtrando por: '+parts.join(' · '); }
-  else banner.style.display = 'none';
+  /* chips para filtros que no tienen selector propio */
+  const chips = [];
+  if (F.semana) chips.push({k:'semana', t:weekLabel(F.semana)+' ('+F.semana.split('-')[0]+')'});
+  if (F.causa) chips.push({k:'causa', t:'Causa: '+F.causa});
+  $('chipBox').innerHTML = chips.map(c=>`<span class="chip">${esc(c.t)}<button data-chip="${c.k}" aria-label="Quitar">✕</button></span>`).join('');
+  $('clearSelBtn').style.display = window._hasFilter ? '' : 'none';
+
+  /* predictivo: historial completo (sin período ni filtros de tipo/semana/causa) */
+  const predAll = computePredictive(rowsAll, ref);
+  const predScope = (F.area||F.tecnico) ? computePredictive(rowsAll.filter(r=>preds.area(r)&&preds.tecnico(r)), ref) : predAll;
+  window._predictive = predScope; window._predAll = predAll;
 
   /* KPIs */
   const correctivos = scopeRows.filter(isCorr), preventivos = scopeRows.filter(isPrev);
   const totalDowntime = scopeRows.reduce((s,r)=>s+r.minMaquina,0);
   const pctCorr = scopeRows.length ? Math.round(correctivos.length/scopeRows.length*100) : 0;
-  const areaCounts = {};
-  correctivos.forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
-  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-  const topArea = areaSorted[0];
+  const mtbfs = predScope.filter(p=>p.mtbf!=null).map(p=>p.mtbf);
+  const mtbfAvg = mtbfs.length ? mtbfs.reduce((a,b)=>a+b,0)/mtbfs.length : null;
+  const corrT = correctivos.filter(r=>r.minTecnico>0);
+  const mttrAvg = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  const nCrit = predScope.filter(p=>p.risk==='critico').length, nAlto = predScope.filter(p=>p.risk==='alto').length;
   const prevCheck = preventivos.filter(r=>r.tiempoRespuestaMin!=null);
   const avgResp = prevCheck.length ? prevCheck.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/prevCheck.length : null;
 
-  document.getElementById('kpiRow').innerHTML = `
-    <div class="kpi"><div class="lbl">Total OTs</div><div class="val">${scopeRows.length}</div><div class="foot">registros válidos analizados</div></div>
-    <div class="kpi accent-red"><div class="lbl">% Correctivo</div><div class="val">${pctCorr}%</div><div class="foot">${correctivos.length} de ${scopeRows.length}</div></div>
-    <div class="kpi accent-teal"><div class="lbl">% Preventivo</div><div class="val">${scopeRows.length?Math.round(preventivos.length/scopeRows.length*100):0}%</div><div class="foot">${preventivos.length} órdenes planificadas</div></div>
-    <div class="kpi accent-amber"><div class="lbl">Paro de máquina acumulado</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min totales</div></div>
-    <div class="kpi"><div class="lbl">${selKey?'Área del equipo':'Área más crítica'}</div><div class="val" style="font-size:19px;">${topArea?esc(topArea[0]):'—'}</div><div class="foot">${topArea?topArea[1]+' correctivos registrados':''}</div></div>
-    <div class="kpi accent-teal"><div class="lbl">Tiempo de respuesta (Checklist)</div><div class="val" style="font-size:19px;">${avgResp!=null?fmtRespuesta(avgResp):'—'}</div><div class="foot">${prevCheck.length} preventivas cerradas desde checklist</div></div>`;
+  $('kpiRow').innerHTML = `
+    <div class="kpi"><div class="lbl">Órdenes de trabajo</div><div class="val">${scopeRows.length}</div><div class="foot">${correctivos.length} correctivas · ${preventivos.length} preventivas</div></div>
+    <div class="kpi ${pctCorr>=60?'accent-red':pctCorr>=35?'accent-amber':'accent-teal'}"><div class="lbl">% Correctivo</div><div class="val">${pctCorr}%</div><div class="foot">${pctCorr>=60?'trabajo mayormente reactivo':pctCorr>=35?'margen para crecer el preventivo':'buena proporción planificada'}</div></div>
+    <div class="kpi accent-amber"><div class="lbl">Paro de máquina</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min acumulados</div></div>
+    <div class="kpi"><div class="lbl">MTBF promedio</div><div class="val">${mtbfAvg!=null?mtbfAvg.toFixed(1)+' d':'—'}</div><div class="foot">en ${mtbfs.length} equipo(s) con ≥3 fallas</div></div>
+    <div class="kpi"><div class="lbl">MTTR promedio</div><div class="val">${mttrAvg!=null?fmtHM(mttrAvg):'—'}</div><div class="foot">${prevCheck.length?'resp. checklist: '+fmtRespuesta(avgResp):'tiempo de técnico por correctivo'}</div></div>
+    <div class="kpi clickable ${nCrit+nAlto?'accent-red':'accent-teal'}" data-goto="equipos"><div class="lbl">Equipos en riesgo</div><div class="val">${nCrit+nAlto}</div><div class="foot">${nCrit} crítico · ${nAlto} alto — ver detalle →</div></div>`;
+  const cnt = $('tabRiskCnt'); cnt.textContent = nCrit+nAlto; cnt.style.display = (nCrit+nAlto) ? '' : 'none';
 
-  /* gráfica: fallas por área */
-  document.getElementById('chartAreaBox').style.height = Math.max(230, areaSorted.length*26)+'px';
-  if (charts.area) charts.area.destroy();
-  charts.area = new Chart(document.getElementById('chartArea'),{
-    type:'bar',
-    data:{labels:areaSorted.map(a=>a[0]), datasets:[{data:areaSorted.map(a=>a[1]), backgroundColor:'#f0a930', borderRadius:4}]},
-    options:{indexAxis:'y',
-      onClick:(e,els)=>{ if(!els.length) return; const a=areaSorted[els[0].index][0]; window._selectedArea=(window._selectedArea===a)?null:a; window._selectedKey=null; window._selectedTecnico=null; render(); },
-      onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
-      scales:{x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'}}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
-  });
+  renderPrioridades(predScope);
 
-  /* gráfica: tipo */
-  const TIPO_COLORS = {'Correctivo':'#e66767','Preventivo':'#199e70','Proyecto':'#3987e5'};
-  const tipoCounts = {};
-  scopeRows.forEach(r=>{ const k=r.tipoMant||'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
-  const tipoLabels = Object.keys(tipoCounts);
-  if (charts.tipo) charts.tipo.destroy();
-  charts.tipo = new Chart(document.getElementById('chartTipo'),{
-    type:'doughnut',
-    data:{labels:tipoLabels, datasets:[{data:Object.values(tipoCounts), backgroundColor:tipoLabels.map(k=>TIPO_COLORS[k]||'#8b98ab'), borderColor:'#141a22', borderWidth:2}]},
-    options:{
-      onClick:(e,els)=>{ if(!els.length) return; const t=tipoLabels[els[0].index]; window._selectedTipo=(window._selectedTipo===t)?null:t; render(); },
-      onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{position:'bottom',labels:{color:'#e6ebf1',font:{family:'Space Grotesk',size:11}}},
-        datalabels:{display:true,color:'#0d1117',font:{family:'IBM Plex Mono',size:11,weight:'700'},
-          formatter:(v,ctx)=>{ const tot=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return v+' ('+(tot?Math.round(v/tot*100):0)+'%)'; }}}}
-  });
-
-  /* gráfica: tendencia semanal (semana calculada desde la fecha) */
+  /* gráfica: tendencia semanal (todas las semanas del rango, incluidas las de 0) */
+  const trendRows = rowsExcept('semana');
   const weekCounts = {};
-  correctivos.forEach(r=>{ const w=weekOf(r); if(w) weekCounts[w]=(weekCounts[w]||0)+1; });
-  // Todas las semanas del rango (incluidas las que tuvieron 0 correctivos): antes solo
-  // aparecían las semanas con fallas, lo que inflaba el promedio y deformaba la tendencia.
+  trendRows.filter(isCorr).forEach(r=>{ const w=weekOf(r); if(w) weekCounts[w]=(weekCounts[w]||0)+1; });
   const weeksSorted = [];
-  const scopeFechas = scopeRows.map(r=>parseFecha(r.fecha)).filter(Boolean);
-  if (scopeFechas.length){
-    const fin = new Date(Math.max(...scopeFechas));
-    const d = new Date(Math.min(...scopeFechas));
+  const tf = trendRows.map(r=>parseFecha(r.fecha).getTime());
+  if (tf.length){
+    const fin = new Date(tf.reduce((a,b)=>Math.max(a,b)));
+    const d = new Date(tf.reduce((a,b)=>Math.min(a,b)));
     d.setDate(d.getDate() - ((d.getDay()+6)%7)); // lunes de la primera semana
     for (; d <= fin; d.setDate(d.getDate()+7)){
       const k = isoWeekKey(d);
@@ -427,106 +598,111 @@ function render(){
   }
   const multiYear = new Set(weeksSorted.map(k=>k.split('-')[0])).size > 1;
   const trendLabel = k => multiYear ? weekLabel(k)+' ’'+k.slice(2,4) : weekLabel(k);
+  const ptColor = weeksSorted.map(w=>!F.semana||w===F.semana?'#f0a930':'#7a5a1f');
   if (charts.trend) charts.trend.destroy();
-  charts.trend = new Chart(document.getElementById('chartTrend'),{
+  charts.trend = new Chart($('chartTrend'),{
     type:'line',
-    data:{labels:weeksSorted.map(trendLabel), datasets:[{data:weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.15)', fill:true, tension:.35, pointBackgroundColor:'#f0a930', pointRadius:5, pointHoverRadius:7}]},
+    data:{labels:weeksSorted.map(trendLabel), datasets:[{data:weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.12)', fill:true, tension:.3,
+      pointBackgroundColor:ptColor, pointBorderColor:ptColor, pointRadius:weeksSorted.map(w=>w===F.semana?7:4), pointHoverRadius:7}]},
     options:{
-      onClick:(e,els)=>{ if(!els.length) return; const s=weeksSorted[els[0].index]; window._selectedSemana=(window._selectedSemana===s)?null:s; render(); },
+      onClick:(e,els)=>{ if(!els.length) return; const s=weeksSorted[els[0].index]; F.semana=(F.semana===s)?'':s; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{display:false}, datalabels:{display:true,align:'top',offset:6,color:'#f0a930',font:{family:'IBM Plex Mono',size:10,weight:'600'},formatter:v=>v}},
-      scales:{x:{ticks:{color:'#8b98ab'},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true}}}
+      plugins:{legend:{display:false}, datalabels:{display:weeksSorted.length<=26,align:'top',offset:5,color:'#f0a930',font:{family:'IBM Plex Mono',size:10,weight:'600'},formatter:v=>v}},
+      scales:{x:{ticks:{color:'#8b98ab',maxRotation:0,autoSkip:true},grid:{display:false}}, y:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},beginAtZero:true}}}
+  });
+
+  /* gráfica: tipo */
+  const TIPO_COLORS = {'correctivo':'#e66767','preventivo':'#199e70','proyecto':'#3987e5'};
+  const tipoCounts = {};
+  rowsExcept('tipo').forEach(r=>{ const k=r.tipoMant||'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
+  const tipoLabels = Object.keys(tipoCounts).sort((a,b)=>tipoCounts[b]-tipoCounts[a]);
+  if (charts.tipo) charts.tipo.destroy();
+  charts.tipo = new Chart($('chartTipo'),{
+    type:'doughnut',
+    data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(k=>tipoCounts[k]),
+      backgroundColor:tipoLabels.map(k=>{ const c=TIPO_COLORS[k.toLowerCase()]||'#8b98ab'; return (!F.tipo||F.tipo===k)?c:c+'40'; }), borderColor:'#141a22', borderWidth:2}]},
+    options:{cutout:'58%',
+      onClick:(e,els)=>{ if(!els.length) return; const t=tipoLabels[els[0].index]; F.tipo=(F.tipo===t)?'':t; render(); },
+      onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
+      plugins:{legend:{position:'right',labels:{color:'#e6ebf1',font:{family:'Space Grotesk',size:11.5},boxWidth:12}},
+        datalabels:{display:true,color:'#0d1117',font:{family:'IBM Plex Mono',size:11,weight:'700'},
+          formatter:(v,ctx)=>{ const tot=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); const p=tot?Math.round(v/tot*100):0; return p>=6?p+'%':''; }}}}
   });
 
   /* gráfica: causas */
   const causaCounts = {};
-  scopeRows.forEach(r=>{ if(r.causa) causaCounts[r.causa]=(causaCounts[r.causa]||0)+1; });
-  const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-  const causaCard = document.getElementById('causaCard');
-  if (!causaSorted.length){
-    causaCard.style.display = window._selectedCausa ? '' : 'none';
-    if (charts.causa){ charts.causa.destroy(); charts.causa = null; }
-  } else {
-    causaCard.style.display = '';
-    document.getElementById('chartCausaBox').style.height = Math.max(230, causaSorted.length*28)+'px';
-    if (charts.causa) charts.causa.destroy();
-    charts.causa = new Chart(document.getElementById('chartCausa'),{
+  rowsExcept('causa').forEach(r=>{ if(r.causa) causaCounts[r.causa]=(causaCounts[r.causa]||0)+1; });
+  const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,12);
+  if (charts.causa){ charts.causa.destroy(); charts.causa = null; }
+  $('chartCausaBox').style.display = causaSorted.length ? '' : 'none';
+  $('causaEmpty').style.display = causaSorted.length ? 'none' : '';
+  if (causaSorted.length){
+    $('chartCausaBox').style.height = Math.max(250, causaSorted.length*26)+'px';
+    charts.causa = new Chart($('chartCausa'),{
       type:'bar',
-      data:{labels:causaSorted.map(c=>c[0]), datasets:[{data:causaSorted.map(c=>c[1]), backgroundColor:'#3987e5', borderRadius:4}]},
+      data:{labels:causaSorted.map(c=>c[0]), datasets:[{data:causaSorted.map(c=>c[1]), backgroundColor:causaSorted.map(c=>!F.causa||F.causa===c[0]?'#3987e5':'#3987e540'), borderRadius:4}]},
       options:{indexAxis:'y',
-        onClick:(e,els)=>{ if(!els.length) return; const c=causaSorted[els[0].index][0]; window._selectedCausa=(window._selectedCausa===c)?null:c; render(); },
+        onClick:(e,els)=>{ if(!els.length) return; const c=causaSorted[els[0].index][0]; F.causa=(F.causa===c)?'':c; render(); },
         onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
         plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
-        scales:{x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'}}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
+        scales:{x:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},grace:'10%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
     });
   }
 
-  /* análisis predictivo: historial completo del alcance equipo/área/técnico (sin filtros de tipo/semana/causa) */
-  const groups = {};
-  baseRows.filter(isCorr).forEach(r=>{
-    const d = parseFecha(r.fecha); if (!d) return;
-    const key = dayKey(r);
-    if (!groups[key]) groups[key] = {area:r.area, equipo:canonEquipo(r), dates:[], downtime:[], entries:[]};
-    groups[key].dates.push(d);
-    groups[key].downtime.push(r.minMaquina);
-    groups[key].entries.push({date:d, falla:r.falla, pieza:r.pieza, tecnicos:r.tecnicos});
+  /* áreas: se comparan todas, sin aplicar el filtro de área */
+  const areaRows = rowsExcept('area');
+  const areaCounts = {};
+  areaRows.filter(isCorr).forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
+  const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  $('chartAreaBox').style.height = Math.max(230, areaSorted.length*28)+'px';
+  if (charts.area) charts.area.destroy();
+  charts.area = new Chart($('chartArea'),{
+    type:'bar',
+    data:{labels:areaSorted.map(a=>a[0]), datasets:[{data:areaSorted.map(a=>a[1]), backgroundColor:areaSorted.map(a=>!F.area||F.area===a[0]?'#f0a930':'#f0a93040'), borderRadius:4}]},
+    options:{indexAxis:'y',
+      onClick:(e,els)=>{ if(!els.length) return; const a=areaSorted[els[0].index][0]; F.area=(F.area===a)?'':a; render(); },
+      onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
+      plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
+      scales:{x:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},grace:'10%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
   });
-  const topFreq = list => {
-    const c = {}; list.forEach(v=>{ if(v) c[v]=(c[v]||0)+1; });
-    const s = Object.entries(c).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-    return s.length ? {value:s[0][0], count:s[0][1]} : null;
-  };
-  const buildPlan = (risk, pieza, mtbf)=>{
-    let b;
-    if (risk==='critico') b='Intervención inmediata: según el historial, esta falla ya debió repetirse. Programar inspección esta semana.';
-    else if (risk==='alto') b='Programar mantenimiento preventivo en los próximos 7 días, antes de la fecha estimada de falla.';
-    else if (risk==='medio') b='Incluir en el plan de mantenimiento preventivo del próximo mes.';
-    else if (risk==='bajo') b='Mantener en monitoreo rutinario; el intervalo entre fallas es amplio ('+(mtbf?mtbf.toFixed(0):'?')+' días).';
-    else b='Registrar más eventos correctivos de este equipo para una recomendación confiable (mínimo 3 días distintos con falla).';
-    if (pieza && pieza.count>=2) b += ' Enfocar la revisión en: '+pieza.value+' (repite en '+pieza.count+' fallas).';
-    return b;
-  };
-  const predictive = Object.values(groups).map(g=>{
-    g.entries.sort((a,b)=>a.date-b.date);
-    // días distintos: varias OTs del mismo equipo el mismo día cuentan como un solo evento
-    const uniq = [...new Set(g.dates.map(d=>d.getTime()))].sort((a,b)=>a-b).map(t=>new Date(t));
-    const n = uniq.length;
-    let mtbf=null, nextDate=null, daysUntil=null, risk='na';
-    if (n>=3){
-      let s=0; for(let i=1;i<n;i++) s+=daysBetween(uniq[i-1],uniq[i]);
-      mtbf = s/(n-1);
-      nextDate = new Date(uniq[n-1].getTime()+mtbf*86400000);
-      daysUntil = daysBetween(refDate, nextDate);
-      risk = daysUntil<0?'critico':daysUntil<=7?'alto':daysUntil<=30?'medio':'bajo';
-    }
-    const last = g.entries[g.entries.length-1];
-    const tec = topFreq(g.entries.map(e=>e.tecnicos));
-    return {area:g.area, equipo:g.equipo, fallas:g.dates.length, mtbf, nextDate, daysUntil, risk, last:uniq[n-1],
-      avgDowntime:g.downtime.reduce((s,x)=>s+x,0)/g.downtime.length, lastFalla:last?last.falla:'',
-      tecnico:tec?tec.value:'—', plan:buildPlan(risk, topFreq(g.entries.map(e=>e.pieza)), mtbf)};
-  });
-  window._predictive = predictive;
-
-  const af = document.getElementById('areaFilter'), cur = af.value;
-  af.innerHTML = '<option value="">Todas las áreas</option>' + [...new Set(predictive.map(p=>p.area))].sort().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
-  af.value = cur;
+  computeAreaStats(areaRows, predAll);
 
   renderTable();
-  computeAreaStats(rows, predictive);
-  renderHistoryAndReco(scopeMode, scopeRows, predictive, selArea, selKey, selTec, rows);
-  renderTecnicos(scopeRows, scopeLabel);
+  renderTecnicos(scopeRows);
   renderKaizen(scopeRows);
-  renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, topArea, weeksSorted, weekCounts});
+  renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, areaSorted, weeksSorted, weekCounts});
+  if (ficha) renderFicha();
+}
+
+/* ---------- prioridades ---------- */
+function renderPrioridades(pred){
+  const list = pred.filter(p=>p.risk==='critico'||p.risk==='alto')
+    .sort((a,b)=>RISK_ORDER[a.risk]-RISK_ORDER[b.risk]||a.daysUntil-b.daysUntil||b.fallas-a.fallas);
+  const inact = pred.filter(p=>p.risk==='inactivo').length;
+  const cont = $('prioList');
+  if (!list.length){
+    cont.innerHTML = '<div class="empty">Ningún equipo en riesgo Crítico o Alto con los datos actuales.</div>'
+      + (inact?`<div class="prio-foot">${inact} equipo(s) sin fallas recientes — revisa en la pestaña Equipos qué se corrigió.</div>`:'');
+    return;
+  }
+  const top = list.slice(0,7);
+  cont.innerHTML = top.map(p=>`
+    <div class="prio-item" data-key="${esc(p.key)}">
+      <span class="risk ${p.risk}">${riskLabel(p.risk)}</span>
+      <div><div class="prio-eq">${esc(p.equipo)}</div><div class="prio-meta">${esc(p.area)} · MTBF ${p.mtbf.toFixed(1)} d · ${p.fallas} correctivos</div></div>
+      <div class="prio-when" style="color:${p.risk==='critico'?'#ff8a8a':'var(--st-serious)'}">${p.daysUntil<0?'vencido hace '+Math.abs(p.daysUntil)+'d':p.daysUntil===0?'hoy':'en '+p.daysUntil+'d'}<div class="prio-meta">${fmtDate(p.nextDate)}</div></div>
+    </div>`).join('')
+    + `<div class="prio-foot">${list.length>top.length?`y ${list.length-top.length} más · `:''}<button class="linkbtn" data-goto="equipos">Ver tabla completa →</button>${inact?` · ${inact} sin fallas recientes`:''}</div>`;
 }
 
 /* ---------- conclusiones ---------- */
 function renderConclusiones(ctx){
-  const cont = document.getElementById('conclusionesList');
+  const cont = $('conclusionesList');
   if (!ctx.scopeRows.length){ cont.innerHTML = '<div class="empty">Todavía no hay suficientes datos para generar conclusiones.</div>'; return; }
   const items = [];
   // se ignora la última semana (normalmente incompleta) para no simular una baja falsa
   const wk = ctx.weeksSorted.length>=5 ? ctx.weeksSorted.slice(0,-1) : ctx.weeksSorted;
-  if (wk.length>=4){
+  if (!F.semana && wk.length>=4){
     const rec = wk.slice(-Math.min(4, Math.floor(wk.length/2))), prev = wk.slice(0, wk.length-rec.length);
     const avg = a => a.reduce((s,w)=>s+(ctx.weekCounts[w]||0),0)/a.length;
     if (prev.length && avg(prev)>0){
@@ -537,21 +713,21 @@ function renderConclusiones(ctx){
     }
   }
   items.push({icon: ctx.pctCorr>=60?'🔴':ctx.pctCorr>=35?'🟡':'🟢', html:`<b>${ctx.pctCorr}%</b> de las OTs de este alcance son correctivas (${ctx.correctivos.length} de ${ctx.scopeRows.length}) — ${ctx.pctCorr>=60?'el trabajo es sobre todo reactivo.':ctx.pctCorr>=35?'todavía hay margen para crecer el preventivo.':'buena proporción de trabajo planificado.'}`});
-  if (ctx.topArea) items.push({icon:'🏭', html:`<b>${esc(ctx.topArea[0])}</b> concentra más correctivos (${ctx.topArea[1]}) — primer candidato para reforzar preventivo.`});
+  const topArea = ctx.areaSorted[0];
+  if (topArea && !F.area) items.push({icon:'🏭', html:`<b>${esc(topArea[0])}</b> concentra más correctivos (${topArea[1]}) — primer candidato para reforzar preventivo.`});
   const pred = window._predictive||[];
-  const crit = pred.filter(p=>p.risk==='critico'), alt = pred.filter(p=>p.risk==='alto');
-  if (crit.length) items.push({icon:'🚨', html:`<b>${crit.length} equipo(s)</b> en riesgo <b>crítico</b> — el más urgente: <b>${esc(crit[0].equipo)}</b> (${esc(crit[0].area)}).`});
+  const crit = pred.filter(p=>p.risk==='critico').sort((a,b)=>a.daysUntil-b.daysUntil), alt = pred.filter(p=>p.risk==='alto');
+  if (crit.length) items.push({icon:'🚨', html:`<b>${crit.length} equipo(s)</b> en riesgo <b>crítico</b> — el más vencido: <b>${esc(crit[0].equipo)}</b> (${esc(crit[0].area)}).`});
   if (alt.length) items.push({icon:'⚠️', html:`<b>${alt.length} equipo(s)</b> en riesgo <b>alto</b>, con falla estimada en los próximos 7 días.`});
   const tecs = (window._tecnicos||[]).filter(t=>t.desempeno==='atencion');
   if (tecs.length) items.push({icon:'👷', html:`${tecs.length} técnico(s) con señales que ameritan revisión: <b>${tecs.slice(0,3).map(t=>esc(t.tecnico)).join(', ')}</b>${tecs.length>3?' y otros':''}.`});
   const kz = (window._kaizenItems||[]).filter(k=>k.trend==='empeorando');
   if (kz.length) items.push({icon:'🔁', html:`<b>${kz.length} pieza(s)</b> fallan cada vez más seguido — la más urgente: <b>${esc(kz[0].pieza)}</b> en ${esc(kz[0].equipo)} (${kz[0].count} correctivos).`});
-  if (ctx.totalDowntime>0) items.push({icon:'⏱', html:`Paro de máquina acumulado en este alcance: <b>${(ctx.totalDowntime/60).toFixed(0)} horas</b>.`});
   cont.innerHTML = items.map(it=>`<div class="concl-item"><span>${it.icon}</span><span>${it.html}</span></div>`).join('');
 }
 
 /* ---------- áreas ---------- */
-function computeAreaStats(rows, predictive){
+function computeAreaStats(rows, predAll){
   const groups = {};
   rows.forEach(r=>{
     const g = groups[r.area] = groups[r.area] || {ots:0, correctivos:0, equipos:new Set(), downtime:0, tec:{}};
@@ -561,15 +737,7 @@ function computeAreaStats(rows, predictive){
   });
   // riesgo por área: se calcula con el historial completo, no con el alcance filtrado
   const riesgo = {};
-  const full = {};
-  rows.filter(isCorr).forEach(r=>{ const d=parseFecha(r.fecha); if(!d) return; const k=dayKey(r); (full[k]=full[k]||{area:r.area,t:new Set()}).t.add(d.getTime()); });
-  const ref = getRefDate(rows);
-  Object.values(full).forEach(g=>{
-    const ts=[...g.t].sort((a,b)=>a-b); if (ts.length<3) return;
-    let s=0; for(let i=1;i<ts.length;i++) s+=(ts[i]-ts[i-1])/86400000;
-    const mtbf=s/(ts.length-1), du=daysBetween(ref,new Date(ts[ts.length-1]+mtbf*86400000));
-    if (du<=7) riesgo[g.area]=(riesgo[g.area]||0)+1;
-  });
+  predAll.forEach(p=>{ if (p.risk==='critico'||p.risk==='alto') riesgo[p.area]=(riesgo[p.area]||0)+1; });
   window._areaStats = Object.entries(groups).map(([area,g])=>{
     const t = Object.entries(g.tec).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0];
     return {area, equipos:g.equipos.size, ots:g.ots, correctivos:g.correctivos, pct:g.ots?Math.round(g.correctivos/g.ots*100):0, downtime:g.downtime, tecnico:t?t[0]:'—', riesgo:riesgo[area]||0};
@@ -583,27 +751,30 @@ function heatColor(pct){
 }
 function renderAreaMap(){
   const list = [...(window._areaStats||[])].sort((a,b)=>b.pct-a.pct||b.ots-a.ots);
-  const sel = window._selectedArea, cont = document.getElementById('riskMap');
+  const cont = $('riskMap');
   if (!list.length){ cont.innerHTML='<div class="empty">Sin datos todavía.</div>'; return; }
   cont.innerHTML = list.map(a=>`
-    <div class="risk-cell ${sel===a.area?'selected':''}" style="background:${heatColor(a.pct)}" data-area="${esc(a.area)}" title="${esc(a.area)}: ${a.pct}% correctivo, ${a.ots} OTs">
+    <div class="risk-cell ${F.area===a.area?'selected':''}" style="background:${heatColor(a.pct)}" data-area="${esc(a.area)}" title="${esc(a.area)}: ${a.pct}% correctivo, ${a.ots} OTs">
       ${a.riesgo>0?`<span class="rc-badge">⚠ ${a.riesgo}</span>`:''}
       <div class="rc-area">${esc(a.area)}</div><div class="rc-meta">${a.pct}% correctivo · ${a.ots} OTs</div></div>`).join('');
 }
 function renderAreaRows(){
   const k = window._areaSortKey||'ots';
+  markSorted('#areaTable', 'ak', k);
   const list = [...(window._areaStats||[])].sort((a,b)=>{
     if (k==='area') return a.area.localeCompare(b.area);
     if (k==='tecnico') return a.tecnico.localeCompare(b.tecnico);
     return (b[k]??0)-(a[k]??0);
   });
-  const sel = window._selectedArea;
-  document.getElementById('areaBody').innerHTML = list.map(a=>`
-    <tr data-area="${esc(a.area)}" class="${sel===a.area?'selected-row':''}">
+  $('areaBody').innerHTML = list.map(a=>`
+    <tr data-area="${esc(a.area)}" class="${F.area===a.area?'selected-row':''}">
       <td class="eqname">${esc(a.area)}</td><td class="numcell">${a.equipos}</td><td class="numcell">${a.ots}</td>
       <td class="numcell">${a.correctivos}</td><td class="numcell">${a.pct}%</td><td class="numcell">${fmtHM(a.downtime)}</td>
       <td>${esc(a.tecnico)}</td><td class="numcell">${a.riesgo>0?`<span class="risk critico">${a.riesgo}</span>`:'0'}</td></tr>`).join('')
     || '<tr><td colspan="8" class="empty">Sin datos.</td></tr>';
+}
+function markSorted(table, attr, k){
+  document.querySelectorAll(table+' thead th').forEach(th=>th.classList.toggle('sorted', th.dataset[attr]===k));
 }
 
 /* ---------- técnicos ---------- */
@@ -636,30 +807,32 @@ function getTecnicoStats(rows){
   });
   return {list, plantAvgMttr};
 }
-function renderTecnicos(rows, scopeLabel){
-  document.getElementById('tecEvalSub').textContent = scopeLabel
-    ? 'Desempeño por técnico, filtrado a: '+scopeLabel
-    : 'MTTR (solo correctivos con tiempo > 0), % sin resolver y cobertura. Con menos de '+MIN_CORR_EVAL+' correctivos no se califica desempeño. Clic en un técnico para ver su historial.';
+function renderTecnicos(rows){
+  $('tecEvalSub').textContent = 'MTTR (solo correctivos con tiempo > 0), % sin resolver y cobertura. Con menos de '+MIN_CORR_EVAL+' correctivos no se califica desempeño. Clic en un técnico para abrir su ficha.';
   const {list} = getTecnicoStats(rows);
   list.sort((a,b)=>b.ots-a.ots||a.tecnico.localeCompare(b.tecnico));
   window._tecnicos = list;
   const top = list.slice(0,10);
   if (charts.tecnicos) charts.tecnicos.destroy();
-  charts.tecnicos = new Chart(document.getElementById('chartTecnicos'),{
+  charts.tecnicos = new Chart($('chartTecnicos'),{
     type:'bar',
-    data:{labels:top.map(t=>t.tecnico), datasets:[{label:'OTs atendidas', data:top.map(t=>t.ots), backgroundColor:'#3987e5', borderRadius:4}]},
+    data:{labels:top.map(t=>t.tecnico), datasets:[
+      {label:'Correctivos', data:top.map(t=>t.correctivos), backgroundColor:top.map(t=>!F.tecnico||F.tecnico===t.tecnico?'#e66767':'#e6676740'), borderRadius:3, stack:'s'},
+      {label:'Otros', data:top.map(t=>t.ots-t.correctivos), backgroundColor:top.map(t=>!F.tecnico||F.tecnico===t.tecnico?'#3987e5':'#3987e540'), borderRadius:3, stack:'s'}]},
     options:{
-      onClick:(e,els)=>{ if(!els.length) return; const t=top[els[0].index].tecnico; window._selectedTecnico=(window._selectedTecnico===t)?null:t; window._selectedKey=null; window._selectedArea=null; render(); },
+      onClick:(e,els)=>{ if(!els.length) return; const t=top[els[0].index].tecnico; F.tecnico=(F.tecnico===t)?'':t; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'top',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:10,weight:'600'},formatter:v=>v}},
-      scales:{x:{ticks:{color:'#8b98ab',font:{family:'IBM Plex Mono',size:10}},grid:{display:false}}, y:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true}}}
+      plugins:{legend:{position:'top',align:'end',labels:{color:'#e6ebf1',font:{family:'Space Grotesk',size:11},boxWidth:12}}},
+      scales:{x:{stacked:true,ticks:{color:'#8b98ab',font:{family:'IBM Plex Mono',size:10}},grid:{display:false}}, y:{stacked:true,ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},beginAtZero:true}}}
   });
   renderTecTable();
 }
 const desempenoLabel = d => ({alto:'Alto',normal:'Normal',atencion:'Necesita atención'}[d]||'—');
 const desempenoClass = d => ({alto:'bajo',normal:'medio',atencion:'critico'}[d]||'na');
+const DESEMP_ORDER = {atencion:0, normal:1, alto:2};
 function renderTecTable(){
   const k = window._tecSortKey||'ots';
+  markSorted('#tecTable', 'tk', k);
   const list = [...(window._tecnicos||[])].sort((a,b)=>{
     if (k==='tecnico') return a.tecnico.localeCompare(b.tecnico);
     if (k==='mttr') return (a.mttr??1e9)-(b.mttr??1e9);
@@ -667,12 +840,11 @@ function renderTecTable(){
     if (k==='downtime') return b.avgDowntime-a.avgDowntime;
     if (k==='noresuelto') return b.noResueltoPct-a.noResueltoPct;
     if (k==='preventivos') return b.preventivosChecklist-a.preventivosChecklist;
-    if (k==='desempeno') return a.desempeno.localeCompare(b.desempeno);
+    if (k==='desempeno') return DESEMP_ORDER[a.desempeno]-DESEMP_ORDER[b.desempeno];
     return (b[k]??0)-(a[k]??0);
   });
-  const sel = window._selectedTecnico;
-  document.getElementById('tecBody').innerHTML = list.map(t=>`
-    <tr data-tec="${esc(t.tecnico)}" class="${sel===t.tecnico?'selected-row':''}">
+  $('tecBody').innerHTML = list.map(t=>`
+    <tr data-tec="${esc(t.tecnico)}" class="${F.tecnico===t.tecnico?'selected-row':''}">
       <td class="eqname">${esc(t.tecnico)}</td><td class="numcell">${t.ots}</td><td class="numcell">${t.correctivos}</td>
       <td class="numcell">${t.mttr!=null?fmtHM(t.mttr):'—'}</td><td class="numcell">${fmtHM(t.avgDowntime)}</td>
       <td class="numcell">${t.areas}</td><td class="numcell">${t.correctivos?t.noResueltoPct+'%':'—'}</td>
@@ -686,7 +858,7 @@ function renderKaizen(rows){
   const groups = {};
   rows.filter(r=>isCorr(r)&&r.pieza).forEach(r=>{
     const d = parseFecha(r.fecha); if (!d) return;
-    const eq = canonEquipo(r), key = r.area+' | '+eq+' | '+r.pieza;
+    const eq = canonEquipo(r), pz = normEq(r.pieza), key = r.area+' | '+eq+' | '+pz;
     (groups[key] = groups[key] || {area:r.area, equipo:eq, pieza:r.pieza, dates:[]}).dates.push(d);
   });
   const avgInt = a => { if (a.length<2) return null; let s=0; for(let i=1;i<a.length;i++) s+=daysBetween(a[i-1],a[i]); return s/(a.length-1); };
@@ -698,102 +870,124 @@ function renderKaizen(rows){
       if (i1!=null && i2!=null) trend = i2<i1*0.8?'empeorando':i2>i1*1.2?'mejorando':'estable';
     }
     return {...g, count:n, first:g.dates[0], last:g.dates[n-1], trend};
-  }).sort((a,b)=>b.count-a.count).slice(0,10);
+  }).sort((a,b)=>(a.trend==='empeorando'?0:1)-(b.trend==='empeorando'?0:1)||b.count-a.count).slice(0,10);
   window._kaizenItems = items;
-  const cont = document.getElementById('kaizenList');
+  const cont = $('kaizenList');
   if (!items.length){ cont.innerHTML='<div class="empty">No hay piezas que se repitan 2+ veces en el alcance actual.</div>'; return; }
   const tl = {empeorando:'Empeorando (fallas más seguidas)', mejorando:'Mejorando (fallas más espaciadas)', estable:'Estable', insuficiente:'Datos insuficientes'};
   cont.innerHTML = items.map(it=>`
     <div class="kaizen-item">
       <div class="kz-head"><div class="kz-title">${esc(it.area)} — ${esc(it.equipo)} · pieza: ${esc(it.pieza)}</div><span class="trend-tag ${it.trend}">${tl[it.trend]}</span></div>
-      <div class="kz-meta">${it.count} correctivos · primera vez: ${it.first.toLocaleDateString('es-DO')} · última vez: ${it.last.toLocaleDateString('es-DO')}</div>
+      <div class="kz-meta">${it.count} correctivos · primera vez: ${fmtDate(it.first)} · última vez: ${fmtDate(it.last)}</div>
       <div class="kz-action"><b>Plan sugerido:</b> aplica un análisis de causa raíz (5 Porqués) a "${esc(it.pieza)}" en este equipo — ${it.count} reparaciones de la misma pieza indican que el correctivo probablemente ataca el síntoma, no la causa. Documenta la contramedida y verifica en la próxima OT; si funciona, estandarízala.</div>
     </div>`).join('');
 }
 
-/* ---------- historial y recomendaciones ---------- */
-function renderHistoryAndReco(mode, hist, predictive, selArea, selKey, selTec, allFull){
-  const card = document.getElementById('historyCard');
-  if (!mode){ card.style.display='none'; return; }
-  card.style.display = 'block';
-  document.getElementById('historyTitle').textContent = mode==='equipo' ? 'Historial completo — '+selKey.replace(' | ',' — ')
-    : mode==='area' ? 'Detalle completo de la línea/área — '+selArea : 'Historial completo — Técnico: '+selTec;
-
-  const sorted = [...hist].sort((a,b)=>(parseFecha(a.fecha)||0)-(parseFecha(b.fecha)||0));
+/* ---------- ficha lateral: equipo / área / técnico ---------- */
+function openFicha(mode, val){
+  ficha = {mode, val};
+  renderFicha();
+  $('drawer').classList.add('open'); $('drawerBg').classList.add('open');
+  $('drawer').setAttribute('aria-hidden','false');
+  $('drawer').scrollTop = 0;
+}
+function closeFicha(){
+  ficha = null;
+  $('drawer').classList.remove('open'); $('drawerBg').classList.remove('open');
+  $('drawer').setAttribute('aria-hidden','true');
+}
+function renderFicha(){
+  const all = window._rowsAll||[], {mode, val} = ficha;
+  const hist = mode==='equipo' ? all.filter(r=>dayKey(r)===val)
+    : mode==='area' ? all.filter(r=>r.area===val) : all.filter(r=>splitTecnicos(r.tecnicos).includes(val));
+  $('drawerKind').textContent = {equipo:'Ficha de equipo', area:'Ficha de línea / área', tecnico:'Ficha de técnico'}[mode];
+  $('historyTitle').textContent = mode==='equipo' ? val.replace(' | ',' — ') : val;
+  const fb = $('drawerFilterBtn');
+  fb.style.display = mode==='equipo' ? 'none' : '';
+  fb.textContent = (mode==='area' ? F.area===val : F.tecnico===val) ? 'Quitar filtro' : 'Filtrar el panel por '+(mode==='area'?'esta área':'este técnico');
+  renderHistoryAndReco(mode, hist, window._predAll||[], val, all);
+}
+function renderHistoryAndReco(mode, hist, predictive, val, allFull){
+  const sorted = [...hist].sort((a,b)=>(parseFecha(b.fecha)||0)-(parseFecha(a.fecha)||0)); // más reciente primero
   const totalParo = hist.reduce((s,r)=>s+r.minMaquina,0);
   const corrH = hist.filter(isCorr);
   const corrT = corrH.filter(r=>r.minTecnico>0); // mismo criterio que la tabla de técnicos
   const mttr = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
-  const paroPlanta = hist.filter(r=>(r.paroPlanta||'').toLowerCase()==='si').length;
+  const paroPlanta = hist.filter(r=>['si','sí'].includes((r.paroPlanta||'').toLowerCase())).length;
   const noRes = corrH.filter(r=>isNoResuelto(r.solucion)).length;
 
-  const boxes = [{lbl:'Eventos totales', val:hist.length}];
+  const boxes = [{lbl:'Eventos totales', val:hist.length}, {lbl:'Correctivos', val:corrH.length}];
+  if (mode==='equipo'){ const p = predictive.find(p=>p.key===val); boxes.push({lbl:'Riesgo actual', val:`<span class="risk ${p?p.risk:'na'}">${riskLabel(p?p.risk:'na')}</span>`}); }
   if (mode==='area') boxes.push({lbl:'Equipos distintos', val:new Set(hist.map(canonEquipo)).size});
   if (mode==='tecnico') boxes.push({lbl:'Áreas cubiertas', val:new Set(hist.map(r=>r.area)).size});
-  boxes.push({lbl:'Paro de máquina acumulado', val:fmtHM(totalParo)});
-  boxes.push({lbl:'MTTR (tiempo prom. de reparación)', val:mttr!=null?fmtHM(mttr):'—'});
-  if (mode==='tecnico') boxes.push({lbl:'% correctivos sin resolver', val:corrH.length?Math.round(noRes/corrH.length*100)+'%':'—'});
-  else boxes.push({lbl:'Veces que paró la planta', val:paroPlanta});
-  document.getElementById('historySummary').innerHTML = boxes.map(b=>`<div class="hs"><div class="hlbl">${b.lbl}</div><div class="hval">${b.val}</div></div>`).join('');
+  boxes.push({lbl:'Paro de máquina', val:fmtHM(totalParo)});
+  boxes.push({lbl:'MTTR', val:mttr!=null?fmtHM(mttr):'—'});
+  if (mode==='tecnico') boxes.push({lbl:'% sin resolver', val:corrH.length?Math.round(noRes/corrH.length*100)+'%':'—'});
+  else boxes.push({lbl:'Paros de planta', val:paroPlanta});
+  $('historySummary').innerHTML = boxes.map(b=>`<div class="hs"><div class="hlbl">${b.lbl}</div><div class="hval">${b.val}</div></div>`).join('');
 
-  const bd = document.getElementById('tecEquipoBreakdown');
-  if (mode==='tecnico'){
+  const bd = $('tecEquipoBreakdown');
+  if (mode==='tecnico' || mode==='area'){
     const eqMap = {};
     hist.forEach(r=>{
       const eq = canonEquipo(r), key = r.area+' | '+eq;
-      const g = eqMap[key] = eqMap[key] || {area:r.area, equipo:eq, ots:0, correctivos:0, downtime:0, last:null};
+      const g = eqMap[key] = eqMap[key] || {key, area:r.area, equipo:eq, ots:0, correctivos:0, downtime:0, last:null};
       g.ots++; g.downtime += r.minMaquina; if (isCorr(r)) g.correctivos++;
       const d = parseFecha(r.fecha); if (d && (!g.last||d>g.last)) g.last = d;
     });
-    const list = Object.values(eqMap).sort((a,b)=>b.ots-a.ots||a.equipo.localeCompare(b.equipo));
+    const riskOf = k => { const p = predictive.find(p=>p.key===k); return p ? p.risk : 'na'; };
+    const list = Object.values(eqMap).sort((a,b)=>RISK_ORDER[riskOf(a.key)]-RISK_ORDER[riskOf(b.key)]||b.ots-a.ots||a.equipo.localeCompare(b.equipo));
     bd.style.display = 'block';
-    bd.innerHTML = `<h3 style="font-size:13px;margin:4px 0 10px;">🔧 Relación técnico ↔ equipo — clic en un equipo para ver su detalle</h3>
+    bd.innerHTML = `<h3 class="sec">🔧 Equipos ${mode==='tecnico'?'atendidos':'de la línea'} — clic para abrir su ficha</h3>
       <div style="overflow-x:auto;margin-bottom:20px;"><table>
-      <thead><tr><th>Área</th><th>Equipo</th><th>OTs atendidas</th><th>Correctivos</th><th>Paro acumulado</th><th>Última vez</th></tr></thead><tbody>
-      ${list.map(g=>`<tr data-key="${esc(g.area+' | '+g.equipo)}"><td class="areaname">${esc(g.area)}</td><td class="eqname">${esc(g.equipo)}</td>
+      <thead><tr>${mode==='tecnico'?'<th>Área</th>':''}<th>Equipo</th><th>Riesgo</th><th>OTs</th><th>Correctivos</th><th>Paro acumulado</th><th>Última vez</th></tr></thead><tbody>
+      ${list.map(g=>`<tr data-key="${esc(g.key)}">${mode==='tecnico'?`<td class="areaname">${esc(g.area)}</td>`:''}<td class="eqname">${esc(g.equipo)}</td>
+        <td><span class="risk ${riskOf(g.key)}">${riskLabel(riskOf(g.key))}</span></td>
         <td class="numcell">${g.ots}</td><td class="numcell">${g.correctivos}</td><td class="numcell">${fmtHM(g.downtime)}</td>
-        <td class="numcell">${g.last?g.last.toLocaleDateString('es-DO'):'—'}</td></tr>`).join('')}
+        <td class="numcell">${fmtDate(g.last)}</td></tr>`).join('')}
       </tbody></table></div>`;
   } else { bd.style.display='none'; bd.innerHTML=''; }
 
-  document.getElementById('historyHeadRow').innerHTML = `<th>Fecha</th><th>OT</th>${mode==='area'?'<th>Equipo</th>':''}${mode==='tecnico'?'<th>Área</th><th>Equipo</th>':''}<th>Tipo</th>${mode!=='tecnico'?'<th>Técnico(s)</th>':''}<th>Paro planta</th><th>Paro máq. (min)</th><th>Causa</th><th>Descripción de falla</th><th>Solución aplicada</th>`;
-  document.getElementById('historyBody').innerHTML = sorted.map(r=>{
+  $('historyHeadRow').innerHTML = `<th>Fecha</th><th>OT</th>${mode==='area'?'<th>Equipo</th>':''}${mode==='tecnico'?'<th>Área</th><th>Equipo</th>':''}<th>Tipo</th>${mode!=='tecnico'?'<th>Técnico(s)</th>':''}<th>Paro planta</th><th>Paro máq. (min)</th><th>Causa</th><th>Descripción de falla</th><th>Solución aplicada</th>`;
+  $('historyBody').innerHTML = sorted.map(r=>{
     const d = parseFecha(r.fecha), cls = isCorr(r)?'critico':isPrev(r)?'bajo':'na';
-    return `<tr><td class="numcell">${d?d.toLocaleDateString('es-DO'):esc(r.fecha)}</td><td class="numcell" style="color:var(--muted);">${esc(r.ot)}</td>
+    return `<tr><td class="numcell">${d?fmtDate(d):esc(r.fecha)}</td><td class="numcell" style="color:var(--muted);">${esc(r.ot)}</td>
       ${mode==='area'?`<td class="eqname">${esc(canonEquipo(r))}</td>`:''}
       ${mode==='tecnico'?`<td class="areaname">${esc(r.area)}</td><td class="eqname">${esc(canonEquipo(r))}</td>`:''}
       <td><span class="risk ${cls}">${esc(r.tipoMant)}</span></td>
       ${mode!=='tecnico'?`<td>${esc(r.tecnicos)||'—'}</td>`:''}
-      <td class="numcell">${(r.paroPlanta||'').toLowerCase()==='si'?'Sí':'No'}</td><td class="numcell">${r.minMaquina||0}</td>
+      <td class="numcell">${['si','sí'].includes((r.paroPlanta||'').toLowerCase())?'Sí':'No'}</td><td class="numcell">${r.minMaquina||0}</td>
       <td style="color:var(--muted);">${esc(r.causa)||'—'}</td><td style="max-width:220px;">${esc(r.falla)||'—'}</td>
       <td style="max-width:220px;color:var(--muted);">${esc(r.solucion)||'—'}</td></tr>`;
-  }).join('');
+  }).join('') || '<tr><td colspan="11" class="empty">Sin OTs registradas.</td></tr>';
 
-  const reco = document.getElementById('recoBox');
+  const reco = $('recoBox');
   if (mode==='equipo'){
-    const info = predictive.find(p=>(p.area+' | '+p.equipo)===selKey);
+    const info = predictive.find(p=>p.key===val);
     if (!info || info.mtbf==null){
       reco.innerHTML = '<h3>📋 Recomendación</h3><p>Este equipo aún no tiene suficientes días distintos con falla correctiva (mínimo 3) para calcular un intervalo confiable. Sigue registrando cada correctivo con fecha y descripción.</p>';
+    } else if (info.risk==='inactivo'){
+      reco.innerHTML = `<h3>📋 Recomendación</h3><p>${esc(info.plan)}</p><p style="color:var(--muted);font-size:11.5px;">MTBF histórico: ${info.mtbf.toFixed(1)} días · última falla: ${fmtDate(info.last)}.</p>`;
     } else {
       const ps = Math.max(1, Math.round(info.mtbf*0.6));
       reco.innerHTML = `<h3>📋 Recomendación basada en confiabilidad industrial</h3>
+        <p><b>${riskLabel(info.risk)}</b> — próxima falla estimada: <b>${fmtDate(info.nextDate)}</b> (${info.daysUntil<0?'vencida hace '+Math.abs(info.daysUntil)+' días':'en '+info.daysUntil+' días'}). ${esc(info.plan)}</p>
         <p><span class="std-tag">RCM</span><span class="std-tag">TPM</span> La práctica estándar es programar el preventivo <b>antes</b> de cumplirse el MTBF. Con un MTBF de <b>${info.mtbf.toFixed(1)} días</b>, un punto de partida razonable es una revisión cada <b>~${ps} días</b> (60% del MTBF), ajustando según la criticidad observada.</p>
         <p><span class="std-tag">ISO 14224</span> Documenta de forma consistente: fecha exacta, pieza que falló, causa raíz (no solo el síntoma) y tiempo de reparación.</p>
         <p><span class="std-tag">ISO 55001</span> Si el equipo aparece repetidamente en "Crítico", evalúa reparar de nuevo, hacer overhaul o reemplazar el componente que más se repite.</p>
         <p style="color:var(--muted);font-size:11.5px;">Guía orientativa, no una auditoría formal — el intervalo final debe validarlo el equipo de mantenimiento.</p>`;
     }
   } else if (mode==='area'){
-    const order = {critico:0,alto:1,medio:2,bajo:3,na:4};
-    const pri = predictive.filter(p=>p.area===selArea&&(p.risk==='critico'||p.risk==='alto')).sort((a,b)=>order[a.risk]-order[b.risk]||b.fallas-a.fallas).slice(0,5);
+    const pri = predictive.filter(p=>p.area===val&&(p.risk==='critico'||p.risk==='alto')).sort((a,b)=>RISK_ORDER[a.risk]-RISK_ORDER[b.risk]||b.fallas-a.fallas).slice(0,5);
     reco.innerHTML = `<h3>📋 Recomendación — línea completa</h3>
       <p><span class="std-tag">RCM</span> Prioriza por criticidad: atiende primero los equipos en riesgo Crítico/Alto, los que más probabilidad tienen de parar la línea.</p>
-      ${pri.length?`<p><b>Equipos a priorizar en "${esc(selArea)}":</b></p><p>${pri.map(p=>`• <b>${esc(p.equipo)}</b> — MTBF ${p.mtbf.toFixed(1)}d, riesgo ${riskLabel(p.risk)}${p.daysUntil<0?' (vencido hace '+Math.abs(p.daysUntil)+'d)':''}`).join('<br>')}</p>`
+      ${pri.length?`<p><b>Equipos a priorizar:</b></p><p>${pri.map(p=>`• <b>${esc(p.equipo)}</b> — MTBF ${p.mtbf.toFixed(1)}d, riesgo ${riskLabel(p.risk)}${p.daysUntil<0?' (vencido hace '+Math.abs(p.daysUntil)+'d)':''}`).join('<br>')}</p>`
         :'<p>Ningún equipo de esta línea está en riesgo Crítico o Alto con los datos actuales.</p>'}
       <p><span class="std-tag">TPM</span> Si esta línea concentra mucho más paro que las demás, considera un evento TPM enfocado en ella, con operadores en limpieza e inspección diaria.</p>
       <p style="color:var(--muted);font-size:11.5px;">Guía orientativa — la priorización final debe considerar el impacto en producción.</p>`;
   } else {
     const {list, plantAvgMttr} = getTecnicoStats(allFull);
-    const me = list.find(t=>t.tecnico===selTec);
+    const me = list.find(t=>t.tecnico===val);
     const ac = {}; corrH.forEach(r=>{ ac[r.area]=(ac[r.area]||0)+1; });
     const topA = Object.entries(ac).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0];
     if (!me || me.mttr==null){
@@ -804,7 +998,7 @@ function renderHistoryAndReco(mode, hist, predictive, selArea, selKey, selTec, a
         : me.desempeno==='alto' ? `Su tiempo de reparación está <b>por debajo</b> del promedio de planta${vs!=null?' ('+Math.abs(vs)+'% más rápido)':''} y su tasa de casos sin resolver es baja.`
         : me.desempeno==='atencion' ? `Su tiempo de reparación o tasa de casos sin resolver está <b>por encima</b> del promedio de planta${vs>0?' ('+vs+'% más lento)':''}.`
         : `Su desempeño está dentro del rango normal${vs!=null?' ('+(vs>0?'+':'')+vs+'% vs. promedio)':''}.`;
-      reco.innerHTML = `<h3>📋 Recomendación de desarrollo — ${esc(selTec)}</h3>
+      reco.innerHTML = `<h3>📋 Recomendación de desarrollo</h3>
         <p><span class="std-tag">Benchmark interno</span> ${txt} MTTR propio: <b>${fmtHM(me.mttr)}</b> · promedio de planta: <b>${plantAvgMttr!=null?fmtHM(plantAvgMttr):'—'}</b> · % sin resolver: <b>${me.noResueltoPct}%</b>.</p>
         ${topA?`<p>Su mayor exposición es en <b>${esc(topA[0])}</b> (${topA[1]} correctivos).</p>`:''}
         ${me.desempeno==='atencion'?'<p><span class="std-tag">TWI</span> Empareja temporalmente al técnico con uno de alto desempeño en esa área para transferir conocimiento práctico.</p>'
@@ -816,14 +1010,15 @@ function renderHistoryAndReco(mode, hist, predictive, selArea, selKey, selTec, a
 
 /* ---------- tabla predictiva ---------- */
 function renderTable(){
-  const search = document.getElementById('searchBox').value.toLowerCase();
-  const areaF = document.getElementById('areaFilter').value, riskF = document.getElementById('riskFilter').value;
-  const k = window._sortKey||'risk', order = {critico:0,alto:1,medio:2,bajo:3,na:4};
+  const search = $('searchBox').value.toLowerCase();
+  const riskF = $('riskFilter').value;
+  const k = window._sortKey||'risk';
+  markSorted('#predTable', 'k', k);
   const list = (window._predictive||[]).filter(p=>
-    (!areaF||p.area===areaF) && (!riskF||p.risk===riskF) &&
+    (!riskF||p.risk===riskF) &&
     (!search || p.area.toLowerCase().includes(search) || p.equipo.toLowerCase().includes(search) || (p.plan||'').toLowerCase().includes(search))
   ).sort((a,b)=>{
-    if (k==='risk') return order[a.risk]-order[b.risk]||b.fallas-a.fallas;
+    if (k==='risk') return RISK_ORDER[a.risk]-RISK_ORDER[b.risk]||(a.daysUntil??1e9)-(b.daysUntil??1e9)||b.fallas-a.fallas;
     if (k==='fallas') return b.fallas-a.fallas;
     if (k==='mtbf') return (a.mtbf??1e9)-(b.mtbf??1e9);
     if (k==='downtime') return b.avgDowntime-a.avgDowntime;
@@ -834,38 +1029,71 @@ function renderTable(){
     if (k==='next') return (a.nextDate||1e15)-(b.nextDate||1e15);
     return 0;
   });
-  const tb = document.getElementById('predBody'), em = document.getElementById('predEmpty');
+  const tb = $('predBody'), em = $('predEmpty');
   if (!list.length){ tb.innerHTML=''; em.style.display='block'; return; }
   em.style.display = 'none';
-  tb.innerHTML = list.map(p=>{
-    const key = p.area+' | '+p.equipo;
-    return `<tr data-key="${esc(key)}" class="${window._selectedKey===key?'selected-row':''}">
+  tb.innerHTML = list.map(p=>`<tr data-key="${esc(p.key)}" class="${ficha&&ficha.mode==='equipo'&&ficha.val===p.key?'selected-row':''}">
       <td class="areaname">${esc(p.area)}</td><td class="eqname">${esc(p.equipo)}</td>
       <td>${p.tecnico&&p.tecnico!=='—'?`<span class="tec-link" data-tec-link="${esc(p.tecnico)}">${esc(p.tecnico)}</span>`:'—'}</td>
       <td class="numcell">${p.fallas}</td><td class="numcell">${p.mtbf!=null?p.mtbf.toFixed(1):'—'}</td>
-      <td class="numcell">${p.last?p.last.toLocaleDateString('es-DO'):'—'}${p.lastFalla?`<div style="color:var(--muted);font-size:11px;margin-top:3px;max-width:220px;">${esc(p.lastFalla)}</div>`:''}</td>
-      <td class="numcell">${p.nextDate?p.nextDate.toLocaleDateString('es-DO')+(p.daysUntil!=null?' ('+(p.daysUntil<0?'vencido hace '+Math.abs(p.daysUntil)+'d':'en '+p.daysUntil+'d')+')':''):'necesita ≥3 días con falla'}</td>
+      <td class="numcell">${fmtDate(p.last)}${p.lastFalla?`<div class="sub-txt">${esc(p.lastFalla)}</div>`:''}</td>
+      <td class="numcell">${p.risk==='inactivo'?`<span style="color:var(--muted)">sin fallas hace ${p.daysSince}d</span>`:p.nextDate?fmtDate(p.nextDate)+(p.daysUntil!=null?' ('+(p.daysUntil<0?'vencido hace '+Math.abs(p.daysUntil)+'d':'en '+p.daysUntil+'d')+')':''):'necesita ≥3 días con falla'}</td>
       <td class="numcell">${p.avgDowntime.toFixed(0)}</td><td><span class="risk ${p.risk}">${riskLabel(p.risk)}</span></td>
-      <td style="max-width:260px;font-size:12px;line-height:1.45;">${esc(p.plan)}</td></tr>`;
-  }).join('');
+      <td style="max-width:260px;font-size:12px;line-height:1.45;">${esc(p.plan)}</td></tr>`).join('');
+}
+
+/* ---------- pestañas ---------- */
+function switchTab(id){
+  if (!$('tab-'+id)) id = 'resumen';
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
+  document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+id));
+  try { history.replaceState(null, '', '#'+id); } catch(e) {}
+  // las gráficas creadas con la pestaña oculta necesitan medir de nuevo su tamaño
+  requestAnimationFrame(()=>Object.values(charts).forEach(c=>{ if (c) c.resize(); }));
 }
 
 /* ---------- eventos ---------- */
-const $ = id => document.getElementById(id);
+$('tabs').addEventListener('click', e=>{ const b=e.target.closest('.tab'); if (b) switchTab(b.dataset.tab); });
+document.addEventListener('click', e=>{
+  const g = e.target.closest('[data-goto]'); if (g){ switchTab(g.dataset.goto); window.scrollTo({top:0}); }
+});
+$('fPeriodo').addEventListener('change', e=>{ F.periodo = e.target.value; render(); });
+$('fArea').addEventListener('change', e=>{ F.area = e.target.value; render(); });
+$('fTecnico').addEventListener('change', e=>{ F.tecnico = e.target.value; render(); });
+$('fTipo').addEventListener('change', e=>{ F.tipo = e.target.value; render(); });
+$('chipBox').addEventListener('click', e=>{ const b=e.target.closest('[data-chip]'); if (b){ F[b.dataset.chip]=''; render(); } });
+$('clearSelBtn').addEventListener('click',()=>{ Object.assign(F, {periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:''}); render(); });
+
 $('searchBox').addEventListener('input', renderTable);
-$('areaFilter').addEventListener('change', renderTable);
 $('riskFilter').addEventListener('change', renderTable);
 document.querySelectorAll('#predTable thead th').forEach(th=>th.addEventListener('click',()=>{ window._sortKey=th.dataset.k; renderTable(); }));
 document.querySelectorAll('#tecTable thead th').forEach(th=>th.addEventListener('click',()=>{ window._tecSortKey=th.dataset.tk; renderTecTable(); }));
 document.querySelectorAll('#areaTable thead th').forEach(th=>th.addEventListener('click',()=>{ window._areaSortKey=th.dataset.ak; renderAreaRows(); }));
 
-$('feedToggle').addEventListener('click',()=>{
-  const open = $('feedBody').classList.toggle('open');
-  $('feedToggle').textContent = (open?'▾':'▸')+' Cargar OTs antiguas en bloque (pegar filas separadas por tabulaciones)';
+$('predBody').addEventListener('click', e=>{
+  const tl = e.target.closest('.tec-link');
+  if (tl){ openFicha('tecnico', tl.dataset.tecLink); return; }
+  const tr = e.target.closest('tr[data-key]'); if (tr){ openFicha('equipo', tr.dataset.key); renderTable(); }
 });
+$('prioList').addEventListener('click', e=>{ const it=e.target.closest('.prio-item'); if (it) openFicha('equipo', it.dataset.key); });
+$('areaBody').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-area]'); if (tr) openFicha('area', tr.dataset.area); });
+$('riskMap').addEventListener('click', e=>{ const c=e.target.closest('.risk-cell'); if (c) openFicha('area', c.dataset.area); });
+$('tecBody').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-tec]'); if (tr) openFicha('tecnico', tr.dataset.tec); });
+$('tecEquipoBreakdown').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-key]'); if (tr) openFicha('equipo', tr.dataset.key); });
+$('drawerClose').addEventListener('click', ()=>{ closeFicha(); renderTable(); });
+$('drawerBg').addEventListener('click', ()=>{ closeFicha(); renderTable(); });
+document.addEventListener('keydown', e=>{ if (e.key==='Escape' && ficha){ closeFicha(); renderTable(); } });
+$('drawerFilterBtn').addEventListener('click', ()=>{
+  if (!ficha) return;
+  const k = ficha.mode==='area' ? 'area' : 'tecnico';
+  F[k] = (F[k]===ficha.val) ? '' : ficha.val;
+  closeFicha(); render();
+});
+
 $('appendBtn').addEventListener('click', async ()=>{
   const st = $('feedStatus'), newRows = parseRaw($('feedArea').value);
   if (!newRows.length){ st.textContent='No se detectaron filas válidas.'; st.style.color='#ef4b4b'; return; }
+  const malas = newRows.filter(r=>!parseFecha(r.fecha)).length;
   st.textContent = `Subiendo ${newRows.length} OT(s)…`; st.style.color='#8b98ab';
   await window.fbReady;
   let ok = 0;
@@ -874,34 +1102,11 @@ $('appendBtn').addEventListener('click', async ()=>{
     chunk.forEach(r=>batch.set(db.collection('ots').doc(), {...rowToOtRecord(r), createdAt:fbTimestamp()}));
     try { await batch.commit(); ok += chunk.length; } catch(err){ console.error(err); }
   }
-  st.textContent = `✅ ${ok} de ${newRows.length} OT(s) subidas a la base de datos compartida`; st.style.color='#35d0b0';
+  st.textContent = `✅ ${ok} de ${newRows.length} OT(s) subidas a la base de datos compartida` + (malas?` · ⚠ ${malas} con fecha no válida (usa AAAA-MM-DD): no aparecerán en el análisis`:'');
+  st.style.color = malas ? '#fab219' : '#35d0b0';
   $('feedArea').value = '';
 });
 $('clearFeedBtn').addEventListener('click',()=>{ $('feedArea').value=''; $('feedStatus').textContent=''; });
-
-function selectOnly(kind, val){
-  const cur = window['_selected'+kind];
-  ['Key','Area','Tecnico'].forEach(k=>{ window['_selected'+k]=null; });
-  window['_selected'+kind] = (cur===val) ? null : val;
-  render();
-}
-$('predBody').addEventListener('click', e=>{
-  const tl = e.target.closest('.tec-link');
-  if (tl){ selectOnly('Tecnico', tl.dataset.tecLink); return; }
-  const tr = e.target.closest('tr[data-key]'); if (tr) selectOnly('Key', tr.dataset.key);
-});
-$('areaBody').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-area]'); if (tr) selectOnly('Area', tr.dataset.area); });
-$('riskMap').addEventListener('click', e=>{ const c=e.target.closest('.risk-cell'); if (c) selectOnly('Area', c.dataset.area); });
-$('tecBody').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-tec]'); if (tr) selectOnly('Tecnico', tr.dataset.tec); });
-$('tecEquipoBreakdown').addEventListener('click', e=>{
-  const tr = e.target.closest('tr[data-key]'); if (!tr) return;
-  window._selectedArea = null; window._selectedTecnico = null; window._selectedKey = tr.dataset.key; render();
-});
-$('clearSelBtn').addEventListener('click',()=>{
-  window._selectedKey = window._selectedArea = window._selectedTecnico = null;
-  window._selectedTipo = window._selectedSemana = window._selectedCausa = null;
-  render();
-});
 
 /* ---------- Firestore ---------- */
 function rowToOtRecord(r){
@@ -927,28 +1132,32 @@ function otRecordToRow(doc){
 }
 
 function exportAnalisisBackup(){
-  if (!allRows.length){ $('feedStatus').textContent='No hay OTs para exportar.'; return; }
+  if (!allRows.length){ $('exportStatus').textContent='No hay OTs para exportar.'; return; }
   const url = URL.createObjectURL(new Blob([JSON.stringify(allRows,null,2)],{type:'application/json'}));
   const a = document.createElement('a'); a.href=url; a.download='analisis_respaldo_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
   URL.revokeObjectURL(url);
 }
-const csvEscape = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+// el apóstrofo evita que Excel interprete como fórmula un texto que empieza con = + - @
+const csvEscape = v => { let s = String(v??''); if (/^[=+\-@]/.test(s) && isNaN(Number(s))) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
 function exportAnalisisCSV(){
-  const rows = window._hasFilter ? (window._scopeRows||[]) : allRows.filter(r=>r.fecha);
-  if (!rows.length){ $('feedStatus').textContent='No hay OTs para exportar con el filtro actual.'; return; }
+  const rows = window._hasFilter ? (window._scopeRows||[]) : (window._rowsAll||[]);
+  if (!rows.length){ $('exportStatus').textContent='No hay OTs para exportar con el filtro actual.'; return; }
   const headers = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Paro Planta','Técnicos','Min Máquina Parada','Min Técnico','Causa','Falla','Solución'];
   let csv = headers.join(',')+'\n';
   rows.forEach(r=>{ csv += [r.ot,r.fecha,weekOf(r),r.area,r.tipoMaquina,r.equipo,r.pieza,r.tipoMant,r.me,r.paroPlanta,r.tecnicos,r.minMaquina,r.minTecnico,r.causa,r.falla,r.solucion].map(csvEscape).join(',')+'\n'; });
   const url = URL.createObjectURL(new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8'}));
   const a = document.createElement('a'); a.href=url; a.download='reporte_analisis'+(window._hasFilter?'_filtrado':'')+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
   URL.revokeObjectURL(url);
-  $('feedStatus').textContent = `📊 Reporte exportado (${rows.length} OTs) — ábrelo con Excel.`;
+  $('exportStatus').textContent = `📊 Reporte exportado (${rows.length} OTs) — ábrelo con Excel.`;
 }
 
 /* ---------- init ---------- */
 window._sortKey = 'risk';
+switchTab((location.hash||'').slice(1) || 'resumen');
 document.addEventListener('DOMContentLoaded',()=>{
   fbRenderMiniNav('analisis');
+  // la barra de filtros se pega justo debajo de la barra de navegación de la app
+  window.fbReady.then(()=>{ const n = $('fbMiniNav'); if (n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight+'px'); }).catch(()=>{});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 });
 
