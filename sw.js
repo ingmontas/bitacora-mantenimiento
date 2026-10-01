@@ -63,3 +63,15 @@ self.addEventListener('fetch', e => {
     })
   );
 });
+
+// Avisos de producción (1 oct 2026): tocar la notificación abre la cola de
+// Avisos en Bitácora (o enfoca la ventana si la app ya está abierta).
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || 'bitacora.html#avisos';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+    const c = cs.find(x => x.url.includes('bitacora.html'));
+    if (c) { c.focus(); return c.navigate ? c.navigate(url) : null; }
+    return self.clients.openWindow(url);
+  }));
+});
