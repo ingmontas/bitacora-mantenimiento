@@ -20,65 +20,133 @@
        cualquier cámara de celular ya lo reconoce y ofrece abrir la URL. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- Exportar a Excel con dashboard, generado en el navegador (sin backend).
-       ExcelJS escribe fórmulas reales + formato condicional; los dos
-       gráficos del dashboard se insertan como imagen (ExcelJS no puede
-       crear gráficos nativos editables desde el navegador), dibujada con
-       Chart.js justo antes de exportar. -->
+       ExcelJS escribe fórmulas reales + formato condicional; los gráficos
+       del dashboard se insertan como imagen dibujada con Chart.js. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     /* ══════════════════════════════════════════════════════════════════
-       NOTA (28 sep 2026): módulo NUEVO e INDEPENDIENTE — "Hoja de Vida"
-       (historial completo de un equipo + exportar a Excel con dashboard).
-       Mismo sistema de diseño que bitacora/inventario/analisis/checklist.
-       Acceso: 4ta entrada del menú superior, o directo por código QR propio
-       (hoja-vida.html?equipo=ID), independiente del QR de Checklist.
+       Hoja de Vida — historial completo de un equipo.
+       1 oct 2026: al elegir un equipo se muestra un tablero completo
+       (indicadores, técnicos, tipos, OTs por mes, piezas más intervenidas,
+       trabajo pendiente) y el historial filtrable: tabla en pantallas
+       anchas, tarjetas en el celular.
        ══════════════════════════════════════════════════════════════════ */
     :root {
       --bg: #0F1923; --surface: #1A2535; --card: #202F42;
       --accent: #F59E0B; --green: #10B981; --red: #EF4444;
       --blue: #818CF8; --orange: #F97316;
       --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --c-corr: #EF6B6B; --c-prev: #1BAF7A; --c-proy: #5B8DEF; --c-otro: #94A3B8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
     #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
     #header h1 { font-size: 15px; font-weight: 800; }
     #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
-    #content { padding: 14px 14px 40px; }
-    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+    #content { padding: 14px 14px 40px; margin: 0 auto; max-width: 480px; }
+    #content.wide { max-width: 1180px; }
+    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); min-width: 0; }
     .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
     .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .card h3 { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
     input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
-    input:focus { border-color: var(--accent); }
-    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    input:focus, select:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; font-family: inherit; }
     .btn:active { opacity: .8; }
     .btn-primary { background: var(--accent); color: #0F1923; }
     .btn-secondary { background: var(--border); color: var(--text); }
     .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
-    .row-actions { display: flex; gap: 8px; margin-bottom: 12px; }
-    .row-actions .btn { flex: 1; }
-    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .row-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .row-actions .grow { flex: 1; }
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .tag-preventivo { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
     .tag-correctivo { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
-    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-    .kpi-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
-    .kpi-tile .kpi-label { font-size: 9px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
-    .kpi-tile .kpi-val { font-size: 20px; font-weight: 800; }
-    .kpi-tile.k0 .kpi-val { color: var(--blue); }
-    .kpi-tile.k1 .kpi-val { color: var(--orange); }
-    .kpi-tile.k2 .kpi-val { color: #1BAF7A; }
-    .kpi-tile.k3 .kpi-val { color: var(--accent); }
+    .tag-proyecto { background: #5B8DEF22; color: #9db8f5; border: 1px solid #5B8DEF44; }
+    .tag-otro { background: #94A3B822; color: var(--muted); border: 1px solid #94A3B844; }
+
+    /* encabezado del equipo */
+    .eq-head { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+    .eq-facts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .eq-facts b { color: var(--text); font-weight: 700; }
+
+    /* KPIs */
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+    .kpi-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0; text-align: center; overflow: hidden; }
+    .kpi-tile .kpi-label { font-size: 10px; color: #fff; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px 6px; }
+    .kpi-tile .kpi-val { font-size: 22px; font-weight: 800; padding: 9px 6px 2px; font-variant-numeric: tabular-nums; }
+    .kpi-tile .kpi-foot { font-size: 10.5px; color: var(--muted); padding: 0 6px 9px; }
+    .kpi-tile.k0 .kpi-label { background: #2A78D6; } .kpi-tile.k1 .kpi-label { background: #C2552A; }
+    .kpi-tile.k2 .kpi-label { background: #158A60; } .kpi-tile.k3 .kpi-label { background: #B07A00; }
+    .kpi-tile.k4 .kpi-label { background: #A63A3A; } .kpi-tile.k5 .kpi-label { background: #5A4FB0; }
+
+    /* paneles del tablero */
+    .dash-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+    .dash-grid > .card { margin-bottom: 0; }
+    .tec-row { display: grid; grid-template-columns: minmax(90px, 1.3fr) 2fr auto; gap: 10px; align-items: center; padding: 7px 4px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .tec-row:hover, .tec-row.sel { background: var(--surface); }
+    .tec-row.sel { box-shadow: inset 3px 0 0 var(--accent); }
+    .tec-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { height: 10px; background: var(--surface); border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; background: #2A78D6; border-radius: 5px; }
+    .tec-num { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+    .tec-num b { color: var(--text); }
+    .tipo-bar { display: flex; height: 26px; border-radius: 7px; overflow: hidden; margin-bottom: 12px; background: var(--surface); }
+    .tipo-bar div { height: 100%; }
+    .tipo-legend { display: grid; gap: 4px; }
+    .tipo-item { display: flex; align-items: center; gap: 9px; font-size: 13px; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
+    .tipo-item:hover, .tipo-item.sel { background: var(--surface); }
+    .tipo-item.sel { box-shadow: inset 3px 0 0 var(--accent); }
+    .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    .tipo-item .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .tipo-item .n b { color: var(--text); }
+    .pz-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .pz-row:last-child { border-bottom: none; }
+    .pz-row .meta { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+    .chart-box { position: relative; height: 210px; }
+    .note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+    .pend-row { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .pend-row:last-child { border-bottom: none; }
+
+    /* historial */
+    .hist-tools { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
+    .seg { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px; overflow-x: auto; }
+    .seg button { flex: 1; background: none; border: none; color: var(--muted); font: 600 12.5px inherit; font-family: inherit; padding: 7px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+    .seg button.on { background: var(--card); color: var(--accent); }
+    .hist-count { font-size: 12px; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .linkbtn { background: none; border: none; color: var(--accent); font: 600 12px inherit; font-family: inherit; cursor: pointer; padding: 0; }
     .item-row { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); cursor: pointer; }
     .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 8px; }
     .item-title { font-weight: 700; font-size: 14px; }
     .item-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
     .item-sol { font-size: 11px; color: #35d0b0; margin-top: 4px; line-height: 1.5; }
-    .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 8px; }
-    .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
-    .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .hist-table-wrap { display: none; overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+    table.hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    table.hist th { background: #2A78D6; color: #fff; font-weight: 700; text-align: left; padding: 9px 10px; white-space: nowrap; position: sticky; top: 0; }
+    table.hist td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.45; }
+    table.hist tr:nth-child(even) td { background: #1d2a3b; }
+    table.hist td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    table.hist td.muted { color: var(--muted); }
+    td.min-cell { min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+    td.min-cell .mtrack { height: 4px; background: var(--surface); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+    td.min-cell .mbar { height: 100%; background: #2A78D6; border-radius: 2px; margin-left: auto; }
+    .more-wrap { text-align: center; margin: 12px 0; }
+    td.desc { min-width: 220px; max-width: 320px; }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 8px; }
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty .emoji { font-size: 44px; display: block; margin-bottom: 12px; }
     .empty p { font-size: 14px; line-height: 1.6; }
+
+    @media (min-width: 820px) {
+      .kpi-grid { grid-template-columns: repeat(6, 1fr); }
+      .dash-grid { grid-template-columns: 1.2fr 1fr; }
+      .dash-grid.three { grid-template-columns: 1.4fr 1fr 1fr; }
+      .hist-tools { grid-template-columns: auto 220px 1fr; align-items: center; }
+      .hist-cards { display: none; }
+      .hist-table-wrap { display: block; }
+    }
+
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
@@ -119,8 +187,8 @@
   <div id="screen-picker">
     <div class="card">
       <div class="card-title">🔍 Elige un equipo</div>
-      <div class="card-sub">Verás su historial completo de mantenimiento</div>
-      <input type="text" id="picker-buscar" placeholder="Buscar equipo..." oninput="renderPicker()"/>
+      <div class="card-sub">Verás todo lo que se le ha hecho: tablero e historial completo</div>
+      <input type="text" id="picker-buscar" placeholder="Buscar equipo o localidad..." oninput="renderPicker()"/>
     </div>
     <div id="picker-lista"></div>
   </div>
@@ -130,24 +198,63 @@
     <div class="row-actions">
       <button class="btn btn-secondary btn-sm" onclick="volverAlPicker()">← Cambiar equipo</button>
       <button class="btn btn-secondary btn-sm" onclick="mostrarQrHojaVida()">📱 Código QR</button>
+      <span class="grow"></span>
+      <button class="btn btn-primary btn-sm" onclick="exportarExcel()">📊 Exportar a Excel</button>
     </div>
 
     <div class="card">
-      <div class="card-title" id="eq-nombre">—</div>
-      <div class="card-sub" id="eq-sub" style="margin-bottom:0;">—</div>
+      <div class="eq-head">
+        <div>
+          <div class="card-title" id="eq-nombre">—</div>
+          <div class="card-sub" id="eq-sub" style="margin-bottom:0;">—</div>
+        </div>
+      </div>
+      <div class="eq-facts" id="eq-facts"></div>
     </div>
 
-    <div class="kpi-grid">
-      <div class="kpi-tile k0"><div class="kpi-label">Total OTs</div><div class="kpi-val" id="kpi-total">—</div></div>
-      <div class="kpi-tile k1"><div class="kpi-label">Min. totales</div><div class="kpi-val" id="kpi-min">—</div></div>
-      <div class="kpi-tile k2"><div class="kpi-label">Min. promedio</div><div class="kpi-val" id="kpi-prom">—</div></div>
-      <div class="kpi-tile k3"><div class="kpi-label">% Preventivo</div><div class="kpi-val" id="kpi-prev">—</div></div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="dash-grid">
+      <div class="card">
+        <h3>OTs por mes</h3>
+        <div class="chart-box"><canvas id="chartMes"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Técnicos que lo han atendido</h3>
+        <div id="tecList"></div>
+        <div class="note">Clic en un técnico para ver solo sus OTs. Si una OT la hicieron dos técnicos, cuenta para ambos.</div>
+      </div>
     </div>
 
-    <button class="btn btn-primary" onclick="exportarExcel()">📊 Exportar a Excel (con dashboard)</button>
+    <div class="dash-grid three">
+      <div class="card">
+        <h3>Tipo de mantenimiento</h3>
+        <div class="tipo-bar" id="tipoBar"></div>
+        <div class="tipo-legend" id="tipoLegend"></div>
+      </div>
+      <div class="card">
+        <h3>Piezas más intervenidas</h3>
+        <div id="piezaList"></div>
+      </div>
+      <div class="card">
+        <h3>Trabajo pendiente</h3>
+        <div id="pendList"></div>
+      </div>
+    </div>
 
-    <div class="section-title">Historial — más reciente primero</div>
-    <div id="historial"></div>
+    <div class="section-title">Historial — todo lo que se le ha hecho</div>
+    <div class="hist-tools">
+      <div class="seg" id="segTipo"></div>
+      <select id="fTec" onchange="hvFiltro.tec=this.value; renderTodo()"></select>
+      <input type="text" id="fBuscar" placeholder="Buscar en descripción, solución, pieza, OT..." oninput="hvFiltro.q=this.value; hvLimite=PAGINA; renderHistorial()"/>
+    </div>
+    <div class="hist-count" id="histCount"></div>
+    <div class="hist-table-wrap"><table class="hist">
+      <thead><tr><th>N° Orden</th><th>Fecha</th><th>Área</th><th>Equipo / pieza</th><th>Técnico</th><th style="text-align:right">Tiempo (min)</th><th>Tipo</th><th>Descripción</th><th>Solución</th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table></div>
+    <div class="hist-cards" id="historial"></div>
+    <div class="more-wrap" id="moreWrap"></div>
   </div>
 
 </div>
@@ -175,7 +282,21 @@
 let currentEquipos = [];   // desde /equipos
 let currentOts = [];       // desde /ots (todas — se filtra en el cliente por EQUIPO, igual que analisis.html)
 let equipoActual = null;   // equipo actualmente mostrado en la hoja de vida
-let historialActual = [];  // OTs ya filtradas + ordenadas del equipo actual
+let historialActual = [];  // OTs ya filtradas + ordenadas del equipo actual (sin filtros de la vista)
+let pendientesActual = []; // OTs abiertas (pendiente / planificada) del equipo actual
+const hvFiltro = { tipo: '', tec: '', q: '' };
+const PAGINA = 50;
+let hvLimite = PAGINA; // filas visibles del historial; "Mostrar más" suma otra página
+let chartMes = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+const splitTec = s => (s || '').split(',').map(x => x.trim()).filter(x => x && x !== '—' && x !== '-');
+const tipoNorm = t => { t = (t || '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : 'Sin clasificar'; };
+const TIPO_COLOR = { 'Correctivo':'var(--c-corr)', 'Preventivo':'var(--c-prev)', 'Proyecto':'var(--c-proy)' };
+const TIPO_TAG = t => ({ 'Correctivo':'tag-correctivo', 'Preventivo':'tag-preventivo', 'Proyecto':'tag-proyecto' }[t] || 'tag-otro');
+function fmtMin(m){ if (!m) return '0 min'; const h = Math.floor(m/60), mm = Math.round(m%60); return h ? `${h}h ${mm}m` : `${mm} min`; }
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
 document.addEventListener('DOMContentLoaded', () => {
   window.fbReady.then(() => {
@@ -214,8 +335,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 // ══════ Carga de datos: /equipos y /ots (misma fuente compartida que ══════
-// bitacora/checklist/analisis — se filtra por nombre de equipo en el
-// cliente, igual patrón que ya usa analisis.html).
+// bitacora/checklist/analisis — se filtra por nombre de equipo en el cliente).
 let _qrAutoAbrioHV = false;
 function cargarDatos() {
   setLoading(true, 'Cargando equipos...');
@@ -227,12 +347,8 @@ function cargarDatos() {
 
   db.collection('ots').onSnapshot((snap) => {
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // CORRECCIÓN (29 sep 2026) — mismo caso que analisis.html: dos
-    // documentos de Firestore pueden terminar con el mismo número de OT
-    // (Title), ej. por un doble-toque en "Guardar" en Bitácora. Se cuenta
-    // solo el PRIMERO de cada número repetido, para que el total de Hoja
-    // de Vida siga coincidiendo con Análisis (nunca se borra nada de
-    // Firestore, solo se evita mostrarlo/contarlo dos veces aquí).
+    // Dos documentos con el mismo número de OT (ej. doble toque en "Guardar")
+    // se cuentan una sola vez, igual que en Análisis.
     const vistos = new Set();
     currentOts = docs.filter(o => {
       const key = (o.Title || o.id || '').trim();
@@ -242,6 +358,7 @@ function cargarDatos() {
       return true;
     });
     setLoading(false);
+    renderPicker();
     if (equipoActual) mostrarHojaDeVida(equipoActual); // refresca si ya hay uno abierto
   }, (err) => { console.warn('Error leyendo ots:', err.message); setLoading(false); showToast('Error cargando historial: ' + err.message, 'error'); });
 }
@@ -257,6 +374,14 @@ function intentarAbrirDesdeQrHV() {
   mostrarHojaDeVida(e);
 }
 
+// Qué OTs pertenecen a un equipo. Coincide por nombre de equipo, o por
+// LINEA_EQUIPO cuando la línea y la máquina se llaman igual (caso "Coating":
+// los técnicos anotan partes sueltas como "bomba" o "1" en el campo Equipo).
+function otsDeEquipo(e) {
+  const nombreNorm = normEq(e.nombre);
+  return currentOts.filter(o => o.FECHA && (normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm || normEq(o.LINEA_EQUIPO) === nombreNorm || (o.equipoId && o.equipoId === e.id)));
+}
+
 // ══════ Screen: elegir equipo ══════
 function renderPicker() {
   const wrap = document.getElementById('picker-lista');
@@ -266,13 +391,18 @@ function renderPicker() {
     wrap.innerHTML = `<div class="empty"><span class="emoji">🔍</span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
     return;
   }
-  wrap.innerHTML = lista.map(e => `
-    <div class="item-row" onclick="mostrarHojaDeVida('${String(e.id).replace(/'/g, "\\'")}')">
-      <div class="item-title">${e.nombre || '(sin nombre)'}</div>
-      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad : ''}</div>
-    </div>
-  `).join('');
+  wrap.innerHTML = lista.map(e => {
+    const n = currentOts.length ? otsDeEquipo(e).length : null;
+    return `
+    <div class="item-row" data-eq="${esc(e.id)}">
+      <div class="item-header"><div class="item-title">${esc(e.nombre || '(sin nombre)')}</div>${n != null ? `<span class="tag tag-otro">${n} OT${n === 1 ? '' : 's'}</span>` : ''}</div>
+      <div class="item-sub">${e.localidad ? '📍 ' + esc(e.localidad) : ''}</div>
+    </div>`;
+  }).join('');
 }
+document.getElementById('picker-lista').addEventListener('click', ev => {
+  const r = ev.target.closest('[data-eq]'); if (r) mostrarHojaDeVida(r.dataset.eq);
+});
 
 function volverAlPicker() {
   equipoActual = null;
@@ -280,78 +410,66 @@ function volverAlPicker() {
   history.replaceState(null, '', location.pathname);
   document.getElementById('screen-hoja').style.display = 'none';
   document.getElementById('screen-picker').style.display = 'block';
+  document.getElementById('content').classList.remove('wide');
 }
 
 // ══════ Screen: hoja de vida ══════
-// EQUIPO puede llegar como id (desde el picker/QR) o ya como objeto.
 function mostrarHojaDeVida(equipoOrId) {
   const e = typeof equipoOrId === 'string' ? currentEquipos.find(x => x.id === equipoOrId) : equipoOrId;
   if (!e) { showToast('Equipo no encontrado', 'error'); return; }
+  const cambio = !equipoActual || equipoActual.id !== e.id;
   equipoActual = e;
+  if (cambio) { hvFiltro.tipo = ''; hvFiltro.tec = ''; hvFiltro.q = ''; document.getElementById('fBuscar').value = ''; window.scrollTo(0, 0); }
 
   const params = new URLSearchParams(location.search);
   if (params.get('equipo') !== e.id) history.replaceState(null, '', location.pathname + '?equipo=' + encodeURIComponent(e.id));
 
   document.getElementById('screen-picker').style.display = 'none';
   document.getElementById('screen-hoja').style.display = 'block';
+  document.getElementById('content').classList.add('wide');
 
   document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('eq-sub').textContent = [e.localidad, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—';
 
-  // Historial: TODAS las OTs de /ots (sin límite, misma colección completa
-  // que usa Análisis) cuyo equipo coincide con este — juntando Bitácora y
-  // los Checklist ya cerrados/realizados (ver "CIERRE FINAL" en
-  // checklist.html) automáticamente, porque ambos escriben los mismos
-  // campos en mayúsculas. Se compara con el mismo fallback y la misma
-  // normalización (minúsculas + espacios colapsados) que usa
-  // canonEquipo()/normEq() en analisis.html.
-  //
-  // 28 sep 2026 — caso real detectado con el usuario: en líneas donde el
-  // equipo registrado ES la línea completa (ej. "COATING", que es la única
-  // máquina de la línea/área "Coating"), los técnicos anotan en Bitácora
-  // partes/tareas sueltas ("bomba", "mantenimiento", "1"...) en el campo
-  // Equipo en vez de repetir "COATING" — pero esas OTs sí son de esa
-  // máquina. Por eso ahora también se incluye cualquier OT cuya
-  // LINEA_EQUIPO (el área/línea, campo de un <select> controlado, no texto
-  // libre) coincida con el nombre del equipo — así "Hoja de Vida" nunca
-  // muestra menos que el total real de esa línea en Análisis. En líneas
-  // con muchas máquinas distintas (ej. "Weaving", con 29 telares) esto no
-  // afecta nada, porque el área se llama "Weaving" y ningún equipo se
-  // llama igual que el área — solo coincide cuando, como en Coating, el
-  // área y la máquina comparten el mismo nombre.
-  const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
-  const nombreNorm = normEq(e.nombre);
-  historialActual = currentOts
-    .filter(o => normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm || normEq(o.LINEA_EQUIPO) === nombreNorm)
+  // Tiempo = TOTAL_MIN_TECNICO (tiempo de trabajo). El tiempo de respuesta de
+  // un checklist (minutos entre abrir y cerrar la OT) se guarda aparte y NO se
+  // suma como tiempo de trabajo.
+  historialActual = otsDeEquipo(e)
     .map(o => ({
-      folio: o.Title || o.id,
+      folio: o.Title || o.folio || o.id,
       fecha: o.FECHA || '',
       area: o.LINEA_EQUIPO || '',
       equipo: o.EQUIPO || '',
-      tecnico: o.TECNICOS || '—',
-      min: Number(o.TOTAL_MIN_TECNICO) || Number(o.TIEMPO_RESPUESTA_MIN) || 0,
-      tipo: o.TIPO_MANTENIMIENTO || '—',
-      causa: o.CAUSA_FALLA || '',
+      pieza: o.PIEZA || '',
+      tecnicos: splitTec(o.TECNICOS),
+      min: Number(o.TOTAL_MIN_TECNICO) || 0,
+      paro: Number(o.TOTAL_MIN_MAQUINA) || 0,
+      resp: (o.TIEMPO_RESPUESTA_MIN != null && o.TIEMPO_RESPUESTA_MIN !== '') ? Number(o.TIEMPO_RESPUESTA_MIN) : null,
+      tipo: tipoNorm(o.TIPO_MANTENIMIENTO),
+      paroPlanta: ['si','sí'].includes((o.PARO_PLANTA || '').toLowerCase()),
+      causa: o.CAUSA_FALLA || o.causaFalla || '',
       falla: o.DESCRIPCION_FALLA || '',
       solucion: o.DESCRIPCION_SOLUCION || '',
       _createdAtMs: o.createdAt && typeof o.createdAt.toMillis === 'function' ? o.createdAt.toMillis() : 0,
     }))
     .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b._createdAtMs - a._createdAtMs));
 
-  renderKpis();
-  renderHistorial();
+  pendientesActual = currentOts.filter(o => !o.FECHA && o.equipoId === e.id && ['pendiente','planificada','en_revision','rechazada'].includes(o.estado));
+
+  renderTodo();
 }
 
-function renderKpis() {
-  const n = historialActual.length;
-  const totalMin = historialActual.reduce((s, r) => s + r.min, 0);
-  const prom = n ? totalMin / n : 0;
-  const preventivos = historialActual.filter(r => r.tipo === 'Preventivo').length;
-  const pct = n ? (preventivos / n * 100) : 0;
-  document.getElementById('kpi-total').textContent = n;
-  document.getElementById('kpi-min').textContent = totalMin;
-  document.getElementById('kpi-prom').textContent = prom.toFixed(1);
-  document.getElementById('kpi-prev').textContent = pct.toFixed(0) + '%';
+function renderTodo() {
+  hvLimite = PAGINA;
+  renderFacts();
+  renderKpis();
+  renderMes();
+  renderTecnicos();
+  renderTipos();
+  renderPiezas();
+  renderPendientes();
+  renderFiltrosHist();
+  renderHistorial();
 }
 
 function fmtFechaHV(f) {
@@ -359,24 +477,228 @@ function fmtFechaHV(f) {
   const [y, m, d] = f.split('-');
   return `${d}/${m}/${y}`;
 }
+const fechaD = f => { const d = new Date((f || '') + 'T00:00:00'); return isNaN(d) ? null : d; };
+const hoy0 = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const diasDesde = f => { const d = fechaD(f); return d ? Math.round((hoy0() - d) / 86400000) : null; };
+
+function renderFacts() {
+  const H = historialActual;
+  const el = document.getElementById('eq-facts');
+  if (!H.length) { el.innerHTML = ''; return; }
+  const ultima = H[0], primera = H[H.length - 1];
+  const ultCorr = H.find(r => r.tipo === 'Correctivo');
+  const ultPrev = H.find(r => r.tipo === 'Preventivo');
+  const hace = f => { const d = diasDesde(f); return d == null ? '' : d === 0 ? ' (hoy)' : d > 0 ? ` (hace ${d} d)` : ''; };
+  el.innerHTML = [
+    `Historial desde <b>${fmtFechaHV(primera.fecha)}</b>`,
+    `Última intervención: <b>${fmtFechaHV(ultima.fecha)}</b>${hace(ultima.fecha)}`,
+    ultCorr ? `Último correctivo: <b>${fmtFechaHV(ultCorr.fecha)}</b>${hace(ultCorr.fecha)}` : 'Sin correctivos registrados',
+    ultPrev ? `Último preventivo: <b>${fmtFechaHV(ultPrev.fecha)}</b>${hace(ultPrev.fecha)}` : 'Sin preventivos registrados',
+  ].map(s => `<span>${s}</span>`).join('');
+}
+
+function renderKpis() {
+  const H = historialActual;
+  const n = H.length;
+  const totalMin = H.reduce((s, r) => s + r.min, 0);
+  const conTiempo = H.filter(r => r.min > 0);
+  const prom = conTiempo.length ? totalMin / conTiempo.length : 0;
+  const corr = H.filter(r => r.tipo === 'Correctivo');
+  const prev = H.filter(r => r.tipo === 'Preventivo').length;
+  const pct = n ? prev / n * 100 : 0;
+  const paro = H.reduce((s, r) => s + r.paro, 0);
+  // días promedio entre fallas correctivas (días distintos, mínimo 3), mismo criterio que Análisis
+  const dias = [...new Set(corr.map(r => r.fecha).filter(Boolean))].sort();
+  let mtbf = null;
+  if (dias.length >= 3) mtbf = (fechaD(dias[dias.length - 1]) - fechaD(dias[0])) / 86400000 / (dias.length - 1);
+  const tiles = [
+    { k: 'k0', l: 'Total de OTs', v: n, f: `${corr.length} correctivas · ${prev} preventivas` },
+    { k: 'k1', l: 'Tiempo total', v: totalMin.toLocaleString('es-DO') + ' min', f: fmtMin(totalMin) + ' de trabajo' },
+    { k: 'k2', l: 'Tiempo promedio', v: prom.toFixed(1) + ' min', f: `por OT con tiempo (${conTiempo.length})` },
+    { k: 'k3', l: '% Preventivo', v: pct.toFixed(1) + '%', f: pct >= 50 ? 'buena proporción planificada' : 'mayormente reactivo' },
+    { k: 'k4', l: 'Paro de máquina', v: fmtMin(paro), f: `${H.filter(r => r.paroPlanta).length} paro(s) de planta` },
+    { k: 'k5', l: 'Días entre fallas', v: mtbf != null ? mtbf.toFixed(1) : '—', f: mtbf != null ? `MTBF con ${dias.length} días con falla` : 'necesita 3 días con falla' },
+  ];
+  document.getElementById('kpiGrid').innerHTML = tiles.map(t => `
+    <div class="kpi-tile ${t.k}"><div class="kpi-label">${t.l}</div><div class="kpi-val">${t.v}</div><div class="kpi-foot">${t.f}</div></div>`).join('');
+}
+
+function renderMes() {
+  const H = historialActual;
+  if (chartMes) { chartMes.destroy(); chartMes = null; }
+  const box = document.getElementById('chartMes').parentElement;
+  if (!H.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  // todos los meses entre la primera y la última OT (incluidos los meses en cero)
+  const keys = H.map(r => r.fecha.slice(0, 7)).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+  const meses = [];
+  let [y, m] = keys[0].split('-').map(Number);
+  const [yf, mf] = keys[keys.length - 1].split('-').map(Number);
+  while (y < yf || (y === yf && m <= mf)) { meses.push(y + '-' + String(m).padStart(2, '0')); m++; if (m > 12) { m = 1; y++; } }
+  const multiY = new Set(meses.map(k => k.slice(0, 4))).size > 1;
+  const label = k => MESES[Number(k.slice(5)) - 1] + (multiY ? ' ' + k.slice(2, 4) : '');
+  const serie = t => meses.map(k => H.filter(r => r.fecha.startsWith(k) && (t === 'Otros' ? !['Correctivo','Preventivo'].includes(r.tipo) : r.tipo === t)).length);
+  const datasets = [
+    { label: 'Correctivo', data: serie('Correctivo'), backgroundColor: '#EF6B6B' },
+    { label: 'Preventivo', data: serie('Preventivo'), backgroundColor: '#1BAF7A' },
+  ];
+  const otros = serie('Otros');
+  if (otros.some(Boolean)) datasets.push({ label: 'Proyecto / otros', data: otros, backgroundColor: '#5B8DEF' });
+  chartMes = new Chart(document.getElementById('chartMes'), {
+    type: 'bar',
+    data: { labels: meses.map(label), datasets: datasets.map(d => ({ ...d, borderRadius: 3, stack: 's', maxBarThickness: 34 })) },
+    options: { maintainAspectRatio: false, animation: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#F1F5F9', boxWidth: 11, font: { size: 11 } } } },
+      scales: { x: { stacked: true, ticks: { color: '#94A3B8' }, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, ticks: { color: '#94A3B8', precision: 0 }, grid: { color: '#2D3F55' } } } }
+  });
+}
+
+function statsTecnicos() {
+  const map = {};
+  historialActual.forEach(r => {
+    const ts = r.tecnicos.length ? r.tecnicos : ['Sin técnico registrado'];
+    ts.forEach(t => { const m = map[t] = map[t] || { ots: 0, min: 0 }; m.ots++; m.min += r.min; });
+  });
+  return Object.entries(map).map(([t, m]) => ({ tecnico: t, ...m })).sort((a, b) => b.ots - a.ots || b.min - a.min);
+}
+function renderTecnicos() {
+  const list = statsTecnicos();
+  const el = document.getElementById('tecList');
+  if (!list.length) { el.innerHTML = '<div class="empty" style="padding:20px">Sin técnicos registrados.</div>'; return; }
+  const max = Math.max(...list.map(t => t.ots));
+  el.innerHTML = list.map(t => `
+    <div class="tec-row ${hvFiltro.tec === t.tecnico ? 'sel' : ''}" data-tec="${esc(t.tecnico)}">
+      <div class="tec-name" title="${esc(t.tecnico)}">${esc(t.tecnico)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, t.ots / max * 100)}%"></div></div>
+      <div class="tec-num"><b>${t.ots}</b> OTs · ${t.min.toLocaleString('es-DO')} min</div>
+    </div>`).join('');
+}
+document.getElementById('tecList').addEventListener('click', ev => {
+  const r = ev.target.closest('[data-tec]'); if (!r) return;
+  hvFiltro.tec = hvFiltro.tec === r.dataset.tec ? '' : r.dataset.tec;
+  renderTodo();
+});
+
+function renderTipos() {
+  const H = historialActual, n = H.length;
+  const counts = {};
+  H.forEach(r => { counts[r.tipo] = (counts[r.tipo] || 0) + 1; });
+  const tipos = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  document.getElementById('tipoBar').innerHTML = tipos.map(([t, c]) => `<div style="width:${c / n * 100}%;background:${TIPO_COLOR[t] || 'var(--c-otro)'}" title="${esc(t)}: ${c}"></div>`).join('');
+  document.getElementById('tipoLegend').innerHTML = tipos.length ? tipos.map(([t, c]) => {
+    const min = H.filter(r => r.tipo === t).reduce((s, r) => s + r.min, 0);
+    return `<div class="tipo-item ${hvFiltro.tipo === t ? 'sel' : ''}" data-tipo="${esc(t)}"><span class="sw" style="background:${TIPO_COLOR[t] || 'var(--c-otro)'}"></span>${esc(t)}<span class="n"><b>${c}</b> (${Math.round(c / n * 100)}%) · ${min.toLocaleString('es-DO')} min</span></div>`;
+  }).join('') : '<div class="empty" style="padding:20px">Sin OTs.</div>';
+}
+document.getElementById('tipoLegend').addEventListener('click', ev => {
+  const r = ev.target.closest('[data-tipo]'); if (!r) return;
+  hvFiltro.tipo = hvFiltro.tipo === r.dataset.tipo ? '' : r.dataset.tipo;
+  renderTodo();
+});
+
+function renderPiezas() {
+  const map = {};
+  historialActual.forEach(r => {
+    if (!r.pieza) return;
+    const k = normEq(r.pieza);
+    const g = map[k] = map[k] || { nombre: r.pieza, n: 0, corr: 0, ultima: '' };
+    g.n++; if (r.tipo === 'Correctivo') g.corr++;
+    if (r.fecha > g.ultima) g.ultima = r.fecha;
+  });
+  const list = Object.values(map).sort((a, b) => b.n - a.n || b.ultima.localeCompare(a.ultima)).slice(0, 6);
+  document.getElementById('piezaList').innerHTML = list.length ? list.map(p => `
+    <div class="pz-row"><div>${esc(p.nombre)}${p.corr >= 3 ? ' <span class="tag tag-correctivo">se repite</span>' : ''}</div>
+      <div class="meta">${p.n} ${p.n === 1 ? 'vez' : 'veces'} · última ${fmtFechaHV(p.ultima)}</div></div>`).join('')
+    : '<div class="note" style="margin-top:0">Ninguna OT de este equipo tiene el campo "Pieza" lleno. Registrarlo en Bitácora permite ver qué componente falla más.</div>';
+}
+
+function renderPendientes() {
+  const el = document.getElementById('pendList');
+  if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0">✅ No hay OTs abiertas para este equipo.</div>'; return; }
+  const est = { pendiente: 'Pendiente', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
+  el.innerHTML = pendientesActual.map(o => `
+    <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'checklist' ? 'Detectada en checklist' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
+      <span class="tag ${o.prioridad === 'alta' ? 'tag-correctivo' : 'tag-otro'}">${est[o.estado] || esc(o.estado)}</span></div>`).join('');
+}
+
+function renderFiltrosHist() {
+  const tipos = [...new Set(historialActual.map(r => r.tipo))].sort();
+  document.getElementById('segTipo').innerHTML = ['', ...tipos].map(t =>
+    `<button class="${hvFiltro.tipo === t ? 'on' : ''}" data-t="${esc(t)}">${t ? esc(t) : 'Todos'}</button>`).join('');
+  const tecs = statsTecnicos().map(t => t.tecnico);
+  const sel = document.getElementById('fTec');
+  sel.innerHTML = '<option value="">Todos los técnicos</option>' + tecs.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  sel.value = tecs.includes(hvFiltro.tec) ? hvFiltro.tec : '';
+}
+document.getElementById('segTipo').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-t]'); if (!b) return;
+  hvFiltro.tipo = b.dataset.t; renderTodo();
+});
+
+function historialFiltrado() {
+  const q = normEq(hvFiltro.q);
+  return historialActual.filter(r =>
+    (!hvFiltro.tipo || r.tipo === hvFiltro.tipo) &&
+    (!hvFiltro.tec || (hvFiltro.tec === 'Sin técnico registrado' ? !r.tecnicos.length : r.tecnicos.includes(hvFiltro.tec))) &&
+    (!q || normEq([r.folio, r.falla, r.solucion, r.pieza, r.equipo, r.causa, r.area].join(' ')).includes(q)));
+}
 
 function renderHistorial() {
+  const HF = historialFiltrado();
+  const H = HF.slice(0, hvLimite);
+  const total = historialActual.length;
+  const filtrado = hvFiltro.tipo || hvFiltro.tec || hvFiltro.q;
+  document.getElementById('histCount').innerHTML = `<span>${HF.length === total ? `<b>${total}</b> OTs` : `<b>${HF.length}</b> de ${total} OTs`} · ${HF.reduce((s, r) => s + r.min, 0).toLocaleString('es-DO')} min de trabajo</span>`
+    + (filtrado ? `<button class="linkbtn" id="limpiarHist">Quitar filtros ✕</button>` : '');
+  const lb = document.getElementById('limpiarHist');
+  if (lb) lb.onclick = () => { hvFiltro.tipo = ''; hvFiltro.tec = ''; hvFiltro.q = ''; document.getElementById('fBuscar').value = ''; renderTodo(); };
+
   const wrap = document.getElementById('historial');
-  if (!historialActual.length) {
+  const body = document.getElementById('histBody');
+  if (!total) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">🗂️</span><p>Este equipo todavía no tiene OTs registradas en Bitácora ni Checklist.</p></div>`;
+    body.innerHTML = `<tr><td colspan="9" class="empty">Este equipo todavía no tiene OTs registradas.</td></tr>`;
     return;
   }
-  wrap.innerHTML = historialActual.map(r => `
-    <div class="item-row" style="cursor:default;border-left-color:${r.tipo === 'Correctivo' ? 'var(--red)' : 'var(--green)'}">
+  if (!H.length) {
+    document.getElementById('moreWrap').innerHTML = '';
+    wrap.innerHTML = `<div class="empty"><p>Ninguna OT coincide con los filtros.</p></div>`;
+    body.innerHTML = `<tr><td colspan="9" class="empty">Ninguna OT coincide con los filtros.</td></tr>`;
+    return;
+  }
+  const rest = HF.length - H.length;
+  document.getElementById('moreWrap').innerHTML = rest > 0
+    ? `<button class="btn btn-secondary btn-sm" id="btnMas">Mostrar ${Math.min(rest, PAGINA)} más (${rest} restantes)</button> <button class="btn btn-secondary btn-sm" id="btnTodas">Mostrar todas</button>` : '';
+  if (rest > 0) {
+    document.getElementById('btnMas').onclick = () => { hvLimite += PAGINA; renderHistorial(); };
+    document.getElementById('btnTodas').onclick = () => { hvLimite = Infinity; renderHistorial(); };
+  }
+  const maxMin = Math.max(1, ...HF.map(r => r.min));
+  const tecTxt = r => r.tecnicos.length ? r.tecnicos.join(', ') : '—';
+  const eqTxt = r => [r.equipo, r.pieza].filter(Boolean).join(' · ') || '—';
+
+  body.innerHTML = H.map(r => `<tr>
+    <td class="nowrap muted">${esc(r.folio)}</td>
+    <td class="nowrap">${fmtFechaHV(r.fecha)}</td>
+    <td>${esc(r.area) || '—'}</td>
+    <td>${esc(eqTxt(r))}</td>
+    <td>${esc(tecTxt(r))}</td>
+    <td class="min-cell">${r.min}<div class="mtrack"><div class="mbar" style="width:${r.min / maxMin * 100}%"></div></div></td>
+    <td><span class="tag ${TIPO_TAG(r.tipo)}">${esc(r.tipo)}</span></td>
+    <td class="desc">${r.causa ? `<span class="muted">[${esc(r.causa)}]</span> ` : ''}${esc(r.falla) || '—'}</td>
+    <td class="desc muted">${esc(r.solucion) || '—'}</td></tr>`).join('');
+
+  wrap.innerHTML = H.map(r => `
+    <div class="item-row" style="cursor:default;border-left-color:${TIPO_COLOR[r.tipo] || 'var(--border)'}">
       <div class="item-header">
-        <div class="item-title">${r.folio} · ${fmtFechaHV(r.fecha)}</div>
-        <span class="tag ${r.tipo === 'Correctivo' ? 'tag-correctivo' : 'tag-preventivo'}">${r.tipo}</span>
+        <div class="item-title">${esc(r.folio)} · ${fmtFechaHV(r.fecha)}</div>
+        <span class="tag ${TIPO_TAG(r.tipo)}">${esc(r.tipo)}</span>
       </div>
-      <div class="item-sub">${r.area ? '📍 ' + r.area + ' · ' : ''}👤 ${r.tecnico} · ⏱ ${r.min} min</div>
-      ${r.falla ? `<div class="item-sub"><strong style="color:var(--text)">Falla:</strong> ${r.causa ? '[' + r.causa + '] ' : ''}${r.falla}</div>` : ''}
-      ${r.solucion ? `<div class="item-sol"><strong>✓ Solución:</strong> ${r.solucion}</div>` : ''}
-    </div>
-  `).join('');
+      <div class="item-sub">${r.area ? '📍 ' + esc(r.area) + ' · ' : ''}${r.equipo || r.pieza ? '🔧 ' + esc(eqTxt(r)) + ' · ' : ''}👤 ${esc(tecTxt(r))} · ⏱ ${r.min} min${r.paro ? ' · paro ' + r.paro + ' min' : ''}</div>
+      ${r.falla ? `<div class="item-sub"><strong style="color:var(--text)">Falla:</strong> ${r.causa ? '[' + esc(r.causa) + '] ' : ''}${esc(r.falla)}</div>` : ''}
+      ${r.solucion ? `<div class="item-sol"><strong>✓ Solución:</strong> ${esc(r.solucion)}</div>` : ''}
+    </div>`).join('');
 }
 
 // ══════ QR propio de la Hoja de Vida (independiente del QR de Checklist) ══════
@@ -392,7 +714,7 @@ function mostrarQrHojaVida() {
 }
 
 // ══════ Exportar a Excel con dashboard (generado en el navegador) ══════
-const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA100' };
+const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA100', red: 'E66767' };
 
 function chartToImage(config, w, h) {
   const canvas = document.createElement('canvas');
@@ -412,22 +734,23 @@ async function exportarExcel() {
     const ws = wb.addWorksheet('Hoja de Vida', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
 
     ws.columns = [
-      { header: 'N° Orden', key: 'folio', width: 12 },
+      { header: 'N° Orden', key: 'folio', width: 16 },
       { header: 'Fecha', key: 'fecha', width: 12 },
       { header: 'Área', key: 'area', width: 12 },
       { header: 'Equipo', key: 'equipo', width: 16 },
-      { header: 'Técnico', key: 'tecnico', width: 18 },
+      { header: 'Técnico', key: 'tecnico', width: 22 },
       { header: 'Tiempo de trabajo (min)', key: 'min', width: 14 },
       { header: 'Tipo', key: 'tipo', width: 12 },
       { header: 'Descripción', key: 'desc', width: 42 },
       { header: 'Solución', key: 'sol', width: 42 },
     ];
     DATA.forEach(r => {
-      const row = { folio: r.folio, area: r.area, equipo: r.equipo, tecnico: r.tecnico, min: r.min, tipo: r.tipo, desc: r.falla, sol: r.solucion };
+      const row = { folio: r.folio, area: r.area, equipo: [r.equipo, r.pieza].filter(Boolean).join(' · '), tecnico: r.tecnicos.join(', ') || 'Sin técnico registrado', min: r.min, tipo: r.tipo, desc: r.falla, sol: r.solucion };
       row.fecha = r.fecha ? new Date(r.fecha + 'T00:00:00') : '';
       ws.addRow(row);
     });
     ws.getColumn('fecha').numFmt = 'DD/MM/YYYY';
+    ['desc','sol'].forEach(k => ws.getColumn(k).alignment = { wrapText: true, vertical: 'top' });
     const lastRow = DATA.length + 1;
 
     ws.getRow(1).eachCell(c => {
@@ -443,15 +766,15 @@ async function exportarExcel() {
 
     // ── Dashboard ──
     const dash = wb.addWorksheet('Dashboard', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
-    ['A','B','C','D','E','F','G','H'].forEach((c, i) => dash.getColumn(c).width = [16,12,18,14,14,14,14,14][i]);
+    ['A','B','C','D','E','F','G','H'].forEach((c, i) => dash.getColumn(c).width = [24,12,18,14,14,14,14,14][i]);
     dash.mergeCells('A1:H1');
-    dash.getCell('A1').value = 'DASHBOARD — ' + (equipoActual.nombre || '');
+    dash.getCell('A1').value = 'DASHBOARD y HOJA DE VIDA — ' + (equipoActual.nombre || '');
     dash.getCell('A1').font = { size: 14, bold: true };
 
     const kpis = [
       { label: 'Total de OTs', formula: `COUNTA('Hoja de Vida'!A2:A${lastRow})`, fmt: '0', color: PALETTE.blue },
       { label: 'Tiempo total (min)', formula: `SUM('Hoja de Vida'!F2:F${lastRow})`, fmt: '0', color: PALETTE.orange },
-      { label: 'Tiempo promedio (min)', formula: `AVERAGE('Hoja de Vida'!F2:F${lastRow})`, fmt: '0.0', color: PALETTE.aqua },
+      { label: 'Tiempo promedio (min)', formula: `IFERROR(AVERAGEIF('Hoja de Vida'!F2:F${lastRow},">0"),0)`, fmt: '0.0', color: PALETTE.aqua },
       { label: '% Preventivo', formula: `COUNTIF('Hoja de Vida'!G2:G${lastRow},"Preventivo")/COUNTA('Hoja de Vida'!G2:G${lastRow})`, fmt: '0.0%', color: PALETTE.yellow },
     ];
     kpis.forEach((k, i) => {
@@ -468,47 +791,47 @@ async function exportarExcel() {
       val.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0EFEC' } };
     });
 
-    const tecnicos = [...new Set(DATA.map(r => r.tecnico).filter(Boolean))];
+    // Técnicos separados: una OT hecha por dos técnicos cuenta para ambos
+    // (COUNTIF/SUMIF con comodines sobre la columna "Técnico").
+    const tecStats = statsTecnicos();
     dash.getCell('A7').value = 'Técnico'; dash.getCell('B7').value = 'N° de OTs'; dash.getCell('C7').value = 'Tiempo total (min)';
     ['A7','B7','C7'].forEach(a => dash.getCell(a).font = { bold: true });
-    tecnicos.forEach((t, i) => {
+    tecStats.forEach((t, i) => {
       const r = 8 + i;
-      dash.getCell(`A${r}`).value = t;
-      dash.getCell(`B${r}`).value = { formula: `COUNTIF('Hoja de Vida'!$E$2:$E$${lastRow},A${r})` };
-      dash.getCell(`C${r}`).value = { formula: `SUMIF('Hoja de Vida'!$E$2:$E$${lastRow},A${r},'Hoja de Vida'!$F$2:$F$${lastRow})` };
+      dash.getCell(`A${r}`).value = t.tecnico;
+      dash.getCell(`B${r}`).value = { formula: `COUNTIF('Hoja de Vida'!$E$2:$E$${lastRow},"*"&A${r}&"*")`, result: t.ots };
+      dash.getCell(`C${r}`).value = { formula: `SUMIF('Hoja de Vida'!$E$2:$E$${lastRow},"*"&A${r}&"*",'Hoja de Vida'!$F$2:$F$${lastRow})`, result: t.min };
     });
-    const tecLastRow = 7 + tecnicos.length;
+    const tecLastRow = 7 + tecStats.length;
 
+    const tipos = [...new Set(DATA.map(r => r.tipo))];
     const tipoHdrRow = tecLastRow + 2;
     dash.getCell(`A${tipoHdrRow}`).value = 'Tipo'; dash.getCell(`B${tipoHdrRow}`).value = 'N° de OTs';
     ['A','B'].forEach(c => dash.getCell(`${c}${tipoHdrRow}`).font = { bold: true });
-    ['Correctivo','Preventivo'].forEach((t, i) => {
+    tipos.forEach((t, i) => {
       const r = tipoHdrRow + 1 + i;
       dash.getCell(`A${r}`).value = t;
       dash.getCell(`B${r}`).value = { formula: `COUNTIF('Hoja de Vida'!$G$2:$G$${lastRow},A${r})` };
     });
 
-    const countByTec = tecnicos.map(t => DATA.filter(r => r.tecnico === t).length);
-    const countCorrectivo = DATA.filter(r => r.tipo === 'Correctivo').length;
-    const countPreventivo = DATA.filter(r => r.tipo === 'Preventivo').length;
-
-    if (tecnicos.length) {
+    if (tecStats.length) {
       const barImg = chartToImage({
         type: 'bar',
-        data: { labels: tecnicos, datasets: [{ data: countByTec, backgroundColor: '#' + PALETTE.blue }] },
-        options: { responsive: false, animation: false, plugins: { legend: { display: false }, title: { display: true, text: 'OTs por técnico' } } },
-      }, 480, 280);
+        data: { labels: tecStats.map(t => t.tecnico), datasets: [{ data: tecStats.map(t => t.ots), backgroundColor: '#' + PALETTE.blue }] },
+        options: { indexAxis: 'y', responsive: false, animation: false, plugins: { legend: { display: false }, title: { display: true, text: 'N° de OTs por técnico' } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+      }, 520, Math.max(220, 60 + tecStats.length * 34));
       const barImgId = wb.addImage({ base64: barImg, extension: 'png' });
-      dash.addImage(barImgId, { tl: { col: 4, row: 6 }, ext: { width: 340, height: 200 } });
+      dash.addImage(barImgId, { tl: { col: 4, row: 6 }, ext: { width: 380, height: Math.max(170, 46 + tecStats.length * 26) } });
     }
-    if (countCorrectivo + countPreventivo > 0) {
+    if (tipos.length) {
+      const colorTipo = { 'Correctivo': '#' + PALETTE.red, 'Preventivo': '#' + PALETTE.aqua, 'Proyecto': '#' + PALETTE.blue };
       const pieImg = chartToImage({
         type: 'pie',
-        data: { labels: ['Correctivo','Preventivo'], datasets: [{ data: [countCorrectivo, countPreventivo], backgroundColor: ['#' + PALETTE.blue, '#' + PALETTE.orange] }] },
-        options: { responsive: false, animation: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Correctivo vs Preventivo' } } },
+        data: { labels: tipos, datasets: [{ data: tipos.map(t => DATA.filter(r => r.tipo === t).length), backgroundColor: tipos.map(t => colorTipo[t] || '#94A3B8') }] },
+        options: { responsive: false, animation: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'OTs por tipo de mantenimiento' } } },
       }, 360, 280);
       const pieImgId = wb.addImage({ base64: pieImg, extension: 'png' });
-      dash.addImage(pieImgId, { tl: { col: 0, row: tipoHdrRow + 3 }, ext: { width: 260, height: 200 } });
+      dash.addImage(pieImgId, { tl: { col: 0, row: tipoHdrRow + tipos.length + 1 }, ext: { width: 260, height: 200 } });
     }
 
     const buf = await wb.xlsx.writeBuffer();
