@@ -38,6 +38,14 @@ service cloud.firestore {
     // checklists, ni análisis, ni nada más.
     function esOperadorOMas() { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','OPERADOR']); }
     function esOperador()     { return tieneRol(['OPERADOR']); }
+    // Herramientas por técnico (2 oct 2026): rol RRHH (Recursos Humanos) solo
+    // ve los cargos por herramientas y marca si se descontaron.
+    function esRRHH()         { return tieneRol(['RRHH']); }
+    function esTecnico()      { return tieneRol(['TECNICO']); }
+    // Nombre de técnico del usuario: campo "tecnico" de /usuarios o, si no
+    // existe, su "nombre". Debe ser igual al nombre usado en las OTs.
+    function miTecnico()      { return usuarioActual().get('tecnico', usuarioActual().get('nombre', '')); }
+    function soloCambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
     match /usuarios/{uid} {
       allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
       allow write: if esAdmin();
@@ -139,6 +147,42 @@ service cloud.firestore {
     match /auditoria/{id} {
       allow read: if esEncargado();
       allow create: if esTecnicoOMas();
+      allow update, delete: if false;
+    }
+    // ══════ HERRAMIENTAS POR TÉCNICO (2 oct 2026) ══════
+    // Gestionan (entregan, reciben, hacen arqueo): Administrador, Encargado y
+    // Almacén. Supervisor solo consulta. El técnico solo ve lo suyo y solo
+    // puede confirmar que recibió una entrega y dar su conformidad en un
+    // arqueo. RRHH solo cambia el estado del cargo. Los arqueos y el registro
+    // de movimientos nunca se borran (respaldan los descuentos).
+    match /herramientas/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas() || esRRHH();
+      allow create, update: if esAlmacenOMas();
+      allow delete: if esAdmin();
+    }
+    match /herramientas_asignadas/{id} {
+      allow read: if esAlmacenOMas() || esSupervisorOMas() || esRRHH()
+        || (esTecnico() && resource.data.tecnico == miTecnico());
+      allow create: if esAlmacenOMas();
+      allow update: if esAlmacenOMas()
+        || (esTecnico() && resource.data.tecnico == miTecnico()
+            && soloCambia(['aceptada', 'aceptadaEn', 'aceptadaPor'])
+            && request.resource.data.aceptada == true);
+      allow delete: if esAdmin();
+    }
+    match /herramientas_arqueos/{id} {
+      allow read: if esAlmacenOMas() || esSupervisorOMas() || esRRHH()
+        || (esTecnico() && resource.data.tecnico == miTecnico());
+      allow create: if esAlmacenOMas();
+      allow update: if esAdmin()
+        || ((esAlmacenOMas() || esRRHH()) && soloCambia(['rrhh']))
+        || (esTecnico() && resource.data.tecnico == miTecnico() && soloCambia(['conformidad'])
+            && resource.data.conformidad.estado == 'pendiente');
+      allow delete: if false;
+    }
+    match /herramientas_movimientos/{id} {
+      allow read: if esAlmacenOMas() || esSupervisorOMas() || esRRHH();
+      allow create: if esAlmacenOMas();
       allow update, delete: if false;
     }
   }

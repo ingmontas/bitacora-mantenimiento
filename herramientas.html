@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Herramientas — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       HERRAMIENTAS POR TÉCNICO (2 oct 2026)
+       - Catálogo de herramientas con valor de reposición y existencia en bodega.
+       - Entrega / devolución por técnico; el técnico CONFIRMA con su usuario
+         que recibió cada entrega (constancia digital + acta imprimible).
+       - Arqueo: se cuenta lo que tiene cada técnico; faltantes y daños pueden
+         cargarse a su cuenta. El técnico da su conformidad (o no) con su usuario.
+       - Recursos Humanos recibe los cargos y marca si se descontaron.
+       Colecciones: herramientas, herramientas_asignadas, herramientas_arqueos,
+       herramientas_movimientos (registro que no se puede editar ni borrar).
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; position: sticky; top: 0; z-index: 200; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 60px; }
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+    .tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 11px 14px 9px; font: 700 13.5px inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
+    .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .n { background: var(--red); color: #fff; border-radius: 9px; font-size: 10px; padding: 1px 6px; margin-left: 4px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
+    .card-title { font-size: 16px; font-weight: 800; }
+    .sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 64px; resize: vertical; }
+    input[type=checkbox] { width: auto; accent-color: var(--accent); }
+    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
+    .btn { padding: 10px 14px; border-radius: 9px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444455; }
+    .btn-green { background: var(--green); color: #052016; }
+    .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 7px; }
+    .btn[disabled] { opacity: .45; cursor: default; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row .grow { flex: 1; min-width: 160px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; }
+    .kpi .l { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .kpi .v { font-size: 21px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .kpi .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; }
+    .item.click { cursor: pointer; } .item.click:hover { border-color: var(--muted); }
+    .item-h { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .item-t { font-weight: 700; font-size: 14px; }
+    .item-s { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .money { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .t-ok { background: #10B98122; color: #4ade80; } .t-warn { background: #F59E0B22; color: var(--accent); }
+    .t-bad { background: #EF444422; color: #ff8a8a; } .t-info { background: #818CF822; color: #a5b4fc; } .t-mut { background: #94A3B822; color: var(--muted); }
+    .section { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
+    .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
+    .banner { background: #F59E0B14; border: 1px solid #F59E0B44; border-radius: 10px; padding: 11px 13px; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+    .banner.red { background: #EF444414; border-color: #EF444455; }
+    .seg { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+    .seg button { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 18px; padding: 6px 12px; font: 600 12px inherit; font-family: inherit; cursor: pointer; }
+    .seg button.on { border-color: var(--accent); color: var(--accent); background: #F59E0B14; }
+    .back { background: none; border: none; color: var(--accent); font: 700 13px inherit; font-family: inherit; cursor: pointer; padding: 0; margin-bottom: 10px; }
+    /* arqueo */
+    .aq-line { display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .aq-line input[type=number] { padding: 7px 8px; text-align: center; }
+    .aq-hdr { font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    .aq-res { grid-column: 1 / -1; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+    .aq-res label { display: flex; align-items: center; gap: 5px; color: var(--text); }
+    .total-bar { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border-radius: 10px; padding: 12px 14px; margin-top: 12px; font-size: 14px; }
+    /* modal */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; width: 100%; max-width: 560px; }
+    .modal h3 { font-size: 16px; margin-bottom: 4px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); }
+    #printArea { display: none; }
+    @media print {
+      @page { margin: 14mm; }
+      body { background: #fff; color: #000; }
+      body > *:not(#printArea) { display: none !important; }
+      #printArea { display: block; font-family: Arial, sans-serif; font-size: 11.5pt; color: #000; }
+      #printArea h2 { font-size: 15pt; text-align: center; margin-bottom: 2px; }
+      #printArea .pa-sub { text-align: center; font-size: 10pt; margin-bottom: 14px; }
+      #printArea table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+      #printArea th, #printArea td { border: 1px solid #555; padding: 5px 6px; text-align: left; }
+      #printArea th { background: #e8e8e8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #printArea td.n { text-align: right; }
+      #printArea .pa-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 20px; font-size: 10.5pt; }
+      #printArea .pa-text { font-size: 10pt; line-height: 1.5; margin: 10px 0; text-align: justify; }
+      #printArea .firmas { display: flex; gap: 30px; margin-top: 50px; }
+      #printArea .firmas div { flex: 1; border-top: 1px solid #000; padding-top: 4px; text-align: center; font-size: 10pt; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div><h1>🧰 Herramientas por técnico</h1><small id="header-sub">Cargando...</small></div>
+</div>
+
+<div class="wrap">
+  <nav class="tabs" id="tabs"></nav>
+  <div id="view"><div class="empty">Cargando...</div></div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+// ══════ ESTADO ══════
+let catalogo = [], asignadas = [], arqueos = [], tecnicosJson = [];
+let ROL = '', YO = '', NOMBRE_USUARIO = '';
+let tab = '', tecSel = null, rrhhFiltro = 'pendiente', catBusca = '';
+const FV = () => firebase.firestore.FieldValue;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => '$' + (Number(n) || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const hora = () => new Date().toTimeString().slice(0, 5);
+const fmtF = f => { if (!f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f || '—'; const [y, m, d] = f.split('-'); return `${d}/${m}/${y}`; };
+const diasDesde = f => { if (!f) return null; const [y, m, d] = f.split('-').map(Number); const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((t - new Date(y, m - 1, d)) / 86400000); };
+const $ = id => document.getElementById(id);
+const esGestor = () => ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'ALMACEN'].includes(ROL);
+const esRRHH = () => ROL === 'RRHH' || ROL === 'ADMINISTRADOR';
+const encabezadoDoc = () => (window.APP_EMPRESA ? esc(window.APP_EMPRESA) + ' — ' : '') + 'Departamento de Mantenimiento';
+
+function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' error' : ''); setTimeout(() => t.className = '', 2800); }
+function openModal(html) { $('modal').innerHTML = html; $('modalBg').classList.add('open'); }
+function closeModal() { $('modalBg').classList.remove('open'); }
+$('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+const quien = () => NOMBRE_USUARIO || (window.currentUser && window.currentUser.email) || '';
+const fail = e => { console.error(e); toast('❌ ' + (e.code === 'permission-denied' ? 'Sin permiso para esta acción. Revisa tu rol o las reglas de Firebase.' : e.message), true); };
+
+// ══════ ARRANQUE ══════
+window.fbReady.then(async () => {
+  const u = window.currentUserRole || {};
+  ROL = u.rol || ''; NOMBRE_USUARIO = u.nombre || '';
+  // El técnico se identifica por el campo "tecnico" de su usuario (o su nombre):
+  // es el mismo valor que exige firestore.rules para dejarle ver lo suyo.
+  YO = u.tecnico || u.nombre || '';
+  $('header-sub').textContent = (window.APP_EMPRESA ? window.APP_EMPRESA + ' · ' : '') + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function' && ROL !== 'RRHH') fbRenderMiniNav('herramientas');
+  try { const r = await fetch('tecnicos.json?_=' + Date.now()); if (r.ok) tecnicosJson = (await r.json()).map(t => t.nombre).filter(Boolean); } catch (e) {}
+
+  const tabs = [];
+  if (esGestor() || ROL === 'SUPERVISOR') tabs.push(['tecnicos', '👷 Técnicos']);
+  if (esGestor()) tabs.push(['catalogo', '🧰 Catálogo']);
+  if (esGestor() || esRRHH() || ROL === 'SUPERVISOR') tabs.push(['rrhh', '💼 Recursos Humanos']);
+  if (ROL === 'TECNICO') tabs.push(['mis', '🧰 Mis herramientas']);
+  if (!tabs.length) { $('view').innerHTML = '<div class="card empty">🔒 Tu rol no tiene acceso a este módulo.</div>'; return; }
+  $('tabs').innerHTML = tabs.map(([k, l]) => `<button class="tab" data-tab="${k}">${l}<span class="n" id="n-${k}" style="display:none"></span></button>`).join('');
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; tecSel = null; render(); } });
+  const pedida = (location.hash || '').slice(1);
+  tab = tabs.some(t => t[0] === pedida) ? pedida : tabs[0][0];
+  escuchar();
+}).catch(() => {});
+
+function escuchar() {
+  const err = e => { console.error(e); $('view').innerHTML = `<div class="card empty">⚠️ No se pudieron leer los datos (${esc(e.code || e.message)}).${ROL === 'TECNICO' ? '<br>Pide al administrador que en tu usuario de Firebase agregue el campo <b>tecnico</b> con tu nombre exacto como aparece en la Bitácora.' : '<br>Revisa que estén publicadas las reglas nuevas de Firestore.'}</div>`; };
+  if (ROL === 'TECNICO') {
+    db.collection('herramientas_asignadas').where('tecnico', '==', YO).onSnapshot(s => { asignadas = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+    db.collection('herramientas_arqueos').where('tecnico', '==', YO).onSnapshot(s => { arqueos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+    return;
+  }
+  if (ROL !== 'RRHH') {
+    db.collection('herramientas').onSnapshot(s => { catalogo = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+    db.collection('herramientas_asignadas').where('estado', '==', 'activa').onSnapshot(s => { asignadas = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+  }
+  db.collection('herramientas_arqueos').onSnapshot(s => { arqueos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+}
+
+function render() {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  try { history.replaceState(null, '', '#' + tab); } catch (e) {}
+  // contadores en pestañas
+  const porEnviar = arqueos.filter(a => (a.rrhh || {}).estado === 'pendiente').length;
+  const enRRHH = arqueos.filter(a => (a.rrhh || {}).estado === 'enviado').length;
+  const nr = $('n-rrhh'); if (nr) { const n = ROL === 'RRHH' ? enRRHH : porEnviar; nr.textContent = n; nr.style.display = n ? '' : 'none'; }
+  const nm = $('n-mis'); if (nm) { const n = asignadas.filter(a => a.estado === 'activa' && !a.aceptada).length + arqueos.filter(a => (a.conformidad || {}).estado === 'pendiente').length; nm.textContent = n; nm.style.display = n ? '' : 'none'; }
+  if (tab === 'tecnicos') tecSel ? renderTecnico(tecSel) : renderTecnicos();
+  else if (tab === 'catalogo') renderCatalogo();
+  else if (tab === 'rrhh') renderRRHH();
+  else if (tab === 'mis') renderMis();
+}
+
+// ══════ LISTA DE TÉCNICOS ══════
+const activasDe = t => asignadas.filter(a => a.tecnico === t && a.estado === 'activa' && a.cantidad > 0);
+const valorDe = list => list.reduce((s, a) => s + (Number(a.costo) || 0) * (Number(a.cantidad) || 0), 0);
+const unidadesDe = list => list.reduce((s, a) => s + (Number(a.cantidad) || 0), 0);
+const ultimoArqueo = t => arqueos.filter(a => a.tecnico === t).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora))[0];
+
+function renderTecnicos() {
+  const nombres = [...new Set([...tecnicosJson, ...asignadas.map(a => a.tecnico), ...arqueos.map(a => a.tecnico)].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const totValor = valorDe(asignadas.filter(a => a.estado === 'activa'));
+  const sinConf = asignadas.filter(a => a.estado === 'activa' && !a.aceptada).length;
+  const sinArqueo30 = nombres.filter(t => activasDe(t).length && (() => { const u = ultimoArqueo(t); return !u || diasDesde(u.fecha) > 30; })()).length;
+  $('view').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="l">Valor en custodia</div><div class="v">${money(totValor)}</div><div class="s">${unidadesDe(asignadas.filter(a => a.estado === 'activa'))} herramientas entregadas</div></div>
+      <div class="kpi"><div class="l">Sin confirmar recibo</div><div class="v" style="color:${sinConf ? 'var(--accent)' : 'inherit'}">${sinConf}</div><div class="s">entregas sin confirmar</div></div>
+      <div class="kpi"><div class="l">Arqueo vencido</div><div class="v" style="color:${sinArqueo30 ? 'var(--red)' : 'inherit'}">${sinArqueo30}</div><div class="s">técnicos sin arqueo en 30 días</div></div>
+    </div>
+    ${nombres.length ? nombres.map(t => {
+      const act = activasDe(t), u = ultimoArqueo(t), d = u ? diasDesde(u.fecha) : null;
+      const pend = act.filter(a => !a.aceptada).length;
+      const cargos = arqueos.filter(a => a.tecnico === t && ['pendiente', 'enviado'].includes((a.rrhh || {}).estado));
+      return `<div class="item click" data-tec="${esc(t)}">
+        <div class="item-h"><div class="item-t">👷 ${esc(t)}</div><div class="money">${money(valorDe(act))}</div></div>
+        <div class="item-s">${unidadesDe(act)} herramienta(s) · ${u ? `último arqueo ${fmtF(u.fecha)} (hace ${d} d)` : 'nunca se le ha hecho arqueo'}</div>
+        <div class="row" style="margin-top:6px">${pend ? `<span class="tag t-warn">${pend} sin confirmar</span>` : ''}${act.length && (!u || d > 30) ? '<span class="tag t-bad">Arqueo pendiente</span>' : ''}${cargos.length ? `<span class="tag t-info">${cargos.length} cargo(s) en proceso · ${money(cargos.reduce((s, a) => s + (a.totalCargo || 0), 0))}</span>` : ''}</div>
+      </div>`;
+    }).join('') : '<div class="card empty">No hay técnicos. Agrégalos en tecnicos.json.</div>'}`;
+  $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => { tecSel = el.dataset.tec; render(); window.scrollTo(0, 0); });
+}
+
+// ══════ FICHA DEL TÉCNICO ══════
+function renderTecnico(t) {
+  const act = activasDe(t).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  const aqs = arqueos.filter(a => a.tecnico === t).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+  const u = aqs[0], g = esGestor();
+  $('view').innerHTML = `
+    <button class="back" id="volver">← Todos los técnicos</button>
+    <div class="card">
+      <div class="item-h"><div><div class="card-title">👷 ${esc(t)}</div><div class="sub">${u ? `Último arqueo: ${fmtF(u.fecha)} (hace ${diasDesde(u.fecha)} días)` : 'Nunca se le ha hecho arqueo'}</div></div><div class="money" style="font-size:18px">${money(valorDe(act))}</div></div>
+      <div class="row" style="margin-top:12px">
+        ${g ? `<button class="btn btn-primary btn-sm" id="bEntregar">➕ Entregar</button>
+        <button class="btn btn-secondary btn-sm" id="bDevolver" ${act.length ? '' : 'disabled'}>↩ Devolución</button>
+        <button class="btn btn-secondary btn-sm" id="bArqueo" ${act.length ? '' : 'disabled'}>📋 Hacer arqueo</button>` : ''}
+        <button class="btn btn-secondary btn-sm" id="bActa" ${act.length ? '' : 'disabled'}>🖨️ Acta de entrega</button>
+      </div>
+    </div>
+    <div class="section">Herramientas a su cargo (${unidadesDe(act)})</div>
+    ${act.length ? act.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${esc(a.nombre)}</div>
+      <div class="item-s">${a.codigo ? esc(a.codigo) + ' · ' : ''}${a.marca ? esc(a.marca) + ' · ' : ''}entregada ${fmtF(a.fechaEntrega)} por ${esc(a.entregadoPor || '—')}</div></div>
+      <div style="text-align:right"><div class="money">${a.cantidad} × ${money(a.costo)}</div>
+      <div style="margin-top:4px">${a.aceptada ? `<span class="tag t-ok">✓ Confirmó ${fmtF(a.aceptadaEn)}</span>` : '<span class="tag t-warn">⏳ Sin confirmar</span>'}</div></div></div></div>`).join('')
+      : '<div class="card empty">No tiene herramientas asignadas.</div>'}
+    <div class="section">Arqueos (${aqs.length})</div>
+    ${aqs.length ? aqs.map(a => tarjetaArqueo(a, true)).join('') : '<div class="card empty">Sin arqueos registrados.</div>'}`;
+  $('volver').onclick = () => { tecSel = null; render(); };
+  if (g) { $('bEntregar').onclick = () => modalEntrega(t); $('bDevolver').onclick = () => modalDevolucion(t); $('bArqueo').onclick = () => modalArqueo(t); }
+  $('bActa').onclick = () => imprimirActa(t);
+  bindArqueoBtns();
+}
+
+function estadoRRHH(a) {
+  const r = (a.rrhh || {}).estado;
+  return { no_aplica: '<span class="tag t-ok">Sin cargo</span>', pendiente: '<span class="tag t-warn">Cargo por enviar a RR.HH.</span>', enviado: '<span class="tag t-info">En RR.HH.</span>', descontado: '<span class="tag t-mut">Descontado</span>', anulado: '<span class="tag t-mut">Cargo anulado</span>' }[r] || '';
+}
+function estadoConf(a) {
+  const c = (a.conformidad || {});
+  if (c.estado === 'conforme') return `<span class="tag t-ok">✓ Técnico conforme</span>`;
+  if (c.estado === 'no_conforme') return `<span class="tag t-bad">✗ Técnico NO conforme</span>`;
+  return '<span class="tag t-warn">⏳ Esperando conformidad del técnico</span>';
+}
+function tarjetaArqueo(a, conBotones) {
+  const malos = (a.items || []).filter(i => i.faltante || i.danada);
+  return `<div class="item"><div class="item-h"><div><div class="item-t">Arqueo ${fmtF(a.fecha)} ${esc(a.hora || '')}${tecSel ? '' : ' · ' + esc(a.tecnico)}</div>
+    <div class="item-s">Por ${esc(a.realizadoPor || '—')} · ${a.unidadesRevisadas || 0} revisadas · ${malos.length ? malos.map(i => `${esc(i.nombre)}: ${i.faltante ? i.faltante + ' faltante' : ''}${i.faltante && i.danada ? ', ' : ''}${i.danada ? i.danada + ' dañada' : ''}`).join(' · ') : 'todo completo'}</div>
+    ${(a.conformidad || {}).nota ? `<div class="item-s" style="color:var(--text)">💬 Técnico: "${esc(a.conformidad.nota)}"</div>` : ''}
+    ${(a.rrhh || {}).nota ? `<div class="item-s" style="color:var(--text)">💼 RR.HH.: "${esc(a.rrhh.nota)}"</div>` : ''}</div>
+    <div class="money" style="color:${a.totalCargo ? '#ff8a8a' : 'inherit'}">${money(a.totalCargo)}</div></div>
+    <div class="row" style="margin-top:7px">${estadoConf(a)} ${estadoRRHH(a)}
+    ${conBotones ? `<span class="grow"></span><button class="btn btn-secondary btn-sm" data-print="${a.id}">🖨️ Constancia</button>` : ''}</div></div>`;
+}
+function bindArqueoBtns() {
+  document.querySelectorAll('[data-print]').forEach(b => b.onclick = () => imprimirConstancia(arqueos.find(a => a.id === b.dataset.print)));
+}
+
+// ══════ ENTREGA ══════
+function modalEntrega(t) {
+  const activos = catalogo.filter(h => h.activo !== false).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  if (!activos.length) { toast('Primero registra herramientas en la pestaña Catálogo', true); return; }
+  openModal(`<h3>➕ Entregar herramienta</h3><div class="sub">A: <b>${esc(t)}</b>. El técnico deberá confirmar con su usuario que la recibió.</div>
+    <label class="f">Herramienta</label>
+    <input type="text" id="eBusca" placeholder="Buscar por nombre o código..." style="margin-bottom:6px">
+    <select id="eSel" size="6">${activos.map(h => `<option value="${h.id}">${esc((h.codigo ? h.codigo + ' · ' : '') + h.nombre)} — bodega: ${h.stockBodega ?? '—'} · ${money(h.costo)}</option>`).join('')}</select>
+    <label class="f">Cantidad</label><input type="number" id="eCant" min="1" value="1">
+    <label class="f">Nota (opcional)</label><input type="text" id="eNota" placeholder="Ej.: estado, número de serie...">
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="eOk">Entregar</button></div>`);
+  $('eBusca').oninput = () => { const q = $('eBusca').value.toLowerCase(); [...$('eSel').options].forEach(o => o.hidden = q && !o.textContent.toLowerCase().includes(q)); };
+  $('eOk').onclick = () => {
+    const h = catalogo.find(x => x.id === $('eSel').value), q = parseInt($('eCant').value, 10);
+    if (!h) return toast('Elige una herramienta', true);
+    if (!(q > 0)) return toast('La cantidad debe ser mayor que 0', true);
+    if (typeof h.stockBodega === 'number' && h.stockBodega < q) return toast(`Solo hay ${h.stockBodega} en bodega`, true);
+    const b = db.batch(), ref = db.collection('herramientas_asignadas').doc();
+    b.set(ref, { tecnico: t, herramientaId: h.id, codigo: h.codigo || '', nombre: h.nombre, marca: h.marca || '', costo: Number(h.costo) || 0,
+      cantidad: q, cantidadEntregada: q, fechaEntrega: hoy(), horaEntrega: hora(), entregadoPor: quien(), nota: $('eNota').value.trim(),
+      aceptada: false, estado: 'activa', createdAt: FV().serverTimestamp() });
+    if (typeof h.stockBodega === 'number') b.update(db.collection('herramientas').doc(h.id), { stockBodega: FV().increment(-q) });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'entrega', tecnico: t, herramientaId: h.id, nombre: h.nombre, cantidad: q, costo: Number(h.costo) || 0, por: quien(), fecha: hoy(), hora: hora(), asignacionId: ref.id, createdAt: FV().serverTimestamp() });
+    b.commit().then(() => toast(`✅ Entregado: ${q} × ${h.nombre}`)).catch(fail);
+    closeModal();
+  };
+}
+
+// ══════ DEVOLUCIÓN ══════
+function modalDevolucion(t) {
+  const act = activasDe(t);
+  openModal(`<h3>↩ Devolución de ${esc(t)}</h3><div class="sub">Indica cuántas devuelve de cada una. Las que vuelven en buen estado regresan a la existencia de bodega.</div>
+    ${act.map(a => `<div class="aq-line" style="grid-template-columns:1fr 70px 110px"><div><b>${esc(a.nombre)}</b><div class="item-s">Tiene ${a.cantidad}</div></div>
+      <input type="number" min="0" max="${a.cantidad}" value="0" data-dev="${a.id}">
+      <select data-cond="${a.id}"><option value="buena">Buen estado</option><option value="danada">Dañada</option></select></div>`).join('')}
+    <label class="f">Nota (opcional)</label><input type="text" id="dNota">
+    <div class="modal-actions"><button class="btn btn-secondary" id="dTodo">Devolver todo</button><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="dOk">Registrar devolución</button></div>`);
+  $('dTodo').onclick = () => document.querySelectorAll('[data-dev]').forEach(i => i.value = i.max);
+  $('dOk').onclick = () => {
+    const b = db.batch(); let n = 0;
+    act.forEach(a => {
+      const q = Math.min(a.cantidad, Math.max(0, parseInt(document.querySelector(`[data-dev="${a.id}"]`).value, 10) || 0));
+      if (!q) return; n += q;
+      const cond = document.querySelector(`[data-cond="${a.id}"]`).value;
+      const resto = a.cantidad - q;
+      b.update(db.collection('herramientas_asignadas').doc(a.id), resto > 0 ? { cantidad: resto } : { cantidad: 0, estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'devuelta' });
+      const h = catalogo.find(x => x.id === a.herramientaId);
+      if (cond === 'buena' && h && typeof h.stockBodega === 'number') b.update(db.collection('herramientas').doc(h.id), { stockBodega: FV().increment(q) });
+      b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'devolucion', condicion: cond, tecnico: t, herramientaId: a.herramientaId, nombre: a.nombre, cantidad: q, por: quien(), fecha: hoy(), hora: hora(), nota: $('dNota').value.trim(), asignacionId: a.id, createdAt: FV().serverTimestamp() });
+    });
+    if (!n) return toast('Indica al menos una cantidad', true);
+    b.commit().then(() => toast(`✅ Devolución registrada (${n})`)).catch(fail);
+    closeModal();
+  };
+}
+
+// ══════ ARQUEO ══════
+function modalArqueo(t) {
+  const act = activasDe(t).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  openModal(`<div id="aqBox"><h3>📋 Arqueo de ${esc(t)}</h3><div class="sub">Cuenta con el técnico presente. Por defecto todo aparece completo: corrige solo lo que no esté o esté dañado. Las faltantes salen de su custodia.</div>
+    <div class="aq-line aq-hdr"><div>Herramienta</div><div style="text-align:center">Encontradas</div><div style="text-align:center">Dañadas</div></div>
+    ${act.map(a => `<div class="aq-line" data-l="${a.id}"><div><b>${esc(a.nombre)}</b><div class="item-s">Asignadas: ${a.cantidad} · ${money(a.costo)} c/u</div></div>
+      <input type="number" min="0" max="${a.cantidad}" value="${a.cantidad}" data-enc>
+      <input type="number" min="0" max="${a.cantidad}" value="0" data-dan>
+      <div class="aq-res" data-res></div></div>`).join('')}
+    <label class="f">Observaciones</label><textarea id="aObs" placeholder="Ej.: la llave 10 mm se perdió en el área de Weaving según el técnico..."></textarea>
+    <div class="total-bar"><span>Total a cargo del técnico</span><b class="money" id="aTotal">$0.00</b></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="aOk">Guardar arqueo</button></div></div>`);
+  const lineas = () => act.map(a => {
+    const el = document.querySelector(`[data-l="${a.id}"]`);
+    let enc = Math.min(a.cantidad, Math.max(0, parseInt(el.querySelector('[data-enc]').value, 10) || 0));
+    let dan = Math.min(enc, Math.max(0, parseInt(el.querySelector('[data-dan]').value, 10) || 0));
+    const cf = el.querySelector('[data-cf]'), cd = el.querySelector('[data-cd]');
+    const cobrarF = cf ? cf.checked : true, cobrarD = cd ? cd.checked : false;
+    const falt = a.cantidad - enc;
+    return { a, el, enc, dan, falt, cobrarF, cobrarD, monto: ((cobrarF ? falt : 0) + (cobrarD ? dan : 0)) * (Number(a.costo) || 0) };
+  });
+  const pintar = () => {
+    let tot = 0;
+    lineas().forEach(L => {
+      tot += L.monto;
+      const res = L.el.querySelector('[data-res]');
+      const prevF = res.querySelector('[data-cf]'), prevD = res.querySelector('[data-cd]');
+      const vf = prevF ? prevF.checked : true, vd = prevD ? prevD.checked : false;
+      res.innerHTML = (L.falt ? `<span class="tag t-bad">${L.falt} faltante(s)</span><label><input type="checkbox" data-cf ${vf ? 'checked' : ''}> Cobrar faltante</label>` : '')
+        + (L.dan ? `<span class="tag t-warn">${L.dan} dañada(s)</span><label><input type="checkbox" data-cd ${vd ? 'checked' : ''}> Cobrar daño</label>` : '')
+        + (L.falt || L.dan ? `<span class="grow"></span><b class="money">${money(lineas().find(x => x.a.id === L.a.id).monto)}</b>` : '');
+      res.style.display = L.falt || L.dan ? '' : 'none';
+    });
+    $('aTotal').textContent = money(lineas().reduce((s, L) => s + L.monto, 0));
+  };
+  // (los eventos van en #aqBox, que se reemplaza al cerrar: no se acumulan en el modal)
+  $('aqBox').addEventListener('input', pintar); $('aqBox').addEventListener('change', pintar); pintar();
+  $('aOk').onclick = () => {
+    const L = lineas(), total = L.reduce((s, x) => s + x.monto, 0);
+    const b = db.batch(), ref = db.collection('herramientas_arqueos').doc();
+    b.set(ref, { tecnico: t, fecha: hoy(), hora: hora(), realizadoPor: quien(),
+      items: L.map(x => ({ asignacionId: x.a.id, herramientaId: x.a.herramientaId, codigo: x.a.codigo || '', nombre: x.a.nombre, costo: Number(x.a.costo) || 0,
+        asignada: x.a.cantidad, encontrada: x.enc, faltante: x.falt, danada: x.dan, cobrarFaltante: !!(x.falt && x.cobrarF), cobrarDanada: !!(x.dan && x.cobrarD), monto: x.monto })),
+      unidadesRevisadas: L.reduce((s, x) => s + x.a.cantidad, 0), unidadesFaltantes: L.reduce((s, x) => s + x.falt, 0), unidadesDanadas: L.reduce((s, x) => s + x.dan, 0),
+      totalCargo: total, observaciones: $('aObs').value.trim(),
+      conformidad: { estado: 'pendiente' },
+      rrhh: { estado: total > 0 ? 'pendiente' : 'no_aplica', historial: [] },
+      createdAt: FV().serverTimestamp() });
+    L.filter(x => x.falt).forEach(x => {
+      const resto = x.a.cantidad - x.falt;
+      b.update(db.collection('herramientas_asignadas').doc(x.a.id), resto > 0 ? { cantidad: resto } : { cantidad: 0, estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'faltante en arqueo' });
+    });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'arqueo', tecnico: t, arqueoId: ref.id, totalCargo: total, faltantes: L.reduce((s, x) => s + x.falt, 0), danadas: L.reduce((s, x) => s + x.dan, 0), por: quien(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
+    b.commit().then(() => toast(total ? `📋 Arqueo guardado · cargo ${money(total)}. El técnico debe dar su conformidad.` : '📋 Arqueo guardado: todo completo')).catch(fail);
+    closeModal();
+  };
+}
+
+// ══════ CATÁLOGO ══════
+function renderCatalogo() {
+  const q = catBusca.toLowerCase();
+  const enUso = id => asignadas.filter(a => a.herramientaId === id && a.estado === 'activa').reduce((s, a) => s + (a.cantidad || 0), 0);
+  const lista = catalogo.filter(h => !q || [h.codigo, h.nombre, h.marca, h.categoria].join(' ').toLowerCase().includes(q)).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  const valBodega = catalogo.reduce((s, h) => s + (Number(h.stockBodega) || 0) * (Number(h.costo) || 0), 0);
+  $('view').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="l">Tipos de herramienta</div><div class="v">${catalogo.length}</div></div>
+      <div class="kpi"><div class="l">Valor en bodega</div><div class="v">${money(valBodega)}</div></div>
+      <div class="kpi"><div class="l">Valor en técnicos</div><div class="v">${money(valorDe(asignadas.filter(a => a.estado === 'activa')))}</div></div>
+    </div>
+    <div class="row" style="margin-bottom:10px"><input class="grow" type="text" id="cBusca" placeholder="Buscar herramienta..." value="${esc(catBusca)}"><button class="btn btn-primary" id="cNueva">➕ Nueva herramienta</button></div>
+    ${lista.length ? lista.map(h => `<div class="item click" data-h="${h.id}"><div class="item-h"><div><div class="item-t">${esc(h.nombre)}${h.activo === false ? ' <span class="tag t-mut">inactiva</span>' : ''}</div>
+      <div class="item-s">${[h.codigo, h.marca, h.categoria].filter(Boolean).map(esc).join(' · ') || '—'}</div></div>
+      <div style="text-align:right"><div class="money">${money(h.costo)}</div><div class="item-s">bodega ${h.stockBodega ?? '—'} · en técnicos ${enUso(h.id)}</div></div></div></div>`).join('')
+      : `<div class="card empty">${catalogo.length ? 'Ninguna coincide con la búsqueda.' : 'Registra aquí las herramientas que se entregan a los técnicos, con su valor de reposición.'}</div>`}`;
+  $('cBusca').oninput = e => { catBusca = e.target.value; const p = e.target.selectionStart; renderCatalogo(); $('cBusca').focus(); $('cBusca').setSelectionRange(p, p); };
+  $('cNueva').onclick = () => modalHerramienta(null);
+  $('view').querySelectorAll('[data-h]').forEach(el => el.onclick = () => modalHerramienta(catalogo.find(h => h.id === el.dataset.h)));
+}
+function modalHerramienta(h) {
+  const v = h || {};
+  openModal(`<h3>${h ? '✏️ Editar herramienta' : '➕ Nueva herramienta'}</h3>
+    <div class="row"><div class="grow"><label class="f">Código</label><input id="hCod" value="${esc(v.codigo || '')}" placeholder="Ej.: HT-014"></div>
+    <div class="grow"><label class="f">Categoría</label><input id="hCat" value="${esc(v.categoria || '')}" placeholder="Ej.: Llaves, Medición, Eléctrica"></div></div>
+    <label class="f">Nombre *</label><input id="hNom" value="${esc(v.nombre || '')}" placeholder="Ej.: Multímetro digital">
+    <label class="f">Marca / modelo / serie</label><input id="hMar" value="${esc(v.marca || '')}" placeholder="Ej.: Fluke 117">
+    <div class="row"><div class="grow"><label class="f">Valor de reposición (c/u) *</label><input id="hCos" type="number" min="0" step="0.01" value="${v.costo ?? ''}"></div>
+    <div class="grow"><label class="f">Existencia en bodega</label><input id="hStk" type="number" min="0" value="${v.stockBodega ?? ''}" placeholder="Vacío = no controlar"></div></div>
+    ${h ? `<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="hAct" ${v.activo === false ? '' : 'checked'}> Activa (se puede entregar)</label>` : ''}
+    <div class="sub" style="margin-top:10px">El valor de reposición es el que se usa para calcular el cargo en caso de faltante. Cambiarlo no afecta los arqueos ya hechos.</div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="hOk">Guardar</button></div>`);
+  $('hOk').onclick = () => {
+    const nombre = $('hNom').value.trim(), costo = parseFloat($('hCos').value), stk = $('hStk').value.trim();
+    if (!nombre) return toast('El nombre es obligatorio', true);
+    if (!(costo >= 0)) return toast('Indica el valor de reposición', true);
+    const data = { codigo: $('hCod').value.trim(), categoria: $('hCat').value.trim(), nombre, marca: $('hMar').value.trim(), costo,
+      stockBodega: stk === '' ? null : Math.max(0, parseInt(stk, 10) || 0), activo: h ? $('hAct').checked : true, actualizadoPor: quien(), updatedAt: FV().serverTimestamp() };
+    const b = db.batch(), ref = h ? db.collection('herramientas').doc(h.id) : db.collection('herramientas').doc();
+    if (h) b.update(ref, data); else b.set(ref, { ...data, createdAt: FV().serverTimestamp() });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: h ? 'catalogo_edicion' : 'catalogo_alta', herramientaId: ref.id, nombre, costo, stockBodega: data.stockBodega, antes: h ? { costo: h.costo ?? null, stockBodega: h.stockBodega ?? null } : null, por: quien(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
+    b.commit().then(() => toast('✅ Herramienta guardada')).catch(fail);
+    closeModal();
+  };
+}
+
+// ══════ RECURSOS HUMANOS ══════
+function renderRRHH() {
+  const conCargo = arqueos.filter(a => (a.totalCargo || 0) > 0);
+  const sum = est => conCargo.filter(a => (a.rrhh || {}).estado === est).reduce((s, a) => s + a.totalCargo, 0);
+  const filtros = [['pendiente', 'Por enviar'], ['enviado', 'En RR.HH.'], ['descontado', 'Descontados'], ['anulado', 'Anulados'], ['todos', 'Todos']];
+  const lista = conCargo.filter(a => rrhhFiltro === 'todos' || (a.rrhh || {}).estado === rrhhFiltro).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+  $('view').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="l">Por enviar a RR.HH.</div><div class="v" style="color:var(--accent)">${money(sum('pendiente'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'pendiente').length} cargo(s)</div></div>
+      <div class="kpi"><div class="l">En RR.HH. (por descontar)</div><div class="v" style="color:#a5b4fc">${money(sum('enviado'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'enviado').length} cargo(s)</div></div>
+      <div class="kpi"><div class="l">Descontado</div><div class="v">${money(sum('descontado'))}</div><div class="s">histórico</div></div>
+    </div>
+    <div class="banner">El cargo se calcula con el valor de reposición registrado. La decisión de descontar y la forma (monto, cuotas) corresponde a Recursos Humanos, según la política de la empresa y la ley laboral vigente. Cada cargo lleva la constancia del arqueo y la conformidad del técnico.</div>
+    <div class="row" style="justify-content:space-between"><div class="seg" id="rSeg">${filtros.map(([k, l]) => `<button class="${rrhhFiltro === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
+    <button class="btn btn-secondary btn-sm" id="rCsv" ${lista.length ? '' : 'disabled'}>⬇ Exportar CSV</button></div>
+    ${lista.length ? lista.map(a => {
+      const r = (a.rrhh || {}).estado, c = (a.conformidad || {}).estado;
+      let acc = '';
+      if (r === 'pendiente' && esGestor()) acc = `<button class="btn btn-primary btn-sm" data-acc="enviar" data-id="${a.id}">${c === 'pendiente' ? 'Enviar sin conformidad' : 'Enviar a RR.HH.'}</button><button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
+      if (r === 'enviado' && esRRHH()) acc = `<button class="btn btn-green btn-sm" data-acc="descontar" data-id="${a.id}">✓ Marcar descontado</button><button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
+      return `<div>${tarjetaArqueo(a, true).replace(/<\/div>$/, '')}${acc ? `<div class="row" style="margin-top:8px">${acc}</div>` : ''}</div></div>`;
+    }).join('') : '<div class="card empty">No hay cargos en este estado.</div>'}`;
+  $('rSeg').onclick = e => { const b = e.target.closest('[data-f]'); if (b) { rrhhFiltro = b.dataset.f; renderRRHH(); } };
+  $('rCsv').onclick = () => exportarCSV(lista);
+  $('view').querySelectorAll('[data-acc]').forEach(b => b.onclick = () => accionRRHH(b.dataset.acc, arqueos.find(a => a.id === b.dataset.id)));
+  bindArqueoBtns();
+}
+function accionRRHH(acc, a) {
+  const titulos = { enviar: 'Enviar cargo a Recursos Humanos', descontar: 'Marcar como descontado', anular: 'Anular cargo' };
+  const ayuda = { enviar: (a.conformidad || {}).estado === 'pendiente' ? '⚠️ El técnico todavía no ha dado su conformidad. Envíalo solo si ya se le notificó y no respondió.' : 'RR.HH. verá el cargo con la constancia del arqueo.',
+    descontar: 'Indica en qué nómina y cómo se aplicó (ej.: nómina 15/10, 2 cuotas).', anular: 'Indica el motivo (ej.: la herramienta apareció, error de conteo, decisión de gerencia).' };
+  openModal(`<h3>${titulos[acc]}</h3><div class="sub">${esc(a.tecnico)} · arqueo ${fmtF(a.fecha)} · <b>${money(a.totalCargo)}</b></div>
+    <div class="sub" style="margin-top:8px">${ayuda[acc]}</div>
+    <label class="f">Nota ${acc === 'enviar' ? '(opcional)' : '*'}</label><textarea id="rNota"></textarea>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn ${acc === 'anular' ? 'btn-danger' : 'btn-primary'}" id="rOk">${titulos[acc]}</button></div>`);
+  $('rOk').onclick = () => {
+    const nota = $('rNota').value.trim();
+    if (acc !== 'enviar' && !nota) return toast('Escribe una nota', true);
+    const estado = { enviar: 'enviado', descontar: 'descontado', anular: 'anulado' }[acc];
+    const prev = a.rrhh || {};
+    const rrhh = { estado, nota: nota || prev.nota || '', fecha: hoy(), por: quien(), historial: [...(prev.historial || []), { estado, nota, fecha: hoy(), hora: hora(), por: quien() }] };
+    db.collection('herramientas_arqueos').doc(a.id).update({ rrhh }).then(() => toast('✅ ' + titulos[acc])).catch(fail);
+    closeModal();
+  };
+}
+function exportarCSV(lista) {
+  const c = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = ['Técnico', 'Fecha arqueo', 'Realizado por', 'Detalle', 'Monto', 'Conformidad técnico', 'Nota técnico', 'Estado RR.HH.', 'Nota RR.HH.'];
+  const rows = lista.map(a => [a.tecnico, fmtF(a.fecha), a.realizadoPor, (a.items || []).filter(i => i.monto).map(i => `${i.nombre} (${i.cobrarFaltante ? i.faltante + ' falt.' : ''}${i.cobrarFaltante && i.cobrarDanada ? ', ' : ''}${i.cobrarDanada ? i.danada + ' dañ.' : ''})`).join('; '),
+    (a.totalCargo || 0).toFixed(2), (a.conformidad || {}).estado || '', (a.conformidad || {}).nota || '', (a.rrhh || {}).estado || '', (a.rrhh || {}).nota || '']);
+  const csv = '﻿' + [head, ...rows].map(r => r.map(c).join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const el = document.createElement('a'); el.href = url; el.download = 'cargos_herramientas_' + hoy() + '.csv'; el.click(); URL.revokeObjectURL(url);
+}
+
+// ══════ VISTA DEL TÉCNICO ══════
+function renderMis() {
+  const act = asignadas.filter(a => a.estado === 'activa' && a.cantidad > 0).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  const sinConf = act.filter(a => !a.aceptada);
+  const aqs = [...arqueos].sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+  const pendConf = aqs.filter(a => (a.conformidad || {}).estado === 'pendiente');
+  $('view').innerHTML = `
+    <div class="kpis"><div class="kpi"><div class="l">Herramientas a mi cargo</div><div class="v">${unidadesDe(act)}</div></div>
+      <div class="kpi"><div class="l">Valor de reposición</div><div class="v">${money(valorDe(act))}</div></div></div>
+    ${sinConf.length ? `<div class="banner"><b>Tienes ${sinConf.length} entrega(s) por confirmar.</b> Revisa que de verdad recibiste cada herramienta antes de confirmar.</div>
+      ${sinConf.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${a.cantidad} × ${esc(a.nombre)}</div><div class="item-s">Entregada ${fmtF(a.fechaEntrega)} ${esc(a.horaEntrega || '')} por ${esc(a.entregadoPor || '—')}${a.nota ? ' · ' + esc(a.nota) : ''}</div></div>
+        <button class="btn btn-green btn-sm" data-ok="${a.id}">✅ Confirmo que la recibí</button></div></div>`).join('')}` : ''}
+    ${pendConf.length ? `<div class="banner red"><b>Tienes ${pendConf.length} arqueo(s) esperando tu conformidad.</b> Si no estás de acuerdo, explica por qué: tu nota llega a tu encargado y a RR.HH.</div>
+      ${pendConf.map(a => `${tarjetaArqueo(a, false)}<div class="card" style="margin-top:-4px"><textarea id="nota-${a.id}" placeholder="Comentario (obligatorio si no estás de acuerdo)"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn btn-green btn-sm" data-conf="conforme" data-id="${a.id}">✓ Estoy de acuerdo</button><button class="btn btn-danger btn-sm" data-conf="no_conforme" data-id="${a.id}">✗ No estoy de acuerdo</button></div></div>`).join('')}` : ''}
+    <div class="section">A mi cargo</div>
+    ${act.length ? act.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${esc(a.nombre)}</div><div class="item-s">${a.codigo ? esc(a.codigo) + ' · ' : ''}desde ${fmtF(a.fechaEntrega)}</div></div>
+      <div style="text-align:right"><div class="money">${a.cantidad} × ${money(a.costo)}</div>${a.aceptada ? '<span class="tag t-ok">✓ Confirmada</span>' : '<span class="tag t-warn">Sin confirmar</span>'}</div></div></div>`).join('') : '<div class="card empty">No tienes herramientas asignadas.</div>'}
+    <div class="section">Mis arqueos</div>
+    ${aqs.filter(a => (a.conformidad || {}).estado !== 'pendiente').map(a => tarjetaArqueo(a, false)).join('') || '<div class="card empty">Sin arqueos anteriores.</div>'}`;
+  $('view').querySelectorAll('[data-ok]').forEach(b => b.onclick = () => {
+    db.collection('herramientas_asignadas').doc(b.dataset.ok).update({ aceptada: true, aceptadaEn: hoy(), aceptadaPor: quien() }).then(() => toast('✅ Recibo confirmado')).catch(fail);
+  });
+  $('view').querySelectorAll('[data-conf]').forEach(b => b.onclick = () => {
+    const nota = ($('nota-' + b.dataset.id).value || '').trim();
+    if (b.dataset.conf === 'no_conforme' && !nota) return toast('Explica por qué no estás de acuerdo', true);
+    db.collection('herramientas_arqueos').doc(b.dataset.id).update({ conformidad: { estado: b.dataset.conf, nota, fecha: hoy(), hora: hora(), por: quien() } })
+      .then(() => toast('✅ Respuesta registrada')).catch(fail);
+  });
+}
+
+// ══════ DOCUMENTOS IMPRIMIBLES ══════
+function imprimir(html) { $('printArea').innerHTML = html; window.print(); }
+function imprimirActa(t) {
+  const act = activasDe(t).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  imprimir(`<h2>ACTA DE ENTREGA Y CUSTODIA DE HERRAMIENTAS</h2><div class="pa-sub">${encabezadoDoc()}</div>
+    <div class="pa-meta"><div><b>Técnico:</b> ${esc(t)}</div><div><b>Fecha:</b> ${fmtF(hoy())}</div><div><b>Emitida por:</b> ${esc(quien())}</div><div><b>Valor total en custodia:</b> ${money(valorDe(act))}</div></div>
+    <table><tr><th>Código</th><th>Herramienta</th><th>Marca / modelo</th><th>Cant.</th><th>Valor c/u</th><th>Valor total</th><th>Entregada</th><th>Confirmó</th></tr>
+    ${act.map(a => `<tr><td>${esc(a.codigo)}</td><td>${esc(a.nombre)}</td><td>${esc(a.marca)}</td><td class="n">${a.cantidad}</td><td class="n">${money(a.costo)}</td><td class="n">${money(a.costo * a.cantidad)}</td><td>${fmtF(a.fechaEntrega)}</td><td>${a.aceptada ? 'Sí, ' + fmtF(a.aceptadaEn) : 'Pendiente'}</td></tr>`).join('')}
+    <tr><td colspan="5" class="n"><b>TOTAL</b></td><td class="n"><b>${money(valorDe(act))}</b></td><td colspan="2"></td></tr></table>
+    <div class="pa-text">Declaro haber recibido las herramientas detalladas en este documento, en buen estado de funcionamiento, para el desempeño de mis labores. Me comprometo a darles el uso adecuado, a mantenerlas bajo mi custodia y a devolverlas cuando la empresa lo solicite o al terminar la relación laboral. Acepto que se realicen arqueos periódicos y que, en caso de pérdida o daño por negligencia debidamente comprobados, se aplique lo establecido en la política interna de la empresa, conforme a la legislación laboral vigente.</div>
+    <div class="firmas"><div>Firma del técnico<br>${esc(t)}</div><div>Entregado por<br>${esc(quien())}</div></div>`);
+}
+function imprimirConstancia(a) {
+  if (!a) return;
+  const c = a.conformidad || {}, r = a.rrhh || {};
+  imprimir(`<h2>CONSTANCIA DE ARQUEO DE HERRAMIENTAS</h2><div class="pa-sub">${encabezadoDoc()}</div>
+    <div class="pa-meta"><div><b>Técnico:</b> ${esc(a.tecnico)}</div><div><b>Fecha y hora:</b> ${fmtF(a.fecha)} ${esc(a.hora || '')}</div>
+      <div><b>Realizado por:</b> ${esc(a.realizadoPor)}</div><div><b>Unidades revisadas:</b> ${a.unidadesRevisadas || 0}</div></div>
+    <table><tr><th>Código</th><th>Herramienta</th><th>Asignadas</th><th>Encontradas</th><th>Faltantes</th><th>Dañadas</th><th>Valor c/u</th><th>Se carga</th><th>Monto</th></tr>
+    ${(a.items || []).map(i => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.nombre)}</td><td class="n">${i.asignada}</td><td class="n">${i.encontrada}</td><td class="n">${i.faltante || ''}</td><td class="n">${i.danada || ''}</td><td class="n">${money(i.costo)}</td><td>${[i.cobrarFaltante ? 'Faltante' : '', i.cobrarDanada ? 'Daño' : ''].filter(Boolean).join(' + ') || '—'}</td><td class="n">${i.monto ? money(i.monto) : ''}</td></tr>`).join('')}
+    <tr><td colspan="8" class="n"><b>TOTAL A CARGO DEL TÉCNICO</b></td><td class="n"><b>${money(a.totalCargo)}</b></td></tr></table>
+    ${a.observaciones ? `<div class="pa-text"><b>Observaciones:</b> ${esc(a.observaciones)}</div>` : ''}
+    <div class="pa-text"><b>Conformidad del técnico:</b> ${c.estado === 'conforme' ? `CONFORME (registrada en el sistema el ${fmtF(c.fecha)} ${esc(c.hora || '')})` : c.estado === 'no_conforme' ? `NO CONFORME (${fmtF(c.fecha)} ${esc(c.hora || '')})` : 'PENDIENTE'}${c.nota ? ` — "${esc(c.nota)}"` : ''}<br>
+    <b>Estado en Recursos Humanos:</b> ${{ no_aplica: 'Sin cargo', pendiente: 'Por enviar', enviado: 'Recibido por RR.HH.', descontado: 'Descontado', anulado: 'Anulado' }[r.estado] || '—'}${r.nota ? ` — "${esc(r.nota)}"` : ''}</div>
+    <div class="firmas"><div>Firma del técnico<br>${esc(a.tecnico)}</div><div>Realizado por<br>${esc(a.realizadoPor)}</div><div>Recursos Humanos</div></div>`);
+}
+</script>
+</body>
+</html>
