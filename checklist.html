@@ -268,6 +268,7 @@ BANDA TRANSPORTADORA A	15"></textarea>
       <div id="qr-canvas-wrap" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:10px;">Escanea con la cámara del celular para abrir el checklist de este equipo directo.</div>
     </div>
+    <a id="qr-etiqueta-parada" class="btn btn-secondary" style="display:block;margin-top:12px;text-decoration:none;font-size:13px;" href="etiquetas-qr.html">🏷️ Etiqueta "¿Máquina parada?" para producción</a>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModalGeneric('modalQrEquipo')">Cerrar</button>
       <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
@@ -1178,6 +1179,7 @@ function mostrarQrEquipo(equipoId, ev) {
   wrap.innerHTML = '';
   const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'checklist.html?equipo=' + encodeURIComponent(equipoId);
   new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById('qr-etiqueta-parada').href = 'etiquetas-qr.html?equipo=' + encodeURIComponent(equipoId);
   openModalGeneric('modalQrEquipo');
 }
 

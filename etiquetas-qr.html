@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Etiquetas QR — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       ETIQUETAS QR "REPORTAR PARADA" (2 oct 2026)
+       Hoja imprimible con un sticker por máquina. El QR abre
+       reportar.html?equipo=<id>: producción escanea con la cámara del
+       celular y el formulario de parada abre con esa máquina ya elegida.
+       Si el operador no había iniciado sesión, login.html conserva el
+       ?equipo= y lo devuelve al formulario después de entrar.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; position: sticky; top: 0; z-index: 50; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 16px 16px 60px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 14px; }
+    .card-title { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+    .card-sub { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+    .toolbar { display: grid; grid-template-columns: 1fr 200px; gap: 8px; margin-top: 12px; }
+    input, select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
+    input:focus, select:focus { border-color: var(--accent); }
+    .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .opts input[type=checkbox], .opts input[type=radio] { width: auto; accent-color: var(--accent); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    .btn { padding: 10px 16px; border-radius: 9px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn[disabled] { opacity: .45; cursor: default; }
+    .count { font-size: 13px; color: var(--muted); margin-left: auto; }
+    .eq-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+    .eq-item { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; cursor: pointer; font-size: 13px; }
+    .eq-item.sel { border-color: var(--accent); background: #F59E0B12; }
+    .eq-item input { width: auto; margin-top: 2px; accent-color: var(--accent); }
+    .eq-item small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+    .empty { text-align: center; color: var(--muted); padding: 30px 10px; font-size: 14px; line-height: 1.6; }
+    .section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 10px; }
+
+    /* ── Etiquetas (vista previa en pantalla = lo que se imprime) ── */
+    #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .label { background: #fff; color: #111; border-radius: 10px; overflow: hidden; border: 2px solid #111; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; }
+    .lb-top { background: #D7261E; color: #fff; text-align: center; padding: 8px 10px 7px; }
+    .lb-top b { display: block; font-size: 19px; letter-spacing: .02em; line-height: 1.15; }
+    .lb-top span { font-size: 12px; font-weight: 600; }
+    .lb-body { display: flex; gap: 12px; align-items: center; padding: 12px; }
+    .lb-qr { flex-shrink: 0; width: 132px; height: 132px; }
+    .lb-qr img, .lb-qr canvas { width: 132px !important; height: 132px !important; display: block; }
+    .lb-info { min-width: 0; }
+    .lb-eq { font-size: 18px; font-weight: 800; line-height: 1.2; word-break: break-word; }
+    .lb-loc { font-size: 12.5px; margin-top: 3px; color: #333; }
+    .lb-steps { font-size: 11px; color: #333; margin-top: 8px; line-height: 1.45; }
+    .lb-foot { border-top: 1px dashed #999; font-size: 10px; color: #555; padding: 5px 12px; display: flex; justify-content: space-between; gap: 8px; }
+    .label.small .lb-qr, .label.small .lb-qr img, .label.small .lb-qr canvas { width: 96px !important; height: 96px !important; }
+    .label.small .lb-top b { font-size: 15px; }
+    .label.small .lb-eq { font-size: 15px; }
+    .label.small .lb-steps { display: none; }
+
+    @media (max-width: 600px) { .toolbar { grid-template-columns: 1fr; } .count { margin-left: 0; width: 100%; } }
+
+    @media print {
+      @page { margin: 10mm; }
+      body { background: #fff; }
+      #header, .no-print, #fbMiniNav { display: none !important; }
+      .wrap { max-width: none; padding: 0; }
+      #sheet { grid-template-columns: repeat(2, 1fr); gap: 6mm; }
+      #sheet.small { grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+      .label { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🏷️ Etiquetas QR — Reportar parada</h1>
+  <small id="header-sub">Cargando...</small>
+</div>
+
+<div class="wrap">
+  <div class="card no-print" id="cfg-card">
+    <div class="card-title">Stickers para las máquinas</div>
+    <div class="card-sub">Pega uno en cada máquina, a la vista del operador. Producción lo escanea con la cámara del celular y el reporte de parada abre con esa máquina ya elegida: solo marca si está parada, escribe qué pasa y envía. Los técnicos reciben el aviso al momento en Bitácora → Avisos.</div>
+    <div class="toolbar">
+      <input type="text" id="buscar" placeholder="Buscar equipo..." oninput="renderLista()"/>
+      <select id="fArea" onchange="renderLista()"><option value="">Todas las áreas</option></select>
+    </div>
+    <div class="opts">
+      Tamaño:
+      <label><input type="radio" name="tam" value="normal" checked onchange="renderSheet()"> Normal (2 por fila)</label>
+      <label><input type="radio" name="tam" value="small" onchange="renderSheet()"> Pequeño (3 por fila)</label>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="marcarTodos(true)">Seleccionar todos</button>
+      <button class="btn btn-secondary" onclick="marcarTodos(false)">Ninguno</button>
+      <span class="count" id="count">0 seleccionados</span>
+      <button class="btn btn-primary" id="btnPrint" onclick="imprimir()" disabled>🖨️ Imprimir etiquetas</button>
+    </div>
+  </div>
+
+  <div class="card no-print">
+    <div id="lista" class="eq-list"></div>
+  </div>
+
+  <div class="section-title no-print" id="previewTitle" style="display:none">Vista previa de impresión</div>
+  <div id="sheet"></div>
+</div>
+
+<script>
+let equipos = [];
+const seleccion = new Set();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const baseUrl = () => location.origin + location.pathname.replace(/[^/]*$/, '');
+
+window.fbReady.then(() => {
+  const u = window.currentUserRole || {};
+  document.getElementById('header-sub').textContent = (window.APP_EMPRESA ? window.APP_EMPRESA + ' · ' : '') + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('etiquetas');
+  // Imprimir y pegar etiquetas es tarea de quien administra mantenimiento.
+  if (!userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR')) {
+    document.querySelector('.wrap').innerHTML = '<div class="card"><div class="empty">🔒 Esta página es para Administrador, Encargado o Supervisor de mantenimiento.</div></div>';
+    return;
+  }
+  db.collection('equipos').orderBy('nombre').onSnapshot(snap => {
+    equipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const areas = [...new Set(equipos.map(e => e.localidad).filter(Boolean))].sort();
+    const sel = document.getElementById('fArea'), cur = sel.value;
+    sel.innerHTML = '<option value="">Todas las áreas</option>' + areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+    sel.value = areas.includes(cur) ? cur : '';
+    // si llega con ?equipo=ID (desde otra pantalla), deja ese ya marcado
+    const q = new URLSearchParams(location.search).get('equipo');
+    if (q && equipos.some(e => e.id === q) && !seleccion.size) seleccion.add(q);
+    renderLista(); renderSheet();
+  }, err => {
+    document.getElementById('lista').innerHTML = `<div class="empty">No se pudo leer la lista de equipos: ${esc(err.message)}</div>`;
+  });
+}).catch(() => {});
+
+function filtrados() {
+  const q = (document.getElementById('buscar').value || '').toLowerCase().trim();
+  const a = document.getElementById('fArea').value;
+  return equipos.filter(e => (!a || e.localidad === a) && (!q || (e.nombre || '').toLowerCase().includes(q) || (e.localidad || '').toLowerCase().includes(q)));
+}
+
+function renderLista() {
+  const lista = filtrados();
+  const el = document.getElementById('lista');
+  el.innerHTML = lista.length ? lista.map(e => `
+    <label class="eq-item ${seleccion.has(e.id) ? 'sel' : ''}">
+      <input type="checkbox" data-id="${esc(e.id)}" ${seleccion.has(e.id) ? 'checked' : ''}>
+      <div><b>${esc(e.nombre || '(sin nombre)')}</b><small>${e.localidad ? '📍 ' + esc(e.localidad) : 'Sin área'}</small></div>
+    </label>`).join('')
+    : `<div class="empty" style="grid-column:1/-1">${equipos.length ? 'Ningún equipo coincide con la búsqueda.' : 'Todavía no hay equipos. Regístralos primero en Inventario.'}</div>`;
+  actualizarConteo();
+}
+document.getElementById('lista').addEventListener('change', ev => {
+  const cb = ev.target.closest('input[data-id]'); if (!cb) return;
+  if (cb.checked) seleccion.add(cb.dataset.id); else seleccion.delete(cb.dataset.id);
+  cb.closest('.eq-item').classList.toggle('sel', cb.checked);
+  actualizarConteo(); renderSheet();
+});
+
+function marcarTodos(on) {
+  filtrados().forEach(e => on ? seleccion.add(e.id) : seleccion.delete(e.id));
+  renderLista(); renderSheet();
+}
+function actualizarConteo() {
+  const n = seleccion.size;
+  document.getElementById('count').textContent = n === 1 ? '1 seleccionado' : n + ' seleccionados';
+  document.getElementById('btnPrint').disabled = !n;
+}
+
+function renderSheet() {
+  const small = (document.querySelector('input[name=tam]:checked') || {}).value === 'small';
+  const sheet = document.getElementById('sheet');
+  sheet.className = small ? 'small' : '';
+  const elegidos = equipos.filter(e => seleccion.has(e.id));
+  document.getElementById('previewTitle').style.display = elegidos.length ? '' : 'none';
+  sheet.innerHTML = elegidos.map(e => `
+    <div class="label ${small ? 'small' : ''}">
+      <div class="lb-top"><b>¿MÁQUINA PARADA?</b><span>Escanea y avisa a mantenimiento</span></div>
+      <div class="lb-body">
+        <div class="lb-qr" data-qr="${esc(e.id)}"></div>
+        <div class="lb-info">
+          <div class="lb-eq">${esc(e.nombre || '(sin nombre)')}</div>
+          <div class="lb-loc">${e.localidad ? '📍 ' + esc(e.localidad) : ''}</div>
+          <div class="lb-steps">1. Abre la cámara y apunta al código<br>2. Marca si está parada y qué pasa<br>3. Toca "Enviar reporte"</div>
+        </div>
+      </div>
+      <div class="lb-foot"><span>${esc(window.APP_EMPRESA || 'Mantenimiento')}</span><span>ID ${esc(String(e.id).slice(0, 6))}</span></div>
+    </div>`).join('');
+  sheet.querySelectorAll('[data-qr]').forEach(div => {
+    new QRCode(div, { text: baseUrl() + 'reportar.html?equipo=' + encodeURIComponent(div.dataset.qr), width: 264, height: 264, correctLevel: QRCode.CorrectLevel.M });
+  });
+}
+
+function imprimir() {
+  if (!seleccion.size) return;
+  window.print();
+}
+</script>
+</body>
+</html>
