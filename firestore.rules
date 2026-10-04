@@ -54,7 +54,7 @@ service cloud.firestore {
     // compartido para borrar repuestos/equipos en Inventario. No tenía
     // regla propia — con las reglas por rol activas habría quedado
     // bloqueado por defecto y nadie habría podido verificar el PIN.
-    match /config/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
+    match /config/{id} { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esAdmin(); }
     // Módulo de Checklists (17 sep 2026): /config/otFolioCounter guarda el
     // número correlativo del folio de la próxima OT generada desde un
     // checklist (OT-0001, OT-0002...). A diferencia de /config/app (el PIN),
