@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v31';
+const CACHE = 'mantenimiento-v32';
 const ASSETS = [
   './',
   'index.html',
@@ -15,6 +15,7 @@ const ASSETS = [
   'checklist.html',
   'hoja-vida.html',
   'reportar.html',
+  'equipo.html',
   'etiquetas-qr.html',
   'herramientas.html',
   'manifest.json',

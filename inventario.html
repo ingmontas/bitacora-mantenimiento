@@ -800,6 +800,9 @@ async function loadDB(){
     updateSyncStatus('ok');
     const box = document.getElementById('fbStatusBox');
     if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${firebaseConfig.projectId}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
+    // (4 oct 2026) desde el QR único: inventario.html?equipo=<id> abre ese equipo
+    const qEq = !window._qrEqAbierto && new URLSearchParams(location.search).get('equipo');
+    if (qEq) { window._qrEqAbierto = true; if (DB.some(x => x.id === qEq)) { openEquipo(qEq); return; } showToast('⚠️ El equipo del código QR ya no existe'); }
     if(currentEquipoId){ if(getCurrentEquipo()) renderDetail(); else backHome(); }
     else renderHome();
   }, (err)=>{

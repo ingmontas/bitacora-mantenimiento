@@ -507,6 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAreas();
   loadLineas();
   loadEquiposCanonicos();
+  prefillEquipoDesdeQR();
   renderCausasOptions('');
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
@@ -571,6 +572,32 @@ function renderCausasOptions(valorActual) {
   if (valorActual && !lista.includes(valorActual)) lista.unshift(valorActual);
   sel.innerHTML = '<option value="">Seleccionar causa...</option>'
     + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${c}</option>`).join('');
+}
+
+// ══════ ABRIR CON EQUIPO YA ELEGIDO (desde el QR único, 4 oct 2026) ══════
+// equipo.html → "Registrar trabajo" abre bitacora.html?equipo=<id>: se llena
+// Equipo y, si existe en la lista de la planta elegida, el Área del equipo.
+function prefillEquipoDesdeQR() {
+  const id = new URLSearchParams(location.search).get('equipo');
+  if (!id) return;
+  window.fbReady.then(async () => {
+    try {
+      const s = await db.collection('equipos').doc(id).get();
+      if (!s.exists) { showToast('⚠️ El equipo del código QR ya no existe', 'error'); return; }
+      const e = s.data();
+      document.getElementById('f-equipo').value = e.nombre || '';
+      const ponerArea = () => {
+        const sel = document.getElementById('f-linea');
+        const loc = (e.localidad || '').trim().toLowerCase();
+        const opt = loc && [...sel.options].find(o => o.value && o.value.trim().toLowerCase() === loc);
+        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change')); }
+        return !!opt;
+      };
+      if (!ponerArea()) setTimeout(ponerArea, 1500); // las áreas pueden tardar en llegar
+      showToast('📋 Equipo: ' + (e.nombre || ''));
+      history.replaceState(null, '', location.pathname);
+    } catch (err) { console.warn('No se pudo precargar el equipo del QR:', err.message); }
+  }).catch(() => {});
 }
 
 // ══════ LISTA DE TÉCNICOS (centralizada en tecnicos.json) ══════

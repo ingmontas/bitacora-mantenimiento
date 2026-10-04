@@ -266,7 +266,7 @@
       <h3 id="qr-equipo-nombre2" style="margin-bottom:2px;">—</h3>
       <div id="qr-equipo-sub2" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
       <div id="qr-canvas-wrap2" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;">Escanea con la cámara del celular para ver la hoja de vida de este equipo directo.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR único de la máquina: al escanearlo se ofrece reportar parada, checklist, registrar trabajo, hoja de vida y repuestos, según quién lo escanee.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalQrHojaVida')">Cerrar</button>
@@ -708,7 +708,8 @@ function mostrarQrHojaVida() {
   document.getElementById('qr-equipo-sub2').textContent = equipoActual.localidad ? '📍 ' + equipoActual.localidad : '';
   const wrap = document.getElementById('qr-canvas-wrap2');
   wrap.innerHTML = '';
-  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'hoja-vida.html?equipo=' + encodeURIComponent(equipoActual.id);
+  // (4 oct 2026) QR único por máquina: abre equipo.html con todas las opciones
+  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'equipo.html?id=' + encodeURIComponent(equipoActual.id);
   new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
   openModal('modalQrHojaVida');
 }

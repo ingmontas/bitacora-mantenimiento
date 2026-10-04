@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Equipo — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       PANTALLA DEL EQUIPO — destino del QR único (4 oct 2026)
+       Cada máquina tiene UN solo QR: equipo.html?id=<id>. Al escanearlo se
+       muestran las opciones según el rol de quien lo escanea:
+         - Producción (Operador): reportar parada y ver sus reportes.
+         - Técnico o más: además checklist, registrar trabajo, hoja de vida
+           y repuestos. Almacén: repuestos.
+       Si no hay sesión, firebase-init.js lleva a login.html y regresa aquí
+       con el mismo ?id=. Los QR viejos (reportar/checklist/hoja de vida)
+       siguen funcionando.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 520px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; position: sticky; top: 0; z-index: 50; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #content { padding: 14px 14px 40px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; }
+    .eq-name { font-size: 21px; font-weight: 800; line-height: 1.2; }
+    .eq-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    .estado { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; border-radius: 9px; font-size: 13px; line-height: 1.45; }
+    .estado.ok { background: #10B98114; border: 1px solid #10B98140; }
+    .estado.alerta { background: #EF444414; border: 1px solid #EF444455; }
+    .estado.aten { background: #F59E0B14; border: 1px solid #F59E0B55; }
+    .opts { display: grid; gap: 10px; }
+    .opt { display: flex; gap: 14px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-decoration: none; color: var(--text); }
+    .opt:active { opacity: .8; }
+    .opt .ic { font-size: 28px; width: 40px; text-align: center; flex-shrink: 0; }
+    .opt b { font-size: 15.5px; display: block; }
+    .opt span { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; line-height: 1.4; }
+    .opt.main { background: #D7261E; border-color: #D7261E; }
+    .opt.main span { color: #ffe4e1; }
+    .section { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
+    .rep { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.5; }
+    .rep.pendiente { border-left-color: var(--red); } .rep.en_atencion { border-left-color: var(--accent); } .rep.completada { border-left-color: var(--green); }
+    .rep .t { font-weight: 700; font-size: 13px; }
+    .muted { color: var(--muted); }
+    .empty { text-align: center; padding: 40px 16px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .empty .e { font-size: 44px; display: block; margin-bottom: 10px; }
+    .btn { display: inline-block; padding: 11px 16px; border-radius: 9px; background: var(--accent); color: #0F1923; font-weight: 700; text-decoration: none; font-size: 14px; margin-top: 12px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="header"><h1>🏭 Equipo</h1><small id="header-sub">Cargando...</small></div>
+<div id="content"><div class="empty"><div class="spinner"></div>Abriendo equipo…</div></div>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const ID = params.get('id') || params.get('equipo') || '';
+const hoyStr = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fmtF = f => { if (!f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f || ''; const [y, m, d] = f.split('-'); return `${d}/${m}/${y}`; };
+function minDesde(fecha, hora) {
+  if (!fecha || !hora) return null;
+  const [y, m, d] = fecha.split('-').map(Number), [hh, mm] = hora.split(':').map(Number);
+  return Math.max(0, Math.round((Date.now() - new Date(y, m - 1, d, hh, mm).getTime()) / 60000));
+}
+const fmtMin = m => m == null ? '' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+
+function error(icono, texto) {
+  $('content').innerHTML = `<div class="card"><div class="empty"><span class="e">${icono}</span>${texto}<br><a class="btn" href="index.html">Ir al inicio</a></div></div>`;
+}
+
+window.fbReady.then(async () => {
+  const u = window.currentUserRole || {};
+  const ROL = u.rol || '';
+  $('header-sub').textContent = u.nombre || '';
+  if (!ID) return error('🔍', 'Este enlace no trae ningún equipo. Escanea de nuevo el código QR de la máquina.');
+
+  let e;
+  try {
+    const snap = await db.collection('equipos').doc(ID).get();
+    if (!snap.exists) return error('❓', 'Este código QR es de un equipo que ya no existe en el sistema (pudo haberse eliminado).<br>Pide a mantenimiento que imprima un QR nuevo desde <b>Etiquetas QR</b>.');
+    e = { id: snap.id, ...snap.data() };
+  } catch (err) {
+    return error('⚠️', err.code === 'permission-denied'
+      ? 'Tu usuario no tiene permiso para ver los equipos. Pide al administrador que revise tu rol.'
+      : 'No se pudo cargar el equipo: ' + esc(err.message) + '<br>Revisa la conexión e inténtalo de nuevo.');
+  }
+  document.title = (e.nombre || 'Equipo') + ' — Mantenimiento';
+  $('header-sub').textContent = (e.localidad ? e.localidad + ' · ' : '') + (u.nombre || '');
+
+  const tec = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO'].includes(ROL);
+  const puedeReportar = tec || ROL === 'OPERADOR';
+  const puedeRepuestos = tec || ROL === 'ALMACEN';
+  const q = encodeURIComponent(e.id);
+  const opciones = [];
+  if (puedeReportar) opciones.push(`<a class="opt main" href="reportar.html?equipo=${q}"><div class="ic">🚨</div><div><b>Reportar parada o falla</b><span>Avisa a mantenimiento al momento</span></div></a>`);
+  if (tec) {
+    const venc = e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoyStr());
+    opciones.push(`<a class="opt" href="checklist.html?equipo=${q}"><div class="ic">🩺</div><div><b>Hacer checklist</b><span>${e.checklistProximaFecha ? (venc ? '⚠️ Vencido · tocaba el ' + fmtF(e.checklistProximaFecha) : 'Próximo: ' + fmtF(e.checklistProximaFecha)) : 'Inspección del equipo'}</span></div></a>`);
+    opciones.push(`<a class="opt" href="bitacora.html?equipo=${q}"><div class="ic">📋</div><div><b>Registrar trabajo</b><span>Nueva entrada en la Bitácora con este equipo ya elegido</span></div></a>`);
+    opciones.push(`<a class="opt" href="hoja-vida.html?equipo=${q}"><div class="ic">🗂️</div><div><b>Hoja de vida</b><span>Todo lo que se le ha hecho a este equipo</span></div></a>`);
+  }
+  if (puedeRepuestos) opciones.push(`<a class="opt" href="inventario.html?equipo=${q}"><div class="ic">🔧</div><div><b>Repuestos y ficha técnica</b><span>${(e.repuestos || []).length} repuesto(s) registrados</span></div></a>`);
+  if (tec) opciones.push(`<a class="opt" href="bitacora.html#avisos"><div class="ic">🔔</div><div><b>Avisos de producción</b><span>Cola de paradas de toda la planta</span></div></a>`);
+  if (!opciones.length) return error('🔒', 'Tu rol no tiene opciones disponibles para este equipo.');
+
+  $('content').innerHTML = `
+    <div class="card">
+      <div class="eq-name">${esc(e.nombre || '(sin nombre)')}</div>
+      <div class="eq-sub">${[e.localidad && '📍 ' + esc(e.localidad), [e.marca, e.modelo].filter(Boolean).map(esc).join(' · '), e.serie && 'Serie ' + esc(e.serie)].filter(Boolean).join('<br>')}</div>
+      <div id="estado"></div>
+    </div>
+    <div class="opts">${opciones.join('')}</div>
+    <div class="section" id="repTitle" style="display:none">Reportes de este equipo</div>
+    <div id="reps"></div>`;
+
+  // Reportes abiertos y recientes de esta máquina (producción solo puede leer
+  // los reportes de operador; técnicos ven también las fallas de checklist).
+  // Almacén no tiene permiso de leer reportes: no se consultan.
+  if (!tec && ROL !== 'OPERADOR') return;
+  const ref = tec ? db.collection('ots').where('equipoId', '==', e.id)
+                  : db.collection('ots').where('origen', '==', 'operador').where('equipoId', '==', e.id);
+  ref.onSnapshot(snap => {
+    const todos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const abiertos = todos.filter(r => ['pendiente', 'en_atencion', 'planificada'].includes(r.estado));
+    const desde = new Date(); desde.setDate(desde.getDate() - 7);
+    const lim = desde.getFullYear() + '-' + String(desde.getMonth() + 1).padStart(2, '0') + '-' + String(desde.getDate()).padStart(2, '0');
+    const recientes = todos.filter(r => r.estado === 'completada' && (r.fechaReporte || r.FECHA || '') >= lim);
+    const enAt = abiertos.find(r => r.estado === 'en_atencion');
+    const pend = abiertos.filter(r => r.estado === 'pendiente');
+    $('estado').innerHTML = enAt
+      ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
+      : pend.length
+        ? `<div class="estado alerta">⏳ <div><b>${pend.length} reporte(s) esperando técnico</b>${pend[0].horaParada ? ' · desde las ' + esc(pend[0].horaParada) + ' (' + fmtMin(minDesde(pend[0].fechaReporte, pend[0].horaParada)) + ')' : ''}. No hace falta reportarlo de nuevo.</div></div>`
+        : `<div class="estado ok">✅ <div>Sin reportes abiertos para este equipo.</div></div>`;
+    const lista = [...abiertos, ...recientes].sort((a, b) => ((b.fechaReporte || b.FECHA || '') + (b.horaParada || '')).localeCompare((a.fechaReporte || a.FECHA || '') + (a.horaParada || '')));
+    $('repTitle').style.display = lista.length ? '' : 'none';
+    $('reps').innerHTML = lista.map(r => {
+      const est = r.estado === 'pendiente' ? '⏳ Esperando técnico' : r.estado === 'en_atencion' ? `🔧 En atención por ${esc(r.asignadoA || '—')}` : r.estado === 'planificada' ? `🗓 Planificada${r.asignadoA ? ' · ' + esc(r.asignadoA) : ''}` : `✅ Resuelto${r.TECNICOS ? ' por ' + esc(r.TECNICOS) : ''}`;
+      return `<div class="rep ${esc(r.estado)}"><div class="t">${esc(r.folio || '')} · ${fmtF(r.fechaReporte || r.FECHA)} ${esc(r.horaParada || '')}</div>
+        <div>${esc(r.descripcionFalla || r.DESCRIPCION_FALLA || '')}</div>
+        <div class="muted">${est}${r.origen === 'checklist' ? ' · detectado en checklist' : r.creadoPor ? ' · reportó ' + esc(r.creadoPor) : ''}</div>
+        ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div style="color:#35d0b0">✓ ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}</div>`;
+    }).join('');
+  }, err => {
+    $('estado').innerHTML = `<div class="estado aten">ℹ️ <div>No se pudo leer el estado de los reportes (${esc(err.code || err.message)}).</div></div>`;
+  });
+}).catch(() => {}); // sin sesión: firebase-init.js ya llevó a login.html con este mismo enlace
+</script>
+</body>
+</html>

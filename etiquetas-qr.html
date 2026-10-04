@@ -18,7 +18,10 @@
     /* ══════════════════════════════════════════════════════════════════
        ETIQUETAS QR "REPORTAR PARADA" (2 oct 2026)
        Hoja imprimible con un sticker por máquina. El QR abre
-       reportar.html?equipo=<id>: producción escanea con la cámara del
+       (4 oct 2026) QR ÚNICO por máquina → equipo.html?id=<id>, que ofrece
+       reportar parada, checklist, bitácora, hoja de vida y repuestos según el
+       rol. Antes apuntaba a reportar.html?equipo=<id> (esos stickers siguen
+       funcionando). Producción escanea con la cámara del
        celular y el formulario de parada abre con esa máquina ya elegida.
        Si el operador no había iniciado sesión, login.html conserva el
        ?equipo= y lo devuelve al formulario después de entrar.
@@ -197,19 +200,19 @@ function renderSheet() {
   document.getElementById('previewTitle').style.display = elegidos.length ? '' : 'none';
   sheet.innerHTML = elegidos.map(e => `
     <div class="label ${small ? 'small' : ''}">
-      <div class="lb-top"><b>¿MÁQUINA PARADA?</b><span>Escanea y avisa a mantenimiento</span></div>
+      <div class="lb-top"><b>¿MÁQUINA PARADA?</b><span>Escanea este código · Mantenimiento</span></div>
       <div class="lb-body">
         <div class="lb-qr" data-qr="${esc(e.id)}"></div>
         <div class="lb-info">
           <div class="lb-eq">${esc(e.nombre || '(sin nombre)')}</div>
           <div class="lb-loc">${e.localidad ? '📍 ' + esc(e.localidad) : ''}</div>
-          <div class="lb-steps">1. Abre la cámara y apunta al código<br>2. Marca si está parada y qué pasa<br>3. Toca "Enviar reporte"</div>
+          <div class="lb-steps"><b>Producción:</b> reportar parada o falla<br><b>Técnicos:</b> checklist, registrar trabajo, hoja de vida y repuestos</div>
         </div>
       </div>
       <div class="lb-foot"><span>${esc(window.APP_EMPRESA || 'Mantenimiento')}</span><span>ID ${esc(String(e.id).slice(0, 6))}</span></div>
     </div>`).join('');
   sheet.querySelectorAll('[data-qr]').forEach(div => {
-    new QRCode(div, { text: baseUrl() + 'reportar.html?equipo=' + encodeURIComponent(div.dataset.qr), width: 264, height: 264, correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(div, { text: baseUrl() + 'equipo.html?id=' + encodeURIComponent(div.dataset.qr), width: 264, height: 264, correctLevel: QRCode.CorrectLevel.M });
   });
 }
 
