@@ -161,7 +161,15 @@ window.fbReady.then(async () => {
   }, err => {
     $('estado').innerHTML = `<div class="estado aten">ℹ️ <div>No se pudo leer el estado de los reportes (${esc(err.code || err.message)}).</div></div>`;
   });
-}).catch(() => {}); // sin sesión: firebase-init.js ya llevó a login.html con este mismo enlace
+}).catch(err => {
+  // Sin sesión, firebase-init.js ya está llevando a login.html con este mismo
+  // enlace. Cualquier otro problema (cuenta sin rol, desactivada, sin conexión)
+  // se muestra en pantalla en vez de dejarla cargando para siempre.
+  setTimeout(() => {
+    if (/login\.html/.test(location.href)) return;
+    error('⚠️', esc((err && err.message) || 'No se pudo iniciar sesión.') + '<br><a class="btn" href="login.html?next=' + encodeURIComponent('equipo.html' + location.search) + '">Iniciar sesión</a>');
+  }, 1500);
+});
 </script>
 </body>
 </html>

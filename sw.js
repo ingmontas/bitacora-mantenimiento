@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v32';
+const CACHE = 'mantenimiento-v33';
 const ASSETS = [
   './',
   'index.html',
@@ -52,7 +52,29 @@ self.addEventListener('fetch', e => {
   if (skipHosts.some(h => url.hostname.includes(h))) return;
   if (url.origin !== self.location.origin) return; // cualquier otro origen externo: red directa
 
-  // Cascarón de la app — caché primero, con respaldo de red
+  // (4 oct 2026) Páginas y código de la app (HTML, JS, JSON): RED PRIMERO.
+  // Antes era "caché primero" y por eso, después de cada actualización, los
+  // celulares seguían mostrando la versión vieja hasta cerrar la app varias
+  // veces. Ahora, con internet, siempre se carga lo último publicado (y se
+  // guarda una copia); sin internet, se usa la copia guardada.
+  const esCodigo = e.request.mode === 'navigate' || /\.(html|js|json)$/i.test(url.pathname) || url.pathname.endsWith('/');
+  if (esCodigo && e.request.method === 'GET') {
+    e.respondWith(
+      // cache:'no-cache' = preguntar siempre al servidor si hay versión nueva
+      // (si no cambió, la respuesta es mínima), en vez de usar la del navegador.
+      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(resp => {
+        if (resp && resp.status === 200) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return resp;
+      }).catch(() => caches.match(e.request, { ignoreSearch: true })
+        .then(r => r || caches.match('index.html')))
+    );
+    return;
+  }
+
+  // Imágenes e íconos: caché primero, con respaldo de red
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
