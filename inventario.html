@@ -103,6 +103,15 @@
   .spec .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';margin-bottom:3px;}
   .spec .v{font-size:13.5px;font-weight:500;}
   .spec .v.empty{color:var(--muted);font-style:italic;font-weight:400;}
+  .spec.full{grid-column:1/-1;} .spec.full .v{font-weight:400;line-height:1.55;}
+  .ficha-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--panel-2);}
+  .ficha-head{display:flex;gap:8px;align-items:center;cursor:pointer;font-size:14px;}
+  .ficha-head input{width:auto;}
+  .ficha-antes{font-size:11.5px;color:var(--muted);margin:6px 0 8px;line-height:1.5;}
+  .ficha-antes span{font-weight:700;}
+  .ficha-despues{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px;font-size:12.5px;}
+  .ficha-despues div span{display:block;font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
+  .ficha-notas{font-size:11px;color:var(--amber);margin-top:8px;line-height:1.5;}
   .spec input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;width:100%;font-family:'Space Grotesk';}
 
   /* parts table */
@@ -213,7 +222,10 @@
 
     <div class="section-hdr">
       <h2>Equipos / Máquinas</h2>
-      <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="btn secondary sm" onclick="abrirOrdenarFichas()">🧹 Ordenar fichas técnicas</span>
+        <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
+      </div>
     </div>
     <div class="eq-toolbar">
       <input type="text" id="eqFiltro" placeholder="Filtrar equipos por nombre, marca, modelo o serie…" oninput="renderHome()">
@@ -269,6 +281,7 @@
       <div class="form-field"><label>Peso</label><input id="eq-peso" placeholder="1 ton."></div>
       <div class="form-field"><label>Fase</label><input id="eq-fase" placeholder="MONO FASICO"></div>
       <div class="form-field"><label>Made in</label><input id="eq-madein"></div>
+      <div class="form-field full"><label>Características</label><textarea id="eq-caracteristicas" placeholder="Capacidad, presión, refrigerante, centro de carga…"></textarea></div>
     </div>
     <div class="modal-actions">
       <button class="btn secondary" onclick="closeModal('modalEquipo')">Cancelar</button>
@@ -457,6 +470,18 @@
   </div>
 </div>
 
+<div class="modal-bg" id="modalFichas">
+  <div class="modal" style="max-width:860px;">
+    <h3>🧹 Ordenar fichas técnicas</h3>
+    <div class="modal-sub">Equipos que tienen la ficha técnica amontonada en "Modelo". Cada dato se pasa a su campo (potencia, peso, tensión, fechas, país…) y lo demás queda en "Características". Nunca se reemplaza un campo que ya tenía dato. Revisa y desmarca los que no quieras cambiar.</div>
+    <div id="fichasBody" style="max-height:60vh;overflow:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalFichas')">Cancelar</button>
+      <button class="btn" id="fichasOk" onclick="aplicarFichas()">Ordenar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Overlay de carga durante sincronización -->
 <div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(13,17,23,.72);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
   <div style="width:34px;height:34px;border:3px solid #2a3140;border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
@@ -497,7 +522,7 @@ function mergeRepuestoInto(list, incoming){
 function mergeEquipoInto(targetList, importedEquipo){
   let existing = targetList.find(e => normalizeKey(e.nombre) === normalizeKey(importedEquipo.nombre));
   if(!existing){ targetList.push(JSON.parse(JSON.stringify(importedEquipo))); return; }
-  ['marca','modelo','serie','localidad','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein'].forEach(k=>{
+  ['marca','modelo','serie','localidad','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein','caracteristicas'].forEach(k=>{
     if(!existing[k] && importedEquipo[k]) existing[k] = importedEquipo[k];
   });
   if(!existing.manualUrl && importedEquipo.manualUrl){ existing.manualUrl = importedEquipo.manualUrl; existing.manualNombre = importedEquipo.manualNombre; }
@@ -943,6 +968,7 @@ function renderDetail(){
     ['Fecha de compra', e.fechaCompra], ['Garantía hasta', garantiaTxt],
     ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia],
     ['Tamaño', e.tamano], ['Peso', e.peso], ['Fase', e.fase], ['Made in', e.madein],
+    ['Características', e.caracteristicas, true],
   ];
 
   const revisar = parts.filter(minLooksDefault).length;
@@ -962,6 +988,7 @@ function renderDetail(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
+        ${necesitaOrden(e) ? `<button class="btn secondary sm" onclick="abrirOrdenarFichas('${e.id}')">🧹 Ordenar ficha</button>` : ''}
         <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
         <button class="btn secondary sm" onclick="showReubicaciones()">🧭 Reubicaciones</button>
         <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
@@ -973,7 +1000,7 @@ function renderDetail(){
 
     <div class="specs-card">
       <div class="specs-grid">
-        ${specs.map(([k,v])=>`<div class="spec"><div class="k">${k}</div><div class="v ${!v?'empty':''}">${v||'sin registrar'}</div></div>`).join('')}
+        ${specs.map(([k,v,full])=>`<div class="spec ${full?'full':''}"><div class="k">${k}</div><div class="v ${!v?'empty':''}">${v?escInv(v):'sin registrar'}</div></div>`).join('')}
       </div>
       <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <input type="file" id="manualInput" accept="application/pdf" style="display:none" onchange="handleManualUpload(event)">
@@ -1121,7 +1148,7 @@ function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 let editingEquipoId = null;
-const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-compra','eq-garantia','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein'];
+const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-compra','eq-garantia','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein','eq-caracteristicas'];
 
 function openNewEquipoModal(){
   editingEquipoId = null;
@@ -1150,6 +1177,7 @@ function openEditEquipoModal(){
   document.getElementById('eq-peso').value = e.peso||'';
   document.getElementById('eq-fase').value = e.fase||'';
   document.getElementById('eq-madein').value = e.madein||'';
+  document.getElementById('eq-caracteristicas').value = e.caracteristicas||'';
   openModal('modalEquipo');
 }
 
@@ -1176,10 +1204,11 @@ async function saveEquipo(){
     peso: document.getElementById('eq-peso').value.trim(),
     fase: document.getElementById('eq-fase').value.trim(),
     madein: document.getElementById('eq-madein').value.trim(),
+    caracteristicas: document.getElementById('eq-caracteristicas').value.trim(),
   };
 
   // Etiquetas legibles para la auditoría — mismas claves que `datos` arriba.
-  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in' };
+  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in', caracteristicas:'Características' };
 
   if(editingEquipoId){
     const e = DB.find(x=>x.id===editingEquipoId);
@@ -1531,6 +1560,7 @@ const COLS_EQUIPO = [
   { k: 'fabricacion',   l: 'Fabricación',       alias: ['fecha fabricacion','fecha de fabricacion','fabricacion','ano fabricacion','año fabricacion','ano de fabricacion','año de fabricacion'], fecha: true },
   { k: 'instalacion',   l: 'Instalación',       alias: ['fecha instalacion','fecha de instalacion','instalacion'], fecha: true },
   { k: 'fechaCompra',   l: 'Compra',            alias: ['fecha compra','fecha de compra','compra'], fecha: true },
+  { k: 'caracteristicas', l: 'Características',  alias: ['caracteristicas','especificaciones','ficha tecnica','descripcion tecnica','detalles','descripcion'] },
   { k: 'garantiaHasta', l: 'Garantía hasta',    alias: ['garantia','garantia hasta','vence garantia','fin de garantia','vencimiento garantia'], fecha: true },
 ];
 const CAMPOS_FICHA = COLS_EQUIPO.map(c => c.k).filter(k => k !== 'nombre' && k !== 'dias');
@@ -1758,6 +1788,124 @@ async function bulkImportEquipos(){
     btn.disabled = false;
   }
 }
+/* ═══════════════ ORDENAR FICHAS TÉCNICAS (4 oct 2026) ═══════════════
+   Muchos equipos se cargaron con toda la ficha técnica dentro de "Modelo"
+   ("CPQYD · Config. 30-RCH · Motor 31.2 kW · Peso 4820 kg · Fab. 2026-01 ·
+   China · ..."). Esto lee ese texto, reparte cada dato en su campo y deja lo
+   demás en "Características". Nunca reemplaza un campo que ya tenía dato:
+   si choca, el texto se queda en Características y se avisa. Siempre con
+   vista previa; se guarda solo lo que se aprueba. */
+const PAISES = ['china','usa','eeuu','ee.uu.','estados unidos','alemania','italia','japon','japón','taiwan','taiwán','corea','corea del sur','india','brasil','mexico','méxico','españa','francia','turquia','turquía','reino unido','inglaterra','suiza','suecia','canada','canadá','republica dominicana','república dominicana','argentina','colombia','austria','holanda','paises bajos','belgica','bélgica','dinamarca','finlandia','vietnam','tailandia','malasia','polonia','portugal','checa','republica checa'];
+const capitalizar = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Devuelve { cambios: {campo: valor}, caracteristicas: [..], notas: [..], modelo }
+function separarFicha(e){
+  const texto = (e.modelo || '').trim();
+  const partes = texto.split(/\s*[·•|;]\s*|\n+/).map(s => s.trim()).filter(Boolean);
+  const res = { cambios: {}, caract: [], notas: [], modeloPartes: [] };
+  const libre = k => !e[k] && !res.cambios[k];
+  const poner = (k, v, original) => {
+    if (!v) return;
+    if (libre(k)) res.cambios[k] = v;
+    else if (sinAcentos(e[k] || res.cambios[k]) !== sinAcentos(v)) { res.caract.push(original); res.notas.push(`${LBL_EQ[k] || k} ya tenía "${e[k] || res.cambios[k]}": "${original}" queda en Características`); }
+  };
+  partes.forEach((seg, i) => {
+    let s = seg, usado = false;
+    const sn = sinAcentos(s);
+    let m;
+    // fecha de fabricación / instalación
+    if ((m = /^(fab\.?|fabricad[oa]|fabricacion|ano de fabricacion|ano fab\.?|año|ano)\s*:?\s*(.+)$/i.exec(s))) {
+      const f = normalizarFecha(m[2].replace(/^en\s+/i, ''));
+      if (!f.error) { poner('fabricacion', f.v, seg); if (f.aviso) res.notas.push('Fabricación: ' + f.aviso); return; }
+    }
+    if ((m = /^(instalad[oa]|instalacion|instalación|fecha de instalacion)\s*:?\s*(.+)$/i.exec(s))) {
+      const f = normalizarFecha(m[2]); if (!f.error) { poner('instalacion', f.v, seg); return; }
+    }
+    // país de origen
+    if ((m = /^(made in|hecho en|origen|fabricado en|pais)\s*:?\s*(.+)$/i.exec(s))) { poner('madein', capitalizar(m[2].trim()), seg); return; }
+    if (PAISES.includes(sn)) { poner('madein', capitalizar(s), seg); return; }
+    // serie
+    if ((m = /^(s\/n|sn|serie|n[°º]? ?serie|serial)\s*:?\s*(.+)$/i.exec(s))) { poner('serie', m[2].trim(), seg); return; }
+    // peso (solo con la palabra "Peso": "Capacidad 3000 kg" NO es el peso)
+    if ((m = /^peso\s*:?\s*(.+)$/i.exec(s))) { poner('peso', m[1].trim(), seg); return; }
+    // dimensiones
+    if ((m = /^(?:(?:dimensiones|medidas|tama[nñ]o)\s*:?\s*)?(\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?\s*(?:mm|cm|m)?)$/i.exec(s))) { poner('tamano', m[1].trim(), seg); return; }
+    // mantenimiento / horómetro → configuración del checklist
+    if ((m = /(cada|c\/)\s*(\d+)\s*(h|hr|hrs|horas)\b/i.exec(s)) && /(serv|mant|horom)/i.test(sn)) { if (!e.checklistFrecuenciaHoras) res.cambios.checklistFrecuenciaHoras = +m[2]; res.caract.push(seg); return; }
+    if ((m = /^horometro\s*:?\s*(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|horas)?/i.exec(sn))) { if (e.horometroActual == null) { res.cambios.horometroActual = parseFloat(m[1].replace(',', '.')); res.cambios.horometroUltimoService = res.cambios.horometroActual; res.notas.push(`Horómetro ${res.cambios.horometroActual} h tomado como último servicio: ajústalo en Checklist si no es así`); } res.caract.push(seg); return; }
+    if (/^mant(\.|enimiento)?\s/i.test(s) && !e.checklistFrecuenciaDias) {
+      const d = /semanal/i.test(s) ? 7 : /quincenal/i.test(s) ? 15 : /mensual/i.test(s) ? 30 : /trimestral/i.test(s) ? 90 : /diari/i.test(s) ? 1 : ((m = /cada\s*(\d+)\s*d/i.exec(s)) ? +m[1] : 0);
+      if (d) { const t = new Date(); const hoy = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+        res.cambios.checklistFrecuenciaDias = d; res.cambios.checklistProximaFecha = addDaysStrInv(hoy, d); res.caract.push(seg); return; }
+    }
+    // datos eléctricos dentro del texto (pueden venir varios: "1F 220V 50Hz 1.38 kW")
+    const quitar = re => { const mm = re.exec(s); if (mm) { s = s.replace(mm[0], ' '); usado = true; } return mm; };
+    let t;
+    if ((t = quitar(/\b(\d{2,3}(?:\s*\/\s*\d{2,3})?)\s*(v|vac|vdc|volts?|voltios)\b/i))) poner('tension', t[1].replace(/\s/g, '') + ' ' + t[2].toUpperCase().replace('VOLTIOS','V').replace(/VOLTS?/,'V'), seg);
+    if ((t = quitar(/\b(\d{2}(?:\s*\/\s*\d{2})?)\s*hz\b/i))) poner('frecuencia', t[1].replace(/\s/g, '') + ' Hz', seg);
+    if ((t = quitar(/\b(\d+(?:[.,]\d+)?)\s*(kw|hp|cv)\b/i))) poner('potencia', t[1] + ' ' + (t[2].toLowerCase() === 'kw' ? 'kW' : t[2].toUpperCase()), seg);
+    if ((t = quitar(/\b([13])\s*f\b|\b(monof[aá]sic[oa]|trif[aá]sic[oa]|bif[aá]sic[oa])\b/i))) poner('fase', t[1] ? (t[1] === '1' ? 'Monofásico' : 'Trifásico') : capitalizar(t[2].toLowerCase()), seg);
+    if (usado) {
+      const resto = s.replace(/\b(motor|potencia|tension|tensión|voltaje|alimentacion|alimentación|electrico|eléctrico|frecuencia|fase)\b/gi, '').replace(/[\s,:\-]+/g, ' ').trim();
+      if (resto) res.caract.push(resto);
+      return;
+    }
+    // el modelo: el primer tramo, más los que parecen parte del código (Config., Versión…)
+    if (i === 0 || /^(config\.?|configuraci[oó]n|mod\.?|modelo|versi[oó]n|tipo)\b/i.test(s)) { res.modeloPartes.push(seg); return; }
+    res.caract.push(seg);
+  });
+  res.modelo = res.modeloPartes.join(' · ');
+  if (res.modelo && res.modelo !== texto) res.cambios.modelo = res.modelo;
+  if (res.caract.length) res.cambios.caracteristicas = [e.caracteristicas, res.caract.join(' · ')].filter(Boolean).join(' · ');
+  return res;
+}
+// Un equipo necesita orden si su Modelo trae varios datos juntos.
+const necesitaOrden = e => (/[·•|;\n]/.test(e.modelo || '') || (e.modelo || '').length > 45) && Object.keys(separarFicha(e).cambios).length > 0;
+
+let fichasPropuestas = [];
+function abrirOrdenarFichas(soloId){
+  const lista = DB.filter(e => (!soloId || e.id === soloId) && necesitaOrden(e)).sort((a, b) => cmpNat(a.nombre, b.nombre));
+  fichasPropuestas = lista.map(e => ({ e, r: separarFicha(e) }));
+  const etiquetas = { ...LBL_EQ, modelo: 'Modelo', caracteristicas: 'Características', checklistFrecuenciaHoras: 'Checklist cada (h)', checklistFrecuenciaDias: 'Checklist cada (días)', horometroActual: 'Horómetro actual', horometroUltimoService: 'Horómetro último servicio' };
+  document.getElementById('fichasBody').innerHTML = fichasPropuestas.length ? `
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="fichasTodas" checked style="width:auto;" onchange="document.querySelectorAll('[data-ficha]').forEach(c=>c.checked=this.checked);contarFichas()"> Seleccionar todos (${fichasPropuestas.length})</label>
+    ${fichasPropuestas.map((x, i) => `
+    <div class="ficha-item">
+      <label class="ficha-head"><input type="checkbox" data-ficha="${i}" checked onchange="contarFichas()"> <b>${escInv(x.e.nombre)}</b> <span style="color:var(--muted);font-size:11.5px;">${escInv(x.e.localidad || '')}</span></label>
+      <div class="ficha-antes"><span>Modelo hoy:</span> ${escInv(x.e.modelo)}</div>
+      <div class="ficha-despues">${Object.entries(x.r.cambios).filter(([k]) => !['horometroUltimoService','checklistProximaFecha'].includes(k)).map(([k, v]) => `<div${k === 'caracteristicas' ? ' style="grid-column:1/-1"' : ''}><span>${etiquetas[k] || k}</span>${escInv(v)}</div>`).join('')}</div>
+      ${x.r.notas.length ? `<div class="ficha-notas">${x.r.notas.map(escInv).join('<br>')}</div>` : ''}
+    </div>`).join('')}`
+    : `<div class="empty-state" style="padding:30px 10px;">✅ ${soloId ? 'La ficha de este equipo ya está ordenada.' : 'No hay equipos con la ficha técnica amontonada en Modelo.'}</div>`;
+  contarFichas();
+  openModal('modalFichas');
+}
+function contarFichas(){
+  const n = document.querySelectorAll('[data-ficha]:checked').length;
+  const b = document.getElementById('fichasOk');
+  b.disabled = !n; b.textContent = n ? `Ordenar ${n} equipo(s)` : 'Nada seleccionado';
+}
+async function aplicarFichas(){
+  const elegidos = [...document.querySelectorAll('[data-ficha]:checked')].map(c => fichasPropuestas[+c.dataset.ficha]);
+  if (!elegidos.length) return;
+  const b = document.getElementById('fichasOk'); b.disabled = true;
+  await window.fbReady;
+  try {
+    for (let i = 0; i < elegidos.length; i += 400) {
+      const batch = db.batch();
+      elegidos.slice(i, i + 400).forEach(({ e, r }) => batch.set(db.collection('equipos').doc(e.id), fbSanitizeTs({ ...r.cambios, updatedAt: fbTimestamp() }), { merge: true }));
+      await batch.commit();
+    }
+    elegidos.forEach(({ e, r }) => logAuditoria('especificaciones_equipo', e.id, e.nombre,
+      Object.entries(r.cambios).map(([k, v]) => ({ campo: k === 'caracteristicas' ? 'Características' : (LBL_EQ[k] || k), anterior: e[k] ?? '', nuevo: v }))));
+    showToast(`✅ Ficha técnica ordenada en ${elegidos.length} equipo(s)`);
+    closeModal('modalFichas');
+  } catch (err) {
+    showToast('⚠️ No se pudo guardar: ' + (err.code === 'permission-denied' ? 'tu usuario no tiene permiso para editar equipos.' : err.message));
+    b.disabled = false;
+  }
+}
+
 // fbSanitize convierte a JSON y perdería el serverTimestamp: este lo conserva.
 function fbSanitizeTs(obj){
   const { updatedAt, ...rest } = obj;
