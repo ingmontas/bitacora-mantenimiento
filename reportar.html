@@ -132,7 +132,7 @@
       <div class="card-sub">Elige el equipo. Los técnicos reciben el aviso en su celular al momento.</div>
       <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="verEstado()">📋 Ver estado de los reportes <span id="estado-badge"></span></button>
       <input type="text" id="buscar-equipo" placeholder="Buscar equipo..." oninput="renderListaEquipos()" style="margin-bottom:10px;"/>
-      <div id="lista-equipos"></div>
+      <div id="lista-equipos"><div class="empty" style="padding:20px 10px;"><p>⏳ Cargando equipos…</p></div></div>
     </div>
   </div>
 
@@ -238,7 +238,19 @@ let equipoSeleccionado = null; // {id, nombre, localidad}
 let prioridadSeleccionada = 'media';
 
 document.addEventListener('DOMContentLoaded', () => {
+  // (4 oct 2026) Antes, si la sesión no abría, la pantalla se quedaba en
+  // "Cargando..." sin lista de equipos y sin decir nada. Ahora explica qué pasa.
+  let sesionLista = false;
+  const avisoSesion = (texto) => {
+    document.getElementById('header-sub').textContent = '2026 · Sin sesión';
+    document.getElementById('lista-equipos').innerHTML = `<div class="empty"><span class="emoji">⚠️</span><p>${texto}</p>
+      <a class="btn" style="display:block;margin-top:12px;text-decoration:none;text-align:center;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="location.reload()">🔄 Reintentar</button>
+      <p style="margin-top:12px;font-size:12.5px;">Sin usuario también puedes reportar escaneando el código QR pegado en la máquina.</p></div>`;
+  };
+  setTimeout(() => { if (!sesionLista) avisoSesion('La conexión está tardando más de lo normal. Revisa el internet o la señal y pulsa Reintentar.'); }, 12000);
   window.fbReady.then(() => {
+    sesionLista = true;
     document.getElementById('header-sub').textContent =
       (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     // Nota a propósito: NO se llama fbRenderMiniNav() aquí — el rol
@@ -252,7 +264,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const qEquipo = new URLSearchParams(location.search).get('equipo');
     if (qEquipo) intentarAbrirDesdeQuery(qEquipo);
   }).catch((err) => {
+    sesionLista = true;
     console.warn('Sin sesión activa:', err.message);
+    avisoSesion(err && err.message && err.message !== 'No hay sesión iniciada' ? err.message : 'Tu sesión no está abierta en este equipo.');
   });
 
   window.addEventListener('online', updateHeaderStatus);
