@@ -434,7 +434,7 @@
 <div class="modal-bg" id="modalBulkEquipos">
   <div class="modal" style="max-width:860px;">
     <h3>📋 Carga masiva de equipos</h3>
-    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados (Nombre, Marca, Modelo, Serie, Área, Frecuencia), las columnas pueden venir en cualquier orden. Antes de guardar verás una vista previa.</div>
+    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados, las columnas pueden venir en cualquier orden y también se carga la ficha técnica: Tensión, Potencia, Frecuencia eléctrica, Fase, Tamaño, Peso, Made in y fechas de fabricación, instalación, compra y garantía. Antes de guardar verás una vista previa.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <button type="button" class="btn sm" onclick="document.getElementById('bulkEquiposFile').click()">📂 Subir archivo Excel / CSV</button>
       <button type="button" class="btn secondary sm" onclick="descargarPlantillaEquipos()">⬇ Descargar plantilla</button>
@@ -1508,18 +1508,33 @@ function addDaysStrInv(baseStr, dias){
 /* ═══════════════ CARGA MASIVA DE EQUIPOS (rehecha 4 oct 2026) ═══════════════
    - Acepta pegar desde Excel (tabulaciones), CSV con ; o , y archivos .xlsx/.csv.
    - Reconoce encabezados en cualquier orden; sin encabezados usa el orden fijo.
+   - Con encabezados también llena la ficha técnica: tensión, potencia,
+     frecuencia eléctrica, fase, tamaño, peso, made in y las fechas.
    - Respeta celdas entre comillas (Excel las usa cuando hay saltos de línea).
    - Vista previa fila por fila antes de guardar; une filas repetidas.
    - Guarda en lotes de 400 (Firestore admite hasta 500 escrituras por lote). */
 let bulkEquiposFilas = [];   // filas ya interpretadas, listas para guardar
 const COLS_EQUIPO = [
-  { k: 'nombre',    alias: ['nombre','equipo','maquina','máquina','nombre del equipo','descripcion','descripción'] },
-  { k: 'marca',     alias: ['marca','fabricante'] },
-  { k: 'modelo',    alias: ['modelo'] },
-  { k: 'serie',     alias: ['serie','serial','numero de serie','número de serie','n° serie','no. serie','s/n','sn'] },
-  { k: 'localidad', alias: ['area','área','localidad','ubicacion','ubicación','linea','línea','zona','departamento'] },
-  { k: 'dias',      alias: ['frecuencia','frecuencia checklist','frecuencia de checklist','dias','días','frecuencia (dias)','frecuencia (días)'] },
+  { k: 'nombre',        l: 'Nombre',            alias: ['nombre','equipo','maquina','nombre del equipo','nombre equipo','descripcion'] },
+  { k: 'marca',         l: 'Marca',             alias: ['marca','fabricante'] },
+  { k: 'modelo',        l: 'Modelo',            alias: ['modelo'] },
+  { k: 'serie',         l: 'Serie',             alias: ['serie','serial','numero de serie','n° serie','no. serie','no serie','s/n','sn'] },
+  { k: 'localidad',     l: 'Área',              alias: ['area','localidad','ubicacion','linea','zona','departamento'] },
+  { k: 'dias',          l: 'Frec. checklist',   alias: ['frecuencia checklist','frecuencia de checklist','frecuencia checklist (dias)','frecuencia (dias)','dias','checklist','cada cuantos dias'] },
+  { k: 'frecuencia',    l: 'Frec. eléctrica',   alias: ['frecuencia electrica','hz','frecuencia (hz)','frecuencia hz'] },
+  { k: 'tension',       l: 'Tensión',           alias: ['tension','voltaje','voltage','tension (v)','voltaje (v)','v'] },
+  { k: 'potencia',      l: 'Potencia',          alias: ['potencia','kw','hp','potencia (kw)','potencia (hp)'] },
+  { k: 'fase',          l: 'Fase',              alias: ['fase','fases'] },
+  { k: 'tamano',        l: 'Tamaño',            alias: ['tamano','dimensiones','medidas','dimension'] },
+  { k: 'peso',          l: 'Peso',              alias: ['peso','peso (kg)'] },
+  { k: 'madein',        l: 'Made in',           alias: ['made in','origen','pais','pais de origen','procedencia','fabricado en'] },
+  { k: 'fabricacion',   l: 'Fabricación',       alias: ['fecha fabricacion','fecha de fabricacion','fabricacion','ano fabricacion','año fabricacion','ano de fabricacion','año de fabricacion'], fecha: true },
+  { k: 'instalacion',   l: 'Instalación',       alias: ['fecha instalacion','fecha de instalacion','instalacion'], fecha: true },
+  { k: 'fechaCompra',   l: 'Compra',            alias: ['fecha compra','fecha de compra','compra'], fecha: true },
+  { k: 'garantiaHasta', l: 'Garantía hasta',    alias: ['garantia','garantia hasta','vence garantia','fin de garantia','vencimiento garantia'], fecha: true },
 ];
+const CAMPOS_FICHA = COLS_EQUIPO.map(c => c.k).filter(k => k !== 'nombre' && k !== 'dias');
+const LBL_EQ = Object.fromEntries(COLS_EQUIPO.map(c => [c.k, c.l]));
 const sinAcentos = s => (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 
 function openBulkEquiposModal(){
@@ -1552,21 +1567,57 @@ function parseTabla(texto){
   return filas.map(f => f.map(c => c.replace(/\s+/g,' ').trim())).filter(f => f.some(c => c));
 }
 
+// Fecha escrita de cualquier forma → AAAA-MM-DD (lo que usan los campos de fecha).
+// Acepta 2022-06-15, 15/06/2022, 15-06-22, 2022-06 (→ día 1), 2022 (→ 1 de enero)
+// y el número de serie de fecha de Excel (ej. 44713). Día primero, como en
+// Latinoamérica. Devuelve { v, aviso } o { error }.
+function normalizarFecha(txt){
+  const s = (txt || '').trim();
+  if (!s) return { v: '' };
+  const p2 = n => String(n).padStart(2, '0');
+  const ok = (y, m, d) => { const f = new Date(y, m - 1, d); return f.getFullYear() === y && f.getMonth() === m - 1 && f.getDate() === d; };
+  let m;
+  if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s)) && ok(+m[1], +m[2], +m[3])) return { v: `${m[1]}-${p2(m[2])}-${p2(m[3])}` };
+  if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/.exec(s))) {
+    let y = +m[3]; if (y < 100) y += 2000;
+    if (ok(y, +m[2], +m[1])) return { v: `${y}-${p2(m[2])}-${p2(m[1])}` };
+  }
+  if ((m = /^(\d{4})[-/.](\d{1,2})$/.exec(s)) && +m[2] >= 1 && +m[2] <= 12) return { v: `${m[1]}-${p2(m[2])}-01`, aviso: 'sin día: se usó el día 1' };
+  if ((m = /^(\d{1,2})[-/.](\d{4})$/.exec(s)) && +m[1] >= 1 && +m[1] <= 12) return { v: `${m[2]}-${p2(m[1])}-01`, aviso: 'sin día: se usó el día 1' };
+  if (/^(19|20)\d{2}$/.test(s)) return { v: `${s}-01-01`, aviso: 'solo año: se usó el 1 de enero' };
+  if (/^\d{5}$/.test(s) && +s > 20000 && +s < 60000) { const f = new Date(Date.UTC(1899, 11, 30) + (+s) * 86400000); return { v: `${f.getUTCFullYear()}-${p2(f.getUTCMonth() + 1)}-${p2(f.getUTCDate())}` }; }
+  return { error: true };
+}
+
 // Convierte la tabla en filas {nombre, marca, ...} según encabezados o el orden fijo.
 function interpretarEquipos(tabla){
-  if (!tabla.length) return { filas: [], conEncabezado: false };
+  if (!tabla.length) return { filas: [], conEncabezado: false, columnas: [] };
   const head = tabla[0].map(sinAcentos);
   const mapa = {};
   COLS_EQUIPO.forEach(col => {
-    const i = head.findIndex(h => col.alias.map(sinAcentos).includes(h));
-    if (i >= 0) mapa[col.k] = i;
+    // se prueba cada alias en orden de prioridad (ej. "Nombre" antes que "Descripción")
+    for (const a of col.alias.map(sinAcentos)) {
+      const i = head.findIndex((h, j) => h === a && !Object.values(mapa).includes(j));
+      if (i >= 0) { mapa[col.k] = i; break; }
+    }
   });
+  // "Frecuencia" a secas puede ser la del checklist (días) o la eléctrica (50/60 Hz):
+  // se decide por lo que traen las celdas.
+  const iFrec = head.findIndex(h => h === 'frecuencia');
+  if (iFrec >= 0 && !Object.values(mapa).includes(iFrec)) {
+    const vals = tabla.slice(1).map(f => (f[iFrec] || '').toLowerCase()).filter(Boolean);
+    const electrica = vals.some(v => /hz|\d\s*\/\s*\d/.test(v));
+    if (electrica && mapa.frecuencia === undefined) mapa.frecuencia = iFrec;
+    else if (!electrica && mapa.dias === undefined) mapa.dias = iFrec;
+  }
   const conEncabezado = mapa.nombre !== undefined;
   const orden = conEncabezado ? mapa : { nombre: 0, marca: 1, modelo: 2, serie: 3, localidad: 4, dias: 5 };
   const cuerpo = conEncabezado ? tabla.slice(1) : tabla;
-  return { conEncabezado, columnas: Object.keys(orden), filas: cuerpo.map((c, n) => {
-    const v = k => orden[k] !== undefined ? (c[orden[k]] || '').trim() : '';
-    return { linea: n + (conEncabezado ? 2 : 1), nombre: v('nombre'), marca: v('marca'), modelo: v('modelo'), serie: v('serie'), localidad: v('localidad'), dias: v('dias') };
+  const ignoradas = conEncabezado ? tabla[0].filter((h, i) => h && !Object.values(mapa).includes(i)) : [];
+  return { conEncabezado, ignoradas, columnas: COLS_EQUIPO.map(c => c.k).filter(k => orden[k] !== undefined), filas: cuerpo.map((c, n) => {
+    const r = { linea: n + (conEncabezado ? 2 : 1) };
+    COLS_EQUIPO.forEach(col => { r[col.k] = orden[col.k] !== undefined ? (c[orden[col.k]] || '').trim() : ''; });
+    return r;
   }) };
 }
 
@@ -1580,9 +1631,9 @@ async function leerArchivoEquipos(ev){
     if (/\.(xlsx|xls)$/i.test(f.name)) {
       status.textContent = 'Leyendo Excel…';
       if (!window.XLSX) await new Promise((ok, mal) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.')); document.head.appendChild(s); });
-      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
       const hoja = wb.Sheets[wb.SheetNames[0]];
-      texto = XLSX.utils.sheet_to_csv(hoja, { FS: '\t', blankrows: false });
+      texto = XLSX.utils.sheet_to_csv(hoja, { FS: '\t', blankrows: false, dateNF: 'yyyy-mm-dd' });
     } else {
       texto = await f.text();
     }
@@ -1593,7 +1644,9 @@ async function leerArchivoEquipos(ev){
 }
 
 function descargarPlantillaEquipos(){
-  const csv = '﻿Nombre;Marca;Modelo;Serie;Área;Frecuencia checklist (días)\nCOMPRESOR 2;INGERSOLL RAND;R11i;SN-4521;Compresor de Aire;7\n';
+  const cab = ['Nombre','Marca','Modelo','Serie','Área','Frecuencia checklist (días)','Tensión','Potencia','Frecuencia eléctrica','Fase','Tamaño','Peso','Made in','Fecha fabricación','Fecha instalación','Fecha compra','Garantía hasta'];
+  const ej = ['COMPRESOR 2','INGERSOLL RAND','R11i','SN-4521','Compresor de Aire','7','220 V','11 kW','60 Hz','Trifásico','1200x800x1500 mm','350 kg','USA','15/06/2022','01/09/2022','10/05/2022','10/05/2024'];
+  const csv = '﻿' + cab.join(';') + '\n' + ej.join(';') + '\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = 'plantilla_equipos.csv'; a.click(); URL.revokeObjectURL(url);
 }
@@ -1611,7 +1664,7 @@ function previsualizarEquipos(){
   const prev = document.getElementById('bulkEquiposPreview');
   const okBtn = document.getElementById('bulkEquiposOk');
   const sobrescribir = document.getElementById('bulkEquiposSobrescribir').checked;
-  const { filas, conEncabezado, columnas } = interpretarEquipos(parseTabla(document.getElementById('bulkEquiposPasteArea').value));
+  const { filas, conEncabezado, columnas, ignoradas } = interpretarEquipos(parseTabla(document.getElementById('bulkEquiposPasteArea').value));
   bulkEquiposFilas = [];
   if (!filas.length) { prev.innerHTML = '<div class="info-box" style="padding:10px;color:var(--muted);font-size:12.5px;">Pega filas o sube un archivo para ver la vista previa.</div>'; okBtn.disabled = true; return; }
 
@@ -1620,17 +1673,22 @@ function previsualizarEquipos(){
   filas.forEach(f => {
     const r = { ...f, problemas: [], avisos: [] };
     if (!r.nombre) { r.estado = 'error'; r.problemas.push('Falta el nombre'); salida.push(r); return; }
-    if (r.dias && !(parseInt(r.dias, 10) > 0)) { r.avisos.push(`Frecuencia "${r.dias}" no es un número: se ignora`); r.dias = ''; }
+    if (r.dias && !(parseInt(r.dias, 10) > 0)) { r.avisos.push(`Frecuencia de checklist "${r.dias}" no es un número de días: se ignora`); r.dias = ''; }
     if (r.localidad) { const c = areaCanonica(r.localidad); if (c) r.localidad = c; else r.avisos.push(`Área "${r.localidad}" no está en la lista de Áreas`); }
+    COLS_EQUIPO.filter(c => c.fecha && r[c.k]).forEach(c => {
+      const n = normalizarFecha(r[c.k]);
+      if (n.error) { r.avisos.push(`${c.l} "${r[c.k]}" no se entiende como fecha: se ignora`); r[c.k] = ''; }
+      else { r[c.k] = n.v; if (n.aviso) r.avisos.push(`${c.l}: ${n.aviso}`); }
+    });
     const k = normalizeKey(r.nombre);
-    if (vistos.has(k)) { const p = vistos.get(k); ['marca','modelo','serie','localidad','dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.linea}: se unió`); return; }
+    if (vistos.has(k)) { const p = vistos.get(k); [...CAMPOS_FICHA, 'dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.linea}: se unió`); return; }
     vistos.set(k, r);
     const ex = DB.find(e => normalizeKey(e.nombre) === k);
     if (!ex) r.estado = 'nuevo';
     else {
       r.existenteId = ex.id;
       const cambios = {};
-      ['marca','modelo','serie','localidad'].forEach(c => { if (r[c] && (sobrescribir ? r[c] !== (ex[c]||'') : !ex[c])) cambios[c] = r[c]; });
+      CAMPOS_FICHA.forEach(c => { if (r[c] && (sobrescribir ? r[c] !== (ex[c]||'') : !ex[c])) cambios[c] = r[c]; });
       const d = parseInt(r.dias, 10);
       if (d > 0 && (sobrescribir ? d !== ex.checklistFrecuenciaDias : !ex.checklistFrecuenciaDias)) cambios.dias = d;
       r.cambios = cambios;
@@ -1641,18 +1699,19 @@ function previsualizarEquipos(){
   bulkEquiposFilas = salida.filter(r => r.estado === 'nuevo' || r.estado === 'actualiza');
   const n = e => salida.filter(r => r.estado === e).length;
   const etiqueta = { nuevo: ['Nuevo', 'var(--teal)'], actualiza: ['Se actualiza', 'var(--amber)'], igual: ['Ya existe, sin cambios', 'var(--muted)'], error: ['Error', 'var(--red)'] };
-  const nombresCol = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Área', dias:'Frecuencia' };
+  const extras = CAMPOS_FICHA.filter(k => !['marca','modelo','serie','localidad'].includes(k) && columnas.includes(k));
   prev.innerHTML = `
     <div style="font-size:12.5px;margin:6px 0 8px;line-height:1.6;">
-      ${conEncabezado ? `✅ Encabezados reconocidos: <b>${columnas.map(c => nombresCol[c]).join(', ')}</b>` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia'}<br>
+      ${conEncabezado ? `✅ Columnas reconocidas: <b>${columnas.map(c => LBL_EQ[c]).join(', ')}</b>${ignoradas.length ? `<br>ℹ️ Columnas que no se usan: ${ignoradas.map(escInv).join(', ')}` : ''}` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia. Para cargar también tensión, potencia, fechas, etc., agrega una fila de encabezados (descarga la plantilla).'}<br>
       <b style="color:var(--teal)">${n('nuevo')} nuevos</b> · <b style="color:var(--amber)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--red)">${n('error')} con error (no se cargan)</b>` : ''}
     </div>
     <div class="table-card" style="max-height:300px;overflow:auto;margin:0;">
-      <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th><th>Notas</th></tr></thead>
+      <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th>${extras.length ? '<th>Ficha técnica</th>' : ''}<th>Notas</th></tr></thead>
       <tbody>${salida.map(r => `<tr>
         <td>${r.linea}</td><td><span style="color:${etiqueta[r.estado][1]};font-weight:700;white-space:nowrap;">${etiqueta[r.estado][0]}</span></td>
         <td><b>${escInv(r.nombre) || '—'}</b></td><td>${escInv(r.marca)}</td><td>${escInv(r.modelo)}</td><td>${escInv(r.serie)}</td><td>${escInv(r.localidad)}</td><td>${escInv(r.dias)}</td>
-        <td style="font-size:11px;color:var(--muted);">${[...r.problemas, ...r.avisos, r.estado === 'actualiza' ? 'Cambia: ' + Object.keys(r.cambios).map(c => nombresCol[c]).join(', ') : ''].filter(Boolean).map(escInv).join('<br>')}</td></tr>`).join('')}</tbody></table>
+        ${extras.length ? `<td style="font-size:11px;">${extras.filter(k => r[k]).map(k => `<span style="color:var(--muted)">${LBL_EQ[k]}:</span> ${escInv(r[k])}`).join('<br>')}</td>` : ''}
+        <td style="font-size:11px;color:var(--muted);">${[...r.problemas, ...r.avisos, r.estado === 'actualiza' ? 'Cambia: ' + Object.keys(r.cambios).map(c => c === 'dias' ? 'Frec. checklist' : LBL_EQ[c]).join(', ') : ''].filter(Boolean).map(escInv).join('<br>')}</td></tr>`).join('')}</tbody></table>
     </div>`;
   okBtn.disabled = !bulkEquiposFilas.length;
   okBtn.textContent = bulkEquiposFilas.length ? `Cargar ${bulkEquiposFilas.length} equipo(s)` : 'Nada que cargar';
@@ -1675,7 +1734,8 @@ async function bulkImportEquipos(){
       const batch = db.batch();
       filas.slice(i, i + 400).forEach(r => {
         if (r.estado === 'nuevo') {
-          const datos = { nombre: r.nombre, marca: r.marca, modelo: r.modelo, serie: r.serie, localidad: r.localidad, repuestos: [], updatedAt: fbTimestamp() };
+          const datos = { nombre: r.nombre, repuestos: [], updatedAt: fbTimestamp() };
+          CAMPOS_FICHA.forEach(c => { datos[c] = r[c] || ''; });
           const d = parseInt(r.dias, 10);
           if (d > 0) { datos.checklistFrecuenciaDias = d; datos.checklistProximaFecha = addDaysStrInv(hoyStr, d); }
           batch.set(db.collection('equipos').doc(), fbSanitizeTs(datos));
