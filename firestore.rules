@@ -76,7 +76,7 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
     match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
-    match /areas/{id}   { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /areas/{id}   { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esEncargado(); }
     match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
     // CORRECCIÓN (revisión previa a publicar): en la app actual, los
     // repuestos de cada equipo se guardan como un array dentro del propio
@@ -89,8 +89,10 @@ service cloud.firestore {
     match /equipos/{id} {
       // Operador necesita ver la lista de equipos para elegir cuál falló
       // (solo lectura — crear/editar/borrar equipos sigue igual que antes).
-      allow read: if esOperadorOMas();
-      allow create, update: if esTecnicoOMas();
+      // (4 oct 2026) Almacén también administra el inventario de repuestos:
+      // antes no podía ni ver los equipos.
+      allow read: if esOperadorOMas() || esAlmacenOMas();
+      allow create, update: if esTecnicoOMas() || esAlmacenOMas();
       allow delete: if esAdmin();
     }
     match /ots/{id} {
@@ -118,7 +120,7 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
     match /movimientos/{id} {
-      allow read: if esTecnicoOMas();
+      allow read: if esTecnicoOMas() || esAlmacenOMas();
       allow create: if esAlmacenOMas() || esTecnicoOMas();
       allow update, delete: if esAdmin();
     }

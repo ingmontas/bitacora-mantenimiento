@@ -58,6 +58,15 @@
   /* equipo cards grid */
   .section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
   .section-hdr h2{font-size:15px;margin:0;}
+  /* Orden y filtros de equipos (4 oct 2026) */
+  .eq-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .eq-toolbar input,.eq-toolbar select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}
+  .eq-toolbar input{flex:1;min-width:180px;}
+  .eq-toolbar .cnt{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .area-hdr{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:10px 0 -2px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  .area-hdr h4{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--amber);}
+  .area-hdr span{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
   .equipo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:10px;}
   .equipo-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;cursor:pointer;transition:border-color .15s;position:relative;overflow:hidden;}
   .equipo-card:hover{border-color:var(--amber-dim);}
@@ -205,6 +214,17 @@
     <div class="section-hdr">
       <h2>Equipos / Máquinas</h2>
       <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
+    </div>
+    <div class="eq-toolbar">
+      <input type="text" id="eqFiltro" placeholder="Filtrar equipos por nombre, marca, modelo o serie…" oninput="renderHome()">
+      <select id="eqArea" onchange="guardarOrdenEq();renderHome()"><option value="">Todas las áreas</option></select>
+      <select id="eqOrden" onchange="guardarOrdenEq();renderHome()">
+        <option value="area">Agrupar por área</option>
+        <option value="nombre">Nombre A–Z</option>
+        <option value="problemas">Más faltantes primero</option>
+        <option value="recientes">Últimos modificados</option>
+      </select>
+      <span class="cnt" id="eqCnt"></span>
     </div>
     <div class="equipo-grid" id="equipoGrid"></div>
   </div>
@@ -412,16 +432,26 @@
 
 <!-- Modal: carga masiva de equipos (pegar tabla) -->
 <div class="modal-bg" id="modalBulkEquipos">
-  <div class="modal" style="max-width:720px;">
+  <div class="modal" style="max-width:860px;">
     <h3>📋 Carga masiva de equipos</h3>
-    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por equipo. Si un equipo ya existe (mismo nombre), se completan solo los datos que tenía vacíos — nunca se borra nada que ya estaba cargado. La frecuencia de checklist es opcional.</div>
-    <div class="form-field full">
-      <label>Formato de columnas: Nombre* · Marca · Modelo · Serie · Área (Localidad) · Frecuencia de checklist (días, opcional)</label>
-      <textarea id="bulkEquiposPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Sala de máquinas	7"></textarea>
+    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados (Nombre, Marca, Modelo, Serie, Área, Frecuencia), las columnas pueden venir en cualquier orden. Antes de guardar verás una vista previa.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button type="button" class="btn sm" onclick="document.getElementById('bulkEquiposFile').click()">📂 Subir archivo Excel / CSV</button>
+      <button type="button" class="btn secondary sm" onclick="descargarPlantillaEquipos()">⬇ Descargar plantilla</button>
+      <input type="file" id="bulkEquiposFile" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="leerArchivoEquipos(event)">
     </div>
+    <div class="form-field full">
+      <label>O pega aquí las filas (con o sin encabezados). Sin encabezados el orden es: Nombre* · Marca · Modelo · Serie · Área · Frecuencia de checklist (días)</label>
+      <textarea id="bulkEquiposPasteArea" style="min-height:150px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="Nombre	Marca	Modelo	Serie	Área	Frecuencia&#10;COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Compresor de Aire	7&#10;TELAR 10	STARLINGER	SL-6	A-8812	Weaving	"></textarea>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin:8px 0;cursor:pointer;">
+      <input type="checkbox" id="bulkEquiposSobrescribir" style="width:auto;" onchange="previsualizarEquipos()"> Si el equipo ya existe, reemplazar sus datos con los del archivo (si no se marca, solo se completan los datos vacíos)
+    </label>
+    <div id="bulkEquiposPreview"></div>
     <div class="modal-actions">
       <button class="btn secondary" onclick="closeModal('modalBulkEquipos')">Cancelar</button>
-      <button class="btn" onclick="bulkImportEquipos()">Procesar y cargar</button>
+      <button class="btn secondary" onclick="previsualizarEquipos()">👁 Ver vista previa</button>
+      <button class="btn" id="bulkEquiposOk" onclick="bulkImportEquipos()" disabled>Cargar equipos</button>
     </div>
     <div id="bulkEquiposStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
   </div>
@@ -685,7 +715,7 @@ function fbSaveEquipo(e){
   const { id, ...rest } = e;
   checkEquipoSize(e);
   const localUpdatedAt = e.updatedAt; // snapshot ANTES de que este guardado cambie updatedAt
-  db.collection('equipos').doc(id).set(fbSanitize({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
+  db.collection('equipos').doc(id).set(fbSanitizeTs({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
     .catch(err => { console.error('Error guardando equipo:', err); showToast('⚠️ No se pudo sincronizar: '+err.message); });
   warnIfEquipoChangedSinceLoad(id, e.nombre, localUpdatedAt);
 }
@@ -735,13 +765,13 @@ async function loadDB(){
     for(const eq of SEED){
       const ref = equiposRef.doc();
       const { id, ...rest } = eq;
-      await ref.set(fbSanitize({ ...rest, updatedAt: fbTimestamp() })).catch(err=>console.error(err));
+      await ref.set(fbSanitizeTs({ ...rest, updatedAt: fbTimestamp() })).catch(err=>console.error(err));
     }
     hideLoading();
   }
 
   equiposRef.onSnapshot((snap)=>{
-    DB = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    DB = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => cmpNat(a.nombre, b.nombre));
     updateSyncStatus('ok');
     const box = document.getElementById('fbStatusBox');
     if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${firebaseConfig.projectId}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
@@ -824,17 +854,27 @@ function renderHome(){
     ${sinContar? `<div class="kpi"><div class="lbl">Sin contar</div><div class="val" style="color:var(--muted);">${sinContar}</div></div>` : ''}
   `;
 
+  pintarFiltroAreas();
+  const { lista, orden } = equiposOrdenados();
+  document.getElementById('eqCnt').textContent = lista.length === DB.length ? '' : `${lista.length} de ${DB.length}`;
   const grid = document.getElementById('equipoGrid');
-  grid.innerHTML = DB.map(e=>{
+  let areaActual = null;
+  grid.innerHTML = lista.map(e=>{
+    let hdr = '';
+    if (orden === 'area' && (e.localidad || '') !== areaActual) {
+      areaActual = e.localidad || '';
+      const n = lista.filter(x => (x.localidad || '') === areaActual).length;
+      hdr = `<div class="area-hdr"><h4>${escInv(areaActual || 'Sin área asignada')}</h4><span>${n} equipo${n === 1 ? '' : 's'}</span></div>`;
+    }
     const parts = e.repuestos;
     const sin = parts.filter(p=>stockStatus(p)==='sin').length;
     const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
     const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
     const ok = parts.length - sin - baj - noData;
-    return `
+    return hdr + `
       <div class="equipo-card" onclick="openEquipo('${e.id}')">
-        ${e.localidad? `<span class="badge-loc">${e.localidad}</span>` : ''}
-        <h3>${e.nombre}</h3>
+        ${e.localidad && orden !== 'area' ? `<span class="badge-loc">${escInv(e.localidad)}</span>` : ''}
+        <h3>${escInv(e.nombre)}</h3>
         <div class="meta">${[e.marca,e.modelo].filter(Boolean).join(' · ') || 'Sin datos de marca/modelo'}</div>
         <div class="stats-row">
           <div class="stat ok"><b>${ok}</b>OK</div>
@@ -845,7 +885,7 @@ function renderHome(){
         </div>
       </div>
     `;
-  }).join('') + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
+  }).join('') + (lista.length ? '' : `<div class="area-hdr"><span>Ningún equipo coincide con el filtro.</span></div>`) + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
 }
 
 /* ═══════════════ RENDER: DETALLE DE EQUIPO ═══════════════ */
@@ -1459,80 +1499,251 @@ async function bulkImportRepuestos(){
    sobrescribe un dato que ya estaba cargado a mano. La frecuencia de
    checklist es opcional y, si viene, también deja el equipo listo para
    aparecer en "Hoy te toca" dentro de checklist.html. */
-function openBulkEquiposModal(){
-  document.getElementById('bulkEquiposPasteArea').value = '';
-  document.getElementById('bulkEquiposStatus').textContent = '';
-  openModal('modalBulkEquipos');
-}
-
 function addDaysStrInv(baseStr, dias){
   const base = baseStr ? new Date(baseStr + 'T00:00:00') : new Date();
   base.setDate(base.getDate() + Number(dias || 0));
   return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
 }
 
-async function bulkImportEquipos(){
-  const text = document.getElementById('bulkEquiposPasteArea').value;
-  const status = document.getElementById('bulkEquiposStatus');
-  if(!text.trim()){ showToast('⚠️ Pega la tabla primero'); return; }
-  const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim());
+/* ═══════════════ CARGA MASIVA DE EQUIPOS (rehecha 4 oct 2026) ═══════════════
+   - Acepta pegar desde Excel (tabulaciones), CSV con ; o , y archivos .xlsx/.csv.
+   - Reconoce encabezados en cualquier orden; sin encabezados usa el orden fijo.
+   - Respeta celdas entre comillas (Excel las usa cuando hay saltos de línea).
+   - Vista previa fila por fila antes de guardar; une filas repetidas.
+   - Guarda en lotes de 400 (Firestore admite hasta 500 escrituras por lote). */
+let bulkEquiposFilas = [];   // filas ya interpretadas, listas para guardar
+const COLS_EQUIPO = [
+  { k: 'nombre',    alias: ['nombre','equipo','maquina','máquina','nombre del equipo','descripcion','descripción'] },
+  { k: 'marca',     alias: ['marca','fabricante'] },
+  { k: 'modelo',    alias: ['modelo'] },
+  { k: 'serie',     alias: ['serie','serial','numero de serie','número de serie','n° serie','no. serie','s/n','sn'] },
+  { k: 'localidad', alias: ['area','área','localidad','ubicacion','ubicación','linea','línea','zona','departamento'] },
+  { k: 'dias',      alias: ['frecuencia','frecuencia checklist','frecuencia de checklist','dias','días','frecuencia (dias)','frecuencia (días)'] },
+];
+const sinAcentos = s => (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 
+function openBulkEquiposModal(){
+  document.getElementById('bulkEquiposPasteArea').value = '';
+  document.getElementById('bulkEquiposStatus').textContent = '';
+  document.getElementById('bulkEquiposPreview').innerHTML = '';
+  document.getElementById('bulkEquiposOk').disabled = true;
+  bulkEquiposFilas = [];
+  openModal('modalBulkEquipos');
+}
+
+// Separa texto en filas/celdas respetando comillas. Detecta el separador.
+function parseTabla(texto){
+  texto = (texto||'').replace(/\r\n?/g,'\n');
+  const primera = texto.split('\n').find(l => l.trim()) || '';
+  const sep = primera.includes('\t') ? '\t' : (primera.includes(';') ? ';' : (primera.includes(',') ? ',' : '\t'));
+  const filas = []; let fila = [], celda = '', comillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    if (comillas) {
+      if (ch === '"' && texto[i+1] === '"') { celda += '"'; i++; }
+      else if (ch === '"') comillas = false;
+      else celda += ch;
+    } else if (ch === '"' && celda === '') comillas = true;
+    else if (ch === sep) { fila.push(celda); celda = ''; }
+    else if (ch === '\n') { fila.push(celda); filas.push(fila); fila = []; celda = ''; }
+    else celda += ch;
+  }
+  fila.push(celda); filas.push(fila);
+  return filas.map(f => f.map(c => c.replace(/\s+/g,' ').trim())).filter(f => f.some(c => c));
+}
+
+// Convierte la tabla en filas {nombre, marca, ...} según encabezados o el orden fijo.
+function interpretarEquipos(tabla){
+  if (!tabla.length) return { filas: [], conEncabezado: false };
+  const head = tabla[0].map(sinAcentos);
+  const mapa = {};
+  COLS_EQUIPO.forEach(col => {
+    const i = head.findIndex(h => col.alias.map(sinAcentos).includes(h));
+    if (i >= 0) mapa[col.k] = i;
+  });
+  const conEncabezado = mapa.nombre !== undefined;
+  const orden = conEncabezado ? mapa : { nombre: 0, marca: 1, modelo: 2, serie: 3, localidad: 4, dias: 5 };
+  const cuerpo = conEncabezado ? tabla.slice(1) : tabla;
+  return { conEncabezado, columnas: Object.keys(orden), filas: cuerpo.map((c, n) => {
+    const v = k => orden[k] !== undefined ? (c[orden[k]] || '').trim() : '';
+    return { linea: n + (conEncabezado ? 2 : 1), nombre: v('nombre'), marca: v('marca'), modelo: v('modelo'), serie: v('serie'), localidad: v('localidad'), dias: v('dias') };
+  }) };
+}
+
+async function leerArchivoEquipos(ev){
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  const status = document.getElementById('bulkEquiposStatus');
+  try {
+    let texto;
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      status.textContent = 'Leyendo Excel…';
+      if (!window.XLSX) await new Promise((ok, mal) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.')); document.head.appendChild(s); });
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const hoja = wb.Sheets[wb.SheetNames[0]];
+      texto = XLSX.utils.sheet_to_csv(hoja, { FS: '\t', blankrows: false });
+    } else {
+      texto = await f.text();
+    }
+    document.getElementById('bulkEquiposPasteArea').value = texto;
+    status.textContent = `Archivo "${f.name}" leído.`;
+    previsualizarEquipos();
+  } catch (err) { status.textContent = '⚠️ ' + err.message; }
+}
+
+function descargarPlantillaEquipos(){
+  const csv = '﻿Nombre;Marca;Modelo;Serie;Área;Frecuencia checklist (días)\nCOMPRESOR 2;INGERSOLL RAND;R11i;SN-4521;Compresor de Aire;7\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'plantilla_equipos.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+// Área escrita en el archivo → nombre exacto de un área ya registrada (sin
+// importar mayúsculas ni acentos). Devuelve null si no existe.
+function areaCanonica(txt){
+  const k = sinAcentos(txt);
+  if (!k) return '';
+  const lista = [...currentAreasInventario, ...DB.map(e => e.localidad).filter(Boolean)];
+  return lista.find(a => sinAcentos(a) === k) || null;
+}
+
+function previsualizarEquipos(){
+  const prev = document.getElementById('bulkEquiposPreview');
+  const okBtn = document.getElementById('bulkEquiposOk');
+  const sobrescribir = document.getElementById('bulkEquiposSobrescribir').checked;
+  const { filas, conEncabezado, columnas } = interpretarEquipos(parseTabla(document.getElementById('bulkEquiposPasteArea').value));
+  bulkEquiposFilas = [];
+  if (!filas.length) { prev.innerHTML = '<div class="info-box" style="padding:10px;color:var(--muted);font-size:12.5px;">Pega filas o sube un archivo para ver la vista previa.</div>'; okBtn.disabled = true; return; }
+
+  const vistos = new Map(); // nombre normalizado → fila (une repetidas dentro del archivo)
+  const salida = [];
+  filas.forEach(f => {
+    const r = { ...f, problemas: [], avisos: [] };
+    if (!r.nombre) { r.estado = 'error'; r.problemas.push('Falta el nombre'); salida.push(r); return; }
+    if (r.dias && !(parseInt(r.dias, 10) > 0)) { r.avisos.push(`Frecuencia "${r.dias}" no es un número: se ignora`); r.dias = ''; }
+    if (r.localidad) { const c = areaCanonica(r.localidad); if (c) r.localidad = c; else r.avisos.push(`Área "${r.localidad}" no está en la lista de Áreas`); }
+    const k = normalizeKey(r.nombre);
+    if (vistos.has(k)) { const p = vistos.get(k); ['marca','modelo','serie','localidad','dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.linea}: se unió`); return; }
+    vistos.set(k, r);
+    const ex = DB.find(e => normalizeKey(e.nombre) === k);
+    if (!ex) r.estado = 'nuevo';
+    else {
+      r.existenteId = ex.id;
+      const cambios = {};
+      ['marca','modelo','serie','localidad'].forEach(c => { if (r[c] && (sobrescribir ? r[c] !== (ex[c]||'') : !ex[c])) cambios[c] = r[c]; });
+      const d = parseInt(r.dias, 10);
+      if (d > 0 && (sobrescribir ? d !== ex.checklistFrecuenciaDias : !ex.checklistFrecuenciaDias)) cambios.dias = d;
+      r.cambios = cambios;
+      r.estado = Object.keys(cambios).length ? 'actualiza' : 'igual';
+    }
+    salida.push(r);
+  });
+  bulkEquiposFilas = salida.filter(r => r.estado === 'nuevo' || r.estado === 'actualiza');
+  const n = e => salida.filter(r => r.estado === e).length;
+  const etiqueta = { nuevo: ['Nuevo', 'var(--teal)'], actualiza: ['Se actualiza', 'var(--amber)'], igual: ['Ya existe, sin cambios', 'var(--muted)'], error: ['Error', 'var(--red)'] };
+  const nombresCol = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Área', dias:'Frecuencia' };
+  prev.innerHTML = `
+    <div style="font-size:12.5px;margin:6px 0 8px;line-height:1.6;">
+      ${conEncabezado ? `✅ Encabezados reconocidos: <b>${columnas.map(c => nombresCol[c]).join(', ')}</b>` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia'}<br>
+      <b style="color:var(--teal)">${n('nuevo')} nuevos</b> · <b style="color:var(--amber)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--red)">${n('error')} con error (no se cargan)</b>` : ''}
+    </div>
+    <div class="table-card" style="max-height:300px;overflow:auto;margin:0;">
+      <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th><th>Notas</th></tr></thead>
+      <tbody>${salida.map(r => `<tr>
+        <td>${r.linea}</td><td><span style="color:${etiqueta[r.estado][1]};font-weight:700;white-space:nowrap;">${etiqueta[r.estado][0]}</span></td>
+        <td><b>${escInv(r.nombre) || '—'}</b></td><td>${escInv(r.marca)}</td><td>${escInv(r.modelo)}</td><td>${escInv(r.serie)}</td><td>${escInv(r.localidad)}</td><td>${escInv(r.dias)}</td>
+        <td style="font-size:11px;color:var(--muted);">${[...r.problemas, ...r.avisos, r.estado === 'actualiza' ? 'Cambia: ' + Object.keys(r.cambios).map(c => nombresCol[c]).join(', ') : ''].filter(Boolean).map(escInv).join('<br>')}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  okBtn.disabled = !bulkEquiposFilas.length;
+  okBtn.textContent = bulkEquiposFilas.length ? `Cargar ${bulkEquiposFilas.length} equipo(s)` : 'Nada que cargar';
+}
+const escInv = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function bulkImportEquipos(){
+  previsualizarEquipos(); // recalcula con los datos más recientes
+  const filas = bulkEquiposFilas;
+  const status = document.getElementById('bulkEquiposStatus');
+  if (!filas.length) { showToast('⚠️ No hay equipos nuevos ni cambios para cargar'); return; }
   await window.fbReady;
   const hoy = new Date();
   const hoyStr = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');
-
-  const batch = db.batch();
-  let nuevos = 0, actualizados = 0;
-  const invalidas = [];
-
-  for(const line of lines){
-    const c = line.split('\t');
-    const nombre = (c[0] || '').trim();
-    if(!nombre){ invalidas.push(line); continue; }
-
-    const datos = {
-      marca: (c[1] || '').trim(),
-      modelo: (c[2] || '').trim(),
-      serie: (c[3] || '').trim(),
-      localidad: (c[4] || '').trim(),
-    };
-    const dias = (c[5] || '').trim() ? parseInt(c[5], 10) : null;
-    if(dias && dias > 0){
-      datos.checklistFrecuenciaDias = dias;
-      datos.checklistProximaFecha = addDaysStrInv(hoyStr, dias);
+  const btn = document.getElementById('bulkEquiposOk');
+  btn.disabled = true;
+  let hechos = 0;
+  try {
+    for (let i = 0; i < filas.length; i += 400) {
+      const batch = db.batch();
+      filas.slice(i, i + 400).forEach(r => {
+        if (r.estado === 'nuevo') {
+          const datos = { nombre: r.nombre, marca: r.marca, modelo: r.modelo, serie: r.serie, localidad: r.localidad, repuestos: [], updatedAt: fbTimestamp() };
+          const d = parseInt(r.dias, 10);
+          if (d > 0) { datos.checklistFrecuenciaDias = d; datos.checklistProximaFecha = addDaysStrInv(hoyStr, d); }
+          batch.set(db.collection('equipos').doc(), fbSanitizeTs(datos));
+        } else {
+          const c = { ...r.cambios };
+          if (c.dias) { c.checklistFrecuenciaDias = c.dias; c.checklistProximaFecha = addDaysStrInv(hoyStr, c.dias); delete c.dias; }
+          batch.set(db.collection('equipos').doc(r.existenteId), fbSanitizeTs({ ...c, updatedAt: fbTimestamp() }), { merge: true });
+        }
+      });
+      status.textContent = `Guardando… ${Math.min(i + 400, filas.length)} de ${filas.length}`;
+      await batch.commit();
+      hechos = Math.min(i + 400, filas.length);
     }
-
-    const existente = DB.find(e => normalizeKey(e.nombre) === normalizeKey(nombre));
-    if(existente){
-      const cambios = {};
-      Object.keys(datos).forEach(k => { if(!existente[k] && datos[k]) cambios[k] = datos[k]; });
-      if(Object.keys(cambios).length){
-        batch.set(db.collection('equipos').doc(existente.id), fbSanitize({ ...cambios, updatedAt: fbTimestamp() }), { merge: true });
-        actualizados++;
-      }
-    } else {
-      const ref = db.collection('equipos').doc();
-      batch.set(ref, fbSanitize({ nombre, ...datos, repuestos: [], updatedAt: fbTimestamp() }));
-      nuevos++;
-    }
-  }
-
-  if(!nuevos && !actualizados){
-    status.innerHTML = '⚠️ No se cargó nada.' + (invalidas.length ? ' Filas sin nombre (columna 1 vacía): ' + invalidas.length : '');
-    return;
-  }
-
-  try{
-    await batch.commit();
-    let msg = `✅ ${nuevos} equipo(s) nuevo(s)`;
-    if(actualizados) msg += `, ${actualizados} completado(s)`;
-    if(invalidas.length) msg += `, ${invalidas.length} fila(s) sin nombre (omitidas)`;
-    showToast(msg);
-    status.textContent = invalidas.length ? `Se omitieron ${invalidas.length} fila(s) sin nombre en la columna 1.` : '';
+    const nuevos = filas.filter(r => r.estado === 'nuevo').length;
+    showToast(`✅ ${nuevos} equipo(s) nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''}`);
     closeModal('modalBulkEquipos');
-  } catch(err){
-    showToast('⚠️ Error al guardar: ' + err.message);
+  } catch (err) {
+    console.error(err);
+    status.innerHTML = `⚠️ Se guardaron ${hechos} de ${filas.length}. Error: ${escInv(err.code === 'permission-denied' ? 'tu usuario no tiene permiso para crear equipos (rol Técnico, Almacén, Encargado o Administrador).' : err.message)}`;
+    btn.disabled = false;
   }
+}
+// fbSanitize convierte a JSON y perdería el serverTimestamp: este lo conserva.
+function fbSanitizeTs(obj){
+  const { updatedAt, ...rest } = obj;
+  const limpio = fbSanitize(rest);
+  return updatedAt ? { ...limpio, updatedAt } : limpio;
+}
+
+/* ═══════════════ ORDEN DE EQUIPOS (4 oct 2026) ═══════════════
+   Firestore entrega los equipos en el orden de su id interno (aleatorio):
+   por eso salían desordenados. Ahora se ordenan por nombre con orden
+   "natural" (TELAR 2 antes que TELAR 10) y, por defecto, agrupados por área. */
+const cmpNat = (a, b) => (a || '').toString().localeCompare((b || '').toString(), 'es', { numeric: true, sensitivity: 'base' });
+function cargarOrdenEq(){
+  try { const c = JSON.parse(localStorage.getItem('inv_orden_eq') || '{}');
+    if (c.orden) document.getElementById('eqOrden').value = c.orden;
+    if (c.area !== undefined) document.getElementById('eqArea').dataset.pend = c.area;
+  } catch (e) {}
+}
+function guardarOrdenEq(){
+  try { localStorage.setItem('inv_orden_eq', JSON.stringify({ orden: document.getElementById('eqOrden').value, area: document.getElementById('eqArea').value })); } catch (e) {}
+}
+const tsMs = t => t && typeof t.toMillis === 'function' ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0);
+function equiposOrdenados(){
+  const q = sinAcentos(document.getElementById('eqFiltro')?.value || '');
+  const selA = document.getElementById('eqArea');
+  const area = selA ? selA.value : '';
+  const orden = document.getElementById('eqOrden')?.value || 'area';
+  let lista = DB.filter(e => (!area || (area === '__sin__' ? !e.localidad : e.localidad === area))
+    && (!q || sinAcentos([e.nombre, e.marca, e.modelo, e.serie, e.localidad].join(' ')).includes(q)));
+  const faltan = e => (e.repuestos || []).filter(p => stockStatus(p) === 'sin').length * 1000 + (e.repuestos || []).filter(p => stockStatus(p) === 'bajo').length;
+  if (orden === 'nombre') lista.sort((a, b) => cmpNat(a.nombre, b.nombre));
+  else if (orden === 'problemas') lista.sort((a, b) => faltan(b) - faltan(a) || cmpNat(a.nombre, b.nombre));
+  else if (orden === 'recientes') lista.sort((a, b) => tsMs(b.updatedAt) - tsMs(a.updatedAt) || cmpNat(a.nombre, b.nombre));
+  else lista.sort((a, b) => (!a.localidad) - (!b.localidad) || cmpNat(a.localidad, b.localidad) || cmpNat(a.nombre, b.nombre));
+  return { lista, orden };
+}
+function pintarFiltroAreas(){
+  const sel = document.getElementById('eqArea'); if (!sel) return;
+  const cur = sel.dataset.pend !== undefined ? sel.dataset.pend : sel.value;
+  delete sel.dataset.pend;
+  const cuenta = {};
+  DB.forEach(e => { const k = e.localidad || '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; });
+  const areas = Object.keys(cuenta).filter(k => k !== '__sin__').sort(cmpNat);
+  sel.innerHTML = `<option value="">Todas las áreas (${DB.length})</option>` + areas.map(a => `<option value="${escInv(a)}">${escInv(a)} (${cuenta[a]})</option>`).join('')
+    + (cuenta.__sin__ ? `<option value="__sin__">Sin área (${cuenta.__sin__})</option>` : '');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
 }
 
 /* ═══════════════ DETECTAR Y FUSIONAR DUPLICADOS ═══════════════ */
@@ -2026,6 +2237,7 @@ async function initApp(){
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   loadTecnicosInventario();
   loadAreasParaEquipos();
+  cargarOrdenEq();
   // Auditoría (29 sep 2026): botón visible solo para Encargado/Administrador
   // (mismo criterio que esEncargado() en firestore.rules) — cosmético
   // nada más, la protección real ya está en las reglas.
