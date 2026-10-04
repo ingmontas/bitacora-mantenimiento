@@ -102,7 +102,7 @@
 <div class="wrap">
   <div class="card no-print" id="cfg-card">
     <div class="card-title">Stickers para las máquinas</div>
-    <div class="card-sub">Pega uno en cada máquina, a la vista del operador. Producción lo escanea con la cámara del celular y el reporte de parada abre con esa máquina ya elegida: solo marca si está parada, escribe qué pasa y envía. Los técnicos reciben el aviso al momento en Bitácora → Avisos.</div>
+    <div class="card-sub">Pega uno en cada máquina, a la vista del operador. Cualquiera lo escanea con la cámara del celular, sin usuario, y ve dos opciones de esa máquina: <b>Reportar parada o falla</b> y su <b>Hoja de vida</b>. Los técnicos reciben el aviso al momento en Bitácora → Avisos; el trabajo se hace entrando a la app.</div>
     <div class="toolbar">
       <input type="text" id="buscar" placeholder="Buscar equipo..." oninput="renderLista()"/>
       <select id="fArea" onchange="renderLista()"><option value="">Todas las áreas</option></select>
@@ -117,6 +117,10 @@
       <button class="btn btn-secondary" onclick="marcarTodos(false)">Ninguno</button>
       <span class="count" id="count">0 seleccionados</span>
       <button class="btn btn-primary" id="btnPrint" onclick="imprimir()" disabled>🖨️ Imprimir etiquetas</button>
+    </div>
+    <div class="actions" style="margin-top:8px;">
+      <button class="btn btn-secondary" id="btnPub" onclick="publicarTodas()">🔄 Actualizar hojas de vida públicas (todos los equipos)</button>
+      <span class="count" id="pubMsg"></span>
     </div>
   </div>
 
@@ -206,7 +210,7 @@ function renderSheet() {
         <div class="lb-info">
           <div class="lb-eq">${esc(e.nombre || '(sin nombre)')}</div>
           <div class="lb-loc">${e.localidad ? '📍 ' + esc(e.localidad) : ''}</div>
-          <div class="lb-steps"><b>Producción:</b> reportar parada o falla<br><b>Técnicos:</b> checklist, registrar trabajo, hoja de vida y repuestos</div>
+          <div class="lb-steps">🚨 Reportar parada o falla<br>🗂️ Ver hoja de vida del equipo</div>
         </div>
       </div>
       <div class="lb-foot"><span>${esc(window.APP_EMPRESA || 'Mantenimiento')}</span><span>ID ${esc(String(e.id).slice(0, 6))}</span></div>
@@ -216,8 +220,34 @@ function renderSheet() {
   });
 }
 
-function imprimir() {
+// (4 oct 2026) Lo que se ve al escanear sin usuario sale de /equipos_publico.
+// Al imprimir se publica (o se pone al día) la hoja de vida de esas máquinas.
+let _otsCache = null;
+async function leerOts() {
+  if (!_otsCache) _otsCache = (await db.collection('ots').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+  return _otsCache;
+}
+async function publicar(lista, msg) {
+  let ots = null;
+  try { ots = await leerOts(); } catch (e) { console.warn('ots:', e.message); }
+  for (let i = 0; i < lista.length; i += 20) {
+    if (msg) msg.textContent = `Publicando ${Math.min(i + 20, lista.length)} de ${lista.length}…`;
+    await Promise.all(lista.slice(i, i + 20).map(e => publicarHojaVida(e, ots)));
+  }
+}
+async function publicarTodas() {
+  const b = document.getElementById('btnPub'), msg = document.getElementById('pubMsg');
+  b.disabled = true; _otsCache = null;
+  await publicar(equipos, msg);
+  msg.textContent = `✅ ${equipos.length} hojas de vida públicas al día`;
+  b.disabled = false;
+}
+async function imprimir() {
   if (!seleccion.size) return;
+  const b = document.getElementById('btnPrint'); b.disabled = true;
+  await publicar(equipos.filter(e => seleccion.has(e.id)), document.getElementById('pubMsg'));
+  document.getElementById('pubMsg').textContent = '';
+  b.disabled = false;
   window.print();
 }
 </script>

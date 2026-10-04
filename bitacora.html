@@ -536,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Historial y Resumen muestran solo trabajo registrado: los avisos de
         // producción y las fallas de checklist que siguen abiertas no son OTs
         // terminadas todavía (antes aparecían como filas vacías y sumaban al total).
-        allRecords = docsOts.filter(r => !(['operador', 'checklist'].includes(r.origen) && r.estado !== 'completada'));
+        allRecords = docsOts.filter(r => !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
         procesarAvisos(docsOts);
         const activeScreen = document.querySelector('.screen.active')?.id;
         if (activeScreen === 'screen-historial') renderHistory();
@@ -932,7 +932,7 @@ let _equiposCanonicos = []; // [{nombre, localidad}] desde /equipos
 function loadEquiposCanonicos() {
   window.fbReady.then(() => {
     db.collection('equipos').onSnapshot((snap) => {
-      _equiposCanonicos = snap.docs.map(d => ({ nombre: d.data().nombre || '', localidad: d.data().localidad || '' })).filter(e => e.nombre);
+      _equiposCanonicos = snap.docs.map(d => ({ ...d.data(), id: d.id, nombre: d.data().nombre || '', localidad: d.data().localidad || '' })).filter(e => e.nombre);
       updateEquipoDatalist();
     }, (err) => console.warn('No se pudo leer /equipos (solo afecta las sugerencias de nombre, no bloquea nada):', err.message));
   }).catch(() => {});
@@ -1136,13 +1136,14 @@ async function submitForm() {
   if (window.editingRecord) {
     const editing = window.editingRecord;
     // Cerrar un aviso de producción: el mismo documento pasa a OT completada.
-    if (editing.origen === 'operador' && editing.estado !== 'completada') {
+    if (['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada') {
       Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: avHoy() });
     }
     // No esperamos (await) la confirmación del servidor: con la persistencia
     // offline de Firestore, el cambio se ve al instante en este celular y se
     // sube solo en cuanto haya señal — no queremos que la app se quede
     // "cargando" congelada si no hay conexión ahora mismo.
+    publicarHojaTrasGuardar(record, editing);
     db.collection('ots').doc(editing.id).update(record).catch((e) => {
       console.error('Error actualizando OT:', e);
       showToast('❌ Error al actualizar: ' + e.message, 'error');
@@ -1157,6 +1158,7 @@ async function submitForm() {
   }
 
   // ═══ MODO CREAR ═══
+  publicarHojaTrasGuardar(record);
   db.collection('ots').add({ ...record, createdAt: fbTimestamp() }).catch((e) => {
     console.error('Error guardando OT:', e);
     showToast('❌ Error al guardar: ' + e.message, 'error');
@@ -1168,6 +1170,17 @@ async function submitForm() {
   resetForm();
   _submitting = false;
   btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
+}
+
+// (4 oct 2026) Mantiene al día la hoja de vida pública del QR (equipo.html)
+// del equipo al que se le acaba de registrar el trabajo. Se espera un momento
+// para que allRecords ya incluya el registro nuevo; si falla, no molesta.
+function publicarHojaTrasGuardar(record, editing) {
+  if (typeof publicarHojaVida !== 'function') return;
+  const keys = [record.EQUIPO, record.TIPO_MAQUINA, record.LINEA_EQUIPO].map(normEqKey).filter(Boolean);
+  const eq = _equiposCanonicos.find(e => (editing && editing.equipoId && e.id === editing.equipoId) || keys.includes(normEqKey(e.nombre)));
+  if (!eq) return;
+  setTimeout(() => publicarHojaVida(eq, allRecords), 1500);
 }
 
 function resetForm() {
@@ -1505,7 +1518,7 @@ function avMiNombre() {
 
 // Se llama desde el listener de /ots con TODOS los documentos.
 function procesarAvisos(docs) {
-  avisos = docs.filter(r => r.origen === 'operador' && ['pendiente', 'en_atencion'].includes(r.estado));
+  avisos = docs.filter(r => ['operador', 'qr'].includes(r.origen) && ['pendiente', 'en_atencion'].includes(r.estado)); // 'qr' = reportado desde la etiqueta QR sin usuario (equipo.html)
   const pendientes = avisos.filter(r => r.estado === 'pendiente');
   if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));
   else pendientes.forEach(r => { if (!_avisosVistos.has(r.id)) { _avisosVistos.add(r.id); alertarAviso(r); } });

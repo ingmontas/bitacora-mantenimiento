@@ -414,6 +414,7 @@ function volverAlPicker() {
 }
 
 // ══════ Screen: hoja de vida ══════
+const _publicados = new Set();
 function mostrarHojaDeVida(equipoOrId) {
   const e = typeof equipoOrId === 'string' ? currentEquipos.find(x => x.id === equipoOrId) : equipoOrId;
   if (!e) { showToast('Equipo no encontrado', 'error'); return; }
@@ -428,6 +429,11 @@ function mostrarHojaDeVida(equipoOrId) {
   document.getElementById('screen-hoja').style.display = 'block';
   document.getElementById('content').classList.add('wide');
 
+  // (4 oct 2026) De paso, deja al día la copia pública que se ve al escanear
+  // el QR (equipo.html). Una vez por equipo y por visita a esta pantalla.
+  if (currentOts.length && typeof publicarHojaVida === 'function' && !_publicados.has(e.id) && ['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','ALMACEN'].includes((window.currentUserRole || {}).rol)) {
+    _publicados.add(e.id); publicarHojaVida(e, currentOts);
+  }
   document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('eq-sub').textContent = [e.localidad, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—';
 
@@ -618,7 +624,7 @@ function renderPendientes() {
   if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0">✅ No hay OTs abiertas para este equipo.</div>'; return; }
   const est = { pendiente: 'Pendiente', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
   el.innerHTML = pendientesActual.map(o => `
-    <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'checklist' ? 'Detectada en checklist' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
+    <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'qr' ? 'Reportada desde el QR' : o.origen === 'checklist' ? 'Detectada en checklist' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
       <span class="tag ${o.prioridad === 'alta' ? 'tag-correctivo' : 'tag-otro'}">${est[o.estado] || esc(o.estado)}</span></div>`).join('');
 }
 

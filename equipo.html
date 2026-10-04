@@ -16,14 +16,14 @@
   <style>
     /* ══════════════════════════════════════════════════════════════════
        PANTALLA DEL EQUIPO — destino del QR único (4 oct 2026)
-       Cada máquina tiene UN solo QR: equipo.html?id=<id>. Al escanearlo se
-       muestran las opciones según el rol de quien lo escanea:
-         - Producción (Operador): reportar parada y ver sus reportes.
-         - Técnico o más: además checklist, registrar trabajo, hoja de vida
-           y repuestos. Almacén: repuestos.
-       Si no hay sesión, firebase-init.js lleva a login.html y regresa aquí
-       con el mismo ?id=. Los QR viejos (reportar/checklist/hoja de vida)
-       siguen funcionando.
+       Se abre SIN iniciar sesión. Cualquiera que escanee ve dos opciones:
+         🚨 Reportar parada o falla  ·  🗂️ Hoja de vida (versión pública)
+       El trabajo (checklist, bitácora, repuestos) se hace entrando a la app.
+       - Sin sesión: el reporte se guarda con origen "qr" (firestore.rules
+         solo lo acepta si el equipo existe y con campos limitados) y la hoja
+         de vida sale de /equipos_publico/{id} (sin técnicos, costos ni repuestos).
+       - Con sesión: el reporte sale a nombre del usuario y se ve el estado
+         actual de la máquina (esperando técnico / en atención).
        ══════════════════════════════════════════════════════════════════ */
     :root {
       --bg: #0F1923; --surface: #1A2535; --card: #202F42;
@@ -43,29 +43,59 @@
     .estado.ok { background: #10B98114; border: 1px solid #10B98140; }
     .estado.alerta { background: #EF444414; border: 1px solid #EF444455; }
     .estado.aten { background: #F59E0B14; border: 1px solid #F59E0B55; }
-    .opts { display: grid; gap: 10px; }
-    .opt { display: flex; gap: 14px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-decoration: none; color: var(--text); }
+    .opts { display: grid; gap: 10px; margin-bottom: 12px; }
+    .opt { display: flex; gap: 14px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 15px; color: var(--text); cursor: pointer; width: 100%; text-align: left; font-family: inherit; }
     .opt:active { opacity: .8; }
-    .opt .ic { font-size: 28px; width: 40px; text-align: center; flex-shrink: 0; }
-    .opt b { font-size: 15.5px; display: block; }
+    .opt .ic { font-size: 30px; width: 42px; text-align: center; flex-shrink: 0; }
+    .opt b { font-size: 16px; display: block; }
     .opt span { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; line-height: 1.4; }
     .opt.main { background: #D7261E; border-color: #D7261E; }
     .opt.main span { color: #ffe4e1; }
-    .section { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
-    .rep { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.5; }
-    .rep.pendiente { border-left-color: var(--red); } .rep.en_atencion { border-left-color: var(--accent); } .rep.completada { border-left-color: var(--green); }
-    .rep .t { font-weight: 700; font-size: 13px; }
+    .opt.on { outline: 2px solid var(--accent); }
+    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 12px 0 5px; }
+    input, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 84px; resize: vertical; }
+    .tg { display: flex; gap: 6px; }
+    .tg button { flex: 1; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .tg button.on-r { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
+    .tg button.on-a { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .tg button.on-g { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .btn { display: block; width: 100%; padding: 14px; border-radius: 10px; border: none; background: var(--accent); color: #0F1923; font-weight: 800; font-size: 15.5px; cursor: pointer; margin-top: 16px; font-family: inherit; text-align: center; text-decoration: none; }
+    .btn.sec { background: var(--border); color: var(--text); font-weight: 700; font-size: 14px; }
+    .btn[disabled] { opacity: .5; }
+    .ficha { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 4px; }
+    .ficha div { min-width: 0; }
+    .ficha .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+    .ficha .v { font-size: 13.5px; margin-top: 2px; word-break: break-word; }
+    .ficha .full { grid-column: 1 / -1; }
+    .kp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 2px; }
+    .kp div { background: var(--surface); border-radius: 9px; padding: 9px 8px; text-align: center; }
+    .kp b { display: block; font-size: 19px; }
+    .kp span { font-size: 10.5px; color: var(--muted); }
+    .h-item { border-left: 3px solid var(--border); background: var(--card); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.5; }
+    .h-item.correctivo { border-left-color: var(--red); } .h-item.preventivo { border-left-color: var(--green); } .h-item.proyecto { border-left-color: var(--blue); }
+    .h-item .t { font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+    .h-item .sol { color: #35d0b0; }
     .muted { color: var(--muted); }
-    .empty { text-align: center; padding: 40px 16px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .section { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+    .empty { text-align: center; padding: 30px 14px; color: var(--muted); font-size: 14px; line-height: 1.6; }
     .empty .e { font-size: 44px; display: block; margin-bottom: 10px; }
-    .btn { display: inline-block; padding: 11px 16px; border-radius: 9px; background: var(--accent); color: #0F1923; font-weight: 700; text-decoration: none; font-size: 14px; margin-top: 12px; }
+    .ok-box { text-align: center; padding: 20px 6px 4px; }
+    .ok-box .e { font-size: 54px; display: block; margin-bottom: 10px; }
+    .ok-box .folio { font-size: 22px; font-weight: 800; color: var(--accent); margin: 10px 0; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; line-height: 1.6; }
+    .foot a { color: var(--accent); }
     .spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 12px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: var(--red); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; width: 90%; max-width: 360px; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 99; }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
-<div id="header"><h1>🏭 Equipo</h1><small id="header-sub">Cargando...</small></div>
+<div id="header"><h1>🏭 Equipo</h1><small id="header-sub">Mantenimiento</small></div>
 <div id="content"><div class="empty"><div class="spinner"></div>Abriendo equipo…</div></div>
+<div id="toast"></div>
 
 <script>
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -73,6 +103,7 @@ const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const ID = params.get('id') || params.get('equipo') || '';
 const hoyStr = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const horaAhora = () => new Date().toTimeString().slice(0, 5);
 const fmtF = f => { if (!f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f || ''; const [y, m, d] = f.split('-'); return `${d}/${m}/${y}`; };
 function minDesde(fecha, hora) {
   if (!fecha || !hora) return null;
@@ -80,96 +111,193 @@ function minDesde(fecha, hora) {
   return Math.max(0, Math.round((Date.now() - new Date(y, m - 1, d, hh, mm).getTime()) / 60000));
 }
 const fmtMin = m => m == null ? '' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
-
+function toast(t) { const el = $('toast'); el.textContent = t; el.className = 'show'; setTimeout(() => el.className = '', 3200); }
 function error(icono, texto) {
-  $('content').innerHTML = `<div class="card"><div class="empty"><span class="e">${icono}</span>${texto}<br><a class="btn" href="index.html">Ir al inicio</a></div></div>`;
+  $('content').innerHTML = `<div class="card"><div class="empty"><span class="e">${icono}</span>${texto}</div></div>`;
 }
 
-window.fbReady.then(async () => {
-  const u = window.currentUserRole || {};
-  const ROL = u.rol || '';
-  $('header-sub').textContent = u.nombre || '';
+let USUARIO = null;     // {rol, nombre} si hay sesión
+let EQ = null;          // datos públicos del equipo
+let vista = '';         // '' | 'reportar' | 'hoja'
+const TEC = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO'];
+const esTec = () => !!(USUARIO && TEC.includes(USUARIO.rol));
+const esOp = () => !!(USUARIO && USUARIO.rol === 'OPERADOR');
+
+// Con o sin sesión: firebase-init.js no redirige en esta página.
+let arrancado = false;
+const arrancar = () => { if (!arrancado) { arrancado = true; iniciar(); } };
+window.fbReady.then(() => { USUARIO = window.currentUserRole || null; arrancar(); })
+  .catch(err => { if (err && err.message !== 'No hay sesión iniciada') console.warn(err.message); arrancar(); });
+
+async function iniciar() {
   if (!ID) return error('🔍', 'Este enlace no trae ningún equipo. Escanea de nuevo el código QR de la máquina.');
-
-  let e;
+  if (USUARIO && USUARIO.nombre) $('header-sub').textContent = USUARIO.nombre;
   try {
-    const snap = await db.collection('equipos').doc(ID).get();
-    if (!snap.exists) return error('❓', 'Este código QR es de un equipo que ya no existe en el sistema (pudo haberse eliminado).<br>Pide a mantenimiento que imprima un QR nuevo desde <b>Etiquetas QR</b>.');
-    e = { id: snap.id, ...snap.data() };
-  } catch (err) {
-    return error('⚠️', err.code === 'permission-denied'
-      ? 'Tu usuario no tiene permiso para ver los equipos. Pide al administrador que revise tu rol.'
-      : 'No se pudo cargar el equipo: ' + esc(err.message) + '<br>Revisa la conexión e inténtalo de nuevo.');
-  }
-  document.title = (e.nombre || 'Equipo') + ' — Mantenimiento';
-  $('header-sub').textContent = (e.localidad ? e.localidad + ' · ' : '') + (u.nombre || '');
+    const pub = await db.collection('equipos_publico').doc(ID).get();
+    if (pub.exists) EQ = { id: ID, ...pub.data() };
+  } catch (err) { console.warn('equipos_publico:', err.message); }
 
-  const tec = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO'].includes(ROL);
-  const puedeReportar = tec || ROL === 'OPERADOR';
-  const puedeRepuestos = tec || ROL === 'ALMACEN';
-  const q = encodeURIComponent(e.id);
-  const opciones = [];
-  if (puedeReportar) opciones.push(`<a class="opt main" href="reportar.html?equipo=${q}"><div class="ic">🚨</div><div><b>Reportar parada o falla</b><span>Avisa a mantenimiento al momento</span></div></a>`);
-  if (tec) {
-    const venc = e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoyStr());
-    opciones.push(`<a class="opt" href="checklist.html?equipo=${q}"><div class="ic">🩺</div><div><b>Hacer checklist</b><span>${e.checklistProximaFecha ? (venc ? '⚠️ Vencido · tocaba el ' + fmtF(e.checklistProximaFecha) : 'Próximo: ' + fmtF(e.checklistProximaFecha)) : 'Inspección del equipo'}</span></div></a>`);
-    opciones.push(`<a class="opt" href="bitacora.html?equipo=${q}"><div class="ic">📋</div><div><b>Registrar trabajo</b><span>Nueva entrada en la Bitácora con este equipo ya elegido</span></div></a>`);
-    opciones.push(`<a class="opt" href="hoja-vida.html?equipo=${q}"><div class="ic">🗂️</div><div><b>Hoja de vida</b><span>Todo lo que se le ha hecho a este equipo</span></div></a>`);
+  // Personal con sesión: ficha al día desde /equipos y, si la copia pública
+  // de este equipo aún no tiene historial, se publica en este momento.
+  if (USUARIO) {
+    try {
+      const s = await db.collection('equipos').doc(ID).get();
+      if (!s.exists) return error('❓', 'Este código QR es de un equipo que ya no existe en el sistema.<br>Imprime un QR nuevo desde <b>Etiquetas QR</b>.');
+      const e = { id: ID, ...s.data() };
+      EQ = { ...(EQ || {}), id: ID, ...Object.fromEntries(CAMPOS_FICHA_PUB.map(k => [k, e[k] || ''])) };
+      if (esTec() && !EQ.historial) {
+        const ots = (await db.collection('ots').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+        await publicarHojaVida(e, ots);
+        const p2 = await db.collection('equipos_publico').doc(ID).get();
+        if (p2.exists) EQ = { ...EQ, ...p2.data() };
+      }
+    } catch (err) { console.warn('equipos:', err.message); }
   }
-  if (puedeRepuestos) opciones.push(`<a class="opt" href="inventario.html?equipo=${q}"><div class="ic">🔧</div><div><b>Repuestos y ficha técnica</b><span>${(e.repuestos || []).length} repuesto(s) registrados</span></div></a>`);
-  if (tec) opciones.push(`<a class="opt" href="bitacora.html#avisos"><div class="ic">🔔</div><div><b>Avisos de producción</b><span>Cola de paradas de toda la planta</span></div></a>`);
-  if (!opciones.length) return error('🔒', 'Tu rol no tiene opciones disponibles para este equipo.');
+  // Sin sesión y sin copia pública todavía: igual se deja reportar (la regla
+  // de Firestore comprueba que el equipo exista); solo falta la hoja de vida.
+  if (!EQ || !EQ.nombre) {
+    if (USUARIO) return error('❓', 'No se encontró este equipo.');
+    EQ = { id: ID, nombre: '', sinPublicar: true };
+  }
+  document.title = (EQ.nombre || 'Equipo') + ' — Mantenimiento';
+  pintar();
+  escucharEstado();
+}
 
+function pintar() {
+  const e = EQ;
   $('content').innerHTML = `
     <div class="card">
-      <div class="eq-name">${esc(e.nombre || '(sin nombre)')}</div>
-      <div class="eq-sub">${[e.localidad && '📍 ' + esc(e.localidad), [e.marca, e.modelo].filter(Boolean).map(esc).join(' · '), e.serie && 'Serie ' + esc(e.serie)].filter(Boolean).join('<br>')}</div>
-      <div id="estado"></div>
+      <div class="eq-name">${esc(e.nombre || 'Equipo')}</div>${e.sinPublicar ? '<div class="eq-sub">Puedes reportar una falla de esta máquina. Su ficha todavía no está publicada.</div>' : ''}
+      <div class="eq-sub">${[e.localidad && '📍 ' + esc(e.localidad), [e.marca, e.modelo].filter(Boolean).map(esc).join(' · ')].filter(Boolean).join('<br>')}</div>
+      <div id="estado">${estadoTxt}</div>
     </div>
-    <div class="opts">${opciones.join('')}</div>
-    <div class="section" id="repTitle" style="display:none">Reportes de este equipo</div>
-    <div id="reps"></div>`;
+    <div class="opts">
+      <button class="opt main ${vista === 'reportar' ? 'on' : ''}" id="oRep"><div class="ic">🚨</div><div><b>Reportar parada o falla</b><span>Avisa a mantenimiento al momento</span></div></button>
+      <button class="opt ${vista === 'hoja' ? 'on' : ''}" id="oHoja"><div class="ic">🗂️</div><div><b>Hoja de vida</b><span>Ficha técnica y trabajos realizados a este equipo</span></div></button>
+    </div>
+    <div id="panel"></div>
+    <div class="foot">${USUARIO ? `Sesión: ${esc(USUARIO.nombre || '')} · <a href="index.html">Abrir la app</a>` : `¿Eres de mantenimiento? <a href="login.html?next=index.html">Inicia sesión</a> para trabajar en la app.`}</div>`;
+  $('oRep').onclick = () => { vista = vista === 'reportar' ? '' : 'reportar'; pintar(); };
+  $('oHoja').onclick = () => { vista = vista === 'hoja' ? '' : 'hoja'; pintar(); };
+  if (vista === 'reportar') pintarReporte();
+  if (vista === 'hoja') pintarHoja();
+  if (vista) setTimeout(() => $('panel') && $('panel').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
 
-  // Reportes abiertos y recientes de esta máquina (producción solo puede leer
-  // los reportes de operador; técnicos ven también las fallas de checklist).
-  // Almacén no tiene permiso de leer reportes: no se consultan.
-  if (!tec && ROL !== 'OPERADOR') return;
-  const ref = tec ? db.collection('ots').where('equipoId', '==', e.id)
-                  : db.collection('ots').where('origen', '==', 'operador').where('equipoId', '==', e.id);
-  ref.onSnapshot(snap => {
-    const todos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const abiertos = todos.filter(r => ['pendiente', 'en_atencion', 'planificada'].includes(r.estado));
-    const desde = new Date(); desde.setDate(desde.getDate() - 7);
-    const lim = desde.getFullYear() + '-' + String(desde.getMonth() + 1).padStart(2, '0') + '-' + String(desde.getDate()).padStart(2, '0');
-    const recientes = todos.filter(r => r.estado === 'completada' && (r.fechaReporte || r.FECHA || '') >= lim);
-    const enAt = abiertos.find(r => r.estado === 'en_atencion');
-    const pend = abiertos.filter(r => r.estado === 'pendiente');
-    $('estado').innerHTML = enAt
-      ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
-      : pend.length
-        ? `<div class="estado alerta">⏳ <div><b>${pend.length} reporte(s) esperando técnico</b>${pend[0].horaParada ? ' · desde las ' + esc(pend[0].horaParada) + ' (' + fmtMin(minDesde(pend[0].fechaReporte, pend[0].horaParada)) + ')' : ''}. No hace falta reportarlo de nuevo.</div></div>`
-        : `<div class="estado ok">✅ <div>Sin reportes abiertos para este equipo.</div></div>`;
-    const lista = [...abiertos, ...recientes].sort((a, b) => ((b.fechaReporte || b.FECHA || '') + (b.horaParada || '')).localeCompare((a.fechaReporte || a.FECHA || '') + (a.horaParada || '')));
-    $('repTitle').style.display = lista.length ? '' : 'none';
-    $('reps').innerHTML = lista.map(r => {
-      const est = r.estado === 'pendiente' ? '⏳ Esperando técnico' : r.estado === 'en_atencion' ? `🔧 En atención por ${esc(r.asignadoA || '—')}` : r.estado === 'planificada' ? `🗓 Planificada${r.asignadoA ? ' · ' + esc(r.asignadoA) : ''}` : `✅ Resuelto${r.TECNICOS ? ' por ' + esc(r.TECNICOS) : ''}`;
-      return `<div class="rep ${esc(r.estado)}"><div class="t">${esc(r.folio || '')} · ${fmtF(r.fechaReporte || r.FECHA)} ${esc(r.horaParada || '')}</div>
-        <div>${esc(r.descripcionFalla || r.DESCRIPCION_FALLA || '')}</div>
-        <div class="muted">${est}${r.origen === 'checklist' ? ' · detectado en checklist' : r.creadoPor ? ' · reportó ' + esc(r.creadoPor) : ''}</div>
-        ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div style="color:#35d0b0">✓ ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}</div>`;
-    }).join('');
-  }, err => {
-    $('estado').innerHTML = `<div class="estado aten">ℹ️ <div>No se pudo leer el estado de los reportes (${esc(err.code || err.message)}).</div></div>`;
-  });
-}).catch(err => {
-  // Sin sesión, firebase-init.js ya está llevando a login.html con este mismo
-  // enlace. Cualquier otro problema (cuenta sin rol, desactivada, sin conexión)
-  // se muestra en pantalla en vez de dejarla cargando para siempre.
-  setTimeout(() => {
-    if (/login\.html/.test(location.href)) return;
-    error('⚠️', esc((err && err.message) || 'No se pudo iniciar sesión.') + '<br><a class="btn" href="login.html?next=' + encodeURIComponent('equipo.html' + location.search) + '">Iniciar sesión</a>');
-  }, 1500);
-});
+// ── Estado actual (solo con sesión: el público no puede leer los reportes) ──
+let estadoTxt = '', unsub = null;
+function escucharEstado() {
+  if (unsub || !(esTec() || esOp())) return;
+  const ref = esTec() ? db.collection('ots').where('equipoId', '==', ID)
+                      : db.collection('ots').where('origen', '==', 'operador').where('equipoId', '==', ID);
+  unsub = ref.onSnapshot(snap => {
+    const ab = snap.docs.map(d => d.data()).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+    const enAt = ab.find(r => r.estado === 'en_atencion'), pend = ab.filter(r => r.estado === 'pendiente');
+    estadoTxt = enAt ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
+      : pend.length ? `<div class="estado alerta">⏳ <div><b>Ya hay ${pend.length} reporte(s) esperando técnico</b>${pend[0].horaParada ? ' · desde las ' + esc(pend[0].horaParada) + ' (' + fmtMin(minDesde(pend[0].fechaReporte, pend[0].horaParada)) + ')' : ''}.</div></div>`
+      : `<div class="estado ok">✅ <div>Sin reportes abiertos para este equipo.</div></div>`;
+    if ($('estado')) $('estado').innerHTML = estadoTxt;
+  }, () => {});
+}
+
+// ── Reportar ──
+let parada = 'si', prioridad = 'media', enviando = false;
+function pintarReporte() {
+  $('panel').innerHTML = `<div class="card">
+    <div style="font-weight:800;font-size:16px;">🚨 Reportar parada o falla</div>
+    <label class="f">¿La máquina está parada?</label>
+    <div class="tg" id="tgPar"><button data-v="si">⛔ Sí, parada</button><button data-v="no">⚠️ No, sigue trabajando</button></div>
+    <label class="f" id="lblHora">¿Desde qué hora?</label><input type="time" id="rHora" value="${horaAhora()}">
+    <label class="f">¿Qué le pasa? *</label><textarea id="rDesc" maxlength="900" placeholder="Qué se ve, se oye o se siente raro…"></textarea>
+    <label class="f">¿Qué tan urgente es?</label>
+    <div class="tg" id="tgPri"><button data-v="alta">🔴 Alta</button><button data-v="media">🟡 Media</button><button data-v="baja">🟢 Baja</button></div>
+    <label class="f">Tu nombre *</label><input type="text" id="rNom" maxlength="80" value="${esc(USUARIO && USUARIO.nombre || '')}" placeholder="Nombre y área o turno">
+    <button class="btn" id="rOk">🚨 Enviar reporte</button>
+  </div>`;
+  const pintarTg = () => {
+    document.querySelectorAll('#tgPar button').forEach(b => b.className = b.dataset.v === parada ? (parada === 'si' ? 'on-r' : 'on-g') : '');
+    document.querySelectorAll('#tgPri button').forEach(b => b.className = b.dataset.v === prioridad ? ({ alta: 'on-r', media: 'on-a', baja: 'on-g' })[prioridad] : '');
+    $('lblHora').textContent = parada === 'si' ? '¿Desde qué hora está parada?' : '¿Desde qué hora se nota la falla?';
+  };
+  $('tgPar').onclick = ev => { const b = ev.target.closest('button'); if (b) { parada = b.dataset.v; pintarTg(); } };
+  $('tgPri').onclick = ev => { const b = ev.target.closest('button'); if (b) { prioridad = b.dataset.v; pintarTg(); } };
+  pintarTg();
+  $('rOk').onclick = enviar;
+}
+async function folioNuevo() {
+  // Técnicos y Producción con sesión: el mismo contador de la app (OT-0001…).
+  // Sin sesión (o si el contador falla): folio "QR-" único.
+  if (esTec() || esOp()) {
+    try {
+      const ref = db.collection('config').doc('otFolioCounter');
+      const n = await db.runTransaction(async tx => { const s = await tx.get(ref); const a = (s.exists && typeof s.data().ultimo === 'number') ? s.data().ultimo : 0; tx.set(ref, { ultimo: a + 1 }, { merge: true }); return a + 1; });
+      return 'OT-' + String(n).padStart(4, '0');
+    } catch (e) { console.warn('folio:', e.message); }
+  }
+  return 'QR-' + Date.now().toString(36).toUpperCase().slice(-6);
+}
+async function enviar() {
+  if (enviando) return;
+  const desc = $('rDesc').value.trim(), nom = $('rNom').value.trim();
+  if (!desc) return toast('Describe qué le pasa a la máquina');
+  if (!nom) return toast('Escribe tu nombre');
+  let h = $('rHora').value || horaAhora(); if (h > horaAhora()) h = horaAhora();
+  enviando = true; $('rOk').disabled = true; $('rOk').textContent = 'Enviando…';
+  const folio = await folioNuevo();
+  // Técnicos y Producción: origen "operador" (igual que reportar.html).
+  // Cualquier otra persona (sin usuario, Almacén, RR.HH.): origen "qr".
+  const doc = {
+    origen: (esTec() || esOp()) ? 'operador' : 'qr', estado: 'pendiente', folio,
+    equipoId: ID, equipoNombre: EQ.nombre || '', equipoLocalidad: EQ.localidad || '',
+    descripcionFalla: desc, prioridad, creadoPor: nom, creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
+    maquinaParada: parada === 'si', fechaReporte: hoyStr(), horaParada: h,
+    checklistId: null, asignadoA: null, fechaPlanificada: null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  try {
+    await db.collection('ots').doc().set(doc);
+    vista = 'ok';
+    $('panel').innerHTML = `<div class="card"><div class="ok-box"><span class="e">✅</span><div style="font-size:19px;font-weight:800;">Reporte enviado</div>
+      <div class="folio">${esc(folio)}</div><div class="muted" style="font-size:13.5px;line-height:1.6;">Mantenimiento ya recibió el aviso de <b>${esc(EQ.nombre || '')}</b>.<br>Guarda este número por si te preguntan.</div>
+      <button class="btn sec" id="rListo">Listo</button></div></div>`;
+    $('rListo').onclick = () => { vista = ''; pintar(); };
+  } catch (err) {
+    console.error(err);
+    toast(err.code === 'permission-denied' ? 'No se pudo enviar: el sistema rechazó el reporte. Avisa a mantenimiento.' : 'No se pudo enviar: ' + err.message);
+    $('rOk').disabled = false; $('rOk').textContent = '🚨 Enviar reporte';
+  }
+  enviando = false;
+}
+
+// ── Hoja de vida (pública: sin técnicos, costos ni repuestos) ──
+let hojaMostrar = 20;
+function pintarHoja() {
+  const e = EQ;
+  const ficha = [['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie], ['Área', e.localidad], ['Fabricación', fmtF(e.fabricacion)], ['Instalación', fmtF(e.instalacion)],
+    ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia], ['Fase', e.fase], ['Tamaño', e.tamano], ['Peso', e.peso], ['Hecho en', e.madein]].filter(x => x[1]);
+  const hist = e.historial || [];
+  const item = h => `<div class="h-item ${esc((h.t || '').toLowerCase())}">
+      <div class="t"><span>${fmtF(h.f)}</span><span class="muted" style="font-weight:600;">${esc(h.t)}</span></div>
+      ${h.d ? `<div>${h.c ? '<span class="muted">[' + esc(h.c) + ']</span> ' : ''}${esc(h.d)}</div>` : ''}
+      ${h.pz ? `<div class="muted">Pieza: ${esc(h.pz)}</div>` : ''}
+      ${h.s ? `<div class="sol">✓ ${esc(h.s)}</div>` : ''}
+      ${h.p ? `<div class="muted">Máquina parada ${fmtMin(h.p)}</div>` : ''}</div>`;
+  if (e.sinPublicar) { $('panel').innerHTML = '<div class="card empty"><span class="e">🗂️</span>La hoja de vida de este equipo todavía no está publicada.<br>Mantenimiento la publica al imprimir su etiqueta desde <b>Etiquetas QR</b>.</div>'; return; }
+  $('panel').innerHTML = `<div class="card">
+    <div style="font-weight:800;font-size:16px;margin-bottom:10px;">🗂️ Hoja de vida</div>
+    ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}
+      ${e.caracteristicas ? `<div class="full"><div class="k">Características</div><div class="v">${esc(e.caracteristicas)}</div></div>` : ''}</div>` : '<div class="muted" style="font-size:13px;">Sin ficha técnica registrada.</div>'}
+    ${e.historial ? `<div class="kp"><div><b>${e.totalOts || 0}</b><span>Trabajos</span></div><div><b>${e.totalCorrectivos || 0}</b><span>Correctivos</span></div><div><b style="font-size:14px;padding-top:4px;">${fmtF(e.ultimaIntervencion) || '—'}</b><span>Último trabajo</span></div></div>` : ''}
+  </div>
+  ${!e.historial ? '<div class="card empty">El historial de trabajos de este equipo todavía no está publicado. Se publica cuando mantenimiento registra un trabajo o imprime su etiqueta.</div>'
+    : !hist.length ? '<div class="card empty">Todavía no hay trabajos registrados para este equipo.</div>'
+    : `<div class="section">Trabajos realizados (${(e.totalOts || 0) > hist.length ? hist.length + ' más recientes' : hist.length})</div>`
+      + hist.slice(0, hojaMostrar).map(item).join('')
+      + (hist.length > hojaMostrar ? `<button class="btn sec" id="hMas">Ver más (${hist.length - hojaMostrar})</button>` : '')}
+  ${esTec() ? `<a class="btn sec" href="hoja-vida.html?equipo=${encodeURIComponent(ID)}">Ver hoja de vida completa (con técnicos y tiempos)</a>` : ''}`;
+  const mas = $('hMas'); if (mas) mas.onclick = () => { hojaMostrar += 30; pintarHoja(); };
+}
 </script>
 </body>
 </html>

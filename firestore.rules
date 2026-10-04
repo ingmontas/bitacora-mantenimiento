@@ -95,6 +95,17 @@ service cloud.firestore {
       allow create, update: if esTecnicoOMas() || esAlmacenOMas();
       allow delete: if esAdmin();
     }
+    function esReporteQR() {
+      let d = request.resource.data;
+      return d.origen == 'qr' && d.estado == 'pendiente' &&
+        d.keys().hasOnly(['origen','estado','folio','equipoId','equipoNombre','equipoLocalidad',
+          'descripcionFalla','prioridad','creadoPor','creadoPorUid','maquinaParada','fechaReporte',
+          'horaParada','checklistId','asignadoA','fechaPlanificada','createdAt']) &&
+        d.equipoId is string && exists(/databases/$(database)/documents/equipos/$(d.equipoId)) &&
+        d.descripcionFalla is string && d.descripcionFalla.size() > 0 && d.descripcionFalla.size() <= 1000 &&
+        d.creadoPor is string && d.creadoPor.size() > 0 && d.creadoPor.size() <= 100 &&
+        d.prioridad in ['alta','media','baja'] && d.asignadoA == null && d.createdAt == request.time;
+    }
     match /ots/{id} {
       // Operador NO puede leer la cola de OTs (esTecnicoOMas() se queda
       // igual) — solo crear una nueva, y solo con forma restringida: sin
@@ -106,7 +117,11 @@ service cloud.firestore {
       // atención o resuelta. Solo esos: la consulta de reportar.html filtra
       // where('origen','==','operador'), que es lo que esta regla exige.
       allow read: if esTecnicoOMas() || (esOperador() && resource.data.origen == 'operador');
-      allow create: if esTecnicoOMas() || (esOperador() &&
+      // (4 oct 2026) QR público (equipo.html): cualquiera que escanee la
+      // etiqueta de una máquina —con o sin usuario— puede dejar un reporte,
+      // pero SOLO con esta forma: origen "qr", estado "pendiente", sin
+      // técnico ni tiempos, campos limitados y un equipo que exista de verdad.
+      allow create: if esReporteQR() || esTecnicoOMas() || (esOperador() &&
         request.resource.data.estado == 'pendiente' &&
         request.resource.data.origen == 'operador' &&
         !('TECNICOS' in request.resource.data) &&
@@ -118,6 +133,13 @@ service cloud.firestore {
       // de Técnico para arriba.)
       allow update: if esTecnicoOMas();
       allow delete: if esAdmin();
+    }
+    // (4 oct 2026) Copia pública de cada equipo para el QR: ficha técnica e
+    // historial resumido (sin técnicos, costos ni repuestos). Se lee de a uno
+    // sin sesión (nunca la lista completa); la escribe el personal desde la app.
+    match /equipos_publico/{id} {
+      allow get: if true;
+      allow list, write: if esTecnicoOMas() || esAlmacenOMas();
     }
     match /movimientos/{id} {
       allow read: if esTecnicoOMas() || esAlmacenOMas();

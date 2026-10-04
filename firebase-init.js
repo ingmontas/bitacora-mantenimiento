@@ -48,7 +48,9 @@ function fbTimestamp() {
   return firebase.firestore.FieldValue.serverTimestamp();
 }
 
-const PUBLIC_PAGES = ['login.html'];
+// equipo.html (destino del QR de cada máquina) también se abre sin sesión:
+// cualquiera puede reportar una falla y ver la hoja de vida pública (4 oct 2026).
+const PUBLIC_PAGES = ['login.html', 'equipo.html'];
 const currentPage = location.pathname.split('/').pop() || 'index.html';
 
 window.currentUser = null;
@@ -144,4 +146,46 @@ function fbRenderMiniNav(active) {
     + `<button onclick="fbLogout()" style="margin-left:8px;background:none;border:1px solid #2D3F55;color:#94A3B8;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">Salir</button>`;
     document.body.insertBefore(bar, document.body.firstChild);
   }).catch(()=>{}); // si no hay sesión, fbReady ya redirigió a login.html — no hacer nada aquí
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// HOJA DE VIDA PÚBLICA (4 oct 2026)
+// El QR de cada máquina (equipo.html) se puede abrir SIN iniciar sesión.
+// Para no abrir toda la base de datos, lo que ve el público sale de una copia
+// aparte por equipo: /equipos_publico/{mismo id del equipo}, con la ficha
+// técnica y el historial de trabajos SIN nombres de técnicos, costos ni
+// repuestos. La escriben los usuarios de mantenimiento automáticamente
+// (Bitácora al guardar, Hoja de Vida al abrir un equipo, Etiquetas QR al
+// imprimir) con publicarHojaVida().
+// ══════════════════════════════════════════════════════════════════════
+const _normPub = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+// Mismas reglas que la Hoja de Vida: por nombre de equipo, por línea con el
+// mismo nombre, o por equipoId (avisos y checklist).
+function otsDelEquipo(e, ots) {
+  const n = _normPub(e.nombre);
+  return (ots || []).filter(o => o.FECHA && (_normPub(o.EQUIPO || o.TIPO_MAQUINA) === n || _normPub(o.LINEA_EQUIPO) === n || (o.equipoId && o.equipoId === e.id)));
+}
+const CAMPOS_FICHA_PUB = ['nombre','localidad','marca','modelo','serie','fabricacion','instalacion','tension','potencia','frecuencia','fase','tamano','peso','madein','caracteristicas','checklistProximaFecha'];
+// e = equipo ({id, nombre, ...}); ots = todas las OTs (opcional: sin ellas solo
+// se publica la ficha técnica y se conserva el historial que ya hubiera).
+function publicarHojaVida(e, ots) {
+  if (!e || !e.id || typeof db === 'undefined') return Promise.resolve();
+  const doc = {};
+  CAMPOS_FICHA_PUB.forEach(k => { doc[k] = e[k] != null ? e[k] : ''; });
+  if (ots) {
+    const corta = (s, n) => { s = (s || '').toString().trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+    const lista = otsDelEquipo(e, ots)
+      .sort((a, b) => (b.FECHA || '').localeCompare(a.FECHA || '') || (b.H_INICIO || '').localeCompare(a.H_INICIO || ''));
+    doc.totalOts = lista.length;
+    doc.totalCorrectivos = lista.filter(o => (o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo').length;
+    doc.ultimaIntervencion = lista[0] ? lista[0].FECHA : '';
+    doc.historial = lista.slice(0, 150).map(o => ({
+      f: o.FECHA || '', t: o.TIPO_MANTENIMIENTO || '', c: o.CAUSA_FALLA || o.causaFalla || '',
+      d: corta(o.DESCRIPCION_FALLA || o.descripcionFalla, 220), s: corta(o.DESCRIPCION_SOLUCION, 220),
+      p: Number(o.TOTAL_MIN_MAQUINA) || 0, pz: corta(o.PIEZA, 60),
+    }));
+  }
+  doc.actualizado = firebase.firestore.FieldValue.serverTimestamp();
+  return db.collection('equipos_publico').doc(e.id).set(doc, { merge: true })
+    .catch(err => console.warn('No se pudo publicar la hoja de vida de', e.nombre, err.message));
 }
