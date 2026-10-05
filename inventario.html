@@ -175,7 +175,7 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-2);border:1px solid var(--line);padding:12px 20px;border-radius:9px;font-size:13px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-  .footer-actions{display:flex;gap:10px;justify-content:center;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);}
+  .footer-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);}
 
   @media(max-width:720px){
     .kpis{grid-template-columns:repeat(2,1fr);}
@@ -246,7 +246,7 @@
   <div class="footer-actions">
     <button class="btn secondary sm" id="btnListaCompra" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
     <button class="btn secondary sm" onclick="exportData()">⬇ Exportar respaldo (JSON)</button>
-    <button class="btn secondary sm" id="btnExportHistorial" style="display:none;" onclick="exportHistorialCompleto()" title="Movimientos de repuestos, reubicaciones y auditoría — hoy no tienen ningún respaldo aparte">⬇ Respaldo de movimientos/reubicaciones/auditoría</button>
+    <button class="btn secondary sm" id="btnExportHistorial" style="display:none;white-space:normal;max-width:100%;" onclick="exportHistorialCompleto()" title="Movimientos de repuestos, reubicaciones y auditoría — hoy no tienen ningún respaldo aparte">⬇ Respaldo de movimientos/reubicaciones/auditoría</button>
     <button class="btn secondary sm" onclick="document.getElementById('importFile').click()">⬆ Importar respaldo</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
   </div>
@@ -430,16 +430,25 @@
 <div class="modal-bg" id="modalBulk">
   <div class="modal" style="max-width:720px;">
     <h3>📋 Carga masiva de repuestos</h3>
-    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por repuesto. Si un repuesto ya existe en este equipo (mismo nombre + modelo), se suma en vez de duplicarse.</div>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por repuesto. Si un repuesto ya existe en este equipo (mismo nombre + tipo + modelo), no se duplica: se suma o se reemplaza su conteo según lo que elijas abajo.</div>
     <div class="form-field full">
       <label>Formato de columnas: Repuesto · Tipo · Modelo · Descripción · Uso · Qty · Cant.Máquina · Mínimo · Máximo</label>
       <textarea id="bulkPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="RELE	OMRON	MY2N-GS-C1	Relé 24VDC 8 pines		4	5	2	10"></textarea>
+    </div>
+    <!-- (5 oct 2026) Antes la carga masiva SIEMPRE sumaba la Qty al stock que
+         ya había, sin decirlo: pegar el conteo físico de la bodega duplicaba
+         el stock. Ahora se elige y queda a la vista. Cada cambio de stock deja
+         un movimiento tipo "ajuste" en el historial. -->
+    <div class="form-field full" style="font-size:12.5px;">
+      <label>Si el repuesto ya existe en este equipo, la Qty pegada…</label>
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:4px 0;"><input type="radio" name="bulkModo" value="sumar" checked style="width:auto;"> <b>Sumar a lo que hay</b> <span style="color:var(--muted);">(llegó mercancía: stock + Qty)</span></label>
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:4px 0;"><input type="radio" name="bulkModo" value="reemplazar" style="width:auto;"> <b>Reemplazar conteo</b> <span style="color:var(--muted);">(conteo físico: el stock queda igual a la Qty)</span></label>
     </div>
     <div class="modal-actions">
       <button class="btn secondary" onclick="closeModal('modalBulk')">Cancelar</button>
       <button class="btn" onclick="bulkImportRepuestos()">Procesar y cargar</button>
     </div>
-    <div id="bulkStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+    <div id="bulkStatus" style="font-size:12px;margin-top:10px;color:var(--muted);max-height:160px;overflow:auto;"></div>
   </div>
 </div>
 
@@ -529,145 +538,12 @@ function mergeEquipoInto(targetList, importedEquipo){
   (importedEquipo.repuestos||[]).forEach(p => mergeRepuestoInto(existing.repuestos, p));
 }
 
-/* ═══════════════ DATOS SEMILLA ═══════════════ */
-const SEED = [
-  {
-    id: 'eq1', nombre: 'VALVE ASSEMBLY', marca: 'WENZHOU FURI', modelo: 'FRTB-ZH', serie: 'FR88-0217TN4',
-    localidad: 'PLANTA 1', fabricacion: '2025-01-04', instalacion: '2025-08-07',
-    tension: '220 V', potencia: '3 KW', frecuencia: '50/60 HZ', tamano: '1340x1340x1670mm',
-    peso: '1 ton.', fase: 'MONO FASICO', madein: 'CHINA',
-    repuestos: [
-      {r:'RELE',t:'OMRON',m:'MY2N-GS-C1',d:'RELE MY2N-GS-C1 DC24 OMRON (24VDC 8 PINES)',u:'',q:4,cm:5},
-      {r:'SENSOR',t:'DMS',m:'DMSG-050 (B30HY)',d:'SENSOR ELECTRONICO DE ESTADO SOLIDO',u:'POSICION DE CILINDRO',q:6,cm:33},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M8/M6',d:'CONECTOR NEUMATICO FESTO TIPO T M8/M6',u:'',q:1,cm:10},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M16/M10',d:'CONECTOR NEUMATICO FESTO TIPO T M16/M10',u:'',q:0,cm:2},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO T',m:'T M6',d:'CONECTOR NEUMATICO FESTO TIPO T M6/M6',u:'',q:2,cm:10},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M6/M6',d:'CONECTOR NEUMATICO FESTO TIPO Y M6/M6',u:'',q:2,cm:30},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M8/M6',d:'CONECTOR NEUMATICO FESTO TIPO Y M8/M6',u:'',q:2,cm:20},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M10/M8',d:'CONECTOR NEUMATICO FESTO TIPO Y M10/M8',u:'',q:0,cm:16},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M12/M10',d:'CONECTOR NEUMATICO FESTO TIPO Y M12/M10',u:'',q:0,cm:10},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M12/M12',d:'CONECTOR NEUMATICO FESTO TIPO Y M12/M12',u:'',q:0,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO Y',m:'Y M16/M12',d:'CONECTOR NEUMATICO FESTO TIPO Y M16/M12',u:'',q:0,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/2 A M16',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/2/M16',u:'',q:0,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/4 A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/4 A M6',u:'',q:2,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/8 A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/8 A M6',u:'',q:2,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 1/2 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 1/2/M12',u:'',q:0,cm:5},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CURVA',m:'DE 5MM A M6',d:'CONECTOR NEUMATICO FESTO TIPO CURVA 5MM A M6',u:'',q:2,cm:15},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/2 A M16',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/2 A M16',u:'',q:0,cm:6},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 5/8 A M16',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 5/8 A M16',u:'',q:0,cm:4},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/4 A M8',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/4 A M8',u:'',q:2,cm:20},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'DE 1/4 A M6',d:'CONECTOR NEUMATICO FESTO TIPO RECTO 1/4 A M6',u:'',q:2,cm:50},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO RECTO',m:'SS316 M8/1/4',d:'Conector doble férula acero inoxidable 316, macho recto, M8 a NPT 1/4',u:'',q:0,cm:60},
-      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO VALVULA',m:'REGULADOR M6/M6',d:'Regulador de caudal de línea neumático para tubo M6/M6',u:'',q:3,cm:30},
-      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO CODO',m:'Rosca M5xM8',d:'Regulador de caudal neumático codo, rosca M5 x M8',u:'',q:1,cm:70},
-      {r:'VALVULA REGULADORA DE CAUDAL',t:'TIPO CODO',m:'Rosca 1/8xM8',d:'Regulador de caudal neumático codo, rosca 1/8 x M8',u:'',q:2,cm:10},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE M16 A M16',d:'CONECTOR NEUMATICO FESTO TIPO CODO M16/M16',u:'',q:0,cm:2},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE 5/8 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CODO 5/8 A M12',u:'',q:0,cm:2},
-      {r:'CONNECTOR NEUMATICO',t:'TIPO CODO',m:'DE 3/8 A M12',d:'CONECTOR NEUMATICO FESTO TIPO CODO 3/8 A M12',u:'',q:0,cm:9},
-      {r:'MANGUERA',t:'Tubo de plástico',m:'M6',d:'Tubo de plástico PUN-H, PUN-H-DUO M6',u:'',q:0,cm:'100 PIE'},
-      {r:'MANGUERA',t:'Tubo de plástico',m:'M8',d:'Tubo de plástico PUN-H, PUN-H-DUO M8',u:'',q:0,cm:'100 PIE'},
-      {r:'MANGUERA',t:'Tubo de plástico',m:'M10',d:'Tubo de plástico PUN-H, PUN-H-DUO M10',u:'',q:0,cm:'100 PIE'},
-      {r:'MANGUERA',t:'Tubo de plástico',m:'M12',d:'Tubo de plástico PUN-H, PUN-H-DUO M12',u:'',q:0,cm:'20 PIE'},
-      {r:'MANGUERA',t:'Tubo de plástico',m:'M16',d:'Tubo de plástico PUN-H, PUN-H-DUO M16',u:'',q:0,cm:'10 PIE'},
-      {r:'SENSOR INDUCTIVO',t:'LEUZE',m:'IS 122PP/2NO-5E0',d:'Interruptor inductivo SN=5mm, 10-30VDC, 200mA',u:'',q:2,cm:18},
-      {r:'Servomotor',t:'innovador',m:'MS1H4-40B30CB-T331R-S',d:'Servomotor innovador',u:'',q:0,cm:1},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'MD20X35S',d:'',u:'',q:0,cm:3},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TN16X25S',d:'Cilindro neumático doble eje, doble varilla',u:'',q:0,cm:1},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TN16X10S',d:'Cilindro neumático doble eje, doble varilla',u:'',q:0,cm:9},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TCLJ16X30-20S',d:'Cilindro triaxial de doble efecto',u:'',q:0,cm:28},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'HRQ30A',d:'Cilindro de tabla giratoria',u:'',q:0,cm:1},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'SDAJ40X50-30SB',d:'Cilindro neumático compacto de doble efecto',u:'',q:0,cm:3},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'TCM6X10S',d:'Cilindro de tres varillas con cojinete de bronce',u:'',q:0,cm:2},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'MD20X15S',d:'',u:'',q:0,cm:3},
-      {r:'CILINDRO NEUMATICOS',t:'AirTAC',m:'HFZ16',d:'Cilindro de dedo neumático, garra abierta y cerrada',u:'',q:2,cm:6},
-      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO VALVULA',u:'',q:0,cm:2},
-      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO BODY',u:'',q:0,cm:4},
-      {r:'MUELA',t:'',m:'',d:'MUELA DEL CILINDRO CROSS',u:'',q:0,cm:2},
-      {r:'ELECTROVALVULA',t:'AIRTAC',m:'4V210-08',d:'DC24, 0.15-0.8MPa',u:'',q:4,cm:48},
-      {r:'ELECTROVALVULA',t:'AIRTAC',m:'4V220-08',d:'DC24, 0.15-0.8MPa',u:'',q:0,cm:2},
-      {r:'SENSOR',t:'LEUZE',m:'HT5.1/2',d:'',u:'CONVEYOR',q:2,cm:10},
-      {r:'Resorte de Compresión',t:'',m:'RC-25x2x50-6.5D-PE',d:'Øext25 Øalambre2 L.libre50mm 6.5 espiras derecho planas esmeriladas',u:'',q:2,cm:6},
-      {r:'Resorte de Compresión',t:'',m:'RC-24x1x125-15.5D-PE',d:'Øext24 Øalambre1 L.libre125mm 15.5 espiras derecho planas esmeriladas',u:'',q:2,cm:2},
-      {r:'Resorte de Compresión',t:'',m:'RC-25x2x114-12.5D-PE',d:'Øext25 Øalambre2 L.libre114mm 12.5 espiras derecho planas esmeriladas',u:'',q:4,cm:16},
-      {r:'Interruptor de vacío',t:'SMC',m:'ZSE20-N-01-L',d:'',u:'Vacuum Switch',q:2,cm:28},
-      {r:'Interruptor de presión',t:'DPS',m:'DPSN1',d:'Serie DPS Airtac, pantalla digital',u:'',q:0,cm:2},
-      {r:'VALVULA SOLENOIDE',t:'SMC',m:'VX214EA',d:'DC24V 4.5W',u:'Valves Vacuum',q:2,cm:56},
-      {r:'filtro de bomba vacío',t:'',m:'',d:'Elemento de filtro de bomba de vacío',u:'',q:0,cm:1},
-      {r:'filtro de vacío',t:'SMC ZFC100-04B',m:'SMC ZFC100-06B',d:'Montaje de manguera de aire de vacío, accesorios conexión rápida',u:'filtro Vacuum',q:10,cm:28},
-      {r:'Sensor',t:'fibra óptica coaxial',m:'Ffrc-610-Mu',d:'Sensor de fibra óptica coaxial de reflexión difusa, sonda curva',u:'',q:1,cm:3},
-      {r:'SENSOR INDUCTIVO',t:'omron',m:'E2B-S08KS02-WP-B1 2M',d:'PNP/NO; 0-2mm; 10-30VDC; M8; 2m; IP67',u:'',q:0,cm:1},
-      {r:'correa',t:'Optibelt OMEGA HTD',m:'1080-8M',d:'Correa de distribución',u:'',q:0,cm:1},
-      {r:'correa',t:'Optibelt',m:'1120-14M',d:'Correa de tiempo tipo 14M, 1120mm',u:'',q:0,cm:1},
-      {r:'Correa',t:'Tipo Vee V Cinturón',m:'z400',d:'Correa trapezoidal clásica',u:'',q:0,cm:4},
-      {r:'MOTOR',t:'MAILI',m:'ch32',d:'2hp 1500w 220/380v 6.59/3.62A 50/60hz 1350/1650rpm',u:'',q:0,cm:1},
-      {r:'VACOOM',t:'ORION',m:'DRY-PUMP',d:'Bomba',u:'',q:0,cm:1},
-      {r:'motor vacoom',t:'aevf',m:'nanjing kingdom-motor',d:'2hp 1.5kw 220v 8.8A 50/60hz 1435/1720rpm',u:'',q:0,cm:1},
-      {r:'rodamiento del vacoom',t:'skf',m:'6205-zz',d:'',u:'BOMBA',q:0,cm:4},
-      {r:'rodamiento del vacoom',t:'skf',m:'6203-zz',d:'',u:'BOMBA',q:0,cm:4},
-      {r:'RODAMIENTO',t:'SKF',m:'6004-E',d:'',u:'CINTA',q:0,cm:8},
-      {r:'RODAMIENTO',t:'SKF',m:'6002-Z',d:'',u:'CINTA',q:0,cm:8},
-      {r:'variador',t:'kewo',m:'ad300-2s1.5 gb',d:'In 1.5kw 220v 50/60hz, out 3hp 0-220v 0-50hz 7A',u:'',q:0,cm:1},
-      {r:'variador',t:'CUH',m:'SDVC31-S',d:'1.5A, in 85-260VAC, out 40-400Hz',u:'',q:0,cm:4},
-      {r:'variador',t:'CUH',m:'SDVC31-M',d:'3A, in 85-260VAC, out 40-400Hz',u:'',q:0,cm:3},
-      {r:'AC SERVO MOTOR',t:'INOVANCE',m:'MS1H4-75B30CB',d:'Usado',u:'',q:0,cm:1},
-      {r:'Rele',t:'MIBBO',m:'SA-40D3Z',d:'Relé de estado sólido',u:'',q:0,cm:1},
-      {r:'BREAKER',t:'CHNT',m:'NXB-63 C25',d:'Breaker europeo doble',u:'',q:0,cm:2},
-      {r:'BREAKER',t:'CHNT',m:'NXB-63 C16',d:'Breaker europeo simple',u:'',q:0,cm:2},
-      {r:'CONTACTOR',t:'CHNT',m:'CJX2-18-10',d:'AC 380V/220V/110V/36V/24V',u:'',q:0,cm:3},
-      {r:'POWER SUPPLY',t:'MEAN WELL',m:'LRS-600-24',d:'24V 600W, perfil bajo',u:'',q:0,cm:1},
-      {r:'POWER SUPPLY',t:'MEAN WELL',m:'LRS-150-24',d:'24V, perfil bajo',u:'',q:0,cm:1},
-      {r:'SERVO DRIVE',t:'INOVANCE',m:'SV630A',d:'AC200V 750W, usado',u:'',q:0,cm:2},
-      {r:'Motor de velocidad variable',t:'MAILI',m:'3RK20GN-C',d:'20W 220V 1250RPM 50/60Hz',u:'',q:0,cm:4},
-      {r:'Motor de velocidad variable',t:'MAILI',m:'5RK40GN-CF',d:'40W 220V 1350/1550RPM',u:'',q:0,cm:1},
-      {r:'CILINDRO NEUMATICOS',t:'AIRTAC',m:'MAC20',d:'Mini cilindro MAC20X75',u:'',q:0,cm:1},
-      {r:'CILINDRO NEUMATICOS',t:'AIRTAC',m:'MI 16X50 SCA.',d:'',u:'',q:0,cm:1},
-      {r:'REGULADOR DE AIRE',t:'AIRTAC',m:'GFR400-15',d:'Filtro regulador 20-130PSI, separador aceite/agua 80CC',u:'',q:0,cm:2},
-      {r:'ACOPLE',t:'AIRTAC',m:'F-M8X125F',d:'Floating Joint, rosca M8, paso 1.25mm',u:'',q:0,cm:4},
-      {r:'ACOPLE',t:'AIRTAC',m:'F-M8X125F (2)',d:'Floating Joint',u:'',q:0,cm:4},
-      {r:'ACOPLE',t:'AIRTAC',m:'F-M14X150F',d:'Floating Joint',u:'',q:0,cm:2},
-      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 3070 x 110 x 1mm',u:'',q:0,cm:1},
-      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 1730 x 110 x 1mm',u:'',q:0,cm:1},
-      {r:'BANDA',t:'',m:'',d:'BANDA TRANSPORTADORA 1720 x 130 x 1mm',u:'',q:0,cm:1},
-      {r:'RESISTENCIA',t:'',m:'Resistencia de abrazadera',d:'Ø35x35 220V',u:'',q:0,cm:1},
-      {r:'SENSOR',t:'Leuze',m:'HT3CL1/2N-M8',d:'Sensor difuso con supresión de fondo — 50136237',u:'',q:0,cm:1},
-      {r:'SENSOR',t:'OPTEX',m:'Wll170-2P330',d:'Sensor de fibra óptica — 6029513',u:'',q:0,cm:3},
-      {r:'chumacera',t:'skf',m:'uc209',d:'UC209-26+AK209, hierro fundido, 1.625"',u:'',q:0,cm:2},
-      {r:'codificador',t:'OMRON',m:'E6B2-CWZ6C',d:'Resolución 1000 p/r',u:'',q:0,cm:1},
-      {r:'Sensor de proximidad',t:'AIRTAC',m:'Dmsj DMS Series 2/3',d:'Reed magnético para cilindro neumático',u:'',q:0,cm:1},
-      {r:'FUENTE',t:'SUICHIN',m:'2420',d:'Adaptador AC/DC, in 100-240V 50/60Hz, out 24V 2A',u:'',q:0,cm:1},
-      {r:'sensor',t:'AIRTAC',m:'HR12-D10NK',d:'Interruptor magnético con sensor de proximidad',u:'',q:0,cm:1},
-    ]
-  },
-  {
-    id: 'eq2', nombre: 'COATING', marca: 'HENGLI', modelo: 'SFM-Z90X31-1600', serie: '065',
-    localidad: 'PLANTA 1', fabricacion: '2022-01-04', instalacion: 'Jul-22',
-    tension: '380V', potencia: '220KW', frecuencia: '50 HZ', tamano: '16500x10000x400mm',
-    peso: '25 ton.', fase: '3', madein: 'CHINA',
-    repuestos: [
-      {r:'SENSOR',t:'DMS',m:'DMSG-N020',d:'NPN/IP64 — 5~30V DC 30V/200 MA MAX',u:'SENSOR DEL CILINDRO QUE BAJA EL ROLLO TERMINADO DE COATING',q:null,cm:null},
-      {r:'RODAMIENTO',t:'SKF',m:'22216-EK-C3',d:'Rodamiento de rótulas en rodillos — Ø int. 80mm, Ø ext. 140mm, espesor 33mm, vel. límite 4300 RPM, carga dinámica 236000KN, estática 270000KN',u:'RODILLO DE AGUA FRIA',q:null,cm:null},
-      {r:'RODAMIENTO',t:'SKF',m:'1306-ENTN9',d:'Rodamiento a rótula de bola — Ø int. 30mm, Ø ext. 72mm, espesor 19mm, peso 396g',u:'RODAMIENTO PARA RODILLOS',q:null,cm:null},
-      {r:'RETENEDORA',t:'SKF',m:'45 x 65 x 10',d:'Retén de Viton — Ø ext. 65mm, Ø int. 45mm, espesor 10mm',u:'RETENEDORA',q:null,cm:null},
-      {r:'FILTRO',t:'',m:'100 x 120 lcr18n19 ti',d:'Filtro automático — automatic belt filtering net 100x120 lcr18n19 ti',u:'FILTRO DE LA EXTRUSORA',q:null,cm:null},
-      {r:'FILTRO',t:'',m:'100 x 260 lcr18n19 ti',d:'Filtro automático — automatic belt filtering net 100x260 lcr18n19 ti',u:'FILTRO DE LA EXTRUSORA',q:null,cm:null},
-      {r:'RETENEDORA',t:'SKF',m:'35 x 52 x 10',d:'Retén de Viton — Ø ext. 52mm, Ø int. 35mm, espesor 10mm',u:'RETENEDORA',q:null,cm:null},
-      {r:'MOTOR',t:'',m:'BTS-50-S',d:'',u:'',q:null,cm:2},
-      {r:'VALVULA',t:'',m:'',d:'',u:'',q:null,cm:2},
-      {r:'TUMA CERO',t:'',m:'FC209',d:'',u:'',q:null,cm:2},
-      {r:'CILINDRO',t:'',m:'SC50*405',d:'',u:'',q:null,cm:2},
-      {r:'REDUTOR',t:'',m:'',d:'',u:'',q:null,cm:1},
-      {r:'MOTOR',t:'',m:'',d:'',u:'',q:null,cm:1},
-      {r:'CILINDRO PARA CUCHILLA',t:'',m:'',d:'Longitud 1970mm',u:'',q:null,cm:null},
-      {r:'CILINDRO',t:'',m:'SC63*1605',d:'',u:'',q:null,cm:2},
-      {r:'DYSPLAY',t:'KADO',m:'AE500',d:'KADO Automation AE500 display unit, cable and software',u:'CONTROLADOR',q:null,cm:1},
-      {r:'FLECHERO',t:'',m:'',d:'Air cylinder arrow 175CM',u:'BOBINA',q:null,cm:2},
-      {r:'ENCODER',t:'',m:'ZZUU4809-001G-2500BZ1-4P5L',d:'Rotary encoder',u:'',q:null,cm:1},
-      {r:'CILINDRO',t:'',m:'',d:'Cylinder Corona 171CM x 20.5CM',u:'TRATAMIENTO CORONA',q:null,cm:1},
-      {r:'CILINDRO',t:'',m:'',d:'Cylinder Cool Water 170CM x 35CM',u:'CILINDRO DE AGUA',q:null,cm:1},
-      {r:'FAN',t:'',m:'pfb0924ghe-5l3n',d:'Brand new DC24V 0.76A cooling fan for ACS510/550',u:'',q:null,cm:2},
-    ]
-  }
-];
+/* ═══════════════ DATOS SEMILLA (quitados 5 oct 2026) ═══════════════ */
+// Antes, si la colección "equipos" se leía vacía (por ejemplo, una lectura
+// que falló a medias o una base nueva), la página subía sola dos equipos de
+// ejemplo (VALVE ASSEMBLY y COATING) con stock inventado. Ya no se inserta
+// nada automáticamente: con la base vacía se muestra un aviso para agregar o
+// importar equipos.
 
 /* ═══════════════ TÉCNICOS (misma lista central que usa Bitácora) ═══════════════ */
 // Antes el técnico de un movimiento de stock era texto libre guardado solo en
@@ -689,7 +565,8 @@ async function loadTecnicosInventario(){
   }catch(e){ console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message); }
   const sel = document.getElementById('mov-tecnico');
   if(sel){
-    sel.innerHTML = '<option value="">Selecciona…</option>' + tecnicosInv.map(t=>`<option value="${t.nombre.replace(/"/g,'&quot;')}">${t.corto||t.nombre}</option>`).join('');
+    // (5 oct 2026) nombres escapados con fbEsc (antes solo se escapaban las comillas del value)
+    sel.innerHTML = '<option value="">Selecciona…</option>' + tecnicosInv.map(t=>`<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto||t.nombre)}</option>`).join('');
   }
 }
 
@@ -720,10 +597,6 @@ function fbSanitize(obj){
   return JSON.parse(JSON.stringify(obj === undefined ? null : obj));
 }
 
-// Guarda el estado actual de un equipo (datos + su array de repuestos) en su
-// documento de Firestore. No se espera (await) la confirmación del servidor
-// para no bloquear la interfaz si no hay señal — con persistencia offline
-// activada, el cambio se sube solo en cuanto haya conexión.
 // Firestore no permite documentos de más de ~1MB. Como cada equipo guarda
 // TODOS sus repuestos en un solo documento, un catálogo muy grande cargado de
 // una vez a un mismo equipo se puede acercar a ese límite. Avisamos antes de
@@ -736,8 +609,14 @@ function checkEquipoSize(e){
   }
   return bytes;
 }
+// (5 oct 2026) Guardado del equipo COMPLETO (datos + todos sus repuestos).
+// Ya solo se usa para restaurar: "Importar respaldo" y "Deshacer" al borrar
+// un equipo. Todo lo demás (movimientos, editar/agregar/borrar repuestos,
+// fusionar, carga masiva, datos del equipo, manual) escribe SOLO el campo
+// que cambia, y los repuestos van dentro de una transacción (txRepuestos).
 function fbSaveEquipo(e){
   const { id, ...rest } = e;
+  if(Array.isArray(rest.repuestos)) asegurarIdsRepuestos(rest.repuestos);
   checkEquipoSize(e);
   const localUpdatedAt = e.updatedAt; // snapshot ANTES de que este guardado cambie updatedAt
   db.collection('equipos').doc(id).set(fbSanitizeTs({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
@@ -750,11 +629,8 @@ function fbSaveEquipo(e){
 // si dos personas editan el MISMO equipo casi al mismo tiempo (una
 // registrando una entrada de un repuesto, otra agregando uno distinto),
 // el segundo guardado puede sobrescribir sin avisar el cambio del primero.
-// Esta verificación no evita esa sobrescritura de raíz -- evitarla del
-// todo requeriría mover cada repuesto a su propio documento en Firestore
-// en vez de un solo arreglo, un cambio de esquema más grande que se dejó
-// aparte, a propósito, para no migrar datos reales de golpe sin probarlo
-// primero -- pero sí avisa cuando pasó, en vez de que nadie se entere.
+// (5 oct 2026) Ese problema ya se resolvió con txRepuestos() (abajo); este
+// aviso queda solo para fbSaveEquipo (restaurar respaldo / deshacer).
 // Nunca bloquea ni retrasa el guardado: es una lectura aparte, en
 // paralelo, que se salta sola si no hay conexión o si algo falla.
 async function warnIfEquipoChangedSinceLoad(equipoId, equipoNombre, localUpdatedAt){
@@ -772,6 +648,136 @@ function fbDeleteEquipoDoc(id){
   return db.collection('equipos').doc(id).delete();
 }
 
+/* ═══════════════ STOCK SEGURO: ID DE REPUESTO + TRANSACCIONES (5 oct 2026) ═══════════════
+   Antes cada repuesto se identificaba por su POSICIÓN en el arreglo y cada
+   cambio subía el arreglo completo que tenía ESTE celular. Si otro técnico
+   registraba una salida al mismo tiempo, o si la lista cambiaba de orden, se
+   perdían movimientos o se descontaba del repuesto equivocado.
+   Ahora:
+   - cada repuesto tiene un `id` corto y estable (se asigna solo, la primera
+     vez que se abre el equipo o al guardar);
+   - todo cambio de repuestos se hace con db.runTransaction: se lee el
+     documento FRESCO del servidor, se busca el repuesto por id, se calcula
+     la nueva cantidad sobre el valor fresco y se escribe solo `repuestos`
+     (+ updatedAt), junto con su registro en /movimientos;
+   - una transacción necesita conexión: sin señal se avisa y no se pierde
+     lo escrito (el formulario queda abierto). */
+const REP_ID_RE = /^[A-Za-z0-9_-]{4,40}$/;
+const repIdValido = id => typeof id === 'string' && REP_ID_RE.test(id);
+function nuevoRepId(){
+  const az = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  const rnd = (window.crypto && crypto.getRandomValues) ? crypto.getRandomValues(new Uint8Array(10)) : Array.from({length:10}, () => Math.floor(Math.random()*256));
+  for (let i = 0; i < 10; i++) s += az[rnd[i] % az.length];
+  return 'r' + s;
+}
+// Pone id a los repuestos que no tienen (o que traen uno inválido de un
+// respaldo importado). Devuelve cuántos asignó.
+function asegurarIdsRepuestos(lista){
+  let n = 0;
+  const vistos = new Set();
+  (lista || []).forEach(p => {
+    if (!p || typeof p !== 'object') return;
+    if (!repIdValido(p.id) || vistos.has(p.id)) { p.id = nuevoRepId(); n++; }
+    vistos.add(p.id);
+  });
+  return n;
+}
+// Referencia a un repuesto tomada al abrir un formulario: su id y, para
+// repuestos viejos sin id, su posición + su clave (nombre|tipo|modelo).
+function refRepuesto(p, idx){
+  return { id: repIdValido(p && p.id) ? p.id : null, idx, key: partKey(p || {}), r: (p && p.r) || '' };
+}
+// Busca el repuesto en la lista FRESCA. Por id; si la referencia no tenía id
+// (repuesto viejo), por posición SOLO si en esa posición sigue estando el
+// mismo repuesto (misma clave). -1 si ya no está.
+function buscarRepuesto(lista, ref){
+  if (!ref) return -1;
+  if (ref.id) return lista.findIndex(p => p && p.id === ref.id);
+  const p = lista[ref.idx];
+  return (p && partKey(p) === ref.key) ? ref.idx : -1;
+}
+// Error con mensaje para el usuario (se muestra tal cual, sin "Error:").
+function errUsuario(msg){ const e = new Error(msg); e.userMsg = msg; return e; }
+function esErrorSinConexion(err){
+  if (!navigator.onLine) return true;
+  const c = err && err.code;
+  return c === 'unavailable' || c === 'deadline-exceeded' || /offline|network|sin conexi/i.test((err && err.message) || '');
+}
+const MSG_SIN_CONEXION = '📶 Para mover stock se necesita conexión. No se guardó nada: intenta de nuevo cuando haya señal.';
+// Muestra el error de una transacción de repuestos de forma clara.
+function avisarErrorTx(err){
+  if (!(err && err.userMsg)) console.error('Transacción de repuestos:', err);
+  if (err && err.userMsg) showToast('⚠️ ' + err.userMsg);
+  else if (esErrorSinConexion(err)) showToast(MSG_SIN_CONEXION);
+  else if (err && err.code === 'permission-denied') showToast('🔒 Tu usuario no tiene permiso para cambiar el inventario.');
+  else showToast('⚠️ No se pudo guardar: ' + ((err && err.message) || err));
+}
+const TX_SIN_CAMBIOS = { sinCambios: true };
+// Corre `fn(lista, datosEquipo, t, idsNuevos)` dentro de una transacción sobre
+// /equipos/{equipoId}. `lista` es una copia de los repuestos FRESCOS (ya con
+// id); fn la modifica y puede agregar escrituras con t.set(...). Si fn
+// devuelve TX_SIN_CAMBIOS (y no hubo ids nuevos) no se escribe nada.
+// OJO: Firestore puede repetir fn si otro celular escribió en medio: fn no
+// debe cambiar nada fuera de `lista` / `t`.
+async function txRepuestos(equipoId, fn){
+  if (!navigator.onLine) { const e = new Error('offline'); e.code = 'unavailable'; throw e; }
+  const ref = db.collection('equipos').doc(equipoId);
+  return db.runTransaction(async t => {
+    const snap = await t.get(ref);
+    if (!snap.exists) throw errUsuario('Este equipo ya no existe (lo borraron desde otro celular).');
+    const data = snap.data() || {};
+    const lista = Array.isArray(data.repuestos) ? data.repuestos.map(p => ({ ...p })) : [];
+    const idsNuevos = asegurarIdsRepuestos(lista);
+    const res = await fn(lista, data, t, idsNuevos);
+    if (res === TX_SIN_CAMBIOS && !idsNuevos) return res;
+    const repuestos = fbSanitize(lista);
+    const bytes = new Blob([JSON.stringify({ ...data, repuestos })]).size;
+    if (bytes > 1000000) throw errUsuario(`"${data.nombre || 'El equipo'}" pasaría de 1MB (límite de Firestore). Divide los repuestos en otro equipo.`);
+    t.update(ref, { repuestos, updatedAt: fbTimestamp() });
+    return res;
+  });
+}
+// Quién está usando la app (para los registros).
+const quienSoy = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—';
+const miUid = () => (window.currentUser && window.currentUser.uid) || null;
+const redondearQ = x => Math.round(x * 10000) / 10000; // evita 0.30000000000000004
+// Número de una celda/campo: acepta coma decimal ("1,5") y miles con punto
+// ("1.250,5"). Devuelve null si está vacío y NaN si no es un número.
+function parseNumero(txt){
+  let s = (txt == null ? '' : String(txt)).trim().replace(/\s/g, '');
+  if (!s) return null;
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
+  return /^-?\d+(\.\d+)?$/.test(s) ? parseFloat(s) : NaN;
+}
+// Registro de /movimientos (ver forma en confirmMovimiento / bulkImportRepuestos).
+function docMovimiento(equipoId, equipoNombre, p, extra){
+  return {
+    equipoId, equipo: equipoNombre || '', repuestoId: p.id || null, repuesto: p.r || '',
+    quien: quienSoy(), quienUid: miUid(), fecha: fbTimestamp(),
+    ...extra,
+  };
+}
+// Asigna (y guarda) los ids que falten la primera vez que se abre un equipo
+// con repuestos viejos. Una sola vez por equipo y sesión; si no hay señal o
+// no hay permiso, se intenta la próxima vez — mientras tanto los botones
+// usan la posición + verificación de nombre.
+const _idsPendientesHechos = new Set();
+function persistirIdsRepuestos(e){
+  if (!e || _idsPendientesHechos.has(e.id) || !navigator.onLine) return;
+  if (!(e.repuestos || []).some(p => !repIdValido(p && p.id))) return;
+  _idsPendientesHechos.add(e.id);
+  txRepuestos(e.id, () => TX_SIN_CAMBIOS)
+    .catch(err => { _idsPendientesHechos.delete(e.id); console.warn('No se pudieron asignar ids a los repuestos:', err.message); });
+}
+// URL de imagen segura para <img src>: solo https o una imagen embebida.
+const urlImgSegura = u => (typeof u === 'string' && /^(https:\/\/|data:image\/(png|jpe?g|webp|gif);)/i.test(u)) ? u : '';
+// id de documento para meter dentro de onclick="f('…')": solo letras, números, _ y -.
+const idJs = id => /^[A-Za-z0-9_-]{1,128}$/.test(String(id)) ? String(id) : '';
+// Espera una promesa como máximo `ms`; devuelve 'timeout' si no terminó.
+const conTimeout = (prom, ms) => Promise.race([prom, new Promise(ok => setTimeout(() => ok('timeout'), ms))]);
+
 /* ═══════════════ CARGA EN VIVO (Firestore) ═══════════════ */
 let dbListenerStarted = false;
 async function loadDB(){
@@ -781,25 +787,16 @@ async function loadDB(){
   updateSyncStatus('syncing');
 
   const equiposRef = db.collection('equipos');
-  const firstSnap = await equiposRef.get().catch(()=>null);
-
-  if(firstSnap && firstSnap.empty){
-    // primera vez que se usa esta base de datos: sube los datos precargados
-    // (SEED) una sola vez, para no perder el inventario que ya tenías.
-    showLoading('Preparando la base de datos por primera vez…');
-    for(const eq of SEED){
-      const ref = equiposRef.doc();
-      const { id, ...rest } = eq;
-      await ref.set(fbSanitizeTs({ ...rest, updatedAt: fbTimestamp() })).catch(err=>console.error(err));
-    }
-    hideLoading();
-  }
+  // (5 oct 2026) Ya no se suben equipos de ejemplo cuando la colección está
+  // vacía (ver "DATOS SEMILLA" arriba): renderHome() muestra cómo empezar.
 
   equiposRef.onSnapshot((snap)=>{
-    DB = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => cmpNat(a.nombre, b.nombre));
+    // (5 oct 2026) equipos creados desde otras pantallas pueden no traer
+    // "repuestos": se normaliza a [] para que nada falle al pintar.
+    DB = snap.docs.map(doc => { const d = doc.data(); return { id: doc.id, ...d, repuestos: Array.isArray(d.repuestos) ? d.repuestos : [] }; }).sort((a, b) => cmpNat(a.nombre, b.nombre));
     updateSyncStatus('ok');
     const box = document.getElementById('fbStatusBox');
-    if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${firebaseConfig.projectId}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
+    if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${fbEsc(firebaseConfig.projectId)}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
     // (4 oct 2026) desde el QR único: inventario.html?equipo=<id> abre ese equipo
     const qEq = !window._qrEqAbierto && new URLSearchParams(location.search).get('equipo');
     if (qEq) { window._qrEqAbierto = true; if (DB.some(x => x.id === qEq)) { openEquipo(qEq); return; } showToast('⚠️ El equipo del código QR ya no existe'); }
@@ -809,16 +806,11 @@ async function loadDB(){
     console.error('Error escuchando equipos:', err);
     updateSyncStatus('error');
     const box = document.getElementById('fbStatusBox');
-    if(box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${err.message}`;
+    if(box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${fbEsc(err.message)}`;
     showToast('⚠️ Error de conexión a Firebase: '+err.message);
   });
 }
-function saveDB(){
-  // por compatibilidad con el resto del código: guarda el equipo actual
-  // (los cambios en otros equipos ya se guardan puntualmente donde ocurren)
-  const e = getCurrentEquipo();
-  if(e) fbSaveEquipo(e);
-}
+// (5 oct 2026) saveDB() (subía el equipo completo) se quitó: ver txRepuestos().
 
 /* ═══════════════ HELPERS DE STOCK ═══════════════ */
 function stockStatus(p){
@@ -900,10 +892,10 @@ function renderHome(){
     const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
     const ok = parts.length - sin - baj - noData;
     return hdr + `
-      <div class="equipo-card" onclick="openEquipo('${e.id}')">
+      <div class="equipo-card" onclick="openEquipo('${idJs(e.id)}')">
         ${e.localidad && orden !== 'area' ? `<span class="badge-loc">${escInv(e.localidad)}</span>` : ''}
         <h3>${escInv(e.nombre)}</h3>
-        <div class="meta">${[e.marca,e.modelo].filter(Boolean).join(' · ') || 'Sin datos de marca/modelo'}</div>
+        <div class="meta">${fbEsc([e.marca,e.modelo].filter(Boolean).join(' · ')) || 'Sin datos de marca/modelo'}</div>
         <div class="stats-row">
           <div class="stat ok"><b>${ok}</b>OK</div>
           <div class="stat bajo"><b>${baj}</b>BAJO</div>
@@ -913,7 +905,10 @@ function renderHome(){
         </div>
       </div>
     `;
-  }).join('') + (lista.length ? '' : `<div class="area-hdr"><span>Ningún equipo coincide con el filtro.</span></div>`) + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
+  }).join('') + (lista.length ? '' : (DB.length
+      ? `<div class="area-hdr"><span>Ningún equipo coincide con el filtro.</span></div>`
+      // (5 oct 2026) base vacía: ya no se cargan equipos de ejemplo, se explica cómo empezar
+      : `<div class="area-hdr" style="display:block;"><span>📭 Todavía no hay equipos registrados. Agrega uno con <b>＋ Agregar equipo</b>, usa <b>📋 Carga masiva de equipos</b> (Excel) o <b>⬆ Importar respaldo</b> (JSON).</span></div>`)) + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
 }
 
 /* ═══════════════ RENDER: DETALLE DE EQUIPO ═══════════════ */
@@ -986,12 +981,12 @@ function renderDetail(){
     <div class="back-link" onclick="backHome()">← Volver a todos los equipos</div>
     <div class="detail-hdr">
       <div>
-        <h2>${e.nombre}</h2>
+        <h2>${fbEsc(e.nombre)}</h2>
         <div class="sub">${parts.length} repuestos registrados · ${sin} sin stock · ${baj} con stock bajo${noData?` · ${noData} sin contar`:''}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
-        ${necesitaOrden(e) ? `<button class="btn secondary sm" onclick="abrirOrdenarFichas('${e.id}')">🧹 Ordenar ficha</button>` : ''}
+        ${necesitaOrden(e) ? `<button class="btn secondary sm" onclick="abrirOrdenarFichas('${idJs(e.id)}')">🧹 Ordenar ficha</button>` : ''}
         <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
         <button class="btn secondary sm" onclick="showReubicaciones()">🧭 Reubicaciones</button>
         <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
@@ -1008,7 +1003,7 @@ function renderDetail(){
       <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <input type="file" id="manualInput" accept="application/pdf" style="display:none" onchange="handleManualUpload(event)">
         ${e.manualUrl ? `
-          <button class="btn secondary sm" onclick="viewManual()">📄 Ver manual — ${e.manualNombre||'PDF'}</button>
+          <button class="btn secondary sm" onclick="viewManual()">📄 Ver manual — ${fbEsc(e.manualNombre||'PDF')}</button>
           <button class="btn secondary sm" onclick="document.getElementById('manualInput').click()">🔄 Reemplazar</button>
           <button class="btn danger sm" onclick="removeManual()">🗑 Quitar manual</button>
         ` : `
@@ -1040,6 +1035,7 @@ function renderDetail(){
     </div>
   `;
   renderPartsTable();
+  persistirIdsRepuestos(e); // (5 oct 2026) da id estable a repuestos viejos
 }
 
 function setRepFilter(f){ repFilter = f; partsShown = PARTS_PAGE_SIZE; renderDetail(); }
@@ -1053,7 +1049,7 @@ function renderPartsTable(){
   if(repFilter==='bajo') list = list.filter(p=>stockStatus(p)==='bajo');
   if(repFilter==='nodata') list = list.filter(p=>stockStatus(p)==='nodata');
   if(repFilter==='revisar') list = list.filter(minLooksDefault);
-  if(localQ) list = list.filter(p=> (p.r+p.t+p.m+p.d+p.u).toLowerCase().includes(localQ));
+  if(localQ) list = list.filter(p=> [p.r,p.t,p.m,p.d,p.u].join(' ').toLowerCase().includes(localQ));
 
   const body = document.getElementById('partsBody');
   if(!list.length){
@@ -1069,18 +1065,21 @@ function renderPartsTable(){
     const pct = gaugePct(p);
     const minPct = minMarkerPct(p);
     const isNum = !isNaN(parseFloat(p.q));
-    const minMaxTxt = [(p.min!=null&&p.min!==''?p.min:'—'), (p.max!=null&&p.max!==''?p.max:'—')].join(' / ');
+    const minMaxTxt = fbEsc([(p.min!=null&&p.min!==''?p.min:'—'), (p.max!=null&&p.max!==''?p.max:'—')].join(' / '));
+    // (5 oct 2026) todo dato del repuesto pasa por fbEsc; la foto solo si es
+    // una URL https/imagen válida, y el lightbox recibe la posición (no la URL).
+    const img = urlImgSegura(p.img);
     return `
       <tr>
-        <td>${p.img ? `<img src="${p.img}" class="thumb" onclick="openLightbox('${p.img}')">` : `<div class="thumb-placeholder">📦</div>`}</td>
-        <td class="part-name">${p.r}${(p.pu!==null && p.pu!==undefined && p.pu!=='') ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
-        <td class="part-modelo">${p.t||'—'}</td>
-        <td class="part-modelo">${p.m||'—'}</td>
-        <td class="part-desc">${p.d||'—'}</td>
-        <td class="part-modelo">${p.u||'—'}</td>
+        <td>${img ? `<img src="${fbEsc(img)}" class="thumb" onclick="openLightboxRep(${p._idx})">` : `<div class="thumb-placeholder">📦</div>`}</td>
+        <td class="part-name">${fbEsc(p.r)}${(p.pu!==null && p.pu!==undefined && p.pu!=='' && !isNaN(Number(p.pu))) ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
+        <td class="part-modelo">${fbEsc(p.t||'—')}</td>
+        <td class="part-modelo">${fbEsc(p.m||'—')}</td>
+        <td class="part-desc">${fbEsc(p.d||'—')}</td>
+        <td class="part-modelo">${fbEsc(p.u||'—')}</td>
         <td>
           <div class="gauge-wrap">
-            <span class="qty-num">${isNum? p.q : '—'}</span>
+            <span class="qty-num">${isNum? fbEsc(p.q) : '—'}</span>
             <div class="gauge">
               <div class="gauge-fill ${st}" style="width:${isNum?pct:100}%"></div>
               ${minPct!=null ? `<div class="gauge-min-mark" style="left:${minPct}%"></div>` : ''}
@@ -1088,7 +1087,7 @@ function renderPartsTable(){
           </div>
         </td>
         <td class="mono" style="color:var(--muted);font-size:11px;">${minMaxTxt}${minLooksDefault(p)?' <span class="stock-badge revisar" title="Mínimo genérico (1) dejado por una carga masiva — revísalo">revisar</span>':''}</td>
-        <td class="mono">${(p.cm!==null && p.cm!==undefined && p.cm!=='')? p.cm : '—'}</td>
+        <td class="mono">${(p.cm!==null && p.cm!==undefined && p.cm!=='')? fbEsc(p.cm) : '—'}</td>
         <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
         <td>
           <div class="row-actions">
@@ -1129,7 +1128,7 @@ function renderEquipoLocalidadOptions(valorActual){
   const lista = currentAreasInventario.slice();
   if (valorActual && !lista.some(a => a.toLowerCase() === valorActual.toLowerCase())) lista.unshift(valorActual);
   sel.innerHTML = '<option value="">Seleccionar área...</option>'
-    + lista.map(a => `<option${a === valorActual ? ' selected' : ''}>${a}</option>`).join('');
+    + lista.map(a => `<option value="${fbEsc(a)}"${a === valorActual ? ' selected' : ''}>${fbEsc(a)}</option>`).join(''); // (5 oct 2026) escapado
 }
 
 function loadAreasParaEquipos(){
@@ -1228,9 +1227,18 @@ async function saveEquipo(){
       const despues = datos[k] || '';
       if(antes !== despues) cambios.push({ campo: EQ_FIELD_LABELS[k]||k, anterior: antes, nuevo: despues });
     });
+    if(!cambios.length){ closeModal('modalEquipo'); showToast('Sin cambios'); return; }
     logAuditoria('especificaciones_equipo', e.id, e.nombre, cambios);
+    // (5 oct 2026) Antes se subía el equipo COMPLETO (set merge con sus
+    // repuestos, checklist y horómetro tal como estaban en este celular):
+    // podía pisar un movimiento de stock o un checklist hecho en otro celular
+    // mientras el formulario estaba abierto. Ahora solo se actualizan los
+    // campos de este formulario. Sin await: sin señal queda en cola y sube solo.
+    db.collection('equipos').doc(e.id).update({ ...fbSanitize(datos), updatedAt: fbTimestamp() })
+      .catch(err => { console.error('Error guardando equipo:', err); showToast(err.code === 'permission-denied' ? '🔒 Tu usuario no tiene permiso para editar equipos.' : '⚠️ No se pudo guardar el equipo: ' + err.message); });
     Object.assign(e, datos);
-    fbSaveEquipo(e);
+    // Mantiene al día la copia pública del QR (solo la ficha; el historial no se toca).
+    publicarHojaVida({ ...e, id: e.id });
     closeModal('modalEquipo');
     renderDetail();
     showToast('✅ Datos del equipo guardados');
@@ -1240,7 +1248,10 @@ async function saveEquipo(){
   await window.fbReady;
   const ref = db.collection('equipos').doc(); // id generado localmente, sin esperar al servidor
   const nuevo = { id: ref.id, ...datos, repuestos: [] };
-  fbSaveEquipo(nuevo);
+  // (5 oct 2026) documento nuevo: se crea directo (sin await, funciona sin señal)
+  ref.set(fbSanitizeTs({ ...datos, repuestos: [], updatedAt: fbTimestamp() }))
+    .catch(err => { console.error('Error creando equipo:', err); showToast(err.code === 'permission-denied' ? '🔒 Tu usuario no tiene permiso para crear equipos.' : '⚠️ No se pudo crear el equipo: ' + err.message); });
+  publicarHojaVida({ ...datos, id: ref.id });
   // Reubicación: un equipo nuevo con Localidad ya asignada cuenta como su
   // "instalación inicial" en el historial (arranca desde "sin ubicación").
   if(datos.localidad){
@@ -1259,23 +1270,29 @@ function handleManualUpload(ev){
   if(!file) return;
   if(file.type !== 'application/pdf'){ showToast('⚠️ Solo se aceptan archivos PDF'); ev.target.value=''; return; }
   const sizeMB = file.size / 1024 / 1024;
-  if(sizeMB > 15){
-    if(!confirm(`Este PDF pesa ${sizeMB.toFixed(1)}MB. ¿Continuar de todos modos?`)) { ev.target.value=''; return; }
-  }
+  // (5 oct 2026) tope de 20 MB: un PDF más grande se leía entero en memoria
+  // (como texto base64) y colgaba los celulares baratos.
+  if(sizeMB > 20){ showToast(`⚠️ Este PDF pesa ${sizeMB.toFixed(1)} MB — el máximo es 20 MB. Comprímelo o súbelo por partes.`); ev.target.value=''; return; }
+  if(!navigator.onLine){ showToast('📶 Para subir el manual se necesita conexión.'); ev.target.value=''; return; }
   const reader = new FileReader();
   reader.onload = async (e)=>{
     const eq = getCurrentEquipo();
+    if(!eq){ return; }
     const prevUrl = eq.manualUrl;
     showLoading('Subiendo manual…');
     try{
-      const url = await fbUploadDataUrl(e.target.result, `manuales/${eq.id}/${Date.now()}-${file.name}`);
+      // nombre de archivo sin caracteres raros para la ruta de Storage
+      const nombreSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').slice(-80);
+      const url = await fbUploadDataUrl(e.target.result, `manuales/${eq.id}/${Date.now()}-${nombreSeguro}`);
+      // (5 oct 2026) solo los dos campos del manual, no el equipo completo
+      await conTimeout(db.collection('equipos').doc(eq.id).update({ manualUrl: url, manualNombre: file.name, updatedAt: fbTimestamp() }), 8000);
       eq.manualUrl = url;
       eq.manualNombre = file.name;
-      fbSaveEquipo(eq);
-      if(prevUrl) fbDeleteFile(prevUrl);
+      if(prevUrl && prevUrl !== url) fbDeleteFile(prevUrl);
       showToast('✅ Manual subido');
     }catch(err){
-      showToast('❌ No se pudo subir el manual: '+err.message);
+      console.error('Error subiendo manual:', err);
+      showToast('❌ No se pudo subir el manual: '+(err.code === 'storage/unauthorized' || err.code === 'permission-denied' ? 'sin permiso.' : err.message));
     }
     hideLoading();
     renderDetail();
@@ -1291,9 +1308,12 @@ function viewManual(){
 function removeManual(){
   if(!confirm('¿Quitar el manual de este equipo?')) return;
   const eq = getCurrentEquipo();
-  fbDeleteFile(eq.manualUrl);
+  const url = eq.manualUrl;
+  // (5 oct 2026) solo los campos del manual; el archivo se borra después de guardar
+  db.collection('equipos').doc(eq.id).update({ manualUrl: null, manualNombre: null, updatedAt: fbTimestamp() })
+    .then(() => fbDeleteFile(url))
+    .catch(err => showToast('⚠️ No se pudo quitar el manual: ' + err.message));
   eq.manualUrl = null; eq.manualNombre = null;
-  fbSaveEquipo(eq);
   renderDetail();
   showToast('🗑 Manual eliminado');
 }
@@ -1309,7 +1329,8 @@ function hideLoading(){
 
 /* ═══════════════ MOVIMIENTOS DE STOCK (entrada / salida) ═══════════════ */
 let movTipo = 'entrada';
-let movRepIdx = null;
+let movRepRef = null;   // (5 oct 2026) referencia por id (antes: movRepIdx, la posición)
+let movEnCurso = false;
 
 function setMovTipo(t){
   movTipo = t;
@@ -1318,10 +1339,11 @@ function setMovTipo(t){
 }
 
 function openMovimiento(idx, tipo){
-  movRepIdx = idx;
   const p = getCurrentEquipo().repuestos[idx];
+  if(!p) return;
+  movRepRef = refRepuesto(p, idx);
   document.getElementById('movModalTitle').textContent = '📦 Movimiento — ' + p.r;
-  document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null ? p.q : 'sin contar');
+  document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null && p.q!=='' ? p.q : 'sin contar');
   document.getElementById('mov-cantidad').value = 1;
   document.getElementById('mov-motivo').value = '';
   document.getElementById('mov-otfolio').value = '';
@@ -1331,43 +1353,65 @@ function openMovimiento(idx, tipo){
   openModal('modalMovimiento');
 }
 
+// (5 oct 2026) El movimiento se hace en una transacción: se lee el stock
+// FRESCO del servidor, se busca el repuesto por id, se calcula el nuevo stock
+// sobre ese valor y se guardan juntos el arreglo de repuestos y el registro
+// en /movimientos (o los dos, o ninguno). Antes se restaba sobre el número que
+// tenía este celular y se subía la lista completa: dos salidas casi al mismo
+// tiempo desde dos celulares dejaban el stock mal. Una salida mayor que el
+// stock ya no se permite (antes solo se preguntaba).
 async function confirmMovimiento(){
+  if(movEnCurso) return;
   const e = getCurrentEquipo();
-  const p = e.repuestos[movRepIdx];
-  const cant = parseFloat(document.getElementById('mov-cantidad').value);
-  if(!cant || cant<=0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+  if(!e || !movRepRef) return;
+  const cant = parseNumero(document.getElementById('mov-cantidad').value);
+  if(!(cant > 0)){ showToast('⚠️ Ingresa una cantidad válida'); return; }
   const tecnico = document.getElementById('mov-tecnico').value.trim();
   const motivo = document.getElementById('mov-motivo').value.trim();
   const otFolio = document.getElementById('mov-otfolio').value.trim();
   if(tecnico) localStorage.setItem('inventario_tecnico_actual', tecnico);
+  const tipo = movTipo, ref = movRepRef, equipoId = e.id;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
 
-  const prevQ = p.q!=null ? parseFloat(p.q) : 0;
-  const newQ = movTipo==='entrada' ? prevQ + cant : prevQ - cant;
-  if(newQ < 0 && !confirm(`El stock quedaría en negativo (${newQ}). ¿Continuar de todos modos?`)) return;
-
-  p.q = newQ;
-  fbSaveEquipo(e);
-  const costoTotal = (movTipo==='salida' && p.pu!=null) ? Number((cant * p.pu).toFixed(2)) : null;
-  logMovimiento({ tecnico:tecnico||'—', equipo:e.nombre, repuesto:p.r, tipo:movTipo, cantidad:cant, motivo, quedaEn:newQ, otFolio: otFolio||null, costoUnitario: p.pu!=null?p.pu:null, costoTotal });
-
-  closeModal('modalMovimiento');
-  renderDetail();
-  showToast(`${movTipo==='entrada'?'📥':'📤'} ${movTipo==='entrada'?'Entrada':'Salida'} registrada — nuevo stock: ${newQ}`);
+  movEnCurso = true;
+  showLoading(tipo==='entrada' ? 'Registrando entrada…' : 'Registrando salida…');
+  try{
+    const res = await txRepuestos(equipoId, (lista, data, t) => {
+      const i = buscarRepuesto(lista, ref);
+      if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo o cambió mientras tanto (lo editaron desde otro celular). Revisa la lista y vuelve a intentarlo.`);
+      const p = lista[i];
+      const sinContar = p.q==null || p.q==='' || isNaN(parseFloat(p.q));
+      const prevQ = sinContar ? 0 : parseFloat(p.q);
+      if(tipo==='salida' && cant > prevQ){
+        throw errUsuario(sinContar
+          ? `"${p.r}" está sin contar: registra primero una entrada o pon el stock en ✏️ Editar.`
+          : `No hay suficiente stock de "${p.r}": hay ${prevQ} y quieres sacar ${cant}.`);
+      }
+      const newQ = redondearQ(tipo==='entrada' ? prevQ + cant : prevQ - cant);
+      p.q = newQ;
+      const pu = (p.pu!=null && p.pu!=='' && !isNaN(Number(p.pu))) ? Number(p.pu) : null;
+      const costoTotal = (tipo==='salida' && pu!=null) ? Number((cant * pu).toFixed(2)) : null;
+      t.set(db.collection('movimientos').doc(), docMovimiento(equipoId, data.nombre || e.nombre, p, {
+        tecnico: tecnico||'—', tipo, cantidad: cant, anterior: sinContar ? null : prevQ, quedaEn: newQ,
+        motivo, otFolio: otFolio||null, costoUnitario: pu, costoTotal,
+      }));
+      return { newQ };
+    });
+    closeModal('modalMovimiento');
+    renderDetail();
+    showToast(`${tipo==='entrada'?'📥':'📤'} ${tipo==='entrada'?'Entrada':'Salida'} registrada — nuevo stock: ${res.newQ}`);
+  }catch(err){
+    avisarErrorTx(err); // el formulario queda abierto para reintentar
+  }finally{
+    hideLoading();
+    movEnCurso = false;
+  }
 }
 
 // El historial de movimientos vive en Firestore (colección "movimientos"),
 // compartido entre todos los celulares — ya no es solo de este dispositivo.
-function logMovimiento(mov){
-  db.collection('movimientos').add({ ...mov, fecha: fbTimestamp() })
-    .catch(err => {
-      console.error('Error guardando movimiento:', err);
-      // (29 sep 2026) antes esto fallaba en silencio -- el stock ya había
-      // cambiado y se mostraba el toast de éxito, pero si el registro de
-      // "quién lo hizo" no se guardaba, nadie se enteraba nunca.
-      showToast('⚠️ El stock se actualizó, pero no se pudo guardar el registro de movimiento: ' + err.message);
-    });
-}
-
+// (5 oct 2026) Los registros nuevos traen equipoId: se busca por id y, para
+// los registros viejos (que solo tienen el nombre), también por nombre.
 async function showMovimientos(){
   const e = getCurrentEquipo();
   document.getElementById('movHistSub').textContent = `Cargando movimientos de "${e.nombre}"…`;
@@ -1376,21 +1420,33 @@ async function showMovimientos(){
   await window.fbReady;
   let equipoLog = [];
   try{
-    const snap = await db.collection('movimientos').where('equipo','==', e.nombre).limit(500).get();
-    equipoLog = snap.docs.map(d=>d.data());
+    const [porId, porNombre] = await Promise.all([
+      db.collection('movimientos').where('equipoId','==', e.id).limit(500).get(),
+      db.collection('movimientos').where('equipo','==', e.nombre).limit(500).get(),
+    ]);
+    const vistos = new Map();
+    porId.docs.forEach(d => vistos.set(d.id, d.data()));
+    // por nombre: solo los viejos sin equipoId (o con el de este mismo equipo)
+    porNombre.docs.forEach(d => { const m = d.data(); if(!m.equipoId || m.equipoId === e.id) vistos.set(d.id, m); });
+    equipoLog = [...vistos.values()];
     equipoLog.sort((a,b)=> (b.fecha?.toMillis?.()||0) - (a.fecha?.toMillis?.()||0));
   }catch(err){ showToast('⚠️ No se pudo cargar el historial: '+err.message); }
   document.getElementById('movHistSub').textContent = `${equipoLog.length} movimiento(s) registrados para "${e.nombre}" — compartido entre todos los celulares.`;
-  document.getElementById('movHistBody').innerHTML = equipoLog.length ? equipoLog.map(m=>`
+  const TIPO_MOV = { entrada: ['ok','📥 Entrada'], salida: ['sin','📤 Salida'], ajuste: ['bajo','🔧 Ajuste'] };
+  // (5 oct 2026) todo lo que viene de Firestore pasa por fbEsc
+  document.getElementById('movHistBody').innerHTML = equipoLog.length ? equipoLog.map(m=>{
+    const tm = TIPO_MOV[m.tipo] || ['nodata', fbEsc(m.tipo||'—')];
+    const cant = (m.tipo==='ajuste' && Number(m.cantidad) > 0) ? '+' + m.cantidad : m.cantidad;
+    return `
     <tr>
       <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
-      <td>${m.tecnico}</td>
-      <td class="part-name">${m.repuesto}</td>
-      <td><span class="stock-badge ${m.tipo==='entrada'?'ok':'sin'}">${m.tipo==='entrada'?'📥 Entrada':'📤 Salida'}</span></td>
-      <td class="mono">${m.cantidad}</td>
-      <td class="mono">${m.quedaEn}</td>
-      <td class="part-desc">${m.motivo||'—'}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${m.otFolio}${m.costoTotal!=null?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
-    </tr>`).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
+      <td>${fbEsc(m.tecnico || m.quien || '—')}</td>
+      <td class="part-name">${fbEsc(m.repuesto)}</td>
+      <td><span class="stock-badge ${tm[0]}">${tm[1]}</span></td>
+      <td class="mono">${fbEsc(cant)}</td>
+      <td class="mono">${fbEsc(m.quedaEn)}</td>
+      <td class="part-desc">${fbEsc(m.motivo||'—')}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${fbEsc(m.otFolio)}${m.costoTotal!=null && !isNaN(Number(m.costoTotal))?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
+    </tr>`; }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
 }
 
 // ═══════════════ REUBICACIÓN DE EQUIPO ENTRE ÁREAS (29 sep 2026) ═══════════════
@@ -1408,7 +1464,8 @@ function logReubicacion(equipo, ubicacionAnterior, ubicacionNueva){
     equipo: equipo.nombre,
     ubicacionAnterior: ubicacionAnterior || '(sin ubicación)',
     ubicacionNueva: ubicacionNueva || '(sin ubicación)',
-    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    quien: quienSoy(),
+    quienUid: miUid(), // (5 oct 2026) uid de quien lo hizo, para las reglas
     fecha: fbTimestamp(),
   }).catch(err => {
     console.error('Error guardando reubicación:', err);
@@ -1434,9 +1491,9 @@ async function showReubicaciones(){
   document.getElementById('reubHistBody').innerHTML = log.length ? log.map(m=>`
     <tr>
       <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
-      <td>${m.ubicacionAnterior}</td>
-      <td>${m.ubicacionNueva}</td>
-      <td>${m.quien}</td>
+      <td>${fbEsc(m.ubicacionAnterior)}</td>
+      <td>${fbEsc(m.ubicacionNueva)}</td>
+      <td>${fbEsc(m.quien)}</td>
     </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="big">📭</div>Sin reubicaciones registradas todavía.</div></td></tr>`;
 }
 
@@ -1454,8 +1511,11 @@ async function showReubicaciones(){
 function logAuditoria(categoria, equipoId, equipoNombre, cambios){
   if(!cambios || !cambios.length) return; // nada cambió de verdad -- no generar ruido
   db.collection('auditoria').add({
-    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
-    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios: fbSanitize(cambios),
+    quien: quienSoy(),
+    // (5 oct 2026) firestore.rules exige quienUid == uid de la sesión y
+    // fecha == hora del servidor (fbTimestamp()).
+    quienUid: miUid(),
     fecha: fbTimestamp(),
   }).catch(err => {
     console.error('Error guardando auditoría:', err);
@@ -1470,6 +1530,8 @@ const AUDITORIA_CATEGORIA_LABEL = {
   puntos_checklist_equipo: '📝 Puntos de checklist (propios del equipo)',
 };
 
+// valor de auditoría legible (los puntos de checklist pueden venir como lista/objeto)
+const fmtAud = v => (v==null || v==='') ? '—' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
 async function openAuditoria(){
   document.getElementById('audHistBody').innerHTML = '';
   openModal('modalAuditoria');
@@ -1479,48 +1541,125 @@ async function openAuditoria(){
     const snap = await db.collection('auditoria').orderBy('fecha','desc').limit(200).get();
     log = snap.docs.map(d=>d.data());
   }catch(err){
-    document.getElementById('audHistBody').innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="big">🔒</div>No se pudo cargar — esto es solo para Encargado/Administrador. (${err.message})</div></td></tr>`;
+    document.getElementById('audHistBody').innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="big">🔒</div>No se pudo cargar — esto es solo para Encargado/Administrador. (${fbEsc(err.message)})</div></td></tr>`;
     return;
   }
   document.getElementById('audHistBody').innerHTML = log.length ? log.map(m=>`
     <tr>
       <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
-      <td>${m.quien}</td>
-      <td>${AUDITORIA_CATEGORIA_LABEL[m.categoria]||m.categoria}</td>
-      <td>${m.equipoNombre||'—'}</td>
-      <td>${(m.cambios||[]).map(c=>`<div style="margin-bottom:2px;"><b>${c.campo}</b>: <span style="color:var(--muted);">${c.anterior||'—'}</span> → ${c.nuevo||'—'}</div>`).join('')}</td>
+      <td>${fbEsc(m.quien)}</td>
+      <td>${AUDITORIA_CATEGORIA_LABEL[m.categoria]||fbEsc(m.categoria)}</td>
+      <td>${fbEsc(m.equipoNombre||'—')}</td>
+      <td>${(Array.isArray(m.cambios)?m.cambios:[]).map(c=>`<div style="margin-bottom:2px;"><b>${fbEsc(c.campo)}</b>: <span style="color:var(--muted);">${fbEsc(fmtAud(c.anterior))}</span> → ${fbEsc(fmtAud(c.nuevo))}</div>`).join('')}</td>
     </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><div class="big">📭</div>Sin cambios registrados todavía.</div></td></tr>`;
 }
 
 /* ═══════════════ CARGA MASIVA (pegar tabla) ═══════════════ */
+// (5 oct 2026) Cambios:
+// - Se elige "Sumar a lo que hay" (como antes, por defecto) o "Reemplazar
+//   conteo" (conteo físico).
+// - Qty/Mínimo/Máximo aceptan coma decimal ("1,5"); un texto que no es número
+//   ya no se convierte en 0 a escondidas: esa fila se marca con error y no se
+//   carga (se avisa cuáles).
+// - Se guarda en una transacción sobre los repuestos FRESCOS del servidor
+//   (ver txRepuestos) y cada repuesto cuyo stock cambió deja un movimiento
+//   tipo "ajuste" en /movimientos (nota "carga masiva").
+let bulkRepEnCurso = false;
 async function bulkImportRepuestos(){
+  if(bulkRepEnCurso) return;
   const text = document.getElementById('bulkPasteArea').value;
+  const status = document.getElementById('bulkStatus');
   if(!text.trim()){ showToast('⚠️ Pega la tabla primero'); return; }
+  const modo = (document.querySelector('input[name="bulkModo"]:checked') || {}).value === 'reemplazar' ? 'reemplazar' : 'sumar';
   const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim());
   const e = getCurrentEquipo();
-  let added=0, merged=0;
-  document.getElementById('bulkStatus').textContent = 'Procesando…';
+  if(!e) return;
 
-  for(const line of lines){
+  const filas = [], errores = [];
+  lines.forEach((line, n) => {
     const c = line.split('\t');
-    if(!c[0] || !c[0].trim()) continue;
+    if(!c[0] || !c[0].trim()) return;
+    const num = (i, etiqueta, problemas) => {
+      const v = parseNumero(c[i]);
+      if(Number.isNaN(v)) { problemas.push(`${etiqueta} "${(c[i]||'').trim()}" no es un número`); return null; }
+      if(v != null && v < 0) { problemas.push(`${etiqueta} no puede ser negativo`); return null; }
+      return v;
+    };
+    const problemas = [];
     const obj = {
       r: c[0].trim(), t:(c[1]||'').trim(), m:(c[2]||'').trim(), d:(c[3]||'').trim(), u:(c[4]||'').trim(),
-      q: (c[5]!==undefined && c[5].trim()!=='') ? (parseFloat(c[5])||0) : null,
-      cm: (c[6]!==undefined && c[6].trim()!=='') ? c[6].trim() : null,
-      min: (c[7]!==undefined && c[7].trim()!=='') ? (parseFloat(c[7])||0) : null,
-      max: (c[8]!==undefined && c[8].trim()!=='') ? (parseFloat(c[8])||0) : null,
+      q: num(5, 'Qty', problemas),
+      cm: (c[6]!==undefined && c[6].trim()!=='') ? c[6].trim() : null, // texto libre ("100 PIE")
+      min: num(7, 'Mínimo', problemas),
+      max: num(8, 'Máximo', problemas),
       img: null
     };
-    const result = mergeRepuestoInto(e.repuestos, obj);
-    if(result.merged) merged++; else added++;
-  }
+    if(problemas.length) errores.push(`Fila ${n+1} (${obj.r}): ${problemas.join('; ')}`);
+    else filas.push(obj);
+  });
+  if(errores.length){
+    status.innerHTML = `<b style="color:var(--red);">${errores.length} fila(s) con error — no se cargan:</b><br>` + errores.map(fbEsc).join('<br>');
+    if(!filas.length){ showToast('⚠️ Ninguna fila válida para cargar'); return; }
+    if(!confirm(`${errores.length} fila(s) tienen números que no se entienden y NO se cargarán (la lista está debajo del cuadro).\n\n¿Cargar las otras ${filas.length}?`)) return;
+  } else status.textContent = '';
+  if(!filas.length){ showToast('⚠️ No hay filas para cargar'); return; }
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
 
-  fbSaveEquipo(e);
-  closeModal('modalBulk');
-  document.getElementById('bulkPasteArea').value = '';
-  renderDetail();
-  showToast(`✅ Carga masiva: ${added} nuevos, ${merged} sumados`);
+  bulkRepEnCurso = true;
+  showLoading('Cargando repuestos…');
+  try{
+    const MAX_MOV_EN_TX = 400; // una transacción admite ~500 escrituras
+    const res = await txRepuestos(e.id, (lista, data, t) => {
+      let added = 0, merged = 0;
+      const antes = new Map(lista.map(p => [p.id, p.q])); // stock fresco antes de la carga
+      for(const inc of filas){
+        const key = partKey(inc);
+        const ex = lista.find(p => partKey(p) === key);
+        if(!ex){ lista.push({ ...inc, id: nuevoRepId() }); added++; continue; }
+        merged++;
+        if(modo === 'reemplazar'){
+          if(inc.q != null) ex.q = inc.q;
+          ['t','m','d','u'].forEach(k=>{ if(!ex[k] && inc[k]) ex[k] = inc[k]; });
+          ['cm','min','max'].forEach(k=>{ if(inc[k]!=null && inc[k]!=='') ex[k] = inc[k]; });
+        } else {
+          mergeRepuestoInto([ex], inc); // misma regla de siempre: suma Qty y completa lo vacío
+        }
+        if(ex.q != null && ex.q !== '') ex.q = redondearQ(parseFloat(ex.q) || 0);
+      }
+      // un movimiento "ajuste" por cada repuesto cuyo stock cambió
+      const cambios = [];
+      lista.forEach(p => {
+        const q0 = antes.has(p.id) ? antes.get(p.id) : null;
+        const a = (q0==null || q0==='' || isNaN(parseFloat(q0))) ? null : parseFloat(q0);
+        const b = (p.q==null || p.q==='' || isNaN(parseFloat(p.q))) ? null : parseFloat(p.q);
+        if(b == null || a === b) return;
+        cambios.push({ p, anterior: a, quedaEn: b, delta: redondearQ(b - (a || 0)) });
+      });
+      const nombreEq = data.nombre || e.nombre;
+      const movs = cambios.map(c => docMovimiento(e.id, nombreEq, c.p, {
+        tecnico: quienSoy(), tipo: 'ajuste', cantidad: c.delta, anterior: c.anterior, quedaEn: c.quedaEn,
+        motivo: 'carga masiva (' + (modo === 'reemplazar' ? 'reemplazar conteo' : 'sumar') + ')', nota: 'carga masiva', modo,
+        otFolio: null, costoUnitario: null, costoTotal: null,
+      }));
+      if(movs.length <= MAX_MOV_EN_TX) { movs.forEach(m => t.set(db.collection('movimientos').doc(), m)); return { added, merged, movs: [], nMovs: movs.length }; }
+      return { added, merged, movs, nMovs: movs.length }; // demasiados: van después en lotes de 400
+    });
+    // Si hubo más de 400 ajustes, se guardan después de la transacción en lotes de 400.
+    for(let i = 0; i < res.movs.length; i += 400){
+      const batch = db.batch();
+      res.movs.slice(i, i + 400).forEach(m => batch.set(db.collection('movimientos').doc(), m));
+      await batch.commit().catch(err => showToast('⚠️ El stock se cargó, pero faltó guardar parte del historial de ajustes: ' + err.message));
+    }
+    closeModal('modalBulk');
+    document.getElementById('bulkPasteArea').value = '';
+    renderDetail();
+    showToast(`✅ Carga masiva: ${res.added} nuevos, ${res.merged} ${modo === 'reemplazar' ? 'con conteo reemplazado' : 'sumados'}${errores.length ? `, ${errores.length} con error` : ''} · ${res.nMovs} ajuste(s) en el historial`);
+  }catch(err){
+    avisarErrorTx(err); // el cuadro queda abierto con lo pegado
+  }finally{
+    hideLoading();
+    bulkRepEnCurso = false;
+  }
 }
 
 /* ═══════════════ CARGA MASIVA DE EQUIPOS ═══════════════
@@ -1749,7 +1888,7 @@ function previsualizarEquipos(){
   okBtn.disabled = !bulkEquiposFilas.length;
   okBtn.textContent = bulkEquiposFilas.length ? `Cargar ${bulkEquiposFilas.length} equipo(s)` : 'Nada que cargar';
 }
-const escInv = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const escInv = s => fbEsc(s); // (5 oct 2026) misma función compartida de firebase-init.js
 
 async function bulkImportEquipos(){
   previsualizarEquipos(); // recalcula con los datos más recientes
@@ -1757,11 +1896,11 @@ async function bulkImportEquipos(){
   const status = document.getElementById('bulkEquiposStatus');
   if (!filas.length) { showToast('⚠️ No hay equipos nuevos ni cambios para cargar'); return; }
   await window.fbReady;
-  const hoy = new Date();
-  const hoyStr = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');
+  const hoyStr = fbHoy();
   const btn = document.getElementById('bulkEquiposOk');
   btn.disabled = true;
   let hechos = 0;
+  let enCola = false; // (5 oct 2026) true si algún lote quedó guardado solo en el celular
   try {
     for (let i = 0; i < filas.length; i += 400) {
       const batch = db.batch();
@@ -1779,11 +1918,21 @@ async function bulkImportEquipos(){
         }
       });
       status.textContent = `Guardando… ${Math.min(i + 400, filas.length)} de ${filas.length}`;
-      await batch.commit();
+      // (5 oct 2026) Con la persistencia sin conexión, commit() no termina
+      // hasta que el servidor responde: sin señal la pantalla quedaba en
+      // "Guardando…" para siempre. El lote ya quedó guardado en el celular al
+      // llamar commit(), así que se espera como máximo 8 s y se sigue.
+      const p = batch.commit();
+      if (enCola) { p.catch(err => showToast('⚠️ Un lote de equipos no se pudo subir: ' + err.message)); }
+      else if ((await conTimeout(p, 8000)) === 'timeout') {
+        enCola = true;
+        p.catch(err => showToast('⚠️ Un lote de equipos no se pudo subir: ' + err.message));
+      }
       hechos = Math.min(i + 400, filas.length);
     }
     const nuevos = filas.filter(r => r.estado === 'nuevo').length;
-    showToast(`✅ ${nuevos} equipo(s) nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''}`);
+    if (enCola) showToast(`💾 Guardado en el celular; se subirá cuando haya señal (${nuevos} nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''})`);
+    else showToast(`✅ ${nuevos} equipo(s) nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''}`);
     closeModal('modalBulkEquipos');
   } catch (err) {
     console.error(err);
@@ -1838,7 +1987,7 @@ function separarFicha(e){
     if ((m = /^horometro\s*:?\s*(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|horas)?/i.exec(sn))) { if (e.horometroActual == null) { res.cambios.horometroActual = parseFloat(m[1].replace(',', '.')); res.cambios.horometroUltimoService = res.cambios.horometroActual; res.notas.push(`Horómetro ${res.cambios.horometroActual} h tomado como último servicio: ajústalo en Checklist si no es así`); } res.caract.push(seg); return; }
     if (/^mant(\.|enimiento)?\s/i.test(s) && !e.checklistFrecuenciaDias) {
       const d = /semanal/i.test(s) ? 7 : /quincenal/i.test(s) ? 15 : /mensual/i.test(s) ? 30 : /trimestral/i.test(s) ? 90 : /diari/i.test(s) ? 1 : ((m = /cada\s*(\d+)\s*d/i.exec(s)) ? +m[1] : 0);
-      if (d) { const t = new Date(); const hoy = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+      if (d) { const hoy = fbHoy();
         res.cambios.checklistFrecuenciaDias = d; res.cambios.checklistProximaFecha = addDaysStrInv(hoy, d); res.caract.push(seg); return; }
     }
     // datos eléctricos dentro del texto (pueden venir varios: "1F 220V 50Hz 1.38 kW")
@@ -1897,8 +2046,12 @@ async function aplicarFichas(){
     for (let i = 0; i < elegidos.length; i += 400) {
       const batch = db.batch();
       elegidos.slice(i, i + 400).forEach(({ e, r }) => batch.set(db.collection('equipos').doc(e.id), fbSanitizeTs({ ...r.cambios, updatedAt: fbTimestamp() }), { merge: true }));
-      await batch.commit();
+      // (5 oct 2026) mismo tope de 8 s que la carga masiva: sin señal queda en cola
+      const p = batch.commit();
+      if ((await conTimeout(p, 8000)) === 'timeout') p.catch(err => showToast('⚠️ No se pudo subir la ficha ordenada: ' + err.message));
     }
+    // copia pública del QR al día con la ficha nueva (sin esperar)
+    elegidos.forEach(({ e, r }) => publicarHojaVida({ ...e, ...r.cambios, id: e.id }));
     elegidos.forEach(({ e, r }) => logAuditoria('especificaciones_equipo', e.id, e.nombre,
       Object.entries(r.cambios).map(([k, v]) => ({ campo: k === 'caracteristicas' ? 'Características' : (LBL_EQ[k] || k), anterior: e[k] ?? '', nuevo: v }))));
     showToast(`✅ Ficha técnica ordenada en ${elegidos.length} equipo(s)`);
@@ -1972,6 +2125,39 @@ function findDuplicateGroups(repuestos){
   return Object.values(groups).filter(idxs=>idxs.length>1);
 }
 
+// Fusiona cada grupo de duplicados de `lista` en una sola fila (sumando el
+// stock). Devuelve la lista nueva; no modifica la original.
+function fusionarDuplicados(lista){
+  const nuevos = [];
+  const yaFusionados = new Set();
+  lista.forEach((p,i)=>{
+    if(yaFusionados.has(i)) return;
+    const key = partKey(p);
+    // reconstruye el grupo completo por key (más simple y robusto que usar índices ya corridos)
+    const mismos = lista.map((pp,ii)=>({pp,ii})).filter(({pp})=>partKey(pp)===key);
+    if(mismos.length>1 && !yaFusionados.has(mismos[0].ii)){
+      const base = {...mismos[0].pp}; // conserva el id del primero
+      let qSum = 0, anyQ = false;
+      mismos.forEach(({pp,ii})=>{
+        yaFusionados.add(ii);
+        if(pp.q!=null && pp.q!==''){ qSum += parseFloat(pp.q)||0; anyQ = true; }
+        ['t','m','d','u'].forEach(k=>{ if(!base[k] && pp[k]) base[k]=pp[k]; });
+        if((base.cm==null||base.cm==='') && pp.cm!=null) base.cm = pp.cm;
+        if((base.pu==null||base.pu==='') && pp.pu!=null) base.pu = pp.pu;
+        if((base.min==null||base.min==='') && pp.min!=null) base.min = pp.min;
+        if((base.max==null||base.max==='') && pp.max!=null) base.max = pp.max;
+        if(!base.img && pp.img) base.img = pp.img;
+      });
+      base.q = anyQ ? redondearQ(qSum) : null;
+      nuevos.push(base);
+    } else if(!yaFusionados.has(i)){
+      yaFusionados.add(i);
+      nuevos.push(p);
+    }
+  });
+  return nuevos;
+}
+
 async function findAndMergeDuplicates(){
   const e = getCurrentEquipo();
   if(!e) return;
@@ -1982,38 +2168,46 @@ async function findAndMergeDuplicates(){
   const preview = dupGroups.slice(0,8).map(idxs=>`• ${e.repuestos[idxs[0]].r} (${idxs.length}×)`).join('\n');
   const msg = `Se encontraron ${dupGroups.length} repuesto(s) duplicados (mismo nombre+modelo), ${totalFilasDeMas} fila(s) de más:\n\n${preview}${dupGroups.length>8?'\n…y '+(dupGroups.length-8)+' más':''}\n\n¿Fusionar cada grupo en una sola fila, sumando el stock (Qty)? Esta acción no se puede deshacer.`;
   if(!confirm(msg)) return;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
 
-  const nuevos = [];
-  const yaFusionados = new Set();
-  e.repuestos.forEach((p,i)=>{
-    if(yaFusionados.has(i)) return;
-    const key = partKey(p);
-    // reconstruye el grupo completo por key (más simple y robusto que usar índices ya corridos)
-    const mismos = e.repuestos.map((pp,ii)=>({pp,ii})).filter(({pp})=>partKey(pp)===key);
-    if(mismos.length>1 && !yaFusionados.has(mismos[0].ii)){
-      const base = {...mismos[0].pp};
-      let qSum = 0, anyQ = false;
-      mismos.forEach(({pp,ii})=>{
-        yaFusionados.add(ii);
-        if(pp.q!=null && pp.q!==''){ qSum += parseFloat(pp.q)||0; anyQ = true; }
-        ['t','m','d','u'].forEach(k=>{ if(!base[k] && pp[k]) base[k]=pp[k]; });
-        if((base.cm==null||base.cm==='') && pp.cm!=null) base.cm = pp.cm;
-        if((base.min==null||base.min==='') && pp.min!=null) base.min = pp.min;
-        if((base.max==null||base.max==='') && pp.max!=null) base.max = pp.max;
-        if(!base.img && pp.img) base.img = pp.img;
-      });
-      base.q = anyQ ? qSum : null;
-      nuevos.push(base);
-    } else if(!yaFusionados.has(i)){
-      yaFusionados.add(i);
-      nuevos.push(p);
-    }
-  });
+  // (5 oct 2026) La fusión se recalcula dentro de una transacción sobre la
+  // lista FRESCA del servidor (antes se subía la lista de este celular).
+  showLoading('Fusionando duplicados…');
+  try{
+    const res = await txRepuestos(e.id, (lista) => {
+      const grupos = findDuplicateGroups(lista);
+      if(!grupos.length) return TX_SIN_CAMBIOS;
+      const filasDeMas = grupos.reduce((s,g)=>s+(g.length-1),0);
+      const nuevos = fusionarDuplicados(lista);
+      lista.splice(0, lista.length, ...nuevos);
+      return { grupos: grupos.length, filasDeMas };
+    });
+    renderDetail();
+    if(res === TX_SIN_CAMBIOS) showToast('✅ Ya no quedan duplicados (otro celular los fusionó)');
+    else showToast(`🧹 ${res.grupos} grupo(s) fusionados — se quitaron ${res.filasDeMas} fila(s) duplicadas`);
+  }catch(err){
+    avisarErrorTx(err);
+  }finally{
+    hideLoading();
+  }
+}
 
-  e.repuestos = nuevos;
-  fbSaveEquipo(e);
-  renderDetail();
-  showToast(`🧹 ${dupGroups.length} grupo(s) fusionados — se quitaron ${totalFilasDeMas} fila(s) duplicadas`);
+// OTs abiertas de un equipo (para avisar antes de borrarlo). Si no se puede
+// consultar (sin señal / sin permiso), devuelve null y no se avisa.
+async function contarOtsAbiertas(e){
+  const ABIERTAS = ['pendiente','en_atencion','planificada','en_revision'];
+  try{
+    const qs = [
+      db.collection('ots').where('equipoId','==', e.id).limit(300).get(),
+      db.collection('ots').where('EQUIPO','==', e.nombre).limit(300).get(),
+      db.collection('ots').where('equipoNombre','==', e.nombre).limit(300).get(),
+    ];
+    const r = await conTimeout(Promise.allSettled(qs), 6000);
+    if(r === 'timeout') return null;
+    const ids = new Set();
+    r.forEach(x => { if(x.status === 'fulfilled') x.value.docs.forEach(d => { if(ABIERTAS.includes(d.data().estado)) ids.add(d.id); }); });
+    return r.some(x => x.status === 'fulfilled') ? ids.size : null;
+  }catch(err){ return null; }
 }
 
 async function deleteEquipo(){
@@ -2022,40 +2216,60 @@ async function deleteEquipo(){
   // se avisa antes, en vez de borrarlo de la pantalla y fallar en la nube.
   if (typeof userHasRole === 'function' && !userHasRole('ADMINISTRADOR')) { showToast('🔒 Solo un Administrador puede eliminar equipos completos.'); return; }
   if(!(await verifyPin())) return;
-  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos? Tendrás unos segundos para deshacerlo con el botón del aviso.`)) return;
+  // (5 oct 2026) avisa si el equipo tiene OTs abiertas (no se borran: quedan en el historial)
+  const abiertas = await contarOtsAbiertas(e);
+  const avisoOts = abiertas ? `\n\n⚠️ Tiene ${abiertas} OT(s) abiertas (pendientes / en atención / planificadas). Esas OTs NO se borran, pero quedarán apuntando a un equipo que ya no existe.` : '';
+  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos?${avisoOts}\n\nSu historial de OTs se conserva. Tendrás unos segundos para deshacerlo con el botón del aviso.`)) return;
   const backup = JSON.parse(JSON.stringify(e));
-  fbDeleteEquipoDoc(e.id).catch(err=>showToast('⚠️ No se pudo borrar en la nube: '+err.message));
+  // (5 oct 2026) se borra también la copia pública del QR (/equipos_publico),
+  // en el mismo lote; antes el QR seguía mostrando la ficha de un equipo borrado.
+  const batch = db.batch();
+  batch.delete(db.collection('equipos').doc(e.id));
+  batch.delete(db.collection('equipos_publico').doc(e.id));
+  batch.commit().catch(err=>showToast('⚠️ No se pudo borrar en la nube: '+err.message));
   DB = DB.filter(x=>x.id!==backup.id);
   backHome();
+  let undone = false;
   showUndoToast(`🗑 Equipo "${backup.nombre}" eliminado`, ()=>{
+    undone = true;
     fbSaveEquipo(backup);
+    publicarHojaVida(backup); // vuelve la ficha pública (el historial se rehace al guardar en Bitácora)
     DB.push(backup);
     openEquipo(backup.id);
   });
+  // El PDF del manual se borra de Storage solo si no se deshizo a tiempo.
+  setTimeout(()=>{ if(!undone && backup.manualUrl) fbDeleteFile(backup.manualUrl); }, 5300);
 }
 
 let tempImgData = null;
+let editingRepRef = null; // (5 oct 2026) repuesto en edición, por id (ver refRepuesto)
 
 function openRepuestoModal(idx){
   editingRepIndex = (idx!=null) ? idx : null;
+  editingRepRef = null;
   tempImgData = null;
+  imgUploadToken++; pendingImgUpload = null; // descarta una subida anterior que siga en curso
   const title = document.getElementById('repModalTitle');
   document.getElementById('rp-imagen-camera').value = '';
   document.getElementById('rp-imagen-gallery').value = '';
   if(editingRepIndex!=null){
     const p = getCurrentEquipo().repuestos[editingRepIndex];
+    if(!p){ return; }
+    editingRepRef = refRepuesto(p, editingRepIndex);
+    editingRepRef.qAlAbrir = (p.q===null||p.q===undefined)? '' : String(p.q);
     title.textContent = '✏️ Editar repuesto';
-    document.getElementById('rp-nombre').value = p.r;
-    document.getElementById('rp-tipo').value = p.t;
-    document.getElementById('rp-modelo').value = p.m;
-    document.getElementById('rp-descripcion').value = p.d;
-    document.getElementById('rp-uso').value = p.u;
-    document.getElementById('rp-qty').value = (p.q===null||p.q===undefined)? '' : p.q;
+    document.getElementById('rp-nombre').value = p.r||'';
+    document.getElementById('rp-tipo').value = p.t||'';
+    document.getElementById('rp-modelo').value = p.m||'';
+    document.getElementById('rp-descripcion').value = p.d||'';
+    document.getElementById('rp-uso').value = p.u||'';
+    document.getElementById('rp-qty').value = editingRepRef.qAlAbrir;
     document.getElementById('rp-cm').value = (p.cm===null||p.cm===undefined)? '' : p.cm;
     document.getElementById('rp-precio').value = (p.pu===null||p.pu===undefined)? '' : p.pu;
     document.getElementById('rp-min').value = (p.min===null||p.min===undefined)? '' : p.min;
     document.getElementById('rp-max').value = (p.max===null||p.max===undefined)? '' : p.max;
-    if(p.img){ tempImgData = p.img; showImagePreview(p.img); } else { hideImagePreview(); }
+    const img = urlImgSegura(p.img);
+    if(img){ tempImgData = img; showImagePreview(img); } else { hideImagePreview(); }
   } else {
     title.textContent = '➕ Nuevo repuesto';
     ['rp-nombre','rp-tipo','rp-modelo','rp-descripcion','rp-uso','rp-qty','rp-cm','rp-precio','rp-min','rp-max'].forEach(id=>document.getElementById(id).value='');
@@ -2073,21 +2287,30 @@ function hideImagePreview(){
 }
 function removeImage(){
   tempImgData = null;
+  imgUploadToken++; pendingImgUpload = null;
   document.getElementById('rp-imagen-camera').value = '';
   document.getElementById('rp-imagen-gallery').value = '';
   hideImagePreview();
 }
 
 let pendingImgUpload = null; // promesa de la subida a Storage en curso, si hay una
+let imgUploadToken = 0;      // (5 oct 2026) si se elige otra foto, la subida vieja ya no cuenta
 
 function handleImageUpload(ev){
   const file = ev.target.files[0];
   if(!file) return;
+  if(!/^image\//.test(file.type)){ showToast('⚠️ Elige una imagen'); return; }
+  // (5 oct 2026) sin señal la subida a Storage se quedaba reintentando y
+  // "Guardar" esperaba para siempre: se avisa antes.
+  if(!navigator.onLine){ showToast('📶 Para subir la foto se necesita conexión.'); ev.target.value=''; return; }
+  const prevImg = tempImgData;
+  const token = ++imgUploadToken;
   const reader = new FileReader();
   reader.onload = (e)=>{
     const img = new Image();
     img.onload = ()=>{
-      // redimensiona a máx 480px antes de subir, para no gastar espacio de más
+      // redimensiona a máx 480px (JPEG 0.8) antes de subir, para no gastar
+      // espacio ni datos de más — ya es menor que el tope general de 1280px.
       const maxDim = 480;
       let w = img.width, h = img.height;
       if(w>h && w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
@@ -2099,28 +2322,55 @@ function handleImageUpload(ev){
       showImagePreview(localPreview); // vista previa instantánea mientras sube
       const path = `repuestos/${currentEquipoId}/${Date.now()}.jpg`;
       pendingImgUpload = fbUploadDataUrl(localPreview, path).then(url=>{
+        if(token !== imgUploadToken){ fbDeleteFile(url); return; } // ya eligieron otra foto o la quitaron
         tempImgData = url;
         pendingImgUpload = null;
       }).catch(err=>{
+        if(token !== imgUploadToken) return;
         showToast('⚠️ No se pudo subir la foto: '+err.message);
         pendingImgUpload = null;
+        // vuelve a mostrar la foto que había (o ninguna), no la que no subió
+        tempImgData = prevImg;
+        if(prevImg) showImagePreview(prevImg); else hideImagePreview();
       });
     };
+    img.onerror = ()=> showToast('⚠️ No se pudo leer la imagen');
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
 function openLightbox(src){
-  document.getElementById('lightboxImg').src = src;
+  const u = urlImgSegura(src);
+  if(!u) return;
+  document.getElementById('lightboxImg').src = u;
   openModal('modalLightbox');
 }
+// (5 oct 2026) La fila pasa su posición, no la URL (una URL dentro de
+// onclick="…" permitía inyectar código).
+function openLightboxRep(idx){
+  const e = getCurrentEquipo();
+  const p = e && e.repuestos[idx];
+  if(p) openLightbox(p.img);
+}
 
+// (5 oct 2026) Guardar repuesto (nuevo o editado) en una transacción sobre la
+// lista FRESCA: el repuesto se busca por id y solo se cambia ese. Si el stock
+// del formulario no se tocó, se conserva el stock fresco (otro celular pudo
+// registrar una salida mientras el formulario estaba abierto); si se cambió,
+// se toma como conteo y queda un movimiento "ajuste" en el historial.
+let saveRepEnCurso = false;
 async function saveRepuesto(){
+  if(saveRepEnCurso) return;
   const nombre = document.getElementById('rp-nombre').value.trim();
   if(!nombre){ showToast('⚠️ El nombre del repuesto es obligatorio'); return; }
 
-  if(pendingImgUpload){ showLoading('Subiendo foto…'); await pendingImgUpload; hideLoading(); }
+  if(pendingImgUpload){
+    showLoading('Subiendo foto…');
+    const r = await conTimeout(pendingImgUpload, 30000);
+    hideLoading();
+    if(r === 'timeout'){ showToast('📶 La foto no termina de subir (señal débil). Espera un poco o quita la foto y guarda.'); return; }
+  }
 
   const qtyRaw = document.getElementById('rp-qty').value.trim();
   const cmRaw = document.getElementById('rp-cm').value.trim();
@@ -2141,59 +2391,126 @@ async function saveRepuesto(){
     img: tempImgData || null,
   };
   const e = getCurrentEquipo();
-  let toastMsg = '✅ Repuesto agregado';
+  if(!e) return;
+  const ref = editingRepIndex!=null ? editingRepRef : null;
+  if(editingRepIndex!=null && !ref){ showToast('⚠️ Vuelve a abrir el repuesto'); return; }
+  const qTocada = ref ? (qtyRaw !== ref.qAlAbrir) : true;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+  const nuevoId = nuevoRepId();
+  const qNum = v => (v==null || v==='' || isNaN(parseFloat(v))) ? null : parseFloat(v);
 
-  if(editingRepIndex!=null){
-    // Si al editar, el nombre+modelo quedó igual al de OTRO repuesto que ya
-    // existía en este equipo, no lo dejamos como fila duplicada: se fusiona
-    // con ese otro (sumando stock) y se elimina la fila que se estaba editando.
-    const newKey = partKey(obj);
-    const dupIdx = e.repuestos.findIndex((p,i2)=> i2!==editingRepIndex && partKey(p)===newKey);
-    if(dupIdx>=0){
-      const target = e.repuestos[dupIdx];
-      const prevQ = target.q!=null ? parseFloat(target.q) : null;
-      const addQ = obj.q!=null ? parseFloat(obj.q) : null;
-      if(prevQ!=null || addQ!=null) target.q = (prevQ||0) + (addQ||0);
-      ['t','m','d','u'].forEach(k=>{ if(!target[k] && obj[k]) target[k] = obj[k]; });
-      if((target.cm==null||target.cm==='') && obj.cm!=null) target.cm = obj.cm;
-      if((target.min==null||target.min==='') && obj.min!=null) target.min = obj.min;
-      if((target.max==null||target.max==='') && obj.max!=null) target.max = obj.max;
-      if(!target.img && obj.img) target.img = obj.img;
-      e.repuestos.splice(editingRepIndex,1);
-      toastMsg = `🔗 "${nombre}" ya existía como otro repuesto — se fusionaron en uno solo (stock: ${target.q ?? '—'})`;
-    } else {
-      e.repuestos[editingRepIndex] = obj;
-      toastMsg = '✅ Repuesto actualizado';
-    }
-  } else {
-    // nuevo repuesto: si ya existe uno igual (mismo nombre+modelo) en este equipo, se suma en vez de duplicarse
-    const result = mergeRepuestoInto(e.repuestos, obj);
-    toastMsg = result.merged
-      ? `🔗 Ya existía "${nombre}" — se sumó al stock (nuevo total: ${result.total ?? '—'})`
-      : '✅ Repuesto agregado';
+  saveRepEnCurso = true;
+  showLoading('Guardando repuesto…');
+  try{
+    const res = await txRepuestos(e.id, (lista, data, t) => {
+      const nombreEq = data.nombre || e.nombre;
+      const ajuste = (p, anterior, motivo) => {
+        const a = qNum(anterior), b = qNum(p.q);
+        if(b == null || a === b) return;
+        t.set(db.collection('movimientos').doc(), docMovimiento(e.id, nombreEq, p, {
+          tecnico: quienSoy(), tipo: 'ajuste', cantidad: redondearQ(b - (a || 0)), anterior: a, quedaEn: b,
+          motivo, nota: motivo, otFolio: null, costoUnitario: null, costoTotal: null,
+        }));
+      };
+      if(ref){
+        const i = buscarRepuesto(lista, ref);
+        if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo o cambió mientras tanto (lo editaron desde otro celular). Cierra y vuelve a abrirlo.`);
+        const actual = lista[i];
+        // stock: si no se tocó en el formulario, vale el FRESCO
+        const qFinal = qTocada ? obj.q : (actual.q===undefined ? null : actual.q);
+        // Si al editar, el nombre+tipo+modelo quedó igual al de OTRO repuesto
+        // que ya existía en este equipo, no lo dejamos como fila duplicada: se
+        // fusiona con ese otro (sumando stock) y se elimina la fila editada.
+        const newKey = partKey(obj);
+        const dupIdx = lista.findIndex((p,i2)=> i2!==i && partKey(p)===newKey);
+        if(dupIdx>=0){
+          const target = lista[dupIdx];
+          const antesT = target.q;
+          const prevQ = qNum(target.q), addQ = qNum(qFinal);
+          if(prevQ!=null || addQ!=null) target.q = redondearQ((prevQ||0) + (addQ||0));
+          ['t','m','d','u'].forEach(k=>{ if(!target[k] && obj[k]) target[k] = obj[k]; });
+          if((target.cm==null||target.cm==='') && obj.cm!=null) target.cm = obj.cm;
+          if((target.pu==null||target.pu==='') && obj.pu!=null) target.pu = obj.pu;
+          if((target.min==null||target.min==='') && obj.min!=null) target.min = obj.min;
+          if((target.max==null||target.max==='') && obj.max!=null) target.max = obj.max;
+          if(!target.img && obj.img) target.img = obj.img;
+          lista.splice(i,1);
+          // el stock del repuesto editado pasa al otro: queda como ajuste de ambos
+          if(qNum(actual.q) != null) ajuste({ ...actual, q: 0 }, actual.q, 'fusión al editar');
+          ajuste(target, antesT, 'fusión al editar');
+          return { msg: `🔗 "${nombre}" ya existía como otro repuesto — se fusionaron en uno solo (stock: ${target.q ?? '—'})` };
+        }
+        const antes = actual.q;
+        lista[i] = { ...actual, ...obj, q: qFinal, id: actual.id };
+        if(qTocada) ajuste(lista[i], antes, 'conteo editado a mano');
+        return { msg: '✅ Repuesto actualizado' };
+      }
+      // nuevo repuesto: si ya existe uno igual (mismo nombre+tipo+modelo) en este equipo, se suma en vez de duplicarse
+      const key = partKey(obj);
+      const ex = lista.find(p => partKey(p) === key);
+      const antesEx = ex ? ex.q : null;
+      const result = mergeRepuestoInto(lista, { ...obj, id: nuevoId });
+      const p = ex || lista[lista.length - 1];
+      if(p.q != null && p.q !== '') p.q = redondearQ(parseFloat(p.q) || 0);
+      ajuste(p, antesEx, ex ? 'alta de repuesto (sumado a uno existente)' : 'alta de repuesto');
+      return { msg: result.merged
+        ? `🔗 Ya existía "${nombre}" — se sumó al stock (nuevo total: ${p.q ?? '—'})`
+        : '✅ Repuesto agregado' };
+    });
+    closeModal('modalRepuesto');
+    renderDetail();
+    showToast(res.msg);
+  }catch(err){
+    avisarErrorTx(err); // el formulario queda abierto
+  }finally{
+    hideLoading();
+    saveRepEnCurso = false;
   }
-
-  fbSaveEquipo(e);
-  closeModal('modalRepuesto');
-  renderDetail();
-  showToast(toastMsg);
 }
 
+// (5 oct 2026) Borrar (y deshacer) por id, en transacción sobre la lista fresca.
 async function deleteRepuesto(idx){
   const e = getCurrentEquipo();
+  const p0 = e && e.repuestos[idx];
+  if(!p0) return;
+  const ref = refRepuesto(p0, idx);
   if(!(await verifyPin())) return;
-  const p = e.repuestos[idx];
-  if(!confirm(`¿Eliminar "${p.r}"?`)) return;
-  const backup = {...p};
-  e.repuestos.splice(idx,1);
-  fbSaveEquipo(e);
+  if(!confirm(`¿Eliminar "${p0.r}"?`)) return;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+  showLoading('Eliminando…');
+  let backup, pos;
+  try{
+    const res = await txRepuestos(e.id, (lista) => {
+      const i = buscarRepuesto(lista, ref);
+      if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo (lo cambiaron desde otro celular).`);
+      const b = { ...lista[i] };
+      lista.splice(i, 1);
+      return { backup: b, pos: i };
+    });
+    backup = res.backup; pos = res.pos;
+  }catch(err){
+    avisarErrorTx(err);
+    return;
+  }finally{
+    hideLoading();
+  }
   renderDetail();
   let undone = false;
-  showUndoToast(`🗑 "${backup.r}" eliminado`, ()=>{
+  showUndoToast(`🗑 "${backup.r}" eliminado`, async ()=>{
     undone = true;
-    e.repuestos.splice(Math.min(idx, e.repuestos.length), 0, backup);
-    fbSaveEquipo(e);
-    renderDetail();
+    try{
+      await txRepuestos(e.id, (lista) => {
+        if(lista.some(p => p.id === backup.id)) return TX_SIN_CAMBIOS; // ya estaba
+        lista.splice(Math.min(pos, lista.length), 0, { ...backup });
+      });
+      renderDetail();
+      showToast(`↩️ "${backup.r}" restaurado`);
+    }catch(err){
+      avisarErrorTx(err);
+      // si no se pudo restaurar, la foto sí se borra más tarde
+      undone = false;
+      setTimeout(()=>{ if(!undone && backup.img) fbDeleteFile(backup.img); }, 1000);
+    }
   });
   // La foto en Storage recién se borra si no se deshizo a tiempo — es lo
   // único de esta acción que de verdad no se puede recuperar después.
@@ -2250,10 +2567,18 @@ async function verifyPin(){
   }
   const entered = prompt('🔒 Ingresa la clave para eliminar:');
   if(entered===null) return false; // canceló
-  // Compatibilidad con claves guardadas antes de este cambio (texto plano de <64 hex)
-  const enteredHash = await sha256Hex(entered);
-  if(enteredHash !== pinHash && entered !== pinHash){ showToast('❌ Clave incorrecta'); return false; }
+  if(!(await pinCoincide(entered, pinHash))){ showToast('❌ Clave incorrecta'); return false; }
   return true;
+}
+// (5 oct 2026) Antes también se aceptaba escribir el HASH guardado tal cual
+// (entered === pinHash): cualquiera que leyera /config/app podía borrar.
+// Ahora: si lo guardado es un hash SHA-256 (64 hex) solo vale la clave cuyo
+// hash coincide; solo una clave vieja guardada en texto plano se compara
+// directo. La clave sigue siendo un freno en pantalla; quién puede borrar de
+// verdad lo deciden las reglas de Firestore.
+async function pinCoincide(entered, guardado){
+  if(/^[0-9a-f]{64}$/i.test(guardado || '')) return (await sha256Hex(entered)) === guardado.toLowerCase();
+  return entered === guardado;
 }
 
 async function configurePin(){
@@ -2264,8 +2589,7 @@ async function configurePin(){
     if(cambiar){
       const old = prompt('Ingresa la clave actual:');
       if(old===null) return;
-      const oldHash = await sha256Hex(old);
-      if(oldHash !== current && old !== current){ showToast('❌ Clave incorrecta'); return; }
+      if(!(await pinCoincide(old, current))){ showToast('❌ Clave incorrecta'); return; }
       const nueva = prompt('Nueva clave:');
       if(!nueva) return;
       try { await fbSetSharedPin(await sha256Hex(nueva)); } catch (e) { return; }
@@ -2273,8 +2597,7 @@ async function configurePin(){
     } else {
       const old = prompt('Ingresa la clave actual para quitar la protección:');
       if(old===null) return;
-      const oldHash = await sha256Hex(old);
-      if(oldHash !== current && old !== current){ showToast('❌ Clave incorrecta'); return; }
+      if(!(await pinCoincide(old, current))){ showToast('❌ Clave incorrecta'); return; }
       try { await fbSetSharedPin(null); } catch (e) { return; }
       showToast('🔓 Protección de eliminación desactivada');
     }
@@ -2299,7 +2622,7 @@ document.getElementById('globalSearch').addEventListener('input', (ev)=>{
   const results = [];
   DB.forEach(e=>{
     e.repuestos.forEach(p=>{
-      if((p.r+' '+p.t+' '+p.m+' '+p.d+' '+p.u).toLowerCase().includes(q)){
+      if([p.r,p.t,p.m,p.d,p.u].join(' ').toLowerCase().includes(q)){
         results.push({equipo:e.nombre, equipoId:e.id, ...p});
       }
     });
@@ -2308,13 +2631,13 @@ document.getElementById('globalSearch').addEventListener('input', (ev)=>{
   document.getElementById('searchResultsTitle').textContent = `${results.length} resultado(s) para "${ev.target.value}"`;
   document.getElementById('searchResultsBody').innerHTML = results.length ? results.map(p=>{
     const st = stockStatus(p);
-    return `<tr style="cursor:pointer" onclick="openEquipo('${p.equipoId}')">
-      <td class="part-modelo">${p.equipo}</td>
-      <td class="part-name">${p.r}</td>
-      <td class="part-modelo">${p.m||'—'}</td>
-      <td class="part-desc">${p.d||'—'}</td>
-      <td class="mono">${p.q}</td>
-      <td class="mono">${p.cm}</td>
+    return `<tr style="cursor:pointer" onclick="openEquipo('${idJs(p.equipoId)}')">
+      <td class="part-modelo">${fbEsc(p.equipo)}</td>
+      <td class="part-name">${fbEsc(p.r)}</td>
+      <td class="part-modelo">${fbEsc(p.m||'—')}</td>
+      <td class="part-desc">${fbEsc(p.d||'—')}</td>
+      <td class="mono">${fbEsc(p.q ?? '—')}</td>
+      <td class="mono">${fbEsc(p.cm ?? '—')}</td>
       <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
     </tr>`;
   }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">🔍</div>Sin resultados en ningún equipo.</div></td></tr>`;
@@ -2353,12 +2676,13 @@ function exportFaltantes(){
     return;
   }
   let csv = 'Equipo,Repuesto,Modelo,Stock actual,Minimo,Estado\n';
-  rows.forEach(r=>{ csv += `"${r.equipo}","${r.repuesto}","${r.modelo}",${r.stock??''},${r.minimo??''},"${r.estado}"\n`; });
+  const cq = v => String(v ?? '').replace(/"/g, '""'); // (5 oct 2026) comillas dentro de un dato
+  rows.forEach(r=>{ csv += `"${cq(r.equipo)}","${cq(r.repuesto)}","${cq(r.modelo)}",${r.stock??''},${r.minimo??''},"${cq(r.estado)}"\n`; });
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const sufijoArchivo = equipoActual ? '_' + equipoActual.nombre.replace(/[^a-z0-9]+/gi, '_') : '';
-  a.href = url; a.download = 'lista_compra' + sufijoArchivo + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.href = url; a.download = 'lista_compra' + sufijoArchivo + '_' + fbHoy() + '.csv'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
   showToast(`🛒 Lista de compra exportada (${rows.length} repuestos)` + (equipoActual ? ` — solo ${equipoActual.nombre}` : ''));
@@ -2368,7 +2692,7 @@ function exportData(){
   const blob = new Blob([JSON.stringify(DB,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'inventario_repuestos_'+new Date().toISOString().slice(0,10)+'.json';
+  a.href = url; a.download = 'inventario_repuestos_'+fbHoy()+'.json'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
   showToast('⬇ Respaldo descargado');
@@ -2404,7 +2728,7 @@ async function exportHistorialCompleto(){
     const blob = new Blob([JSON.stringify(respaldo, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'respaldo_movimientos_reubicaciones_auditoria_' + new Date().toISOString().slice(0,10) + '.json';
+    a.href = url; a.download = 'respaldo_movimientos_reubicaciones_auditoria_' + fbHoy() + '.json'; // (5 oct 2026) fecha local
     a.click();
     URL.revokeObjectURL(url);
     showToast(`⬇ Respaldo descargado — ${respaldo.movimientos.length} movimientos, ${respaldo.reubicaciones.length} reubicaciones, ${respaldo.auditoria.length} auditorías`);
@@ -2420,11 +2744,22 @@ function importData(ev){
     try{
       const data = JSON.parse(e.target.result);
       if(!Array.isArray(data)) throw new Error('formato inválido');
+      // (5 oct 2026) un respaldo puede venir editado a mano: ids de equipo
+      // raros (comillas, barras) se reemplazan, porque se usan en botones de
+      // la pantalla; los repuestos reciben su id estable al guardarse.
+      data.forEach(eq => {
+        if(!eq || typeof eq !== 'object') throw new Error('formato inválido');
+        if(eq.id != null && !/^[A-Za-z0-9_-]{1,64}$/.test(String(eq.id))) delete eq.id;
+        if(!Array.isArray(eq.repuestos)) eq.repuestos = [];
+      });
       const fusionar = confirm('¿Cómo quieres cargar este respaldo?\n\nAceptar = SUMAR/fusionar con lo que ya tienes (recomendado si varios técnicos cargan por separado — no duplica, suma cantidades)\nCancelar = REEMPLAZAR todo (borra lo que había)');
       showLoading('Importando respaldo…');
       if(fusionar){
         data.forEach(eq => mergeEquipoInto(DB, eq));
-        for(const e of DB) fbSaveEquipo(e);
+        for(const e of DB){
+          if(!e.id) e.id = db.collection('equipos').doc().id; // equipo nuevo del respaldo sin id
+          fbSaveEquipo(e);
+        }
       } else {
         for(const old of DB) await fbDeleteEquipoDoc(old.id).catch(()=>{});
         DB = data;
@@ -2458,7 +2793,10 @@ function showToast(msg){
 function showUndoToast(msg, onUndo, delayMs=5200){
   const t = document.getElementById('toast');
   clearTimeout(toastTimer);
-  t.innerHTML = `<span>${msg}</span>`;
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = msg; // (5 oct 2026) el mensaje trae nombres: como texto, no HTML
+  t.appendChild(span);
   const btn = document.createElement('button');
   btn.className = 'btn sm';
   btn.style.cssText = 'margin-left:12px;padding:4px 10px;';

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="theme-color" content="#0F1923"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -118,7 +118,8 @@ window.fbReady.then(()=>{
   if (window.currentUserRole && window.currentUserRole.rol === 'RRHH') { location.replace('herramientas.html#rrhh'); return; }
   document.getElementById('fbStatus').innerHTML = `🟢 Conectado a Firebase (proyecto <b>${firebaseConfig.projectId}</b>)`;
 }).catch((err)=>{
-  document.getElementById('fbStatus').innerHTML = `🔴 No se pudo conectar a Firebase — revisa <code>firebase-config.js</code>`;
+  // (5 oct 2026) Muestra la causa real (antes decía siempre "revisa firebase-config.js").
+  document.getElementById('fbStatus').textContent = '🔴 ' + ((err && err.message) || 'No se pudo conectar a Firebase');
 });
 </script>
 </body>

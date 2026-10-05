@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="theme-color" content="#0F1923"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>Iniciar sesión — Mantenimiento</title>
@@ -31,19 +31,29 @@
   <h1>Mantenimiento</h1>
   <p class="sub">Inicia sesión con la cuenta que te asignó tu administrador.</p>
   <form id="loginForm">
-    <label>Correo</label>
+    <label for="email">Correo</label>
     <input type="email" id="email" required autocomplete="username" inputmode="email"/>
-    <label>Contraseña</label>
+    <label for="password">Contraseña</label>
     <input type="password" id="password" required autocomplete="current-password"/>
     <div id="msg"></div>
     <button type="submit" id="submitBtn">Iniciar sesión</button>
   </form>
+  <a href="#" id="olvide" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">Olvidé mi contraseña</a>
 </div>
 <script>
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const params = new URLSearchParams(location.search);
-const next = params.get('next') || 'index.html';
+// (5 oct 2026) Solo se acepta volver a una página propia de la app
+// ("bitacora.html?equipo=…"). Antes cualquier valor servía: un enlace
+// preparado podía mandar a una página falsa o ejecutar código (javascript:).
+const nextPedido = params.get('next') || '';
+const next = /^[a-z0-9-]+\.html(\?[^#]*)?$/i.test(nextPedido) ? nextPedido : 'index.html';
+// Si la app cerró la sesión por un motivo (cuenta desactivada, sin rol), se dice aquí.
+try {
+  const motivo = sessionStorage.getItem('fbMotivoSalida');
+  if (motivo) { document.getElementById('msg').textContent = motivo; sessionStorage.removeItem('fbMotivoSalida'); }
+} catch (e) {}
 
 // CORRECCIÓN (revisión previa a publicar): si el navegador todavía tiene
 // una sesión anónima vieja (de antes de esta fase), Firebase la reporta
@@ -59,7 +69,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('submitBtn');
   const msg = document.getElementById('msg');
-  msg.textContent = '';
+  msg.textContent = ''; msg.style.color = '';
   btn.disabled = true; btn.textContent = 'Entrando…';
   try {
     await auth.signInWithEmailAndPassword(
@@ -75,9 +85,27 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       'auth/wrong-password': 'Contraseña incorrecta.',
       'auth/invalid-credential': 'Correo o contraseña incorrectos.',
       'auth/too-many-requests': 'Demasiados intentos — espera unos minutos e intenta de nuevo.',
+      'auth/network-request-failed': 'Sin conexión a internet. Revisa la señal e intenta de nuevo.',
+      'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
     };
     msg.textContent = map[err.code] || ('Error: ' + err.message);
     btn.disabled = false; btn.textContent = 'Iniciar sesión';
+  }
+});
+
+// (5 oct 2026) Recuperar contraseña: Firebase envía un correo para crear una nueva.
+document.getElementById('olvide').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  const email = document.getElementById('email').value.trim();
+  if (!email) { msg.textContent = 'Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    msg.style.color = '#10B981';
+    msg.textContent = 'Si ese correo tiene cuenta, te llegó un enlace para crear una contraseña nueva (revisa también spam).';
+  } catch (err) {
+    msg.style.color = '';
+    msg.textContent = err.code === 'auth/invalid-email' ? 'Correo inválido.' : err.code === 'auth/network-request-failed' ? 'Sin conexión a internet.' : 'No se pudo enviar el correo: ' + err.message;
   }
 });
 </script>

@@ -241,7 +241,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
 
   <!-- ═════════ EQUIPOS ═════════ -->
   <section class="tabpanel" id="tab-equipos">
-    <p class="section-intro">MTBF = intervalo promedio entre fallas correctivas en días distintos (mínimo 3). Se calcula con todo el historial del equipo, sin aplicar el período ni los filtros de tipo, semana o causa. "Sin fallas recientes" = lleva más del doble de su MTBF (y al menos 30 días más) sin fallar.</p>
+    <p class="section-intro">MTBF = intervalo promedio entre fallas correctivas en días distintos (mínimo 3). Esta tabla (riesgo y predicción) se calcula con todo el historial del equipo, sin aplicar el período ni los filtros de tipo, semana o causa; el KPI "MTBF prom. (filtrado)" del Resumen sí aplica todos los filtros. Un equipo se identifica por su ficha (o por su nombre si la OT no la trae), sin importar el área donde se registró. "Sin fallas recientes" = lleva más del doble de su MTBF (y al menos 30 días más) sin fallar.</p>
     <div class="card mb">
       <h2>Análisis predictivo por equipo (MTBF)</h2>
       <div class="cardsub">Clic en un equipo para ver su ficha completa; clic en un técnico para ver la suya.</div>
@@ -308,7 +308,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <div style="overflow-x:auto;"><table id="tecTable">
         <thead><tr>
           <th data-tk="tecnico">Técnico</th><th data-tk="ots">OTs atendidas</th><th data-tk="correctivos">Correctivos</th>
-          <th data-tk="mttr">MTTR prom.</th><th data-tk="downtime">Paro prom. máquina</th><th data-tk="areas">Áreas cubiertas</th>
+          <th data-tk="mttr" title="Minutos de técnico promedio por correctivo (no es el MTTR de máquina)">Tiempo técnico prom.</th><th data-tk="downtime">Paro prom. máquina</th><th data-tk="areas">Áreas cubiertas</th>
           <th data-tk="noresuelto">% sin resolver</th><th data-tk="preventivos">Preventivos (checklist)</th>
           <th data-tk="respuesta">Tiempo resp. prom.</th><th data-tk="desempeno">Desempeño</th></tr></thead>
         <tbody id="tecBody"></tbody></table></div>
@@ -319,10 +319,10 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   <section class="tabpanel" id="tab-datos">
     <div class="card mb">
       <h2>Exportar</h2>
-      <div class="cardsub">El CSV respeta los filtros activos; el respaldo JSON incluye todas las OTs.</div>
+      <div class="cardsub">El CSV respeta los filtros activos. El respaldo JSON (solo administrador / encargado) trae los documentos originales de todas las OTs.</div>
       <div class="feed-actions">
         <button onclick="exportAnalisisCSV()">📊 Exportar reporte a Excel (CSV)</button>
-        <button class="secondary" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
+        <button class="secondary" id="backupBtn" style="display:none;" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
         <span class="feed-status" id="exportStatus"></span>
       </div>
     </div>
@@ -367,14 +367,36 @@ const RAW = ``;
 let allRows = [];
 const charts = {};
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// (5 oct 2026) Se usa el escape común de firebase-init (también escapa ` );
+// la copia local queda solo de respaldo.
+const esc = typeof fbEsc === 'function' ? fbEsc : (s => String(s ?? '').replace(/[&<>"'`]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c])));
 
-if (typeof ChartDataLabels !== 'undefined') {
-  Chart.register(ChartDataLabels);
-  Chart.defaults.set('plugins.datalabels', { display:false });
+// (5 oct 2026) Sin conexión el CDN de Chart.js puede no cargar: antes el
+// script se caía aquí y la página quedaba en blanco. Ahora los KPIs y tablas
+// se dibujan igual y cada gráfica muestra un aviso en su lugar.
+const HAS_CHART = typeof Chart !== 'undefined';
+if (HAS_CHART) {
+  if (typeof ChartDataLabels !== 'undefined') {
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set('plugins.datalabels', { display:false });
+  }
+  Chart.defaults.maintainAspectRatio = false;
+  Chart.defaults.animation = false;
 }
-Chart.defaults.maintainAspectRatio = false;
-Chart.defaults.animation = false;
+// Crea (o recrea) la gráfica `name` en el canvas `canvasId`; sin Chart.js deja un aviso.
+function mkChart(name, canvasId, cfg){
+  if (charts[name]) { try { charts[name].destroy(); } catch(e) {} charts[name] = null; }
+  const cv = $(canvasId); if (!cv) return null;
+  if (!HAS_CHART){
+    cv.style.display = 'none';
+    const box = cv.parentNode;
+    if (box && !box.querySelector('.nochart')) box.insertAdjacentHTML('beforeend', '<div class="empty nochart">Gráficas no disponibles sin conexión</div>');
+    return null;
+  }
+  try { charts[name] = new Chart(cv, cfg); }
+  catch(err){ console.error('Gráfica '+name+':', err); charts[name] = null; }
+  return charts[name];
+}
 
 function parseRaw(raw){
   const out = [];
@@ -395,42 +417,60 @@ function parseRaw(raw){
   return out;
 }
 
-/* ---------- equipos: nombre combinado tipoMaquina + equipo ---------- */
+/* ---------- equipos ---------- */
+// (5 oct 2026) La clave de equipo ya NO incluye el área: antes la misma
+// máquina registrada en dos áreas salía como dos equipos (con dos MTBF) y no
+// coincidía con Bitácora ni con la Hoja de vida. Ahora:
+//   - si la OT trae equipoId → se agrupa por equipoId (nombre del catálogo);
+//   - si no → por fbEquipoKey(EQUIPO || TIPO_MAQUINA); si ese nombre es el de
+//     un equipo del catálogo, se une a su equipoId (OTs viejas sin id).
+// El área se muestra como atributo: la más frecuente del equipo.
 function normEq(s){ return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' '); }
 function equipoLabel(r){
   const tipo = (r.tipoMaquina||'').trim(), eq = (r.equipo||'').trim();
   if (tipo && eq && normEq(tipo)!==normEq(eq)) return tipo + ' ' + eq;
   return tipo || eq || 'Equipo sin nombre';
 }
-let _canon = {};
+let _equiposCat = {};      // equipoId → nombre (colección "equipos")
+let _equiposPorNombre = {}; // fbEquipoKey(nombre) → equipoId
+function eqKey(r){
+  if (r.equipoId) return 'id:'+r.equipoId;
+  const k = fbEquipoKey(r.equipo || r.tipoMaquina);
+  if (k && _equiposPorNombre[k]) return 'id:'+_equiposPorNombre[k];
+  return 'n:'+(k || '?');
+}
+let _eqInfo = {}; // clave → {label, area}
+const topKey = obj => Object.entries(obj).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]?.[0];
 function buildCanon(rows){
-  const counts = {};
+  const acc = {};
   rows.forEach(r=>{
-    const raw = equipoLabel(r), k = (r.area||'Sin área')+' | '+normEq(raw);
-    (counts[k] = counts[k] || {})[raw] = (counts[k][raw]||0)+1;
+    const k = eqKey(r), g = acc[k] = acc[k] || {labels:{}, areas:{}};
+    const lbl = equipoLabel(r); g.labels[lbl] = (g.labels[lbl]||0)+1;
+    const a = r.area||'Sin área'; g.areas[a] = (g.areas[a]||0)+1;
   });
   const map = {};
-  Object.entries(counts).forEach(([k,v])=>{ map[k] = Object.entries(v).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0][0]; });
-  return map;
+  Object.entries(acc).forEach(([k,g])=>{
+    const id = k.startsWith('id:') ? k.slice(3) : null;
+    map[k] = { label: (id && _equiposCat[id]) || topKey(g.labels) || 'Equipo sin nombre', area: topKey(g.areas) || 'Sin área' };
+  });
+  _eqInfo = map;
 }
-function canonEquipo(r){
-  const raw = equipoLabel(r);
-  return _canon[(r.area||'Sin área')+' | '+normEq(raw)] || raw;
-}
-const dayKey = r => (r.area||'Sin área') + ' | ' + canonEquipo(r);
+function canonEquipo(r){ const i = _eqInfo[eqKey(r)]; return i ? i.label : equipoLabel(r); }
+const eqArea = k => (_eqInfo[k] && _eqInfo[k].area) || 'Sin área';
+const eqLabelOf = k => (_eqInfo[k] && _eqInfo[k].label) || 'Equipo';
 
 /* ---------- fechas y semanas ---------- */
-function parseFecha(s){ if (!s) return null; const d = new Date(s+'T00:00:00'); return isNaN(d.getTime()) ? null : d; }
+// (5 oct 2026) Fecha local con fbParseFecha (new Date('YYYY-MM-DD') es UTC) y
+// se rechazan fechas imposibles como 2026-02-31 (antes "rodaban" a marzo).
+function parseFecha(s){
+  const d = fbParseFecha(s); if (!d) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return (d.getMonth()+1 === +m[2] && d.getDate() === +m[3]) ? d : null;
+}
 const daysBetween = (a,b) => Math.round((b-a)/86400000);
 function today0(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
-function isoWeekKey(d){
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const n = t.getUTCDay()||7;
-  t.setUTCDate(t.getUTCDate()+4-n);
-  const y0 = new Date(Date.UTC(t.getUTCFullYear(),0,1));
-  const w = Math.ceil(((t-y0)/86400000+1)/7);
-  return t.getUTCFullYear() + '-' + String(w).padStart(2,'0');
-}
+// (5 oct 2026) Semana ISO con las funciones comunes de firebase-init (mismo resultado).
+function isoWeekKey(d){ return fbAnioSemanaISO(d) + '-' + String(fbSemanaISO(d)).padStart(2,'0'); }
 const weekOf = r => { const d = parseFecha(r.fecha); return d ? isoWeekKey(d) : ''; };
 const weekLabel = k => 'Sem ' + parseInt(k.split('-')[1],10);
 const fmtDate = d => d ? d.toLocaleDateString('es-DO') : '—';
@@ -474,8 +514,8 @@ function computePredictive(rows, refDate){
   const groups = {};
   rows.filter(isCorr).forEach(r=>{
     const d = parseFecha(r.fecha); if (!d) return;
-    const key = dayKey(r);
-    if (!groups[key]) groups[key] = {area:r.area, equipo:canonEquipo(r), dates:[], downtime:[], entries:[]};
+    const key = eqKey(r);
+    if (!groups[key]) groups[key] = {key, area:eqArea(key), equipo:eqLabelOf(key), dates:[], downtime:[], entries:[]};
     groups[key].dates.push(d);
     groups[key].downtime.push(r.minMaquina);
     groups[key].entries.push({date:d, falla:r.falla, pieza:r.pieza, tecnicos:r.tecnicos});
@@ -498,7 +538,7 @@ function computePredictive(rows, refDate){
     }
     const last = g.entries[g.entries.length-1];
     const tec = topFreq(g.entries.map(e=>e.tecnicos));
-    return {area:g.area, equipo:g.equipo, key:g.area+' | '+g.equipo, fallas:g.dates.length, mtbf, nextDate, daysUntil, daysSince, risk, last:lastD,
+    return {area:g.area, equipo:g.equipo, key:g.key, fallas:g.dates.length, mtbf, nextDate, daysUntil, daysSince, risk, last:lastD,
       avgDowntime:g.downtime.reduce((s,x)=>s+x,0)/g.downtime.length, lastFalla:last?last.falla:'',
       tecnico:tec?tec.value:'—', plan:buildPlan(risk, topFreq(g.entries.map(e=>e.pieza)), mtbf, daysSince)};
   });
@@ -517,7 +557,7 @@ function render(){
   const invalid = allRows.length - withDate.length;
   const rowsAll = withDate;
   window._rowsAll = rowsAll;
-  _canon = buildCanon(rowsAll);
+  buildCanon(rowsAll);
 
   $('nowClock').textContent = ref.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric'});
   const fechas = rowsAll.map(r=>parseFecha(r.fecha).getTime());
@@ -554,28 +594,50 @@ function render(){
 
   /* predictivo: historial completo (sin período ni filtros de tipo/semana/causa) */
   const predAll = computePredictive(rowsAll, ref);
-  const predScope = (F.area||F.tecnico) ? computePredictive(rowsAll.filter(r=>preds.area(r)&&preds.tecnico(r)), ref) : predAll;
+  // (5 oct 2026) Con filtro de área se toman los equipos que tienen OTs en esa
+  // área, con TODO su historial (la clave de equipo ya no depende del área).
+  const keysArea = F.area ? new Set(rowsAll.filter(preds.area).map(eqKey)) : null;
+  const predScope = (F.area||F.tecnico) ? computePredictive(rowsAll.filter(r=>(!keysArea||keysArea.has(eqKey(r)))&&preds.tecnico(r)), ref) : predAll;
   window._predictive = predScope; window._predAll = predAll;
 
   /* KPIs */
+  // (5 oct 2026) Definiciones corregidas:
+  //  - MTTR = minutos de máquina parada de los CORRECTIVOS (con paro > 0) ÷ nº de
+  //    esos correctivos. Antes era el tiempo del técnico y, si había checklists,
+  //    se mostraba el tiempo de respuesta bajo la misma etiqueta "MTTR".
+  //  - El tiempo del técnico y la respuesta de checklist tienen su propio KPI.
+  //  - MTBF del KPI = con TODOS los filtros activos (período, tipo, semana,
+  //    causa, área, técnico). La tabla de riesgo/predicción sigue usando el
+  //    historial completo del equipo (eso sí lo necesita).
+  //  - "Paro por fallas" = solo correctivos; el total de todos los tipos va en el tooltip.
+  //  - Disponibilidad = MTBF / (MTBF + MTTR).
   const correctivos = scopeRows.filter(isCorr), preventivos = scopeRows.filter(isPrev);
-  const totalDowntime = scopeRows.reduce((s,r)=>s+r.minMaquina,0);
+  const totalDowntimeAll = scopeRows.reduce((s,r)=>s+r.minMaquina,0);
+  const totalDowntime = correctivos.reduce((s,r)=>s+r.minMaquina,0);
   const pctCorr = scopeRows.length ? Math.round(correctivos.length/scopeRows.length*100) : 0;
-  const mtbfs = predScope.filter(p=>p.mtbf!=null).map(p=>p.mtbf);
+  const predKpi = computePredictive(scopeRows, ref);
+  const mtbfs = predKpi.filter(p=>p.mtbf!=null).map(p=>p.mtbf);
   const mtbfAvg = mtbfs.length ? mtbfs.reduce((a,b)=>a+b,0)/mtbfs.length : null;
+  const corrM = correctivos.filter(r=>r.minMaquina>0);
+  const mttrAvg = corrM.length ? corrM.reduce((s,r)=>s+r.minMaquina,0)/corrM.length : null;
   const corrT = correctivos.filter(r=>r.minTecnico>0);
-  const mttrAvg = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  const tecAvg = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  const mtbfMin = mtbfAvg!=null ? mtbfAvg*1440 : null;
+  const disp = (mtbfMin!=null && mttrAvg!=null && (mtbfMin+mttrAvg)>0) ? mtbfMin/(mtbfMin+mttrAvg)*100 : null;
   const nCrit = predScope.filter(p=>p.risk==='critico').length, nAlto = predScope.filter(p=>p.risk==='alto').length;
   const prevCheck = preventivos.filter(r=>r.tiempoRespuestaMin!=null);
   const avgResp = prevCheck.length ? prevCheck.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/prevCheck.length : null;
 
   $('kpiRow').innerHTML = `
     <div class="kpi"><div class="lbl">Órdenes de trabajo</div><div class="val">${scopeRows.length}</div><div class="foot">${correctivos.length} correctivas · ${preventivos.length} preventivas</div></div>
-    <div class="kpi ${pctCorr>=60?'accent-red':pctCorr>=35?'accent-amber':'accent-teal'}"><div class="lbl">% Correctivo</div><div class="val">${pctCorr}%</div><div class="foot">${pctCorr>=60?'trabajo mayormente reactivo':pctCorr>=35?'margen para crecer el preventivo':'buena proporción planificada'}</div></div>
-    <div class="kpi accent-amber"><div class="lbl">Paro de máquina</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min acumulados</div></div>
-    <div class="kpi"><div class="lbl">MTBF promedio</div><div class="val">${mtbfAvg!=null?mtbfAvg.toFixed(1)+' d':'—'}</div><div class="foot">en ${mtbfs.length} equipo(s) con ≥3 fallas</div></div>
-    <div class="kpi"><div class="lbl">MTTR promedio</div><div class="val">${mttrAvg!=null?fmtHM(mttrAvg):'—'}</div><div class="foot">${prevCheck.length?'resp. checklist: '+fmtRespuesta(avgResp):'tiempo de técnico por correctivo'}</div></div>
-    <div class="kpi clickable ${nCrit+nAlto?'accent-red':'accent-teal'}" data-goto="equipos"><div class="lbl">Equipos en riesgo</div><div class="val">${nCrit+nAlto}</div><div class="foot">${nCrit} crítico · ${nAlto} alto — ver detalle →</div></div>`;
+    <div class="kpi ${pctCorr>=60?'accent-red':pctCorr>=35?'accent-amber':'accent-teal'}"><div class="lbl">% Correctivo</div><div class="val">${scopeRows.length?pctCorr+'%':'—'}</div><div class="foot">${!scopeRows.length?'sin OTs en el alcance':pctCorr>=60?'trabajo mayormente reactivo':pctCorr>=35?'margen para crecer el preventivo':'buena proporción planificada'}</div></div>
+    <div class="kpi accent-amber" title="Minutos de máquina parada registrados en OTs correctivas. Paro total de todos los tipos (incl. preventivos/proyectos): ${totalDowntimeAll.toLocaleString()} min."><div class="lbl">Paro por fallas</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min en correctivos · total ${totalDowntimeAll.toLocaleString()} min</div></div>
+    <div class="kpi" title="Tiempo medio entre fallas: promedio de los intervalos (en días) entre correctivos de cada equipo con al menos 3 días distintos con falla, dentro del alcance filtrado (período, área, técnico, tipo, semana y causa)."><div class="lbl">MTBF prom. (filtrado)</div><div class="val">${mtbfAvg!=null?mtbfAvg.toFixed(1)+' d':'—'}</div><div class="foot">en ${mtbfs.length} equipo(s) con ≥3 días con falla en el alcance</div></div>
+    <div class="kpi" title="Tiempo medio de reparación: minutos de máquina parada de los correctivos ÷ número de correctivos. Solo cuenta los correctivos con paro de máquina mayor que 0."><div class="lbl">MTTR (paro por correctivo)</div><div class="val">${mttrAvg!=null?fmtHM(mttrAvg):'—'}</div><div class="foot">${corrM.length} correctivo(s) con paro &gt; 0</div></div>
+    <div class="kpi ${disp==null?'':disp>=95?'accent-teal':disp>=85?'accent-amber':'accent-red'}" title="Disponibilidad = MTBF ÷ (MTBF + MTTR), con ambos en minutos. Fórmula estándar de disponibilidad inherente: qué fracción del tiempo el equipo promedio está operando y no parado por fallas. Necesita MTBF y MTTR."><div class="lbl">Disponibilidad</div><div class="val">${disp!=null?disp.toFixed(1)+'%':'—'}</div><div class="foot">MTBF ÷ (MTBF + MTTR)</div></div>
+    <div class="kpi" title="Promedio de minutos de técnico registrados en los correctivos (solo los que tienen tiempo de técnico mayor que 0)."><div class="lbl">Tiempo técnico prom.</div><div class="val">${tecAvg!=null?fmtHM(tecAvg):'—'}</div><div class="foot">por correctivo (${corrT.length} con tiempo)</div></div>
+    ${prevCheck.length?`<div class="kpi" title="Tiempo promedio desde que se generó la OT de checklist hasta su cierre."><div class="lbl">Resp. checklist prom.</div><div class="val">${fmtRespuesta(avgResp)}</div><div class="foot">${prevCheck.length} OT(s) de checklist cerradas</div></div>`:''}
+    <div class="kpi clickable ${nCrit+nAlto?'accent-red':'accent-teal'}" data-goto="equipos" title="Según el historial completo de cada equipo (solo aplican los filtros de área y técnico)."><div class="lbl">Equipos en riesgo</div><div class="val">${nCrit+nAlto}</div><div class="foot">${nCrit} crítico · ${nAlto} alto — ver detalle →</div></div>`;
   const cnt = $('tabRiskCnt'); cnt.textContent = nCrit+nAlto; cnt.style.display = (nCrit+nAlto) ? '' : 'none';
 
   renderPrioridades(predScope);
@@ -599,8 +661,7 @@ function render(){
   const multiYear = new Set(weeksSorted.map(k=>k.split('-')[0])).size > 1;
   const trendLabel = k => multiYear ? weekLabel(k)+' ’'+k.slice(2,4) : weekLabel(k);
   const ptColor = weeksSorted.map(w=>!F.semana||w===F.semana?'#f0a930':'#7a5a1f');
-  if (charts.trend) charts.trend.destroy();
-  charts.trend = new Chart($('chartTrend'),{
+  mkChart('trend', 'chartTrend', {
     type:'line',
     data:{labels:weeksSorted.map(trendLabel), datasets:[{data:weeksSorted.map(w=>weekCounts[w]), borderColor:'#f0a930', backgroundColor:'rgba(240,169,48,.12)', fill:true, tension:.3,
       pointBackgroundColor:ptColor, pointBorderColor:ptColor, pointRadius:weeksSorted.map(w=>w===F.semana?7:4), pointHoverRadius:7}]},
@@ -616,8 +677,7 @@ function render(){
   const tipoCounts = {};
   rowsExcept('tipo').forEach(r=>{ const k=r.tipoMant||'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
   const tipoLabels = Object.keys(tipoCounts).sort((a,b)=>tipoCounts[b]-tipoCounts[a]);
-  if (charts.tipo) charts.tipo.destroy();
-  charts.tipo = new Chart($('chartTipo'),{
+  mkChart('tipo', 'chartTipo', {
     type:'doughnut',
     data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(k=>tipoCounts[k]),
       backgroundColor:tipoLabels.map(k=>{ const c=TIPO_COLORS[k.toLowerCase()]||'#8b98ab'; return (!F.tipo||F.tipo===k)?c:c+'40'; }), borderColor:'#141a22', borderWidth:2}]},
@@ -633,12 +693,12 @@ function render(){
   const causaCounts = {};
   rowsExcept('causa').forEach(r=>{ if(r.causa) causaCounts[r.causa]=(causaCounts[r.causa]||0)+1; });
   const causaSorted = Object.entries(causaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,12);
-  if (charts.causa){ charts.causa.destroy(); charts.causa = null; }
+  if (charts.causa){ try { charts.causa.destroy(); } catch(e) {} charts.causa = null; }
   $('chartCausaBox').style.display = causaSorted.length ? '' : 'none';
   $('causaEmpty').style.display = causaSorted.length ? 'none' : '';
   if (causaSorted.length){
     $('chartCausaBox').style.height = Math.max(250, causaSorted.length*26)+'px';
-    charts.causa = new Chart($('chartCausa'),{
+    mkChart('causa', 'chartCausa', {
       type:'bar',
       data:{labels:causaSorted.map(c=>c[0]), datasets:[{data:causaSorted.map(c=>c[1]), backgroundColor:causaSorted.map(c=>!F.causa||F.causa===c[0]?'#3987e5':'#3987e540'), borderRadius:4}]},
       options:{indexAxis:'y',
@@ -655,8 +715,7 @@ function render(){
   areaRows.filter(isCorr).forEach(r=>{ areaCounts[r.area]=(areaCounts[r.area]||0)+1; });
   const areaSorted = Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   $('chartAreaBox').style.height = Math.max(230, areaSorted.length*28)+'px';
-  if (charts.area) charts.area.destroy();
-  charts.area = new Chart($('chartArea'),{
+  mkChart('area', 'chartArea', {
     type:'bar',
     data:{labels:areaSorted.map(a=>a[0]), datasets:[{data:areaSorted.map(a=>a[1]), backgroundColor:areaSorted.map(a=>!F.area||F.area===a[0]?'#f0a930':'#f0a93040'), borderRadius:4}]},
     options:{indexAxis:'y',
@@ -731,16 +790,17 @@ function computeAreaStats(rows, predAll){
   const groups = {};
   rows.forEach(r=>{
     const g = groups[r.area] = groups[r.area] || {ots:0, correctivos:0, equipos:new Set(), downtime:0, tec:{}};
-    g.ots++; g.downtime += r.minMaquina; g.equipos.add(canonEquipo(r));
+    g.ots++; g.downtime += r.minMaquina; g.equipos.add(eqKey(r));
     if (isCorr(r)) g.correctivos++;
     splitTecnicos(r.tecnicos).forEach(t=>{ g.tec[t]=(g.tec[t]||0)+1; });
   });
   // riesgo por área: se calcula con el historial completo, no con el alcance filtrado
-  const riesgo = {};
-  predAll.forEach(p=>{ if (p.risk==='critico'||p.risk==='alto') riesgo[p.area]=(riesgo[p.area]||0)+1; });
+  // (5 oct 2026) cuenta los equipos con OTs en el área (un equipo puede estar en varias)
+  const enRiesgo = new Set(predAll.filter(p=>p.risk==='critico'||p.risk==='alto').map(p=>p.key));
   window._areaStats = Object.entries(groups).map(([area,g])=>{
     const t = Object.entries(g.tec).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0];
-    return {area, equipos:g.equipos.size, ots:g.ots, correctivos:g.correctivos, pct:g.ots?Math.round(g.correctivos/g.ots*100):0, downtime:g.downtime, tecnico:t?t[0]:'—', riesgo:riesgo[area]||0};
+    const riesgo = [...g.equipos].filter(k=>enRiesgo.has(k)).length;
+    return {area, equipos:g.equipos.size, ots:g.ots, correctivos:g.correctivos, pct:g.ots?Math.round(g.correctivos/g.ots*100):0, downtime:g.downtime, tecnico:t?t[0]:'—', riesgo};
   });
   renderAreaRows();
   renderAreaMap();
@@ -808,13 +868,12 @@ function getTecnicoStats(rows){
   return {list, plantAvgMttr};
 }
 function renderTecnicos(rows){
-  $('tecEvalSub').textContent = 'MTTR (solo correctivos con tiempo > 0), % sin resolver y cobertura. Con menos de '+MIN_CORR_EVAL+' correctivos no se califica desempeño. Clic en un técnico para abrir su ficha.';
+  $('tecEvalSub').textContent = 'Tiempo técnico promedio (solo correctivos con tiempo de técnico > 0), % sin resolver y cobertura. Con menos de '+MIN_CORR_EVAL+' correctivos no se califica desempeño. Clic en un técnico para abrir su ficha.';
   const {list} = getTecnicoStats(rows);
   list.sort((a,b)=>b.ots-a.ots||a.tecnico.localeCompare(b.tecnico));
   window._tecnicos = list;
   const top = list.slice(0,10);
-  if (charts.tecnicos) charts.tecnicos.destroy();
-  charts.tecnicos = new Chart($('chartTecnicos'),{
+  mkChart('tecnicos', 'chartTecnicos', {
     type:'bar',
     data:{labels:top.map(t=>t.tecnico), datasets:[
       {label:'Correctivos', data:top.map(t=>t.correctivos), backgroundColor:top.map(t=>!F.tecnico||F.tecnico===t.tecnico?'#e66767':'#e6676740'), borderRadius:3, stack:'s'},
@@ -858,8 +917,8 @@ function renderKaizen(rows){
   const groups = {};
   rows.filter(r=>isCorr(r)&&r.pieza).forEach(r=>{
     const d = parseFecha(r.fecha); if (!d) return;
-    const eq = canonEquipo(r), pz = normEq(r.pieza), key = r.area+' | '+eq+' | '+pz;
-    (groups[key] = groups[key] || {area:r.area, equipo:eq, pieza:r.pieza, dates:[]}).dates.push(d);
+    const ek = eqKey(r), pz = normEq(r.pieza), key = ek+' | '+pz;
+    (groups[key] = groups[key] || {area:eqArea(ek), equipo:eqLabelOf(ek), pieza:r.pieza, dates:[]}).dates.push(d);
   });
   const avgInt = a => { if (a.length<2) return null; let s=0; for(let i=1;i<a.length;i++) s+=daysBetween(a[i-1],a[i]); return s/(a.length-1); };
   const items = Object.values(groups).filter(g=>g.dates.length>=2).map(g=>{
@@ -898,10 +957,10 @@ function closeFicha(){
 }
 function renderFicha(){
   const all = window._rowsAll||[], {mode, val} = ficha;
-  const hist = mode==='equipo' ? all.filter(r=>dayKey(r)===val)
+  const hist = mode==='equipo' ? all.filter(r=>eqKey(r)===val)
     : mode==='area' ? all.filter(r=>r.area===val) : all.filter(r=>splitTecnicos(r.tecnicos).includes(val));
   $('drawerKind').textContent = {equipo:'Ficha de equipo', area:'Ficha de línea / área', tecnico:'Ficha de técnico'}[mode];
-  $('historyTitle').textContent = mode==='equipo' ? val.replace(' | ',' — ') : val;
+  $('historyTitle').textContent = mode==='equipo' ? eqLabelOf(val)+' — '+eqArea(val) : val;
   const fb = $('drawerFilterBtn');
   fb.style.display = mode==='equipo' ? 'none' : '';
   fb.textContent = (mode==='area' ? F.area===val : F.tecnico===val) ? 'Quitar filtro' : 'Filtrar el panel por '+(mode==='area'?'esta área':'este técnico');
@@ -912,16 +971,20 @@ function renderHistoryAndReco(mode, hist, predictive, val, allFull){
   const totalParo = hist.reduce((s,r)=>s+r.minMaquina,0);
   const corrH = hist.filter(isCorr);
   const corrT = corrH.filter(r=>r.minTecnico>0); // mismo criterio que la tabla de técnicos
-  const mttr = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  const tecProm = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  // (5 oct 2026) MTTR = paro de máquina de los correctivos (con paro > 0), igual que el KPI
+  const corrM = corrH.filter(r=>r.minMaquina>0);
+  const mttr = corrM.length ? corrM.reduce((s,r)=>s+r.minMaquina,0)/corrM.length : null;
   const paroPlanta = hist.filter(r=>['si','sí'].includes((r.paroPlanta||'').toLowerCase())).length;
   const noRes = corrH.filter(r=>isNoResuelto(r.solucion)).length;
 
   const boxes = [{lbl:'Eventos totales', val:hist.length}, {lbl:'Correctivos', val:corrH.length}];
   if (mode==='equipo'){ const p = predictive.find(p=>p.key===val); boxes.push({lbl:'Riesgo actual', val:`<span class="risk ${p?p.risk:'na'}">${riskLabel(p?p.risk:'na')}</span>`}); }
-  if (mode==='area') boxes.push({lbl:'Equipos distintos', val:new Set(hist.map(canonEquipo)).size});
+  if (mode==='area') boxes.push({lbl:'Equipos distintos', val:new Set(hist.map(eqKey)).size});
   if (mode==='tecnico') boxes.push({lbl:'Áreas cubiertas', val:new Set(hist.map(r=>r.area)).size});
   boxes.push({lbl:'Paro de máquina', val:fmtHM(totalParo)});
-  boxes.push({lbl:'MTTR', val:mttr!=null?fmtHM(mttr):'—'});
+  boxes.push({lbl:'MTTR (paro/correctivo)', val:mttr!=null?fmtHM(mttr):'—'});
+  boxes.push({lbl:'Tiempo técnico prom.', val:tecProm!=null?fmtHM(tecProm):'—'});
   if (mode==='tecnico') boxes.push({lbl:'% sin resolver', val:corrH.length?Math.round(noRes/corrH.length*100)+'%':'—'});
   else boxes.push({lbl:'Paros de planta', val:paroPlanta});
   $('historySummary').innerHTML = boxes.map(b=>`<div class="hs"><div class="hlbl">${b.lbl}</div><div class="hval">${b.val}</div></div>`).join('');
@@ -930,8 +993,8 @@ function renderHistoryAndReco(mode, hist, predictive, val, allFull){
   if (mode==='tecnico' || mode==='area'){
     const eqMap = {};
     hist.forEach(r=>{
-      const eq = canonEquipo(r), key = r.area+' | '+eq;
-      const g = eqMap[key] = eqMap[key] || {key, area:r.area, equipo:eq, ots:0, correctivos:0, downtime:0, last:null};
+      const key = eqKey(r);
+      const g = eqMap[key] = eqMap[key] || {key, area:eqArea(key), equipo:eqLabelOf(key), ots:0, correctivos:0, downtime:0, last:null};
       g.ots++; g.downtime += r.minMaquina; if (isCorr(r)) g.correctivos++;
       const d = parseFecha(r.fecha); if (d && (!g.last||d>g.last)) g.last = d;
     });
@@ -978,7 +1041,8 @@ function renderHistoryAndReco(mode, hist, predictive, val, allFull){
         <p style="color:var(--muted);font-size:11.5px;">Guía orientativa, no una auditoría formal — el intervalo final debe validarlo el equipo de mantenimiento.</p>`;
     }
   } else if (mode==='area'){
-    const pri = predictive.filter(p=>p.area===val&&(p.risk==='critico'||p.risk==='alto')).sort((a,b)=>RISK_ORDER[a.risk]-RISK_ORDER[b.risk]||b.fallas-a.fallas).slice(0,5);
+    const keysLinea = new Set(hist.map(eqKey));
+    const pri = predictive.filter(p=>keysLinea.has(p.key)&&(p.risk==='critico'||p.risk==='alto')).sort((a,b)=>RISK_ORDER[a.risk]-RISK_ORDER[b.risk]||b.fallas-a.fallas).slice(0,5);
     reco.innerHTML = `<h3>📋 Recomendación — línea completa</h3>
       <p><span class="std-tag">RCM</span> Prioriza por criticidad: atiende primero los equipos en riesgo Crítico/Alto, los que más probabilidad tienen de parar la línea.</p>
       ${pri.length?`<p><b>Equipos a priorizar:</b></p><p>${pri.map(p=>`• <b>${esc(p.equipo)}</b> — MTBF ${p.mtbf.toFixed(1)}d, riesgo ${riskLabel(p.risk)}${p.daysUntil<0?' (vencido hace '+Math.abs(p.daysUntil)+'d)':''}`).join('<br>')}</p>`
@@ -999,11 +1063,11 @@ function renderHistoryAndReco(mode, hist, predictive, val, allFull){
         : me.desempeno==='atencion' ? `Su tiempo de reparación o tasa de casos sin resolver está <b>por encima</b> del promedio de planta${vs>0?' ('+vs+'% más lento)':''}.`
         : `Su desempeño está dentro del rango normal${vs!=null?' ('+(vs>0?'+':'')+vs+'% vs. promedio)':''}.`;
       reco.innerHTML = `<h3>📋 Recomendación de desarrollo</h3>
-        <p><span class="std-tag">Benchmark interno</span> ${txt} MTTR propio: <b>${fmtHM(me.mttr)}</b> · promedio de planta: <b>${plantAvgMttr!=null?fmtHM(plantAvgMttr):'—'}</b> · % sin resolver: <b>${me.noResueltoPct}%</b>.</p>
+        <p><span class="std-tag">Benchmark interno</span> ${txt} Tiempo técnico propio: <b>${fmtHM(me.mttr)}</b> · promedio de planta: <b>${plantAvgMttr!=null?fmtHM(plantAvgMttr):'—'}</b> · % sin resolver: <b>${me.noResueltoPct}%</b>.</p>
         ${topA?`<p>Su mayor exposición es en <b>${esc(topA[0])}</b> (${topA[1]} correctivos).</p>`:''}
         ${me.desempeno==='atencion'?'<p><span class="std-tag">TWI</span> Empareja temporalmente al técnico con uno de alto desempeño en esa área para transferir conocimiento práctico.</p>'
           :me.desempeno==='alto'?'<p><span class="std-tag">Trabajo estándar</span> Buen candidato para documentar su método como hoja de trabajo estándar y apoyar como mentor.</p>':''}
-        <p style="color:var(--muted);font-size:11.5px;">Comparación estadística simple, no una evaluación formal. El MTTR mezcla trabajos de distinta complejidad; el supervisor conoce el contexto de cada intervención.</p>`;
+        <p style="color:var(--muted);font-size:11.5px;">Comparación estadística simple, no una evaluación formal. El tiempo técnico mezcla trabajos de distinta complejidad; el supervisor conoce el contexto de cada intervención.</p>`;
     }
   }
 }
@@ -1093,18 +1157,29 @@ $('drawerFilterBtn').addEventListener('click', ()=>{
 $('appendBtn').addEventListener('click', async ()=>{
   const st = $('feedStatus'), newRows = parseRaw($('feedArea').value);
   if (!newRows.length){ st.textContent='No se detectaron filas válidas.'; st.style.color='#ef4b4b'; return; }
-  const malas = newRows.filter(r=>!parseFecha(r.fecha)).length;
-  st.textContent = `Subiendo ${newRows.length} OT(s)…`; st.style.color='#8b98ab';
+  // (5 oct 2026) Las filas con fecha no válida YA NO se suben (antes se subían
+  // con un aviso y quedaban en la base sin aparecer nunca en el análisis).
+  // Se listan y se dejan en el cuadro para corregirlas y volver a subirlas.
+  const fechaOk = r => /^\d{4}-\d{2}-\d{2}$/.test(r.fecha) && !!parseFecha(r.fecha);
+  const buenas = newRows.filter(fechaOk), malas = newRows.filter(r=>!fechaOk(r));
+  const listaMalas = malas.slice(0,10).map(r=>`${r.ot} (fecha: "${r.fecha||'vacía'}")`).join(', ') + (malas.length>10?` y ${malas.length-10} más`:'');
+  if (!buenas.length){
+    st.textContent = `❌ Ninguna fila subida: ${malas.length} con fecha no válida (usa AAAA-MM-DD): ${listaMalas}`;
+    st.style.color = '#ef4b4b'; return;
+  }
+  st.textContent = `Subiendo ${buenas.length} OT(s)…`; st.style.color='#8b98ab';
   await window.fbReady;
   let ok = 0;
-  for (let i=0; i<newRows.length; i+=400){
-    const batch = db.batch(), chunk = newRows.slice(i,i+400);
+  for (let i=0; i<buenas.length; i+=400){
+    const batch = db.batch(), chunk = buenas.slice(i,i+400);
     chunk.forEach(r=>batch.set(db.collection('ots').doc(), {...rowToOtRecord(r), createdAt:fbTimestamp()}));
     try { await batch.commit(); ok += chunk.length; } catch(err){ console.error(err); }
   }
-  st.textContent = `✅ ${ok} de ${newRows.length} OT(s) subidas a la base de datos compartida` + (malas?` · ⚠ ${malas} con fecha no válida (usa AAAA-MM-DD): no aparecerán en el análisis`:'');
-  st.style.color = malas ? '#fab219' : '#35d0b0';
-  $('feedArea').value = '';
+  st.textContent = `✅ ${ok} de ${buenas.length} OT(s) subidas a la base de datos compartida` + (malas.length?` · ⚠ ${malas.length} rechazada(s) por fecha no válida (usa AAAA-MM-DD), quedan en el cuadro: ${listaMalas}`:'');
+  st.style.color = malas.length ? '#fab219' : '#35d0b0';
+  // deja en el cuadro solo las líneas rechazadas, para corregirlas
+  const otsMalas = new Set(malas.map(r=>r.ot));
+  $('feedArea').value = malas.length ? $('feedArea').value.split('\n').filter(l=>otsMalas.has((l.split('\t')[0]||'').trim())).join('\n') : '';
 });
 $('clearFeedBtn').addEventListener('click',()=>{ $('feedArea').value=''; $('feedStatus').textContent=''; });
 
@@ -1121,6 +1196,7 @@ function rowToOtRecord(r){
 }
 function otRecordToRow(doc){
   return {
+    equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'',
     ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:doc.LINEA_EQUIPO||'Sin área',
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',
     tipoMant:doc.TIPO_MANTENIMIENTO||'Sin clasificar', paroPlanta:doc.PARO_PLANTA||'', tecnicos:doc.TECNICOS||'',
@@ -1131,11 +1207,27 @@ function otRecordToRow(doc){
   };
 }
 
+// (5 oct 2026) El respaldo ahora es de los documentos ORIGINALES de /ots (id +
+// todos los campos, incluidas anuladas y avisos abiertos); antes exportaba las
+// filas ya procesadas del panel y se perdían campos. Fechas Timestamp → texto
+// ISO. Solo ADMINISTRADOR / ENCARGADO_MANTENIMIENTO.
+let _rawOtDocs = [];
+function plainFirestore(v){
+  if (v == null || typeof v !== 'object') return v;
+  if (typeof v.toDate === 'function') { try { return v.toDate().toISOString(); } catch(e) { return null; } }
+  if (Array.isArray(v)) return v.map(plainFirestore);
+  if (typeof v.path === 'string' && v.firestore) return v.path; // DocumentReference
+  const o = {}; Object.keys(v).forEach(k=>{ o[k] = plainFirestore(v[k]); }); return o;
+}
+const puedeRespaldo = () => typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO');
 function exportAnalisisBackup(){
-  if (!allRows.length){ $('exportStatus').textContent='No hay OTs para exportar.'; return; }
-  const url = URL.createObjectURL(new Blob([JSON.stringify(allRows,null,2)],{type:'application/json'}));
-  const a = document.createElement('a'); a.href=url; a.download='analisis_respaldo_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
-  URL.revokeObjectURL(url);
+  if (!puedeRespaldo()){ $('exportStatus').textContent='El respaldo JSON es solo para administrador o encargado de mantenimiento.'; return; }
+  if (!_rawOtDocs.length){ $('exportStatus').textContent='No hay OTs para exportar.'; return; }
+  const data = _rawOtDocs.map(d=>({id:d.id, ...plainFirestore(d.data())}));
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  const a = document.createElement('a'); a.href=url; a.download='respaldo-ots-'+fbHoy()+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  $('exportStatus').textContent = `⬇ Respaldo exportado (${data.length} documentos de /ots).`;
 }
 // el apóstrofo evita que Excel interprete como fórmula un texto que empieza con = + - @
 const csvEscape = v => { let s = String(v??''); if (/^[=+\-@]/.test(s) && isNaN(Number(s))) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
@@ -1146,7 +1238,7 @@ function exportAnalisisCSV(){
   let csv = headers.join(',')+'\n';
   rows.forEach(r=>{ csv += [r.ot,r.fecha,weekOf(r),r.area,r.tipoMaquina,r.equipo,r.pieza,r.tipoMant,r.me,r.paroPlanta,r.tecnicos,r.minMaquina,r.minTecnico,r.causa,r.falla,r.solucion].map(csvEscape).join(',')+'\n'; });
   const url = URL.createObjectURL(new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8'}));
-  const a = document.createElement('a'); a.href=url; a.download='reporte_analisis'+(window._hasFilter?'_filtrado':'')+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  const a = document.createElement('a'); a.href=url; a.download='reporte_analisis'+(window._hasFilter?'_filtrado':'')+'_'+fbHoy()+'.csv'; // (5 oct 2026) fecha local, no UTC a.click();
   URL.revokeObjectURL(url);
   $('exportStatus').textContent = `📊 Reporte exportado (${rows.length} OTs) — ábrelo con Excel.`;
 }
@@ -1157,11 +1249,22 @@ switchTab((location.hash||'').slice(1) || 'resumen');
 document.addEventListener('DOMContentLoaded',()=>{
   fbRenderMiniNav('analisis');
   // la barra de filtros se pega justo debajo de la barra de navegación de la app
-  window.fbReady.then(()=>{ const n = $('fbMiniNav'); if (n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight+'px'); }).catch(()=>{});
+  window.fbReady.then(()=>{
+    const n = $('fbMiniNav'); if (n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight+'px');
+    if (puedeRespaldo()) $('backupBtn').style.display = ''; // (5 oct 2026) respaldo solo admin/encargado
+  }).catch(()=>{});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 });
 
 window.fbReady.then(()=>{
+  // (5 oct 2026) Catálogo de equipos: nombre oficial para las OTs con equipoId
+  // y para unir OTs viejas (sin id) cuyo nombre coincide con un equipo.
+  db.collection('equipos').get().then(s=>{
+    const cat = {}, porNombre = {};
+    s.docs.forEach(d=>{ const n = (d.data()||{}).nombre; if (n){ cat[d.id] = n; const k = fbEquipoKey(n); if (k && !porNombre[k]) porNombre[k] = d.id; } });
+    _equiposCat = cat; _equiposPorNombre = porNombre;
+    if (allRows.length) render();
+  }).catch(err=>console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err));
   let seeded = false;
   db.collection('ots').onSnapshot(async snap=>{
     // primera vez con la base vacía: se siembra el histórico (si RAW trae datos) usando lotes
@@ -1176,7 +1279,14 @@ window.fbReady.then(()=>{
       if (seed.length) return; // el siguiente snapshot ya trae los datos
     }
     // orden estable por id de documento: el dedupe por número de OT siempre conserva el mismo documento
-    const rows = snap.docs.map(d=>({...otRecordToRow(d.data()), _id:d.id})).sort((a,b)=>a._id.localeCompare(b._id));
+    _rawOtDocs = snap.docs;
+    // (5 oct 2026) Fuera las OTs anuladas (reportes duplicados) y los avisos
+    // (operador/qr) y OTs de checklist que todavía no están completadas: es el
+    // mismo filtro que usa Bitácora. (Los abiertos no suelen tener FECHA, pero
+    // un aviso en atención o una OT de checklist sí podrían traerla.)
+    const rows = snap.docs.map(d=>({...otRecordToRow(d.data()), _id:d.id}))
+      .filter(r=>r.estado!=='anulada' && !(['operador','checklist','qr'].includes(r.origen) && r.estado!=='completada'))
+      .sort((a,b)=>a._id.localeCompare(b._id));
     const vistos = new Set();
     allRows = rows.filter(r=>{
       const k = (r.ot||'').trim();
@@ -1190,8 +1300,10 @@ window.fbReady.then(()=>{
     $('rangeInfo').textContent = 'Error de conexión a Firebase: '+err.message;
   });
 }).catch(err=>{
+  // (5 oct 2026) El aviso grande ya lo muestra firebase-init; aquí solo una línea
+  // con el error real (antes decía siempre "revisa firebase-config.js").
   console.error('No se pudo conectar a Firebase:', err);
-  $('rangeInfo').textContent = 'No se pudo conectar a Firebase — revisa firebase-config.js';
+  $('rangeInfo').textContent = 'No se pudieron cargar los datos: ' + ((err && err.message) || err || 'error desconocido');
 });
 </script>
 </body>

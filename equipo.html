@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0F1923"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
@@ -155,10 +155,9 @@ async function iniciar() {
   }
   // Sin sesión y sin copia pública todavía: igual se deja reportar (la regla
   // de Firestore comprueba que el equipo exista); solo falta la hoja de vida.
-  if (!EQ || !EQ.nombre) {
-    if (USUARIO) return error('❓', 'No se encontró este equipo.');
-    EQ = { id: ID, nombre: '', sinPublicar: true };
-  }
+  // (5 oct 2026) Roles que no leen /equipos (RR.HH.) caen aquí igual que el
+  // público: pueden reportar aunque la ficha no esté publicada.
+  if (!EQ || !EQ.nombre) EQ = { ...(EQ || {}), id: ID, nombre: '', sinPublicar: true };
   document.title = (EQ.nombre || 'Equipo') + ' — Mantenimiento';
   pintar();
   escucharEstado();
@@ -186,13 +185,14 @@ function pintar() {
 }
 
 // ── Estado actual (solo con sesión: el público no puede leer los reportes) ──
-let estadoTxt = '', unsub = null;
+let estadoTxt = '', unsub = null, ABIERTOS = [];
 function escucharEstado() {
   if (unsub || !(esTec() || esOp())) return;
   const ref = esTec() ? db.collection('ots').where('equipoId', '==', ID)
-                      : db.collection('ots').where('origen', '==', 'operador').where('equipoId', '==', ID);
+                      : db.collection('ots').where('origen', 'in', ['operador', 'qr']).where('equipoId', '==', ID);
   unsub = ref.onSnapshot(snap => {
-    const ab = snap.docs.map(d => d.data()).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+    ABIERTOS = snap.docs.map(d => d.data()).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+    const ab = ABIERTOS.filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
     const enAt = ab.find(r => r.estado === 'en_atencion'), pend = ab.filter(r => r.estado === 'pendiente');
     estadoTxt = enAt ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
       : pend.length ? `<div class="estado alerta">⏳ <div><b>Ya hay ${pend.length} reporte(s) esperando técnico</b>${pend[0].horaParada ? ' · desde las ' + esc(pend[0].horaParada) + ' (' + fmtMin(minDesde(pend[0].fechaReporte, pend[0].horaParada)) + ')' : ''}.</div></div>`
@@ -226,23 +226,22 @@ function pintarReporte() {
   $('rOk').onclick = enviar;
 }
 async function folioNuevo() {
-  // Técnicos y Producción con sesión: el mismo contador de la app (OT-0001…).
-  // Sin sesión (o si el contador falla): folio "QR-" único.
-  if (esTec() || esOp()) {
-    try {
-      const ref = db.collection('config').doc('otFolioCounter');
-      const n = await db.runTransaction(async tx => { const s = await tx.get(ref); const a = (s.exists && typeof s.data().ultimo === 'number') ? s.data().ultimo : 0; tx.set(ref, { ultimo: a + 1 }, { merge: true }); return a + 1; });
-      return 'OT-' + String(n).padStart(4, '0');
-    } catch (e) { console.warn('folio:', e.message); }
-  }
-  return 'QR-' + Date.now().toString(36).toUpperCase().slice(-6);
+  // Técnicos y Producción con sesión: el contador de la app (OT-0001…).
+  // Sin sesión: folio "QR-" + 8 caracteres (antes 6, se repetía cada ~25 días).
+  if (esTec() || esOp()) return fbFolioNuevo();
+  return 'QR-' + Date.now().toString(36).toUpperCase().slice(-6) + Math.random().toString(36).slice(2, 4).toUpperCase();
 }
 async function enviar() {
   if (enviando) return;
   const desc = $('rDesc').value.trim(), nom = $('rNom').value.trim();
   if (!desc) return toast('Describe qué le pasa a la máquina');
   if (!nom) return toast('Escribe tu nombre');
-  let h = $('rHora').value || horaAhora(); if (h > horaAhora()) h = horaAhora();
+  // (5 oct 2026) Una hora mayor que la actual es de anoche (parada de las
+  // 23:30 reportada a las 00:15): se guarda con la fecha de ayer.
+  let h = $('rHora').value || horaAhora(), fechaRep = hoyStr();
+  if (h > horaAhora()) { const ay = new Date(); ay.setDate(ay.getDate() - 1); fechaRep = fbFechaLocal(ay); }
+  const abierto = ABIERTOS[0];
+  if (abierto && !confirm(`Ya hay un reporte abierto de esta máquina (${abierto.folio || ''}, ${abierto.estado === 'en_atencion' ? 'en atención' : 'esperando técnico'}).\n\n¿Enviar otro de todas formas?`)) return;
   enviando = true; $('rOk').disabled = true; $('rOk').textContent = 'Enviando…';
   const folio = await folioNuevo();
   // Técnicos y Producción: origen "operador" (igual que reportar.html).
@@ -251,12 +250,17 @@ async function enviar() {
     origen: (esTec() || esOp()) ? 'operador' : 'qr', estado: 'pendiente', folio,
     equipoId: ID, equipoNombre: EQ.nombre || '', equipoLocalidad: EQ.localidad || '',
     descripcionFalla: desc, prioridad, creadoPor: nom, creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
-    maquinaParada: parada === 'si', fechaReporte: hoyStr(), horaParada: h,
+    maquinaParada: parada === 'si', fechaReporte: fechaRep, horaParada: h,
     checklistId: null, asignadoA: null, fechaPlanificada: null,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   try {
-    await db.collection('ots').doc().set(doc);
+    // (5 oct 2026) Sin señal, set() no termina hasta reconectar: se espera
+    // como máximo 8 s; después se da por enviado (Firestore lo sube solo).
+    // Un rechazo de las reglas sí se muestra como error.
+    const guardado = db.collection('ots').doc().set(doc);
+    const r = await Promise.race([guardado.then(() => 'ok'), new Promise(res => setTimeout(() => res('espera'), 8000))]);
+    if (r === 'espera') guardado.catch(err => toast('⚠️ El reporte ' + folio + ' no se pudo guardar: ' + err.message));
     vista = 'ok';
     $('panel').innerHTML = `<div class="card"><div class="ok-box"><span class="e">✅</span><div style="font-size:19px;font-weight:800;">Reporte enviado</div>
       <div class="folio">${esc(folio)}</div><div class="muted" style="font-size:13.5px;line-height:1.6;">Mantenimiento ya recibió el aviso de <b>${esc(EQ.nombre || '')}</b>.<br>Guarda este número por si te preguntan.</div>
@@ -278,7 +282,7 @@ function pintarHoja() {
     ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia], ['Fase', e.fase], ['Tamaño', e.tamano], ['Peso', e.peso], ['Hecho en', e.madein]].filter(x => x[1]);
   const hist = e.historial || [];
   const item = h => `<div class="h-item ${esc((h.t || '').toLowerCase())}">
-      <div class="t"><span>${fmtF(h.f)}</span><span class="muted" style="font-weight:600;">${esc(h.t)}</span></div>
+      <div class="t"><span>${esc(fmtF(h.f))}</span><span class="muted" style="font-weight:600;">${esc(h.t)}</span></div>
       ${h.d ? `<div>${h.c ? '<span class="muted">[' + esc(h.c) + ']</span> ' : ''}${esc(h.d)}</div>` : ''}
       ${h.pz ? `<div class="muted">Pieza: ${esc(h.pz)}</div>` : ''}
       ${h.s ? `<div class="sol">✓ ${esc(h.s)}</div>` : ''}
@@ -288,7 +292,7 @@ function pintarHoja() {
     <div style="font-weight:800;font-size:16px;margin-bottom:10px;">🗂️ Hoja de vida</div>
     ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}
       ${e.caracteristicas ? `<div class="full"><div class="k">Características</div><div class="v">${esc(e.caracteristicas)}</div></div>` : ''}</div>` : '<div class="muted" style="font-size:13px;">Sin ficha técnica registrada.</div>'}
-    ${e.historial ? `<div class="kp"><div><b>${e.totalOts || 0}</b><span>Trabajos</span></div><div><b>${e.totalCorrectivos || 0}</b><span>Correctivos</span></div><div><b style="font-size:14px;padding-top:4px;">${fmtF(e.ultimaIntervencion) || '—'}</b><span>Último trabajo</span></div></div>` : ''}
+    ${e.historial ? `<div class="kp"><div><b>${e.totalOts || 0}</b><span>Trabajos</span></div><div><b>${e.totalCorrectivos || 0}</b><span>Correctivos</span></div><div><b style="font-size:14px;padding-top:4px;">${esc(fmtF(e.ultimaIntervencion) || '—')}</b><span>Último trabajo</span></div></div>` : ''}
   </div>
   ${!e.historial ? '<div class="card empty">El historial de trabajos de este equipo todavía no está publicado. Se publica cuando mantenimiento registra un trabajo o imprime su etiqueta.</div>'
     : !hist.length ? '<div class="card empty">Todavía no hay trabajos registrados para este equipo.</div>'

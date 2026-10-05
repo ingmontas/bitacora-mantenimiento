@@ -135,15 +135,33 @@ let ROL = '', YO = '', NOMBRE_USUARIO = '';
 let tab = '', tecSel = null, rrhhFiltro = 'pendiente', catBusca = '';
 const FV = () => firebase.firestore.FieldValue;
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money = n => '$' + (Number(n) || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const hoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+// (5 oct 2026) esc = alias de fbEsc (firebase-init.js): escapa también ` y se
+// mantiene igual en toda la app.
+const esc = s => fbEsc(s);
+// (5 oct 2026) Dinero siempre redondeado a centavos (evita 0.1+0.2 = 0.30000000000000004
+// en los cargos que van a nómina) y mostrado con 2 decimales.
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const money = n => '$' + r2(n).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// (5 oct 2026) Fecha local con el helper común (nunca toISOString para fechas).
+const hoy = () => fbHoy();
 const hora = () => new Date().toTimeString().slice(0, 5);
-const fmtF = f => { if (!f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f || '—'; const [y, m, d] = f.split('-'); return `${d}/${m}/${y}`; };
+const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
+// (5 oct 2026) Lo que no tiene formato de fecha se devuelve escapado (va a innerHTML).
+const fmtF = f => { if (!f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f ? esc(f) : '—'; const [y, m, d] = f.split('-'); return `${d}/${m}/${y}`; };
 const diasDesde = f => { if (!f) return null; const [y, m, d] = f.split('-').map(Number); const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((t - new Date(y, m - 1, d)) / 86400000); };
 const $ = id => document.getElementById(id);
 const esGestor = () => ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'ALMACEN'].includes(ROL);
 const esRRHH = () => ROL === 'RRHH' || ROL === 'ADMINISTRADOR';
+// (5 oct 2026) Transiciones del cargo en RR.HH. permitidas por rol (las mismas que
+// exige firestore.rules): pendiente→enviado (Almacén/Encargado/Admin),
+// enviado→descontado (solo RRHH), pendiente|enviado→anulado (Encargado/Admin y RRHH).
+// Desde descontado/anulado no se puede salir.
+const puedeRRHH = (desde, hacia) => {
+  if (hacia === 'enviado') return desde === 'pendiente' && ['ALMACEN', 'ENCARGADO_MANTENIMIENTO', 'ADMINISTRADOR'].includes(ROL);
+  if (hacia === 'descontado') return desde === 'enviado' && ROL === 'RRHH';
+  if (hacia === 'anulado') return ['pendiente', 'enviado'].includes(desde) && ['ENCARGADO_MANTENIMIENTO', 'ADMINISTRADOR', 'RRHH'].includes(ROL);
+  return false;
+};
 const encabezadoDoc = () => (window.APP_EMPRESA ? esc(window.APP_EMPRESA) + ' — ' : '') + 'Departamento de Mantenimiento';
 
 function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' error' : ''); setTimeout(() => t.className = '', 2800); }
@@ -175,7 +193,9 @@ window.fbReady.then(async () => {
   const pedida = (location.hash || '').slice(1);
   tab = tabs.some(t => t[0] === pedida) ? pedida : tabs[0][0];
   escuchar();
-}).catch(() => {});
+// (5 oct 2026) Los errores de arranque los muestra firebase-init (overlay global);
+// aquí solo se registran en consola para no dejar una promesa rechazada sin atender.
+}).catch(e => { try { console.error(e); } catch (_) {} });
 
 function escuchar() {
   const err = e => { console.error(e); $('view').innerHTML = `<div class="card empty">⚠️ No se pudieron leer los datos (${esc(e.code || e.message)}).${ROL === 'TECNICO' ? '<br>Pide al administrador que en tu usuario de Firebase agregue el campo <b>tecnico</b> con tu nombre exacto como aparece en la Bitácora.' : '<br>Revisa que estén publicadas las reglas nuevas de Firestore.'}</div>`; };
@@ -254,7 +274,7 @@ function renderTecnico(t) {
     <div class="section">Herramientas a su cargo (${unidadesDe(act)})</div>
     ${act.length ? act.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${esc(a.nombre)}</div>
       <div class="item-s">${a.codigo ? esc(a.codigo) + ' · ' : ''}${a.marca ? esc(a.marca) + ' · ' : ''}entregada ${fmtF(a.fechaEntrega)} por ${esc(a.entregadoPor || '—')}</div></div>
-      <div style="text-align:right"><div class="money">${a.cantidad} × ${money(a.costo)}</div>
+      <div style="text-align:right"><div class="money">${esc(a.cantidad)} × ${money(a.costo)}</div>
       <div style="margin-top:4px">${a.aceptada ? `<span class="tag t-ok">✓ Confirmó ${fmtF(a.aceptadaEn)}</span>` : '<span class="tag t-warn">⏳ Sin confirmar</span>'}</div></div></div></div>`).join('')
       : '<div class="card empty">No tiene herramientas asignadas.</div>'}
     <div class="section">Arqueos (${aqs.length})</div>
@@ -278,7 +298,7 @@ function estadoConf(a) {
 function tarjetaArqueo(a, conBotones) {
   const malos = (a.items || []).filter(i => i.faltante || i.danada);
   return `<div class="item"><div class="item-h"><div><div class="item-t">Arqueo ${fmtF(a.fecha)} ${esc(a.hora || '')}${tecSel ? '' : ' · ' + esc(a.tecnico)}</div>
-    <div class="item-s">Por ${esc(a.realizadoPor || '—')} · ${a.unidadesRevisadas || 0} revisadas · ${malos.length ? malos.map(i => `${esc(i.nombre)}: ${i.faltante ? i.faltante + ' faltante' : ''}${i.faltante && i.danada ? ', ' : ''}${i.danada ? i.danada + ' dañada' : ''}`).join(' · ') : 'todo completo'}</div>
+    <div class="item-s">Por ${esc(a.realizadoPor || '—')} · ${esc(a.unidadesRevisadas || 0)} revisadas · ${malos.length ? malos.map(i => `${esc(i.nombre)}: ${i.faltante ? esc(i.faltante) + ' faltante' : ''}${i.faltante && i.danada ? ', ' : ''}${i.danada ? esc(i.danada) + ' dañada' : ''}`).join(' · ') : 'todo completo'}</div>
     ${(a.conformidad || {}).nota ? `<div class="item-s" style="color:var(--text)">💬 Técnico: "${esc(a.conformidad.nota)}"</div>` : ''}
     ${(a.rrhh || {}).nota ? `<div class="item-s" style="color:var(--text)">💼 RR.HH.: "${esc(a.rrhh.nota)}"</div>` : ''}</div>
     <div class="money" style="color:${a.totalCargo ? '#ff8a8a' : 'inherit'}">${money(a.totalCargo)}</div></div>
@@ -296,7 +316,7 @@ function modalEntrega(t) {
   openModal(`<h3>➕ Entregar herramienta</h3><div class="sub">A: <b>${esc(t)}</b>. El técnico deberá confirmar con su usuario que la recibió.</div>
     <label class="f">Herramienta</label>
     <input type="text" id="eBusca" placeholder="Buscar por nombre o código..." style="margin-bottom:6px">
-    <select id="eSel" size="6">${activos.map(h => `<option value="${h.id}">${esc((h.codigo ? h.codigo + ' · ' : '') + h.nombre)} — bodega: ${h.stockBodega ?? '—'} · ${money(h.costo)}</option>`).join('')}</select>
+    <select id="eSel" size="6">${activos.map(h => `<option value="${h.id}">${esc((h.codigo ? h.codigo + ' · ' : '') + h.nombre)} — bodega: ${esc(h.stockBodega ?? '—')} · ${money(h.costo)}</option>`).join('')}</select>
     <label class="f">Cantidad</label><input type="number" id="eCant" min="1" value="1">
     <label class="f">Nota (opcional)</label><input type="text" id="eNota" placeholder="Ej.: estado, número de serie...">
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="eOk">Entregar</button></div>`);
@@ -307,11 +327,11 @@ function modalEntrega(t) {
     if (!(q > 0)) return toast('La cantidad debe ser mayor que 0', true);
     if (typeof h.stockBodega === 'number' && h.stockBodega < q) return toast(`Solo hay ${h.stockBodega} en bodega`, true);
     const b = db.batch(), ref = db.collection('herramientas_asignadas').doc();
-    b.set(ref, { tecnico: t, herramientaId: h.id, codigo: h.codigo || '', nombre: h.nombre, marca: h.marca || '', costo: Number(h.costo) || 0,
+    b.set(ref, { tecnico: t, herramientaId: h.id, codigo: h.codigo || '', nombre: h.nombre, marca: h.marca || '', costo: r2(h.costo),
       cantidad: q, cantidadEntregada: q, fechaEntrega: hoy(), horaEntrega: hora(), entregadoPor: quien(), nota: $('eNota').value.trim(),
       aceptada: false, estado: 'activa', createdAt: FV().serverTimestamp() });
     if (typeof h.stockBodega === 'number') b.update(db.collection('herramientas').doc(h.id), { stockBodega: FV().increment(-q) });
-    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'entrega', tecnico: t, herramientaId: h.id, nombre: h.nombre, cantidad: q, costo: Number(h.costo) || 0, por: quien(), fecha: hoy(), hora: hora(), asignacionId: ref.id, createdAt: FV().serverTimestamp() });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'entrega', tecnico: t, herramientaId: h.id, nombre: h.nombre, cantidad: q, costo: r2(h.costo), por: quien(), porUid: uidYo(), fecha: hoy(), hora: hora(), asignacionId: ref.id, createdAt: FV().serverTimestamp() });
     b.commit().then(() => toast(`✅ Entregado: ${q} × ${h.nombre}`)).catch(fail);
     closeModal();
   };
@@ -321,8 +341,8 @@ function modalEntrega(t) {
 function modalDevolucion(t) {
   const act = activasDe(t);
   openModal(`<h3>↩ Devolución de ${esc(t)}</h3><div class="sub">Indica cuántas devuelve de cada una. Las que vuelven en buen estado regresan a la existencia de bodega.</div>
-    ${act.map(a => `<div class="aq-line" style="grid-template-columns:1fr 70px 110px"><div><b>${esc(a.nombre)}</b><div class="item-s">Tiene ${a.cantidad}</div></div>
-      <input type="number" min="0" max="${a.cantidad}" value="0" data-dev="${a.id}">
+    ${act.map(a => `<div class="aq-line" style="grid-template-columns:1fr 70px 110px"><div><b>${esc(a.nombre)}</b><div class="item-s">Tiene ${esc(a.cantidad)}</div></div>
+      <input type="number" min="0" max="${esc(a.cantidad)}" value="0" data-dev="${a.id}">
       <select data-cond="${a.id}"><option value="buena">Buen estado</option><option value="danada">Dañada</option></select></div>`).join('')}
     <label class="f">Nota (opcional)</label><input type="text" id="dNota">
     <div class="modal-actions"><button class="btn btn-secondary" id="dTodo">Devolver todo</button><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="dOk">Registrar devolución</button></div>`);
@@ -334,10 +354,13 @@ function modalDevolucion(t) {
       if (!q) return; n += q;
       const cond = document.querySelector(`[data-cond="${a.id}"]`).value;
       const resto = a.cantidad - q;
-      b.update(db.collection('herramientas_asignadas').doc(a.id), resto > 0 ? { cantidad: resto } : { cantidad: 0, estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'devuelta' });
+      // (5 oct 2026) Se descuenta con increment(-q) en vez de escribir el valor absoluto:
+      // si otro usuario cambió la cantidad a la vez (otro teléfono, offline) no se pisa.
+      // Las reglas rechazan que la cantidad quede negativa.
+      b.update(db.collection('herramientas_asignadas').doc(a.id), resto > 0 ? { cantidad: FV().increment(-q) } : { cantidad: FV().increment(-q), estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'devuelta' });
       const h = catalogo.find(x => x.id === a.herramientaId);
       if (cond === 'buena' && h && typeof h.stockBodega === 'number') b.update(db.collection('herramientas').doc(h.id), { stockBodega: FV().increment(q) });
-      b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'devolucion', condicion: cond, tecnico: t, herramientaId: a.herramientaId, nombre: a.nombre, cantidad: q, por: quien(), fecha: hoy(), hora: hora(), nota: $('dNota').value.trim(), asignacionId: a.id, createdAt: FV().serverTimestamp() });
+      b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'devolucion', condicion: cond, tecnico: t, herramientaId: a.herramientaId, nombre: a.nombre, cantidad: q, por: quien(), porUid: uidYo(), fecha: hoy(), hora: hora(), nota: $('dNota').value.trim(), asignacionId: a.id, createdAt: FV().serverTimestamp() });
     });
     if (!n) return toast('Indica al menos una cantidad', true);
     b.commit().then(() => toast(`✅ Devolución registrada (${n})`)).catch(fail);
@@ -348,11 +371,11 @@ function modalDevolucion(t) {
 // ══════ ARQUEO ══════
 function modalArqueo(t) {
   const act = activasDe(t).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
-  openModal(`<div id="aqBox"><h3>📋 Arqueo de ${esc(t)}</h3><div class="sub">Cuenta con el técnico presente. Por defecto todo aparece completo: corrige solo lo que no esté o esté dañado. Las faltantes salen de su custodia.</div>
+  openModal(`<div id="aqBox"><h3>📋 Arqueo de ${esc(t)}</h3><div class="sub">Cuenta con el técnico presente. Por defecto todo aparece completo: corrige solo lo que no esté o esté dañado. Las faltantes y las dañadas que se cobran salen de su custodia (si el cargo se anula, vuelven a ella).</div>
     <div class="aq-line aq-hdr"><div>Herramienta</div><div style="text-align:center">Encontradas</div><div style="text-align:center">Dañadas</div></div>
-    ${act.map(a => `<div class="aq-line" data-l="${a.id}"><div><b>${esc(a.nombre)}</b><div class="item-s">Asignadas: ${a.cantidad} · ${money(a.costo)} c/u</div></div>
-      <input type="number" min="0" max="${a.cantidad}" value="${a.cantidad}" data-enc>
-      <input type="number" min="0" max="${a.cantidad}" value="0" data-dan>
+    ${act.map(a => `<div class="aq-line" data-l="${a.id}"><div><b>${esc(a.nombre)}</b><div class="item-s">Asignadas: ${esc(a.cantidad)} · ${money(a.costo)} c/u</div></div>
+      <input type="number" min="0" max="${esc(a.cantidad)}" value="${esc(a.cantidad)}" data-enc>
+      <input type="number" min="0" max="${esc(a.cantidad)}" value="0" data-dan>
       <div class="aq-res" data-res></div></div>`).join('')}
     <label class="f">Observaciones</label><textarea id="aObs" placeholder="Ej.: la llave 10 mm se perdió en el área de Weaving según el técnico..."></textarea>
     <div class="total-bar"><span>Total a cargo del técnico</span><b class="money" id="aTotal">$0.00</b></div>
@@ -364,7 +387,18 @@ function modalArqueo(t) {
     const cf = el.querySelector('[data-cf]'), cd = el.querySelector('[data-cd]');
     const cobrarF = cf ? cf.checked : true, cobrarD = cd ? cd.checked : false;
     const falt = a.cantidad - enc;
-    return { a, el, enc, dan, falt, cobrarF, cobrarD, monto: ((cobrarF ? falt : 0) + (cobrarD ? dan : 0)) * (Number(a.costo) || 0) };
+    // (5 oct 2026) Monto por línea redondeado a centavos:
+    // round2((cobrarFaltante ? faltante*costo : 0) + (cobrarDanada ? danada*costo : 0)).
+    const costo = r2(a.costo);
+    const monto = r2((cobrarF && falt ? falt * costo : 0) + (cobrarD && dan ? dan * costo : 0));
+    // (5 oct 2026) Lo que sale de la custodia del técnico: toda faltante (se perdió) y las
+    // dañadas que se le cobran (se las lleva Almacén). La dañada NO cobrada sigue a su
+    // cargo. Antes la dañada cobrada se quedaba en custodia y podía cobrarse otra vez en el
+    // siguiente arqueo. "retiradaCobrada" es la parte cobrada: es lo que vuelve a su
+    // custodia si el cargo se anula.
+    const retiradaCobrada = (cobrarF ? falt : 0) + (cobrarD ? dan : 0);
+    const retirada = Math.min(a.cantidad, falt + (cobrarD ? dan : 0));
+    return { a, el, enc, dan, falt, cobrarF, cobrarD, costo, monto, retirada, retiradaCobrada };
   });
   const pintar = () => {
     let tot = 0;
@@ -383,21 +417,34 @@ function modalArqueo(t) {
   // (los eventos van en #aqBox, que se reemplaza al cerrar: no se acumulan en el modal)
   $('aqBox').addEventListener('input', pintar); $('aqBox').addEventListener('change', pintar); pintar();
   $('aOk').onclick = () => {
-    const L = lineas(), total = L.reduce((s, x) => s + x.monto, 0);
+    const L = lineas();
+    // (5 oct 2026) totalCargo = suma de items[].monto, redondeada a centavos.
+    const total = r2(L.reduce((s, x) => s + x.monto, 0));
     const b = db.batch(), ref = db.collection('herramientas_arqueos').doc();
-    b.set(ref, { tecnico: t, fecha: hoy(), hora: hora(), realizadoPor: quien(),
-      items: L.map(x => ({ asignacionId: x.a.id, herramientaId: x.a.herramientaId, codigo: x.a.codigo || '', nombre: x.a.nombre, costo: Number(x.a.costo) || 0,
-        asignada: x.a.cantidad, encontrada: x.enc, faltante: x.falt, danada: x.dan, cobrarFaltante: !!(x.falt && x.cobrarF), cobrarDanada: !!(x.dan && x.cobrarD), monto: x.monto })),
+    // (5 oct 2026) Contrato con firestore.rules: conformidad nace 'pendiente' (nunca
+    // 'conforme'), rrhh nace 'pendiente' (o 'no_aplica' si totalCargo == 0) con historial
+    // vacío, y realizadoPorUid es el uid de quien lo hace.
+    b.set(ref, { tecnico: t, fecha: hoy(), hora: hora(), realizadoPor: quien(), realizadoPorUid: uidYo(),
+      items: L.map(x => ({ asignacionId: x.a.id, herramientaId: x.a.herramientaId, codigo: x.a.codigo || '', nombre: x.a.nombre, costo: x.costo,
+        asignada: x.a.cantidad, encontrada: x.enc, faltante: x.falt, danada: x.dan, cobrarFaltante: !!(x.falt && x.cobrarF), cobrarDanada: !!(x.dan && x.cobrarD), monto: x.monto,
+        retirada: x.retirada, retiradaCobrada: x.retiradaCobrada })),
       unidadesRevisadas: L.reduce((s, x) => s + x.a.cantidad, 0), unidadesFaltantes: L.reduce((s, x) => s + x.falt, 0), unidadesDanadas: L.reduce((s, x) => s + x.dan, 0),
       totalCargo: total, observaciones: $('aObs').value.trim(),
       conformidad: { estado: 'pendiente' },
       rrhh: { estado: total > 0 ? 'pendiente' : 'no_aplica', historial: [] },
       createdAt: FV().serverTimestamp() });
-    L.filter(x => x.falt).forEach(x => {
-      const resto = x.a.cantidad - x.falt;
-      b.update(db.collection('herramientas_asignadas').doc(x.a.id), resto > 0 ? { cantidad: resto } : { cantidad: 0, estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'faltante en arqueo' });
+    // (5 oct 2026) Se descuenta de la custodia con increment(-n) (no valor absoluto, para no
+    // pisar cambios concurrentes); se cierra la asignación si queda en 0. Las reglas
+    // rechazan una cantidad negativa.
+    const retiradas = L.filter(x => x.retirada > 0);
+    retiradas.forEach(x => {
+      const resto = x.a.cantidad - x.retirada;
+      b.update(db.collection('herramientas_asignadas').doc(x.a.id), resto > 0 ? { cantidad: FV().increment(-x.retirada) }
+        : { cantidad: FV().increment(-x.retirada), estado: 'cerrada', fechaCierre: hoy(), motivoCierre: 'faltante en arqueo' });
     });
-    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'arqueo', tecnico: t, arqueoId: ref.id, totalCargo: total, faltantes: L.reduce((s, x) => s + x.falt, 0), danadas: L.reduce((s, x) => s + x.dan, 0), por: quien(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'arqueo', tecnico: t, arqueoId: ref.id, totalCargo: total, faltantes: L.reduce((s, x) => s + x.falt, 0), danadas: L.reduce((s, x) => s + x.dan, 0),
+      retiradas: retiradas.map(x => ({ asignacionId: x.a.id, herramientaId: x.a.herramientaId, nombre: x.a.nombre, cantidad: x.retirada, faltante: x.falt, danadaCobrada: x.cobrarD ? x.dan : 0 })),
+      por: quien(), porUid: uidYo(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
     b.commit().then(() => toast(total ? `📋 Arqueo guardado · cargo ${money(total)}. El técnico debe dar su conformidad.` : '📋 Arqueo guardado: todo completo')).catch(fail);
     closeModal();
   };
@@ -418,7 +465,7 @@ function renderCatalogo() {
     <div class="row" style="margin-bottom:10px"><input class="grow" type="text" id="cBusca" placeholder="Buscar herramienta..." value="${esc(catBusca)}"><button class="btn btn-primary" id="cNueva">➕ Nueva herramienta</button></div>
     ${lista.length ? lista.map(h => `<div class="item click" data-h="${h.id}"><div class="item-h"><div><div class="item-t">${esc(h.nombre)}${h.activo === false ? ' <span class="tag t-mut">inactiva</span>' : ''}</div>
       <div class="item-s">${[h.codigo, h.marca, h.categoria].filter(Boolean).map(esc).join(' · ') || '—'}</div></div>
-      <div style="text-align:right"><div class="money">${money(h.costo)}</div><div class="item-s">bodega ${h.stockBodega ?? '—'} · en técnicos ${enUso(h.id)}</div></div></div></div>`).join('')
+      <div style="text-align:right"><div class="money">${money(h.costo)}</div><div class="item-s">bodega ${esc(h.stockBodega ?? '—')} · en técnicos ${enUso(h.id)}</div></div></div></div>`).join('')
       : `<div class="card empty">${catalogo.length ? 'Ninguna coincide con la búsqueda.' : 'Registra aquí las herramientas que se entregan a los técnicos, con su valor de reposición.'}</div>`}`;
   $('cBusca').oninput = e => { catBusca = e.target.value; const p = e.target.selectionStart; renderCatalogo(); $('cBusca').focus(); $('cBusca').setSelectionRange(p, p); };
   $('cNueva').onclick = () => modalHerramienta(null);
@@ -431,20 +478,32 @@ function modalHerramienta(h) {
     <div class="grow"><label class="f">Categoría</label><input id="hCat" value="${esc(v.categoria || '')}" placeholder="Ej.: Llaves, Medición, Eléctrica"></div></div>
     <label class="f">Nombre *</label><input id="hNom" value="${esc(v.nombre || '')}" placeholder="Ej.: Multímetro digital">
     <label class="f">Marca / modelo / serie</label><input id="hMar" value="${esc(v.marca || '')}" placeholder="Ej.: Fluke 117">
-    <div class="row"><div class="grow"><label class="f">Valor de reposición (c/u) *</label><input id="hCos" type="number" min="0" step="0.01" value="${v.costo ?? ''}"></div>
-    <div class="grow"><label class="f">Existencia en bodega</label><input id="hStk" type="number" min="0" value="${v.stockBodega ?? ''}" placeholder="Vacío = no controlar"></div></div>
+    <div class="row"><div class="grow"><label class="f">Valor de reposición (c/u) *</label><input id="hCos" type="number" min="0" step="0.01" value="${esc(v.costo ?? '')}"></div>
+    <div class="grow"><label class="f">Existencia en bodega</label><input id="hStk" type="number" min="0" value="${esc(v.stockBodega ?? '')}" placeholder="Vacío = no controlar"></div></div>
     ${h ? `<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="hAct" ${v.activo === false ? '' : 'checked'}> Activa (se puede entregar)</label>` : ''}
     <div class="sub" style="margin-top:10px">El valor de reposición es el que se usa para calcular el cargo en caso de faltante. Cambiarlo no afecta los arqueos ya hechos.</div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="hOk">Guardar</button></div>`);
   $('hOk').onclick = () => {
-    const nombre = $('hNom').value.trim(), costo = parseFloat($('hCos').value), stk = $('hStk').value.trim();
+    // (5 oct 2026) Valor de reposición redondeado a centavos.
+    const nombre = $('hNom').value.trim(), costo = r2(parseFloat($('hCos').value)), stk = $('hStk').value.trim();
     if (!nombre) return toast('El nombre es obligatorio', true);
-    if (!(costo >= 0)) return toast('Indica el valor de reposición', true);
+    if (!(parseFloat($('hCos').value) >= 0)) return toast('Indica el valor de reposición', true);
+    const nuevoStk = stk === '' ? null : Math.max(0, parseInt(stk, 10) || 0);
+    const antesStk = h && typeof h.stockBodega === 'number' ? h.stockBodega : null;
+    // (5 oct 2026) La existencia en bodega se guarda como DIFERENCIA (increment) respecto a
+    // lo que el usuario veía en pantalla, no como valor absoluto: si mientras editaba se
+    // registró una entrega o devolución (otro teléfono / offline), ese movimiento no se
+    // pierde. Solo se escribe valor absoluto al crear la herramienta o al activar/quitar
+    // el control de existencia (null ↔ número).
+    let stockBodega, deltaStk = null;
+    if (h && antesStk !== null && nuevoStk !== null) { deltaStk = nuevoStk - antesStk; stockBodega = deltaStk ? FV().increment(deltaStk) : undefined; }
+    else stockBodega = nuevoStk;
     const data = { codigo: $('hCod').value.trim(), categoria: $('hCat').value.trim(), nombre, marca: $('hMar').value.trim(), costo,
-      stockBodega: stk === '' ? null : Math.max(0, parseInt(stk, 10) || 0), activo: h ? $('hAct').checked : true, actualizadoPor: quien(), updatedAt: FV().serverTimestamp() };
+      activo: h ? $('hAct').checked : true, actualizadoPor: quien(), updatedAt: FV().serverTimestamp() };
+    if (stockBodega !== undefined) data.stockBodega = stockBodega;
     const b = db.batch(), ref = h ? db.collection('herramientas').doc(h.id) : db.collection('herramientas').doc();
     if (h) b.update(ref, data); else b.set(ref, { ...data, createdAt: FV().serverTimestamp() });
-    b.set(db.collection('herramientas_movimientos').doc(), { tipo: h ? 'catalogo_edicion' : 'catalogo_alta', herramientaId: ref.id, nombre, costo, stockBodega: data.stockBodega, antes: h ? { costo: h.costo ?? null, stockBodega: h.stockBodega ?? null } : null, por: quien(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
+    b.set(db.collection('herramientas_movimientos').doc(), { tipo: h ? 'catalogo_edicion' : 'catalogo_alta', herramientaId: ref.id, nombre, costo, stockBodega: nuevoStk, ajusteStock: deltaStk, antes: h ? { costo: h.costo ?? null, stockBodega: h.stockBodega ?? null } : null, por: quien(), porUid: uidYo(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
     b.commit().then(() => toast('✅ Herramienta guardada')).catch(fail);
     closeModal();
   };
@@ -468,8 +527,10 @@ function renderRRHH() {
     ${lista.length ? lista.map(a => {
       const r = (a.rrhh || {}).estado, c = (a.conformidad || {}).estado;
       let acc = '';
-      if (r === 'pendiente' && esGestor()) acc = `<button class="btn btn-primary btn-sm" data-acc="enviar" data-id="${a.id}">${c === 'pendiente' ? 'Enviar sin conformidad' : 'Enviar a RR.HH.'}</button><button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
-      if (r === 'enviado' && esRRHH()) acc = `<button class="btn btn-green btn-sm" data-acc="descontar" data-id="${a.id}">✓ Marcar descontado</button><button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
+      // (5 oct 2026) Solo se muestran los botones de las transiciones que el rol puede hacer.
+      if (puedeRRHH(r, 'enviado')) acc += `<button class="btn btn-primary btn-sm" data-acc="enviar" data-id="${a.id}">${c === 'pendiente' ? 'Enviar sin conformidad' : 'Enviar a RR.HH.'}</button>`;
+      if (puedeRRHH(r, 'descontado')) acc += `<button class="btn btn-green btn-sm" data-acc="descontar" data-id="${a.id}">✓ Marcar descontado</button>`;
+      if (puedeRRHH(r, 'anulado')) acc += `<button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
       return `<div>${tarjetaArqueo(a, true).replace(/<\/div>$/, '')}${acc ? `<div class="row" style="margin-top:8px">${acc}</div>` : ''}</div></div>`;
     }).join('') : '<div class="card empty">No hay cargos en este estado.</div>'}`;
   $('rSeg').onclick = e => { const b = e.target.closest('[data-f]'); if (b) { rrhhFiltro = b.dataset.f; renderRRHH(); } };
@@ -480,7 +541,7 @@ function renderRRHH() {
 function accionRRHH(acc, a) {
   const titulos = { enviar: 'Enviar cargo a Recursos Humanos', descontar: 'Marcar como descontado', anular: 'Anular cargo' };
   const ayuda = { enviar: (a.conformidad || {}).estado === 'pendiente' ? '⚠️ El técnico todavía no ha dado su conformidad. Envíalo solo si ya se le notificó y no respondió.' : 'RR.HH. verá el cargo con la constancia del arqueo.',
-    descontar: 'Indica en qué nómina y cómo se aplicó (ej.: nómina 15/10, 2 cuotas).', anular: 'Indica el motivo (ej.: la herramienta apareció, error de conteo, decisión de gerencia).' };
+    descontar: 'Indica en qué nómina y cómo se aplicó (ej.: nómina 15/10, 2 cuotas).', anular: 'Indica el motivo (ej.: la herramienta apareció, error de conteo, decisión de gerencia). Las herramientas cobradas en este arqueo vuelven a la custodia del técnico.' };
   openModal(`<h3>${titulos[acc]}</h3><div class="sub">${esc(a.tecnico)} · arqueo ${fmtF(a.fecha)} · <b>${money(a.totalCargo)}</b></div>
     <div class="sub" style="margin-top:8px">${ayuda[acc]}</div>
     <label class="f">Nota ${acc === 'enviar' ? '(opcional)' : '*'}</label><textarea id="rNota"></textarea>
@@ -489,14 +550,45 @@ function accionRRHH(acc, a) {
     const nota = $('rNota').value.trim();
     if (acc !== 'enviar' && !nota) return toast('Escribe una nota', true);
     const estado = { enviar: 'enviado', descontar: 'descontado', anular: 'anulado' }[acc];
-    const prev = a.rrhh || {};
-    const rrhh = { estado, nota: nota || prev.nota || '', fecha: hoy(), por: quien(), historial: [...(prev.historial || []), { estado, nota, fecha: hoy(), hora: hora(), por: quien() }] };
-    db.collection('herramientas_arqueos').doc(a.id).update({ rrhh }).then(() => toast('✅ ' + titulos[acc])).catch(fail);
+    // (5 oct 2026) Se valida contra el estado MÁS RECIENTE (la lista se actualiza en vivo).
+    const actual = arqueos.find(x => x.id === a.id) || a;
+    const desde = (actual.rrhh || {}).estado;
+    if (!puedeRRHH(desde, estado)) { closeModal(); return toast('Este cargo ya cambió de estado o tu rol no puede hacer esta acción', true); }
+    // (5 oct 2026) Solo se cambian campos dentro de rrhh (rutas con punto) y el historial
+    // se AGREGA con arrayUnion: nunca se reescribe ni se pierde una entrada anterior.
+    // La fecha de la entrada es la hora del cliente en ISO (serverTimestamp no se permite
+    // dentro de arrays).
+    const entrada = { estado, desde: desde || '', nota, por: quien(), porUid: uidYo(), fecha: new Date().toISOString(), hora: hora() };
+    const b = db.batch(), ref = db.collection('herramientas_arqueos').doc(actual.id);
+    b.update(ref, { 'rrhh.estado': estado, 'rrhh.nota': nota || (actual.rrhh || {}).nota || '', 'rrhh.fecha': hoy(), 'rrhh.por': quien(), 'rrhh.porUid': uidYo(),
+      'rrhh.historial': FV().arrayUnion(entrada) });
+    // (5 oct 2026) Al anular el cargo, lo que se le había retirado de la custodia POR ese
+    // cargo (faltante cobrada / dañada cobrada) vuelve a su custodia (increment) y queda
+    // un movimiento. Arqueos viejos (sin "retiradaCobrada") solo habían retirado las
+    // faltantes, así que solo se devuelven las faltantes cobradas.
+    let restaurados = [];
+    if (estado === 'anulado') {
+      const porAsig = {};
+      (actual.items || []).forEach(i => {
+        const n = typeof i.retiradaCobrada === 'number' ? i.retiradaCobrada : (i.cobrarFaltante ? (Number(i.faltante) || 0) : 0);
+        if (n > 0 && i.asignacionId) {
+          porAsig[i.asignacionId] = porAsig[i.asignacionId] || { asignacionId: i.asignacionId, herramientaId: i.herramientaId || '', nombre: i.nombre || '', cantidad: 0 };
+          porAsig[i.asignacionId].cantidad += n;
+        }
+      });
+      restaurados = Object.values(porAsig);
+      restaurados.forEach(x => b.update(db.collection('herramientas_asignadas').doc(x.asignacionId),
+        { cantidad: FV().increment(x.cantidad), estado: 'activa', reabiertaEn: hoy(), reabiertaPor: quien(), motivoReapertura: 'cargo anulado' }));
+      if (restaurados.length) b.set(db.collection('herramientas_movimientos').doc(), { tipo: 'arqueo_anulado', tecnico: actual.tecnico, arqueoId: actual.id, restauradas: restaurados,
+        nota, por: quien(), porUid: uidYo(), fecha: hoy(), hora: hora(), createdAt: FV().serverTimestamp() });
+    }
+    b.commit().then(() => toast('✅ ' + titulos[acc] + (restaurados.length ? ' · herramientas devueltas a su custodia' : ''))).catch(fail);
     closeModal();
   };
 }
 function exportarCSV(lista) {
-  const c = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  // (5 oct 2026) Celdas que empiezan con = + - @ se prefijan con ' (inyección de fórmulas en Excel).
+  const c = v => { let t = String(v ?? ''); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
   const head = ['Técnico', 'Fecha arqueo', 'Realizado por', 'Detalle', 'Monto', 'Conformidad técnico', 'Nota técnico', 'Estado RR.HH.', 'Nota RR.HH.'];
   const rows = lista.map(a => [a.tecnico, fmtF(a.fecha), a.realizadoPor, (a.items || []).filter(i => i.monto).map(i => `${i.nombre} (${i.cobrarFaltante ? i.faltante + ' falt.' : ''}${i.cobrarFaltante && i.cobrarDanada ? ', ' : ''}${i.cobrarDanada ? i.danada + ' dañ.' : ''})`).join('; '),
     (a.totalCargo || 0).toFixed(2), (a.conformidad || {}).estado || '', (a.conformidad || {}).nota || '', (a.rrhh || {}).estado || '', (a.rrhh || {}).nota || '']);
@@ -515,14 +607,14 @@ function renderMis() {
     <div class="kpis"><div class="kpi"><div class="l">Herramientas a mi cargo</div><div class="v">${unidadesDe(act)}</div></div>
       <div class="kpi"><div class="l">Valor de reposición</div><div class="v">${money(valorDe(act))}</div></div></div>
     ${sinConf.length ? `<div class="banner"><b>Tienes ${sinConf.length} entrega(s) por confirmar.</b> Revisa que de verdad recibiste cada herramienta antes de confirmar.</div>
-      ${sinConf.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${a.cantidad} × ${esc(a.nombre)}</div><div class="item-s">Entregada ${fmtF(a.fechaEntrega)} ${esc(a.horaEntrega || '')} por ${esc(a.entregadoPor || '—')}${a.nota ? ' · ' + esc(a.nota) : ''}</div></div>
+      ${sinConf.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${esc(a.cantidad)} × ${esc(a.nombre)}</div><div class="item-s">Entregada ${fmtF(a.fechaEntrega)} ${esc(a.horaEntrega || '')} por ${esc(a.entregadoPor || '—')}${a.nota ? ' · ' + esc(a.nota) : ''}</div></div>
         <button class="btn btn-green btn-sm" data-ok="${a.id}">✅ Confirmo que la recibí</button></div></div>`).join('')}` : ''}
     ${pendConf.length ? `<div class="banner red"><b>Tienes ${pendConf.length} arqueo(s) esperando tu conformidad.</b> Si no estás de acuerdo, explica por qué: tu nota llega a tu encargado y a RR.HH.</div>
       ${pendConf.map(a => `${tarjetaArqueo(a, false)}<div class="card" style="margin-top:-4px"><textarea id="nota-${a.id}" placeholder="Comentario (obligatorio si no estás de acuerdo)"></textarea>
         <div class="row" style="margin-top:8px"><button class="btn btn-green btn-sm" data-conf="conforme" data-id="${a.id}">✓ Estoy de acuerdo</button><button class="btn btn-danger btn-sm" data-conf="no_conforme" data-id="${a.id}">✗ No estoy de acuerdo</button></div></div>`).join('')}` : ''}
     <div class="section">A mi cargo</div>
     ${act.length ? act.map(a => `<div class="item"><div class="item-h"><div><div class="item-t">${esc(a.nombre)}</div><div class="item-s">${a.codigo ? esc(a.codigo) + ' · ' : ''}desde ${fmtF(a.fechaEntrega)}</div></div>
-      <div style="text-align:right"><div class="money">${a.cantidad} × ${money(a.costo)}</div>${a.aceptada ? '<span class="tag t-ok">✓ Confirmada</span>' : '<span class="tag t-warn">Sin confirmar</span>'}</div></div></div>`).join('') : '<div class="card empty">No tienes herramientas asignadas.</div>'}
+      <div style="text-align:right"><div class="money">${esc(a.cantidad)} × ${money(a.costo)}</div>${a.aceptada ? '<span class="tag t-ok">✓ Confirmada</span>' : '<span class="tag t-warn">Sin confirmar</span>'}</div></div></div>`).join('') : '<div class="card empty">No tienes herramientas asignadas.</div>'}
     <div class="section">Mis arqueos</div>
     ${aqs.filter(a => (a.conformidad || {}).estado !== 'pendiente').map(a => tarjetaArqueo(a, false)).join('') || '<div class="card empty">Sin arqueos anteriores.</div>'}`;
   $('view').querySelectorAll('[data-ok]').forEach(b => b.onclick = () => {
@@ -531,7 +623,9 @@ function renderMis() {
   $('view').querySelectorAll('[data-conf]').forEach(b => b.onclick = () => {
     const nota = ($('nota-' + b.dataset.id).value || '').trim();
     if (b.dataset.conf === 'no_conforme' && !nota) return toast('Explica por qué no estás de acuerdo', true);
-    db.collection('herramientas_arqueos').doc(b.dataset.id).update({ conformidad: { estado: b.dataset.conf, nota, fecha: hoy(), hora: hora(), por: quien() } })
+    // (5 oct 2026) Conformidad: solo 'conforme' o 'no_conforme', con el uid de quien responde.
+    const est = b.dataset.conf === 'no_conforme' ? 'no_conforme' : 'conforme';
+    db.collection('herramientas_arqueos').doc(b.dataset.id).update({ conformidad: { estado: est, nota, fecha: hoy(), hora: hora(), por: quien(), porUid: uidYo() } })
       .then(() => toast('✅ Respuesta registrada')).catch(fail);
   });
 }
@@ -543,7 +637,7 @@ function imprimirActa(t) {
   imprimir(`<h2>ACTA DE ENTREGA Y CUSTODIA DE HERRAMIENTAS</h2><div class="pa-sub">${encabezadoDoc()}</div>
     <div class="pa-meta"><div><b>Técnico:</b> ${esc(t)}</div><div><b>Fecha:</b> ${fmtF(hoy())}</div><div><b>Emitida por:</b> ${esc(quien())}</div><div><b>Valor total en custodia:</b> ${money(valorDe(act))}</div></div>
     <table><tr><th>Código</th><th>Herramienta</th><th>Marca / modelo</th><th>Cant.</th><th>Valor c/u</th><th>Valor total</th><th>Entregada</th><th>Confirmó</th></tr>
-    ${act.map(a => `<tr><td>${esc(a.codigo)}</td><td>${esc(a.nombre)}</td><td>${esc(a.marca)}</td><td class="n">${a.cantidad}</td><td class="n">${money(a.costo)}</td><td class="n">${money(a.costo * a.cantidad)}</td><td>${fmtF(a.fechaEntrega)}</td><td>${a.aceptada ? 'Sí, ' + fmtF(a.aceptadaEn) : 'Pendiente'}</td></tr>`).join('')}
+    ${act.map(a => `<tr><td>${esc(a.codigo)}</td><td>${esc(a.nombre)}</td><td>${esc(a.marca)}</td><td class="n">${esc(a.cantidad)}</td><td class="n">${money(a.costo)}</td><td class="n">${money(a.costo * a.cantidad)}</td><td>${fmtF(a.fechaEntrega)}</td><td>${a.aceptada ? 'Sí, ' + fmtF(a.aceptadaEn) : 'Pendiente'}</td></tr>`).join('')}
     <tr><td colspan="5" class="n"><b>TOTAL</b></td><td class="n"><b>${money(valorDe(act))}</b></td><td colspan="2"></td></tr></table>
     <div class="pa-text">Declaro haber recibido las herramientas detalladas en este documento, en buen estado de funcionamiento, para el desempeño de mis labores. Me comprometo a darles el uso adecuado, a mantenerlas bajo mi custodia y a devolverlas cuando la empresa lo solicite o al terminar la relación laboral. Acepto que se realicen arqueos periódicos y que, en caso de pérdida o daño por negligencia debidamente comprobados, se aplique lo establecido en la política interna de la empresa, conforme a la legislación laboral vigente.</div>
     <div class="firmas"><div>Firma del técnico<br>${esc(t)}</div><div>Entregado por<br>${esc(quien())}</div></div>`);
@@ -553,9 +647,9 @@ function imprimirConstancia(a) {
   const c = a.conformidad || {}, r = a.rrhh || {};
   imprimir(`<h2>CONSTANCIA DE ARQUEO DE HERRAMIENTAS</h2><div class="pa-sub">${encabezadoDoc()}</div>
     <div class="pa-meta"><div><b>Técnico:</b> ${esc(a.tecnico)}</div><div><b>Fecha y hora:</b> ${fmtF(a.fecha)} ${esc(a.hora || '')}</div>
-      <div><b>Realizado por:</b> ${esc(a.realizadoPor)}</div><div><b>Unidades revisadas:</b> ${a.unidadesRevisadas || 0}</div></div>
+      <div><b>Realizado por:</b> ${esc(a.realizadoPor)}</div><div><b>Unidades revisadas:</b> ${esc(a.unidadesRevisadas || 0)}</div></div>
     <table><tr><th>Código</th><th>Herramienta</th><th>Asignadas</th><th>Encontradas</th><th>Faltantes</th><th>Dañadas</th><th>Valor c/u</th><th>Se carga</th><th>Monto</th></tr>
-    ${(a.items || []).map(i => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.nombre)}</td><td class="n">${i.asignada}</td><td class="n">${i.encontrada}</td><td class="n">${i.faltante || ''}</td><td class="n">${i.danada || ''}</td><td class="n">${money(i.costo)}</td><td>${[i.cobrarFaltante ? 'Faltante' : '', i.cobrarDanada ? 'Daño' : ''].filter(Boolean).join(' + ') || '—'}</td><td class="n">${i.monto ? money(i.monto) : ''}</td></tr>`).join('')}
+    ${(a.items || []).map(i => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.nombre)}</td><td class="n">${esc(i.asignada)}</td><td class="n">${esc(i.encontrada)}</td><td class="n">${esc(i.faltante || '')}</td><td class="n">${esc(i.danada || '')}</td><td class="n">${money(i.costo)}</td><td>${[i.cobrarFaltante ? 'Faltante' : '', i.cobrarDanada ? 'Daño' : ''].filter(Boolean).join(' + ') || '—'}</td><td class="n">${i.monto ? money(i.monto) : ''}</td></tr>`).join('')}
     <tr><td colspan="8" class="n"><b>TOTAL A CARGO DEL TÉCNICO</b></td><td class="n"><b>${money(a.totalCargo)}</b></td></tr></table>
     ${a.observaciones ? `<div class="pa-text"><b>Observaciones:</b> ${esc(a.observaciones)}</div>` : ''}
     <div class="pa-text"><b>Conformidad del técnico:</b> ${c.estado === 'conforme' ? `CONFORME (registrada en el sistema el ${fmtF(c.fecha)} ${esc(c.hora || '')})` : c.estado === 'no_conforme' ? `NO CONFORME (${fmtF(c.fecha)} ${esc(c.hora || '')})` : 'PENDIENTE'}${c.nota ? ` — "${esc(c.nota)}"` : ''}<br>

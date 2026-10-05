@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0F1923"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -45,7 +45,7 @@
     textarea { resize: vertical; min-height: 70px; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     .row { display: flex; gap: 10px; }
-    .row .field { flex: 1; }
+    .row .field { flex: 1; min-width: 0; } /* (5 oct 2026) min-width:0 evita que las 3 horas desborden la pantalla */
     .col-sm { width: 80px; flex-shrink: 0; }
     .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
     .btn:active { opacity: .8; }
@@ -188,6 +188,9 @@
 
   <!-- SCREEN: NUEVO -->
   <div class="screen active" id="screen-nuevo">
+    <!-- (5 oct 2026) Registros que Firebase rechazó: se guardó una copia en
+         este celular para no perder lo escrito (ver BORRADOR_KEY). -->
+    <div id="borrador-banner" class="sync-banner" style="display:none;background:#EF444418;border-color:#EF444455;flex-wrap:wrap;"></div>
     <div id="edit-banner" class="sync-banner" style="display:none;background:#818CF818;border-color:#818CF844;">
       <div>
         <p style="color:var(--blue);">✏️ Editando registro existente</p>
@@ -206,7 +209,9 @@
         </div>
         <div class="field col-sm">
           <label>Semana</label>
-          <input type="number" id="f-semana" min="1" max="53"/>
+          <!-- (5 oct 2026) La semana ya no se escribe a mano: sale sola de la
+               Fecha (semana ISO, igual que Análisis). Se muestra solo de referencia. -->
+          <input type="number" id="f-semana" min="1" max="53" readonly title="Se calcula sola a partir de la fecha"/>
         </div>
       </div>
 
@@ -351,6 +356,12 @@
       <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()" style="flex:1"/>
       <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryCSV()">📊 Excel</button>
     </div>
+    <!-- (5 oct 2026) Por rendimiento solo se leen los últimos 400 días;
+         este botón trae todo el historial una vez (ver suscribirOtsRecientes). -->
+    <div id="hist-alcance" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:10px;">
+      <span id="hist-alcance-txt">Mostrando los últimos 400 días.</span>
+      <button class="btn btn-secondary btn-sm" id="hist-completo-btn" style="white-space:nowrap;" onclick="cargarHistorialCompleto()">Cargar historial completo</button>
+    </div>
     <div id="history-list"></div>
   </div>
 
@@ -401,7 +412,7 @@
     </div>
 
     <div class="ms-section-title">🏭 Toda la planta</div>
-    <div class="card-sub" style="margin-top:-4px">Todos los registros</div>
+    <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 400 días</div>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
       <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
@@ -491,12 +502,30 @@
 // ══════ ESTADO ══════
 let allRecords = []; // se llena en vivo desde Firestore (colección "ots")
 
+// (5 oct 2026) Alias: las pantallas usaban sus propias copias del escape HTML
+// (msEsc/avEsc, que no escapaban la comilla invertida). Ahora todas usan la
+// función compartida fbEsc() de firebase-init.js.
+const esc = s => fbEsc(s);
+
+// Nombre de quien usa la app, para editadoPor / anuladoPor (5 oct 2026).
+function miNombreUsuario() {
+  return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+}
+
+// (5 oct 2026) La semana del formulario sale siempre de la fecha (semana ISO).
+function syncSemanaDesdeFecha() {
+  const f = document.getElementById('f-fecha').value;
+  document.getElementById('f-semana').value = fbSemanaISO(f) || '';
+}
+
 // ══════ INIT ══════
 document.addEventListener('DOMContentLoaded', () => {
   fbRenderMiniNav('bitacora');
+  // (5 oct 2026) Antes: d.toISOString().split('T')[0] — eso es la fecha en
+  // UTC, y en UTC-4 después de las 8:00 pm ya daba la fecha de MAÑANA.
   const d = new Date();
-  document.getElementById('f-fecha').value = d.toISOString().split('T')[0];
-  document.getElementById('f-semana').value = getWeekNumber(d);
+  document.getElementById('f-fecha').value = fbHoy();
+  syncSemanaDesdeFecha();
   const t = d.toTimeString().slice(0,5);
   document.getElementById('f-hinicio').value = t;
   document.getElementById('f-htecnico').value = t;
@@ -509,6 +538,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadEquiposCanonicos();
   prefillEquipoDesdeQR();
   renderCausasOptions('');
+  renderBorradorBanner();
+  document.getElementById('f-fecha').addEventListener('change', syncSemanaDesdeFecha);
+  document.getElementById('f-fecha').addEventListener('input', syncSemanaDesdeFecha);
   document.getElementById('f-hinicio').addEventListener('change', updateDuration);
   document.getElementById('f-hfinal').addEventListener('change', updateDuration);
   document.getElementById('f-planta').addEventListener('change', onPlantaSelectChange);
@@ -527,33 +559,105 @@ document.addEventListener('DOMContentLoaded', () => {
   // OT que se cree desde Inventario/Análisis o desde otro celular aparece
   // aquí automáticamente, sin recargar la página.
   window.fbReady.then(() => {
-    // Sin límite: antes se cortaba en las 400 OTs más recientes y las viejas
-    // "desaparecían" de Historial/Resumen aunque seguían en la nube. Análisis
-    // ya las leía todas, así que esto alinea a Bitácora con Análisis.
-    db.collection('ots').orderBy('createdAt', 'desc')
+    // (5 oct 2026) Rendimiento: antes se leía TODA la colección /ots en cada
+    // apertura (cada vez más lento y más caro en celulares baratos). Ahora:
+    //  1) un listener de los últimos 400 días (Historial, Resumen, Mi semana);
+    //  2) otro listener solo de los avisos abiertos (pendiente/en_atencion),
+    //     que no tienen FECHA todavía y por eso no entran en el primero.
+    // "Cargar historial completo" (en Historial) cambia el 1) a lectura total.
+    suscribirOtsRecientes(false);
+    db.collection('ots').where('estado', 'in', ['pendiente', 'en_atencion'])
       .onSnapshot((snap) => {
-        const docsOts = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _pending: doc.metadata.hasPendingWrites }));
-        // Historial y Resumen muestran solo trabajo registrado: los avisos de
-        // producción y las fallas de checklist que siguen abiertas no son OTs
-        // terminadas todavía (antes aparecían como filas vacías y sumaban al total).
-        allRecords = docsOts.filter(r => !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
-        procesarAvisos(docsOts);
-        const activeScreen = document.querySelector('.screen.active')?.id;
-        if (activeScreen === 'screen-historial') renderHistory();
-        if (activeScreen === 'screen-stats') loadStats();
-        updateHeaderStatus();
-        updateEquipoDatalist();
+        _docsAvisosAbiertos = snap.docs.map(docAOt);
+        _avisosListos = true; // (5 oct 2026) ya llegó la primera lectura de avisos
+        combinarOts();
       }, (err) => {
-        console.error('Error escuchando OTs:', err);
-        showToast('⚠️ Error leyendo la base de datos: ' + err.message, 'error');
+        console.error('Error escuchando avisos:', err);
+        showToast('⚠️ Error leyendo los avisos: ' + err.message, 'error');
       });
+    vigilarBorradoresAnteriores();
     const box = document.getElementById('fb-status-box');
-    if (box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${firebaseConfig.projectId}</strong>). Los registros se comparten en tiempo real con todos los celulares conectados a esta misma app.`;
+    if (box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${esc(firebaseConfig.projectId)}</strong>). Los registros se comparten en tiempo real con todos los celulares conectados a esta misma app.`;
   }).catch((err) => {
     const box = document.getElementById('fb-status-box');
-    if (box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${err.message}. Revisa <code>firebase-config.js</code>.`;
+    if (box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${esc(err.message)}. Revisa <code>firebase-config.js</code>.`;
   });
 });
+
+// ══════ LECTURA DE /ots (5 oct 2026 — dos listeners combinados) ══════
+const DIAS_RECIENTES = 400;
+let _docsRecientes = [];       // listener 1: FECHA >= hace 400 días (o todo)
+let _docsAvisosAbiertos = [];  // listener 2: estado pendiente / en_atencion
+let _unsubRecientes = null;
+let _historialCompleto = false;
+let _recientesListos = false;  // ya llegó la primera lectura del listener 1
+
+// serverTimestamps:'estimate' → una OT recién creada sin señal trae una hora
+// estimada en vez de null, así se puede ordenar igual que antes.
+function docAOt(doc) {
+  return { id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }), _pending: doc.metadata.hasPendingWrites };
+}
+
+function suscribirOtsRecientes(completo) {
+  if (_unsubRecientes) { try { _unsubRecientes(); } catch (e) {} }
+  _historialCompleto = !!completo;
+  let q = db.collection('ots');
+  // Sin orderBy: where(FECHA) + orderBy(createdAt) necesitaría un índice
+  // compuesto. Se ordena aquí mismo (ver combinarOts).
+  if (!completo) q = q.where('FECHA', '>=', fbFechaLocal(new Date(Date.now() - DIAS_RECIENTES * 86400000)));
+  // includeMetadataChanges: para que "SIN SUBIR" se quite en cuanto el
+  // servidor confirma, aunque los datos no hayan cambiado.
+  _unsubRecientes = q.onSnapshot({ includeMetadataChanges: true }, (snap) => {
+    _docsRecientes = snap.docs.map(docAOt);
+    _recientesListos = true;
+    combinarOts();
+  }, (err) => {
+    console.error('Error escuchando OTs:', err);
+    showToast('⚠️ Error leyendo la base de datos: ' + err.message, 'error');
+  });
+  actualizarAlcanceUI();
+}
+
+function cargarHistorialCompleto() {
+  if (_historialCompleto) return;
+  if (!confirm('¿Cargar TODO el historial? En celulares lentos o con pocos datos puede tardar un poco.')) return;
+  showToast('⏳ Cargando historial completo…', 'warn');
+  window.fbReady.then(() => suscribirOtsRecientes(true)).catch(() => {});
+}
+
+function actualizarAlcanceUI() {
+  const txt = document.getElementById('hist-alcance-txt');
+  const btn = document.getElementById('hist-completo-btn');
+  const sub = document.getElementById('s-alcance');
+  if (txt) txt.textContent = _historialCompleto ? 'Mostrando todo el historial.' : `Mostrando los últimos ${DIAS_RECIENTES} días.`;
+  if (btn) btn.style.display = _historialCompleto ? 'none' : '';
+  if (sub) sub.textContent = _historialCompleto ? 'Todos los registros' : `Últimos ${DIAS_RECIENTES} días`;
+}
+
+const _msOrden = r => (r.createdAt && typeof r.createdAt.toMillis === 'function') ? r.createdAt.toMillis()
+  : ((fbParseFecha(r.FECHA) || new Date(0)).getTime());
+
+// Une los dos listeners sin duplicar documentos (un aviso abierto que ya
+// tenga FECHA puede venir en los dos: se usa la versión del listener de
+// avisos, que es el que manda sobre su estado).
+function combinarOts() {
+  const porId = new Map();
+  _docsRecientes.forEach(d => porId.set(d.id, d));
+  _docsAvisosAbiertos.forEach(d => porId.set(d.id, d));
+  const docsOts = [...porId.values()].sort((a, b) => _msOrden(b) - _msOrden(a));
+  // Historial y Resumen muestran solo trabajo registrado: los avisos de
+  // producción y las fallas de checklist que siguen abiertas no son OTs
+  // terminadas todavía (antes aparecían como filas vacías y sumaban al total).
+  // (5 oct 2026) Tampoco las OTs anuladas (reportes duplicados), de ningún origen.
+  allRecords = docsOts.filter(r => r.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
+  procesarAvisos(_docsAvisosAbiertos);
+  revisarBorradoresConfirmados();
+  const activeScreen = document.querySelector('.screen.active')?.id;
+  if (activeScreen === 'screen-historial') renderHistory();
+  if (activeScreen === 'screen-stats') loadStats();
+  updateHeaderStatus();
+  updateEquipoDatalist();
+}
 
 // ══════ CAUSAS DE FALLA (catálogo fijo — comparación con Maximo/SAP, 28 sep 2026) ══════
 // Lista corta y fija (mismo criterio que se usó con los puntos de checklist:
@@ -571,7 +675,7 @@ function renderCausasOptions(valorActual) {
   const lista = CAUSAS_FALLA.slice();
   if (valorActual && !lista.includes(valorActual)) lista.unshift(valorActual);
   sel.innerHTML = '<option value="">Seleccionar causa...</option>'
-    + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${c}</option>`).join('');
+    + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${esc(c)}</option>`).join(''); // (5 oct 2026) escapado: la causa puede venir de un registro
 }
 
 // ══════ ABRIR CON EQUIPO YA ELEGIDO (desde el QR único, 4 oct 2026) ══════
@@ -629,13 +733,14 @@ async function loadTecnicos() {
 function renderTecGrid(lista) {
   const grid = document.getElementById('tec-grid');
   const seleccionados = getSelectedTecs(); // conserva selección si ya había alguna
+  // (5 oct 2026) Nombres escapados con fbEsc (antes solo se cambiaba la comilla doble).
   grid.innerHTML = lista.map(t => `
-    <button class="tec-chip${seleccionados.includes(t.nombre)?' sel':''}" data-tec="${t.nombre.replace(/"/g,'&quot;')}" onclick="toggleTec(this)">${t.corto || t.nombre}</button>
+    <button class="tec-chip${seleccionados.includes(t.nombre)?' sel':''}" data-tec="${esc(t.nombre)}" onclick="toggleTec(this)">${esc(t.corto || t.nombre)}</button>
   `).join('');
 
   const preview = document.getElementById('tec-actual-list');
   if (preview) {
-    preview.innerHTML = lista.map(t => `<span class="code-chip">${t.nombre}</span>`).join('') || '<span style="color:var(--muted);font-size:12px;">Sin técnicos cargados</span>';
+    preview.innerHTML = lista.map(t => `<span class="code-chip">${esc(t.nombre)}</span>`).join('') || '<span style="color:var(--muted);font-size:12px;">Sin técnicos cargados</span>';
   }
 }
 
@@ -663,7 +768,7 @@ function renderPlantaOptions(lista, valorActual) {
   const valor = valorActual !== undefined ? valorActual : sel.value;
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
   sel.innerHTML = '<option value="">Seleccionar planta...</option>'
-    + lista.map(p => `<option${p === valor ? ' selected' : ''}>${p}</option>`).join('')
+    + lista.map(p => `<option${p === valor ? ' selected' : ''}>${esc(p)}</option>`).join('') // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar planta nueva…</option>' : '');
 }
 
@@ -764,7 +869,7 @@ function renderAreaOptions(lista, valorActual) {
   // la opción, para no dejarlo tocar un botón que Firebase le va a rechazar.
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
   sel.innerHTML = '<option value="">Seleccionar área...</option>'
-    + lista.map(a => `<option${a === valor ? ' selected' : ''}>${a}</option>`).join('')
+    + lista.map(a => `<option${a === valor ? ' selected' : ''}>${esc(a)}</option>`).join('') // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar área nueva…</option>' : '');
 }
 
@@ -859,7 +964,7 @@ function renderLineaOptions(lista, valorActual) {
   const areaElegida = document.getElementById('f-linea')?.value || '';
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO') && areaElegida && areaElegida !== '__nueva__';
   sel.innerHTML = '<option value="">— Ninguna / No aplica —</option>'
-    + lista.map(l => `<option${l === valor ? ' selected' : ''}>${l}</option>`).join('')
+    + lista.map(l => `<option${l === valor ? ' selected' : ''}>${esc(l)}</option>`).join('') // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar línea nueva…</option>' : '');
 }
 
@@ -904,9 +1009,10 @@ async function onLineaSelectChange() {
   }
 }
 
+// (5 oct 2026) Antes contaba semanas desde el 1 de enero (no coincidía con
+// Análisis ni con el calendario). Ahora es la semana ISO compartida.
 function getWeekNumber(d) {
-  const start = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d - start) / 86400000) + 1) / 7);
+  return fbSemanaISO(d);
 }
 
 function updateHeaderStatus() {
@@ -969,11 +1075,18 @@ function updateEquipoDatalist() {
     if (linea && r.LINEA_EQUIPO !== linea) return;
     vistos.add(r.EQUIPO.trim());
   });
-  dl.innerHTML = [...vistos].sort().map(v => `<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+  dl.innerHTML = [...vistos].sort().map(v => `<option value="${esc(v)}"></option>`).join(''); // (5 oct 2026) fbEsc en vez de solo la comilla
 }
 
 // ══════ NAVIGATION ══════
 function goTo(screen, btn) {
+  // (5 oct 2026) Si se sale del formulario estando en modo edición (o
+  // cerrando un aviso), se sale de ese modo: antes la app quedaba "atrapada"
+  // y el siguiente registro nuevo sobrescribía la OT que se estaba editando.
+  if (screen !== 'nuevo' && window.editingRecord) {
+    exitEditMode();
+    showToast('✏️ Edición cancelada (saliste del formulario)', 'warn');
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
@@ -994,7 +1107,9 @@ function getToggle(groupId) {
   return sel ? sel.dataset.val : '';
 }
 function selectToggleByValue(groupId, val) {
-  const btn = document.querySelector(`#${groupId} [data-val="${val}"]`);
+  // (5 oct 2026) Se busca por comparación y no armando un selector CSS con el
+  // valor del registro (un valor con comillas rompía querySelector).
+  const btn = [...document.querySelectorAll(`#${groupId} [data-val]`)].find(b => b.dataset.val === String(val));
   if (btn) selectToggle(groupId, btn);
 }
 function toggleTec(btn) { btn.classList.toggle('sel'); }
@@ -1006,14 +1121,21 @@ function timeToMin(t) {
   const [h,m] = t.split(':').map(Number);
   return h * 60 + m;
 }
+// (5 oct 2026) Antes '00:00' contaba como "vacío" (0 es falso) y un trabajo
+// que cruzaba la medianoche (23:30 → 01:10) no mostraba duración. Ahora usa
+// fbHoraAMin (null = vacío) y fbMinutosEntre (sabe cruzar la medianoche).
 function updateDuration() {
-  const start = timeToMin(document.getElementById('f-hinicio').value);
-  const end = timeToMin(document.getElementById('f-hfinal').value);
+  const hIni = document.getElementById('f-hinicio').value;
+  const hFin = document.getElementById('f-hfinal').value;
   const el = document.getElementById('duracion-display');
-  if (start && end && end > start) {
-    const diff = end - start;
-    el.textContent = `⏳ Duración: ${diff} min (${(diff/60).toFixed(1)} hrs)`;
-  } else el.textContent = '';
+  if (fbHoraAMin(hIni) != null && fbHoraAMin(hFin) != null) {
+    const diff = fbMinutosEntre(hIni, hFin);
+    if (diff > 0) {
+      el.textContent = `⏳ Duración: ${diff} min (${(diff/60).toFixed(1)} hrs)${fbHoraAMin(hFin) < fbHoraAMin(hIni) ? ' · cruza la medianoche' : ''}`;
+      return;
+    }
+  }
+  el.textContent = '';
 }
 
 // ══════ EDITAR REGISTRO ══════
@@ -1034,7 +1156,8 @@ function editRecord(idx) {
 
 function fillFormFromRecord(r) {
   document.getElementById('f-fecha').value = r.FECHA || '';
-  document.getElementById('f-semana').value = r.SEMANA || '';
+  // (5 oct 2026) La semana se recalcula desde la fecha (semana ISO).
+  document.getElementById('f-semana').value = fbSemanaISO(r.FECHA) || r.SEMANA || '';
   // Planta → Área → Línea se repintan en cascada (en vez de asignar .value
   // directo) para que el <select> de Área muestre las opciones de la planta
   // correcta del registro, y el de Línea las de esa área — FASE 2b/2c.
@@ -1082,13 +1205,25 @@ function exitEditMode() {
 
 // ══════ SUBMIT ══════
 let _submitting = false; // evita registros duplicados por doble-tap (wifi lenta de planta)
+
+// Mensaje claro cuando Firebase rechaza un cambio (5 oct 2026).
+function msgErrorFirestore(e, contexto) {
+  if (e && e.code === 'permission-denied') {
+    if (contexto === 'aviso') return 'No tienes permiso para cerrar este aviso: lo está atendiendo otro técnico (o ya cambió de estado).';
+    return 'Firebase no permitió guardar este cambio (permiso denegado).';
+  }
+  return (e && e.message) || String(e);
+}
+
 async function submitForm() {
   if (_submitting) return;
   const planta = document.getElementById('f-planta').value;
   const linea = document.getElementById('f-linea').value;
   const sublinea = document.getElementById('f-sublinea').value;
   const falla = document.getElementById('f-falla').value.trim();
+  const fecha = document.getElementById('f-fecha').value;
   if (!planta || !linea || !falla) { showToast('⚠️ Completa Planta, Área y Descripción de Falla', 'error'); return; }
+  if (!fbParseFecha(fecha)) { showToast('⚠️ Falta la Fecha', 'error'); return; }
 
   _submitting = true;
   const btn = document.getElementById('submit-btn');
@@ -1096,16 +1231,21 @@ async function submitForm() {
   btn.disabled = true;
   btn.style.opacity = '.6';
 
-  const fecha = document.getElementById('f-fecha').value;
   const hInicio = document.getElementById('f-hinicio').value;
   const hFinal = document.getElementById('f-hfinal').value;
   const hTecnico = document.getElementById('f-htecnico').value;
-  const minMaq = hFinal ? Math.max(0, timeToMin(hFinal) - timeToMin(hInicio)) : 0;
-  const minTec = hFinal ? Math.max(0, timeToMin(hFinal) - timeToMin(hTecnico)) : 0;
+  // (5 oct 2026) fbMinutosEntre: un trabajo de 23:30 a 01:10 son 100 min
+  // (antes daba 0). Sin hora de inicio/técnico ya no se toma "desde las 00:00".
+  const minMaq = (hFinal && hInicio) ? fbMinutosEntre(hInicio, hFinal) : 0;
+  const minTec = (hFinal && hTecnico) ? fbMinutosEntre(hTecnico, hFinal) : 0;
+
+  // (5 oct 2026) SEMANA sale siempre de la FECHA (semana ISO), no del campo
+  // aparte, para que nunca queden en desacuerdo.
+  const semana = fbSemanaISO(fecha);
+  document.getElementById('f-semana').value = semana || '';
 
   const record = {
-    Title: window.editingRecord ? (window.editingRecord.Title || window.editingRecord.folio || ('OT-' + Date.now())) : ('OT-' + Date.now()),
-    SEMANA: parseInt(document.getElementById('f-semana').value) || getWeekNumber(new Date()),
+    SEMANA: semana,
     FECHA: fecha,
     PLANTA: planta,
     LINEA_EQUIPO: linea,
@@ -1135,19 +1275,28 @@ async function submitForm() {
   // ═══ MODO EDICIÓN: actualizar un registro ya existente ═══
   if (window.editingRecord) {
     const editing = window.editingRecord;
+    // Se conserva el Title que ya tenía (los avisos traen su folio).
+    record.Title = editing.Title || editing.folio || ('OT-' + Date.now());
+    const esCierreAviso = ['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada';
+    // (5 oct 2026) Copia local ANTES de mandar el cambio (ver BORRADOR_KEY).
+    borradorAgregar({ id: editing.id, modo: 'editar', record: { ...record }, editing: { id: editing.id, origen: editing.origen || '', estado: editing.estado || '', folio: editing.folio || '', Title: editing.Title || '' }, ts: Date.now() });
     // Cerrar un aviso de producción: el mismo documento pasa a OT completada.
-    if (['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada') {
-      Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: avHoy() });
+    if (esCierreAviso) {
+      Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: fbHoy() });
     }
+    // (5 oct 2026) Quién y cuándo editó (lo pide la auditoría).
+    Object.assign(record, { editadoPor: miNombreUsuario(), editadoEn: fbTimestamp() });
     // No esperamos (await) la confirmación del servidor: con la persistencia
     // offline de Firestore, el cambio se ve al instante en este celular y se
     // sube solo en cuanto haya señal — no queremos que la app se quede
     // "cargando" congelada si no hay conexión ahora mismo.
     publicarHojaTrasGuardar(record, editing);
-    db.collection('ots').doc(editing.id).update(record).catch((e) => {
-      console.error('Error actualizando OT:', e);
-      showToast('❌ Error al actualizar: ' + e.message, 'error');
-    });
+    db.collection('ots').doc(editing.id).update(record)
+      .then(() => borradorQuitar(editing.id))
+      .catch((e) => {
+        console.error('Error actualizando OT:', e);
+        borradorMarcarFallido(editing.id, msgErrorFirestore(e, esCierreAviso ? 'aviso' : ''));
+      });
     document.getElementById('loading').classList.remove('show');
     showToast(navigator.onLine ? '✅ Cambios guardados' : '💾 Guardado local — se subirá al volver la señal', navigator.onLine ? 'success' : 'warn');
     exitEditMode();
@@ -1158,18 +1307,141 @@ async function submitForm() {
   }
 
   // ═══ MODO CREAR ═══
+  // (5 oct 2026) Folio del contador compartido (OT-0001…), igual que el resto
+  // de la app. fbFolioNuevo() nunca tarda más de 5 s: sin señal da un folio
+  // provisional "OT-P…" y la OT se guarda igual.
+  const folio = await fbFolioNuevo();
+  record.folio = folio;
+  record.Title = folio;
+  // Id generado aquí (en vez de .add) para poder guardar la copia local con él.
+  const ref = db.collection('ots').doc();
+  borradorAgregar({ id: ref.id, modo: 'crear', record: { ...record }, ts: Date.now() });
   publicarHojaTrasGuardar(record);
-  db.collection('ots').add({ ...record, createdAt: fbTimestamp() }).catch((e) => {
-    console.error('Error guardando OT:', e);
-    showToast('❌ Error al guardar: ' + e.message, 'error');
-  });
+  ref.set({ ...record, createdAt: fbTimestamp() })
+    .then(() => borradorQuitar(ref.id))
+    .catch((e) => {
+      console.error('Error guardando OT:', e);
+      borradorMarcarFallido(ref.id, msgErrorFirestore(e));
+    });
 
   document.getElementById('loading').classList.remove('show');
-  showToast(navigator.onLine ? '✅ Registrado en la bitácora compartida' : '📵 Sin conexión — guardado local, se subirá después', navigator.onLine ? 'success' : 'warn');
+  showToast(navigator.onLine ? '✅ Registrado en la bitácora compartida (' + folio + ')' : '📵 Sin conexión — guardado local, se subirá después', navigator.onLine ? 'success' : 'warn');
 
   resetForm();
   _submitting = false;
   btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
+}
+
+// ══════ COPIA LOCAL DE LO GUARDADO (5 oct 2026) ══════
+// Antes: "✅ Guardado" + formulario limpio ANTES de que Firebase confirmara.
+// Si después el servidor rechazaba la escritura (permiso, regla, sesión
+// vencida) lo escrito se perdía sin aviso. Ahora, antes de limpiar, se guarda
+// una copia en este celular; se borra cuando Firebase confirma. Si lo
+// rechaza: mensaje de error y botón "Recuperar" para volver a llenar el
+// formulario con lo que se había escrito.
+const BORRADOR_KEY = 'bitacora_borrador_pendiente';
+function borradoresLeer() {
+  try { const v = JSON.parse(localStorage.getItem(BORRADOR_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function borradoresGuardar(lista) {
+  try { if (lista.length) localStorage.setItem(BORRADOR_KEY, JSON.stringify(lista)); else localStorage.removeItem(BORRADOR_KEY); } catch (e) {}
+}
+function borradorAgregar(b) {
+  const l = borradoresLeer().filter(x => x.id !== b.id);
+  l.push(b);
+  borradoresGuardar(l);
+}
+function borradorQuitar(id) {
+  borradoresGuardar(borradoresLeer().filter(x => x.id !== id));
+  renderBorradorBanner();
+}
+function borradorMarcarFallido(id, msg) {
+  const l = borradoresLeer();
+  const b = l.find(x => x.id === id);
+  if (b) { b.fallido = true; b.error = msg || ''; borradoresGuardar(l); }
+  showToast('❌ NO se guardó en la nube: ' + (msg || '') + ' — usa "Recuperar" en Nuevo para no perder lo escrito.', 'error', 12000);
+  renderBorradorBanner();
+}
+function renderBorradorBanner() {
+  const el = document.getElementById('borrador-banner');
+  if (!el) return;
+  const fallidos = borradoresLeer().filter(b => b.fallido);
+  if (!fallidos.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = fallidos.map(b => {
+    const r = b.record || {};
+    const titulo = [r.FECHA, r.LINEA_EQUIPO, r.EQUIPO].filter(Boolean).join(' · ') || 'Registro';
+    // Solo el id del documento va dentro del onclick (es seguro).
+    return `<div style="flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div><p style="color:var(--red);">⚠️ No se subió: ${esc(titulo)}</p><small>${esc(b.error || 'Firebase rechazó el cambio')} · ${b.modo === 'editar' ? 'edición' : 'registro nuevo'}</small></div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn btn-primary btn-sm" onclick="borradorRecuperar('${esc(b.id)}')">Recuperar</button>
+        <button class="btn btn-secondary btn-sm" onclick="borradorDescartar('${esc(b.id)}')">Descartar</button>
+      </div></div>`;
+  }).join('');
+}
+function borradorRecuperar(id) {
+  const b = borradoresLeer().find(x => x.id === id);
+  if (!b) return;
+  const f = document.getElementById('f-falla').value.trim() || document.getElementById('f-solucion').value.trim();
+  if (f && !confirm('El formulario tiene datos escritos. ¿Reemplazarlos con el registro que no se subió?')) return;
+  goTo('nuevo', document.getElementById('nav-nuevo'));
+  // Si estaba editando otra OT, se sale de ese modo para no sobrescribirla.
+  if (window.editingRecord) exitEditMode();
+  fillFormFromRecord(b.record || {});
+  if (b.modo === 'editar') {
+    // Se vuelve a editar el MISMO documento (no se crea uno nuevo).
+    const actual = allRecords.find(r => r.id === b.id) || avisos.find(r => r.id === b.id);
+    window.editingRecord = actual || { ...(b.editing || {}), id: b.id };
+    document.getElementById('edit-banner').style.display = 'flex';
+    document.getElementById('form-title').textContent = '✏️ Editar Entrada';
+    document.getElementById('form-sub').textContent = 'Recuperado de la copia local — revisa y guarda';
+    document.getElementById('submit-btn').textContent = '💾 Guardar Cambios';
+  }
+  borradoresGuardar(borradoresLeer().filter(x => x.id !== id));
+  renderBorradorBanner();
+  window.scrollTo(0, 0);
+  showToast('📋 Registro recuperado — revisa y vuelve a guardar');
+}
+function borradorDescartar(id) {
+  if (!confirm('¿Descartar este registro que no se subió? Se perderá lo escrito.')) return;
+  borradorQuitar(id);
+}
+
+// Copias que quedaron de una sesión anterior (se cerró la app antes de que
+// Firebase confirmara). Se vigila cada documento: cuando el servidor lo
+// muestra sin cambios pendientes, se decide si la escritura llegó (se borra
+// la copia) o se perdió (se ofrece "Recuperar").
+const _borradoresVigilados = new Set();
+function vigilarBorradoresAnteriores() {
+  borradoresLeer().filter(b => !b.fallido).forEach(b => {
+    if (_borradoresVigilados.has(b.id)) return;
+    _borradoresVigilados.add(b.id);
+    const unsub = db.collection('ots').doc(b.id).onSnapshot({ includeMetadataChanges: true }, (snap) => {
+      if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) return; // todavía no hay respuesta del servidor
+      unsub();
+      const d = snap.exists ? snap.data() : null;
+      const r = b.record || {};
+      const llego = d && ['FECHA', 'DESCRIPCION_FALLA', 'DESCRIPCION_SOLUCION', 'H_FINAL'].every(k => (d[k] || '') === (r[k] || ''));
+      if (llego) borradorQuitar(b.id);
+      else borradorMarcarFallido(b.id, 'el cambio no llegó al servidor (se cerró la app antes de subirlo)');
+    }, () => {});
+  });
+}
+// Copia de esta sesión cuyo documento ya aparece confirmado en la lista en
+// vivo (por si la promesa de escritura nunca llegó a avisar).
+function revisarBorradoresConfirmados() {
+  const l = borradoresLeer();
+  if (!l.length || !_recientesListos) return;
+  const porId = new Map(allRecords.map(r => [r.id, r]));
+  const quedan = l.filter(b => {
+    if (b.fallido || Date.now() - (b.ts || 0) < 5000) return true; // recién mandado: se espera a la confirmación
+    const d = porId.get(b.id);
+    if (!d || d._pending) return true;
+    const r = b.record || {};
+    return !['FECHA', 'DESCRIPCION_FALLA', 'DESCRIPCION_SOLUCION', 'H_FINAL'].every(k => (d[k] || '') === (r[k] || ''));
+  });
+  if (quedan.length !== l.length) { borradoresGuardar(quedan); renderBorradorBanner(); }
 }
 
 // (4 oct 2026) Mantiene al día la hoja de vida pública del QR (equipo.html)
@@ -1180,11 +1452,40 @@ function publicarHojaTrasGuardar(record, editing) {
   const keys = [record.EQUIPO, record.TIPO_MAQUINA, record.LINEA_EQUIPO].map(normEqKey).filter(Boolean);
   const eq = _equiposCanonicos.find(e => (editing && editing.equipoId && e.id === editing.equipoId) || keys.includes(normEqKey(e.nombre)));
   if (!eq) return;
-  setTimeout(() => publicarHojaVida(eq, allRecords), 1500);
+  setTimeout(() => {
+    // (5 oct 2026) allRecords ahora trae solo los últimos 400 días: si se
+    // publicara con eso, la hoja pública perdería el historial viejo. Se
+    // completa con una consulta pequeña de las OTs de ESE equipo.
+    if (_historialCompleto) { publicarHojaVida(eq, allRecords); return; }
+    otsDelEquipoCompletas(eq)
+      .then(ots => publicarHojaVida(eq, ots))
+      .catch(err => console.warn('No se pudo leer el historial completo del equipo; no se publica la hoja pública esta vez:', err.message));
+  }, 1500);
+}
+// Todas las OTs de un equipo (por equipoId o por cualquiera de los nombres
+// con que se ha escrito), unidas con las que ya están en memoria.
+async function otsDelEquipoCompletas(eq) {
+  const key = fbEquipoKey(eq.nombre);
+  const nombres = new Set([eq.nombre]);
+  allRecords.forEach(r => [r.EQUIPO, r.TIPO_MAQUINA, r.LINEA_EQUIPO].forEach(n => { if (n && fbEquipoKey(n) === key) nombres.add(n); }));
+  const lista = [...nombres].slice(0, 10); // 'in' admite hasta 10 valores
+  const col = db.collection('ots');
+  const consultas = [col.where('equipoId', '==', eq.id).get()];
+  ['EQUIPO', 'TIPO_MAQUINA', 'LINEA_EQUIPO'].forEach(campo => consultas.push(col.where(campo, 'in', lista).get()));
+  const snaps = await Promise.all(consultas);
+  const porId = new Map(allRecords.map(r => [r.id, r]));
+  snaps.forEach(sn => sn.docs.forEach(d => { if (!porId.has(d.id)) porId.set(d.id, { id: d.id, ...d.data() }); }));
+  // Mismo filtro que allRecords: sin anuladas ni avisos/checklist abiertos.
+  return [...porId.values()].filter(r => r.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
 }
 
 function resetForm() {
   const d = new Date();
+  // (5 oct 2026) La fecha vuelve a HOY (local) en cada entrada nueva: antes se
+  // quedaba la del registro anterior y, pasada la medianoche, se guardaba con
+  // la fecha de ayer.
+  document.getElementById('f-fecha').value = fbHoy();
+  syncSemanaDesdeFecha();
   // f-planta NO se limpia a propósito: el mismo celular casi siempre reporta
   // desde la misma planta, así que se queda seleccionada para la próxima
   // entrada (ver PLANTA_LS_KEY). Área y Línea sí vuelven a "Seleccionar...".
@@ -1223,25 +1524,29 @@ function renderHistory() {
 
   window._historyCache = filtered;
 
+  // (5 oct 2026) TODO dato de la OT pasa por esc() (fbEsc): un texto con
+  // <img onerror=...> en una falla o un nombre ya no se ejecuta como código.
   list.innerHTML = filtered.map((r,idx) => {
-    const tipo = (r.TIPO_MANTENIMIENTO || '').toLowerCase();
+    const tipo = (r.TIPO_MANTENIMIENTO || '').toLowerCase().replace(/[^a-z]/g, '');
     const esParo = r.PARO_PLANTA === 'si';
-    const tags = `<span class="tag tag-${tipo}">${r.TIPO_MANTENIMIENTO||'—'}</span>
+    const tags = `<span class="tag tag-${tipo}">${esc(r.TIPO_MANTENIMIENTO||'—')}</span>
       ${r._pending ? '<span class="tag tag-local">SIN SUBIR</span>' : '<span class="tag tag-synced">☁️ ✓</span>'}
       ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}
       ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta">🔴 ALTA</span>' : ''}`;
+    const sem = fbSemanaISO(r.FECHA) || r.SEMANA || '?';
+    const minMaq = Number(r.TOTAL_MIN_MAQUINA) || 0;
     return `<div class="hist-item ${tipo}">
       <div class="hist-header">
         <div>
-          <div class="hist-title">${r.LINEA_EQUIPO||'—'}${r.LINEA ? ' · '+r.LINEA : ''} ${r.EQUIPO ? '· '+r.EQUIPO : ''}</div>
-          <div class="hist-date">📅 ${r.FECHA||''} · Sem.${r.SEMANA||'?'} ${r.PLANTA ? '· 🏭 '+r.PLANTA : ''} ${r.TECNICOS ? '· 👷 '+r.TECNICOS.split(',')[0] : ''}</div>
+          <div class="hist-title">${esc(r.LINEA_EQUIPO||'—')}${r.LINEA ? ' · '+esc(r.LINEA) : ''} ${r.EQUIPO ? '· '+esc(r.EQUIPO) : ''}</div>
+          <div class="hist-date">📅 ${esc(r.FECHA||'')} · Sem.${esc(sem)} ${r.PLANTA ? '· 🏭 '+esc(r.PLANTA) : ''} ${r.TECNICOS ? '· 👷 '+esc(String(r.TECNICOS).split(',')[0]) : ''}</div>
         </div>
         <div class="hist-tags">${tags}</div>
       </div>
-      <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+r.CAUSA_FALLA+'] ' : ''}${r.DESCRIPCION_FALLA||'—'}</div>
-      ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${r.DESCRIPCION_SOLUCION}</div>` : ''}
+      <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+esc(r.CAUSA_FALLA)+'] ' : ''}${esc(r.DESCRIPCION_FALLA||'—')}</div>
+      ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-        ${r.TOTAL_MIN_MAQUINA > 0 ? `<div style="font-size:11px;color:var(--muted);">⏱ ${r.TOTAL_MIN_MAQUINA} min máquina</div>` : '<div></div>'}
+        ${minMaq > 0 ? `<div style="font-size:11px;color:var(--muted);">⏱ ${minMaq} min máquina</div>` : '<div></div>'}
         <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})">✏️ Editar</button>
       </div>
     </div>`;
@@ -1275,7 +1580,7 @@ function msGuardarCfg() {
   try { localStorage.setItem(MS_CFG_KEY, JSON.stringify(c)); } catch (e) {}
   renderMiSemana();
 }
-const msEsc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const msEsc = s => fbEsc(s); // (5 oct 2026) alias del escape compartido
 const msNorm = s => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 const msSplit = s => (s || '').split(',').map(x => x.trim()).filter(Boolean);
 const msFecha = f => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(f || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
@@ -1321,9 +1626,13 @@ function msStatsSemana(tec, lunes, cfg) {
     // unión de intervalos H_TECNICO (o H_INICIO) → H_FINAL
     const ivs = [];
     let sinHoras = 0;
+    // (5 oct 2026) Un trabajo que cruza la medianoche (23:30 → 01:10) antes
+    // no sumaba nada (b > a fallaba). Ahora el intervalo termina después de
+    // 1440 y todo se cuenta en el día en que empezó.
     delDia.forEach(r => {
-      const a = timeToMin(r.H_TECNICO || r.H_INICIO), b = timeToMin(r.H_FINAL);
-      if ((r.H_TECNICO || r.H_INICIO) && r.H_FINAL && b > a) ivs.push([a, b]);
+      const hIni = r.H_TECNICO || r.H_INICIO;
+      const a = fbHoraAMin(hIni), dur = fbMinutosEntre(hIni, r.H_FINAL);
+      if (a != null && fbHoraAMin(r.H_FINAL) != null && dur > 0) ivs.push([a, a + dur]);
       else sinHoras += Number(r.TOTAL_MIN_TECNICO) || 0;
     });
     ivs.sort((x, y) => x[0] - y[0]);
@@ -1338,7 +1647,8 @@ function msStatsSemana(tec, lunes, cfg) {
   }
   const corr = rows.filter(r => msTipo(r) === 'correctivo');
   const corrT = corr.filter(r => Number(r.TOTAL_MIN_TECNICO) > 0);
-  const resp = rows.map(r => (r.H_INICIO && r.H_TECNICO) ? timeToMin(r.H_TECNICO) - timeToMin(r.H_INICIO) : null).filter(v => v != null && v >= 0 && v < 720);
+  // (5 oct 2026) Respuesta con fbMinutosEntre: paró 23:50 y llegó 00:10 = 20 min.
+  const resp = rows.map(r => (r.H_INICIO && r.H_TECNICO) ? fbMinutosEntre(r.H_INICIO, r.H_TECNICO) : null).filter(v => v != null && v >= 0 && v < 720);
   const trab = dias.reduce((s, d) => s + d.trab, 0);
   const jornada = dias.reduce((s, d) => s + d.jornada, 0);
   const inact = dias.reduce((s, d) => s + d.inact, 0);
@@ -1385,7 +1695,7 @@ function renderMiSemana() {
 
   const lunes = msAddDias(msLunes(msHoy()), msOffset * 7);
   const dom = msAddDias(lunes, 6);
-  const sem = getWeekNumber(lunes);
+  const sem = fbSemanaISO(lunes); // (5 oct 2026) semana ISO
   const rango = `${lunes.getDate()} ${MS_MESES[lunes.getMonth()]} – ${dom.getDate()} ${MS_MESES[dom.getMonth()]} ${dom.getFullYear()}`;
   document.getElementById('ms-semana-lbl').innerHTML = `${msOffset === 0 ? 'Esta semana' : msOffset === -1 ? 'Semana pasada' : 'Semana ' + sem}<small>Sem. ${sem} · ${rango}</small>`;
   document.getElementById('ms-next').disabled = msOffset >= 0;
@@ -1479,9 +1789,9 @@ function renderMsOts(rows) {
     const d = msFecha(r.FECHA), tipo = msTipo(r);
     const otros = msSplit(r.TECNICOS).filter(t => t !== msTec);
     const eq = [r.TIPO_MAQUINA, r.EQUIPO].filter(Boolean).join(' ') || '—';
-    const horas = r.H_TECNICO || r.H_FINAL ? `${r.H_TECNICO || '?'}–${r.H_FINAL || '?'}` : '';
-    const resp = r.H_INICIO && r.H_TECNICO ? timeToMin(r.H_TECNICO) - timeToMin(r.H_INICIO) : null;
-    return `<div class="ms-ot ${tipo}">
+    const horas = r.H_TECNICO || r.H_FINAL ? `${msEsc(r.H_TECNICO || '?')}–${msEsc(r.H_FINAL || '?')}` : ''; // (5 oct 2026) escapado
+    const resp = r.H_INICIO && r.H_TECNICO ? fbMinutosEntre(r.H_INICIO, r.H_TECNICO) : null; // (5 oct 2026) cruza medianoche
+    return `<div class="ms-ot ${msEsc(tipo)}">
       <div class="top"><span>${d ? MS_DIAS[(d.getDay() + 6) % 7] + ' ' + d.getDate() : msEsc(r.FECHA)} · ${msEsc(eq)}</span><span style="color:var(--muted);font-weight:600;">${msEsc(r.TIPO_MANTENIMIENTO || '')}</span></div>
       <div class="meta">📍 ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · 🕐 ' + horas : ''} · ⏱ ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--orange)">sin hora final</span>' : ''}</div>
       <div class="meta" style="color:var(--text);margin-top:3px;">${r.CAUSA_FALLA ? '[' + msEsc(r.CAUSA_FALLA) + '] ' : ''}${msEsc(r.DESCRIPCION_FALLA || '')}</div>
@@ -1501,9 +1811,13 @@ function renderMsOts(rows) {
 // activaron en este celular, notificación del sistema.
 let avisos = [];
 let _avisosVistos = null; // null = todavía no llegó la primera lectura
+// (5 oct 2026) Los avisos que ya existían al abrir la app no suenan: la lista
+// de "vistos" se arma con la PRIMERA lectura del listener de avisos (antes se
+// armaba vacía con la de OTs recientes y al abrir sonaban todos).
+let _avisosListos = false;
 let _audioCtx = null;
-const avEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const avHoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const avEsc = s => fbEsc(s); // (5 oct 2026) alias del escape compartido
+const avHoy = () => fbHoy();  // (5 oct 2026) fecha local compartida
 const avAhora = () => new Date().toTimeString().slice(0, 5);
 function avMinDesde(fecha, hora) {
   if (!fecha || !hora) return null;
@@ -1516,11 +1830,35 @@ function avMiNombre() {
   return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || 'Técnico';
 }
 
-// Se llama desde el listener de /ots con TODOS los documentos.
+// (5 oct 2026) Nombre del equipo para mostrar: el de Inventario (/equipos)
+// según equipoId. Un reporte anónimo desde el QR podría traer cualquier
+// texto en equipoNombre; solo se usa si el equipo no está en la lista.
+function avEquipo(r) {
+  const e = r.equipoId ? _equiposCanonicos.find(x => x.id === r.equipoId) : null;
+  return { nombre: (e && e.nombre) || r.equipoNombre || '', localidad: (e && e.localidad) || r.equipoLocalidad || '' };
+}
+const _avOrden = r => (r.createdAt && typeof r.createdAt.toMillis === 'function') ? r.createdAt.toMillis()
+  : ((fbParseFecha(r.fechaReporte) || new Date(0)).getTime() + (fbHoraAMin(r.horaParada) || 0) * 60000);
+// (5 oct 2026) "Posible duplicado": ya hay OTRO aviso abierto, reportado
+// antes, para el mismo equipo (dos operadores reportando la misma parada).
+function avAvisoPrevioMismoEquipo(r) {
+  if (!r.equipoId) return null;
+  const ord = _avOrden(r);
+  return avisos.find(o => o.id !== r.id && o.equipoId === r.equipoId
+    && (_avOrden(o) < ord || (_avOrden(o) === ord && o.id < r.id))) || null;
+}
+// (5 oct 2026) ¿Este aviso lo tomé yo? Por uid (nuevo) o por nombre (avisos viejos).
+function avEsMio(r) {
+  if (r.asignadoUid) return !!(window.currentUser && r.asignadoUid === window.currentUser.uid);
+  return !!r.asignadoA && r.asignadoA === avMiNombre();
+}
+
+// Se llama con los avisos abiertos (listener de estado pendiente/en_atencion).
 function procesarAvisos(docs) {
   avisos = docs.filter(r => ['operador', 'qr'].includes(r.origen) && ['pendiente', 'en_atencion'].includes(r.estado)); // 'qr' = reportado desde la etiqueta QR sin usuario (equipo.html)
   const pendientes = avisos.filter(r => r.estado === 'pendiente');
-  if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));
+  if (!_avisosListos) { /* todavía no llegó la lista de avisos */ }
+  else if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));
   else pendientes.forEach(r => { if (!_avisosVistos.has(r.id)) { _avisosVistos.add(r.id); alertarAviso(r); } });
   const badge = document.getElementById('avisos-badge');
   if (badge) { badge.textContent = pendientes.length; badge.style.display = pendientes.length ? '' : 'none'; }
@@ -1528,7 +1866,9 @@ function procesarAvisos(docs) {
 }
 
 function alertarAviso(r) {
-  const txt = `🚨 ${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${r.equipoNombre || ''}${r.equipoLocalidad ? ' (' + r.equipoLocalidad + ')' : ''}`;
+  const eq = avEquipo(r);
+  const dup = avAvisoPrevioMismoEquipo(r) ? ' (posible duplicado)' : '';
+  const txt = `🚨 ${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${eq.nombre}${eq.localidad ? ' (' + eq.localidad + ')' : ''}${dup}`;
   showToast(txt, 'error');
   try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
   try {
@@ -1544,7 +1884,7 @@ function alertarAviso(r) {
   try {
     if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
       navigator.serviceWorker.ready.then(reg => reg.showNotification('Nueva parada reportada', {
-        body: `${r.equipoNombre || ''} — ${r.descripcionFalla || ''}`, tag: 'aviso-' + r.id, renotify: true,
+        body: `${eq.nombre}${dup} — ${r.descripcionFalla || ''}`, tag: 'aviso-' + r.id, renotify: true,
         icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [300, 150, 300], data: { url: 'bitacora.html#avisos' } }));
     }
   } catch (e) {}
@@ -1565,7 +1905,6 @@ document.addEventListener('click', () => { if (!_audioCtx) { try { _audioCtx = n
 
 function renderAvisos() {
   const wrap = document.getElementById('avisos-lista');
-  const yo = avMiNombre();
   const permiso = 'Notification' in window ? Notification.permission : 'unsupported';
   document.getElementById('avisos-activar').style.display = permiso === 'granted' ? 'none' : '';
   const orden = { pendiente: 0, en_atencion: 1 };
@@ -1573,41 +1912,96 @@ function renderAvisos() {
     || ({ alta: 0, media: 1, baja: 2 }[a.prioridad] ?? 1) - ({ alta: 0, media: 1, baja: 2 }[b.prioridad] ?? 1)
     || ((a.fechaReporte || '') + (a.horaParada || '')).localeCompare((b.fechaReporte || '') + (b.horaParada || '')));
   if (!lista.length) { wrap.innerHTML = '<div class="empty" style="padding:40px 10px;"><span class="emoji" style="font-size:40px;display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>'; return; }
+  const esSup = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  // Dentro de los onclick solo va el id del documento (seguro); nunca nombres.
   wrap.innerHTML = lista.map(r => {
     const min = avMinDesde(r.fechaReporte, r.horaParada);
-    const mio = r.asignadoA && r.asignadoA === yo;
+    const mio = avEsMio(r);
+    const eq = avEquipo(r);
+    const previo = avAvisoPrevioMismoEquipo(r);
+    // (5 oct 2026) "Anular (duplicado)": pendiente, o en atención si es mío o soy supervisor+.
+    const puedeAnular = r.estado === 'pendiente' || mio || esSup || !r.asignadoUid;
+    const btnAnular = puedeAnular ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%;font-size:12px;" onclick="anularAviso('${esc(r.id)}')">🚫 Anular (duplicado)</button>` : '';
     const acciones = r.estado === 'pendiente'
-      ? `<button class="btn btn-primary" onclick="atenderAviso('${r.id}')">🏃 Voy a atenderlo</button>`
-      : `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${r.id}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${r.id}')">↩ Soltar</button>` : ''}</div>`;
-    return `<div class="av-card ${r.estado} ${r.maquinaParada ? 'parada' : ''}">
-      <div class="av-top"><div><div class="av-eq">${avEsc(r.equipoNombre || '—')}</div><div class="av-meta">📍 ${avEsc(r.equipoLocalidad || '—')} · ${avEsc(r.folio || '')} · reportó ${avEsc(r.creadoPor || '—')}</div></div>
+      ? `<button class="btn btn-primary" onclick="atenderAviso('${esc(r.id)}')">🏃 Voy a atenderlo</button>`
+      // (5 oct 2026) Solo quien lo tomó (o Supervisor y más) puede cerrarlo:
+      // a los demás se les dice quién lo atiende en vez de dejarles llenar
+      // todo el formulario para que al final Firebase lo rechace.
+      : (mio || esSup || !r.asignadoUid)
+        ? `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${esc(r.id)}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${esc(r.id)}')">↩ Soltar</button>` : ''}</div>`
+        : `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:8px;">🔧 Lo está atendiendo ${esc(r.asignadoA || 'otro técnico')}</div>`;
+    const badgeDup = previo ? `<div style="display:inline-block;margin-top:5px;background:#F9731622;color:var(--orange);border:1px solid #F9731655;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;">⚠️ Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
+    return `<div class="av-card ${r.estado === 'pendiente' ? 'pendiente' : 'en_atencion'} ${r.maquinaParada ? 'parada' : ''}">
+      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')}</div><div class="av-meta">📍 ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
         <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '⛔ parada' : '⚠️ falla'}<b>${avFmt(min)}</b></div></div>
-      <div class="av-desc">${avEsc(r.descripcionFalla || '')}</div>
-      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + avEsc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + avEsc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--accent)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + avEsc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + avEsc(r.horaLlegada) : ''}</b>` : ''}</div>
+      <div class="av-desc">${esc(r.descripcionFalla || '')}</div>
+      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + esc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + esc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--accent)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + esc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + esc(r.horaLlegada) : ''}</b>` : ''}</div>
       ${acciones}
+      ${btnAnular}
     </div>`;
   }).join('');
 }
 setInterval(() => { if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos(); }, 30000);
 
+// (5 oct 2026) Tomar un aviso. Si dos técnicos tocan "Voy" casi a la vez, la
+// regla de Firestore solo deja pasar al primero (el estado guardado tiene que
+// seguir en 'pendiente'); al segundo se le avisa claramente. Se escribe
+// asignadoUid porque la regla lo usa para saber quién puede soltarlo/cerrarlo.
+// Sin señal, la escritura no se confirma hasta que vuelva: no se bloquea la
+// pantalla, solo se avisa si al final el servidor la rechaza.
 function atenderAviso(id) {
-  db.collection('ots').doc(id).update({ estado: 'en_atencion', asignadoA: avMiNombre(), horaLlegada: avAhora(), atendidoEn: fbTimestamp() })
-    .catch(e => showToast('❌ No se pudo tomar el aviso: ' + e.message, 'error'));
+  const r = avisos.find(x => x.id === id);
+  if (r && r.estado !== 'pendiente') {
+    showToast(`⚠️ Este aviso ya lo tomó ${r.asignadoA || 'otro técnico'}`, 'error');
+    renderAvisos();
+    return;
+  }
+  if (!window.currentUser) { showToast('⚠️ Sesión no lista todavía, intenta de nuevo', 'error'); return; }
+  db.collection('ots').doc(id).update({
+    estado: 'en_atencion', asignadoA: avMiNombre(), asignadoUid: window.currentUser.uid,
+    horaLlegada: avAhora(), atendidoEn: fbTimestamp(),
+    editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
+  }).catch(e => showToast(e && e.code === 'permission-denied'
+      ? '⚠️ Este aviso ya lo tomó otro técnico — revisa la lista'
+      : '❌ No se pudo tomar el aviso: ' + e.message, 'error', 8000));
   showToast('🏃 Aviso tomado — producción ya ve que vas en camino');
 }
 function soltarAviso(id) {
-  db.collection('ots').doc(id).update({ estado: 'pendiente', asignadoA: null, horaLlegada: null })
-    .catch(e => showToast('❌ ' + e.message, 'error'));
+  db.collection('ots').doc(id).update({
+    estado: 'pendiente', asignadoA: null, asignadoUid: null, horaLlegada: null,
+    editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
+  }).catch(e => showToast(e && e.code === 'permission-denied'
+      ? '⚠️ Solo el técnico que tomó el aviso (o un supervisor) puede soltarlo'
+      : '❌ No se pudo soltar el aviso: ' + e.message, 'error', 8000));
+}
+// (5 oct 2026) Anular un aviso repetido (dos reportes de la misma parada).
+// Queda guardado como 'anulada' con quién, cuándo y por qué; no aparece en
+// Avisos, Historial ni Resumen.
+function anularAviso(id) {
+  const r = avisos.find(x => x.id === id);
+  if (!r) return;
+  const previo = avAvisoPrevioMismoEquipo(r);
+  const sugerido = previo ? 'Duplicado de ' + (previo.folio || 'otro aviso') : 'Duplicado';
+  const motivo = (window.prompt(`Anular el aviso ${r.folio || ''} (${avEquipo(r).nombre || 'equipo'}).\nEscribe el motivo (ej: duplicado de OT-0123):`, sugerido) || '').trim();
+  if (!motivo) { showToast('Anulación cancelada (falta el motivo)', 'warn'); return; }
+  db.collection('ots').doc(id).update({
+    estado: 'anulada', anuladoPor: miNombreUsuario(), anuladoEn: fbTimestamp(), motivoAnulacion: motivo.slice(0, 300),
+    editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
+  }).catch(e => showToast(e && e.code === 'permission-denied'
+      ? '⚠️ No se pudo anular: el aviso ya cambió de estado o lo está atendiendo otro técnico'
+      : '❌ No se pudo anular el aviso: ' + e.message, 'error', 8000));
+  showToast('🚫 Aviso anulado', 'warn');
 }
 function cerrarAviso(id) {
   const r = avisos.find(x => x.id === id);
   if (!r) return;
-  const fecha = r.fechaReporte || avHoy();
+  const fecha = fbParseFecha(r.fechaReporte) ? r.fechaReporte : fbHoy();
   const tec = r.asignadoA || avMiNombre();
+  const eq = avEquipo(r);
   const pseudo = {
-    FECHA: fecha, SEMANA: getWeekNumber(new Date(fecha + 'T00:00:00')),
+    FECHA: fecha, SEMANA: fbSemanaISO(fecha),
     PLANTA: leerPlantaGuardada() || document.getElementById('f-planta').value || (currentPlantas.length === 1 ? currentPlantas[0] : ''),
-    LINEA_EQUIPO: r.equipoLocalidad || '', EQUIPO: r.equipoNombre || '',
+    LINEA_EQUIPO: eq.localidad, EQUIPO: eq.nombre,
     DESCRIPCION_FALLA: r.descripcionFalla || '', CAUSA_FALLA: r.causaFalla || '',
     H_INICIO: r.horaParada || '', H_TECNICO: r.horaLlegada || avAhora(), H_FINAL: avAhora(),
     TIPO_MANTENIMIENTO: 'Correctivo', PARO_PLANTA: 'no', PRIORIDAD: r.prioridad || 'media', TECNICOS: tec,
@@ -1615,7 +2009,7 @@ function cerrarAviso(id) {
   window.editingRecord = r;
   fillFormFromRecord(pseudo);
   document.getElementById('edit-banner').style.display = 'flex';
-  document.querySelector('#edit-banner p').textContent = `🚨 Cerrando aviso ${r.folio || ''} — ${r.equipoNombre || ''}`;
+  document.querySelector('#edit-banner p').textContent = `🚨 Cerrando aviso ${r.folio || ''} — ${eq.nombre}`;
   document.querySelector('#edit-banner small').textContent = 'Revisa área, pieza, causa y escribe la solución. Al guardar, producción verá el aviso como resuelto.';
   document.getElementById('form-title').textContent = '✅ Cerrar aviso de producción';
   document.getElementById('form-sub').textContent = 'Las horas ya vienen del reporte';
@@ -1646,20 +2040,28 @@ function loadStats() {
     const max = top[0][1];
     document.getElementById('lineas-bars').innerHTML = top.map(([k,v])=>`
       <div class="bar-wrap">
-        <div class="bar-label"><span>${k}</span><strong>${v}</strong></div>
+        <div class="bar-label"><span>${esc(k)}</span><strong>${v}</strong></div>
         <div class="bar-track"><div class="bar-fill" style="width:${(v/max*100).toFixed(1)}%"></div></div>
       </div>`).join('');
   }
 
+  // (5 oct 2026) Agrupado por AÑO + semana ISO calculada desde FECHA: antes
+  // "Sem 40" de 2025 y de 2026 se sumaban juntas, y la SEMANA guardada podía
+  // no coincidir con la fecha.
   const bySem = {};
-  data.forEach(r => { const k='Sem '+r.SEMANA; bySem[k]=(bySem[k]||0)+1; });
-  const sems = Object.entries(bySem).sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true})).slice(-8);
+  data.forEach(r => {
+    const w = fbSemanaISO(r.FECHA), y = fbAnioSemanaISO(r.FECHA);
+    if (!w || !y) return;
+    const k = y + '-' + String(w).padStart(2, '0');
+    bySem[k] = (bySem[k] || 0) + 1;
+  });
+  const sems = Object.entries(bySem).sort((a,b)=>a[0].localeCompare(b[0])).slice(-8);
   if (sems.length > 1) {
     document.getElementById('semana-card').style.display = 'block';
     const maxS = Math.max(...sems.map(s=>s[1]));
     document.getElementById('semana-bars').innerHTML = sems.map(([k,v])=>`
       <div class="bar-wrap">
-        <div class="bar-label"><span>${k}</span><strong>${v}</strong></div>
+        <div class="bar-label"><span>Sem ${Number(k.slice(5))} · ${k.slice(0,4)}</span><strong>${v}</strong></div>
         <div class="bar-track"><div class="bar-fill" style="width:${(v/maxS*100).toFixed(1)}%;background:var(--blue)"></div></div>
       </div>`).join('');
   }
@@ -1685,10 +2087,10 @@ function exportHistoryCSV(full) {
   const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'reporte_bitacora'+suffix+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.href = url; a.download = 'reporte_bitacora'+suffix+'_'+fbHoy()+'.csv'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
-  showToast('📊 Reporte exportado (' + rows.length + ' OTs) — ábrelo con Excel');
+  showToast('📊 Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${DIAS_RECIENTES} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
 }
 
 // ══════ RESPALDO ══════
@@ -1697,10 +2099,10 @@ function exportBackup() {
   const blob = new Blob([JSON.stringify(allRecords, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'bitacora_respaldo_' + new Date().toISOString().slice(0,10) + '.json';
+  a.href = url; a.download = 'bitacora_respaldo_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
-  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs)');
+  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${DIAS_RECIENTES} días — para todo usa "Cargar historial completo" en Historial`) + ')');
 }
 
 // ══════ CONFIG ══════
@@ -1740,12 +2142,13 @@ async function clearLocal() {
 
 // ══════ TOAST ══════
 let toastTimer;
-function showToast(msg, type='success') {
+// (5 oct 2026) ms opcional: los errores importantes se quedan más tiempo.
+function showToast(msg, type='success', ms) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'show ' + (type==='error'?'error':type==='warn'?'warn':'');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>el.classList.remove('show'), 3800);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), ms || 3800);
 }
 </script>
 </body>

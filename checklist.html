@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0F1923"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -420,7 +420,7 @@ async function exportChecklistsBackup(){
     const blob = new Blob([JSON.stringify({ generadoEn: new Date().toISOString(), checklists: rows }, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'respaldo_checklists_' + new Date().toISOString().slice(0,10) + '.json';
+    a.href = url; a.download = 'respaldo_checklists_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
     a.click();
     URL.revokeObjectURL(url);
     showToast(`⬇ Respaldo descargado — ${rows.length} checklists`);
@@ -462,10 +462,13 @@ async function loadTecnicos() {
   }
 }
 
+// (5 oct 2026) Seguridad: todo dato que viene de Firestore o que escribió
+// una persona (nombres de equipo, notas, puntos, folios...) pasa por fbEsc()
+// antes de meterse en innerHTML; los onclick solo reciben ids de documento.
 function renderTecGridInto(elId, seleccionados) {
   const grid = document.getElementById(elId);
   grid.innerHTML = TECNICOS_LISTA.map(t => `
-    <button type="button" class="tec-chip${(seleccionados||[]).includes(t.nombre) ? ' sel' : ''}" data-tec="${t.nombre.replace(/"/g, '&quot;')}" onclick="this.classList.toggle('sel')">${t.corto || t.nombre}</button>
+    <button type="button" class="tec-chip${(seleccionados||[]).includes(t.nombre) ? ' sel' : ''}" data-tec="${fbEsc(t.nombre)}" onclick="this.classList.toggle('sel')">${fbEsc(t.corto || t.nombre)}</button>
   `).join('');
 }
 
@@ -545,13 +548,13 @@ function itemRowHtml(e, marcarVencido) {
   return `
     <div class="item-row${marcarVencido ? ' due' : ''}" onclick="abrirFormChecklist('${e.id}')">
       <div class="item-header">
-        <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+        <div class="item-title">${fbEsc(e.nombre || '(sin nombre)')}</div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
           <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
         </div>
       </div>
-      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad + ' · ' : ''}${prox}${horometroTxt}</div>
+      <div class="item-sub">${e.localidad ? '📍 ' + fbEsc(e.localidad) + ' · ' : ''}${fbEsc(prox)}${fbEsc(horometroTxt)}</div>
     </div>`;
 }
 
@@ -602,7 +605,7 @@ function renderPuntosForm() {
   const wrap = document.getElementById('cf-puntos');
   wrap.innerHTML = itemsFormState.map((it, idx) => `
     <div class="checklist-punto">
-      <div class="checklist-punto-label">${it.punto}</div>
+      <div class="checklist-punto-label">${fbEsc(it.punto)}</div>
       <div class="toggle-row">
         <button type="button" class="toggle-btn${it.resultado === 'ok' ? ' sel-ok' : ''}" onclick="setItemResultado(${idx},'ok')">✅ OK</button>
         <button type="button" class="toggle-btn${it.resultado === 'falla' ? ' sel-falla' : ''}" onclick="setItemResultado(${idx},'falla')">⚠️ Falla</button>
@@ -613,7 +616,7 @@ function renderPuntosForm() {
             <label>Causa</label>
             <select onchange="itemsFormState[${idx}].causa=this.value">
               <option value="">Seleccionar causa...</option>
-              ${CAUSAS_FALLA.map(c => `<option${it.causa === c ? ' selected' : ''}>${c}</option>`).join('')}
+              ${CAUSAS_FALLA.map(c => `<option${it.causa === c ? ' selected' : ''}>${fbEsc(c)}</option>`).join('')}
             </select>
           </div>
           <div class="field" style="margin-bottom:0;max-width:130px;">
@@ -623,7 +626,7 @@ function renderPuntosForm() {
             </select>
           </div>
         </div>
-        <textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${it.nota || ''}</textarea>` : ''}
+        <textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${fbEsc(it.nota || '')}</textarea>` : ''}
     </div>
   `).join('');
 }
@@ -633,8 +636,67 @@ function setItemResultado(idx, val) {
   renderPuntosForm();
 }
 
+// (5 oct 2026) Horómetro: una lectura MENOR que la actual casi siempre es
+// un error de dedo (y reinicia mal el conteo de horas). Solo Administrador
+// o Encargado pueden bajarla, y confirmando. Un salto de más de 2000 h
+// también se confirma (ej. un cero de más). Devuelve true si se puede seguir.
+const HOROMETRO_SALTO_SOSPECHOSO = 2000;
+function validarLecturaHorometro(equipo, lectura) {
+  const tieneActual = equipo && equipo.horometroActual !== undefined && equipo.horometroActual !== null && equipo.horometroActual !== '';
+  if (!tieneActual) return true;
+  const actual = Number(equipo.horometroActual);
+  if (isNaN(actual)) return true;
+  if (lectura < actual) {
+    const puedeCorregir = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+    if (!puedeCorregir) {
+      showToast(`La lectura (${lectura} h) es menor que la actual del equipo (${actual} h). Revisa el número; si de verdad hay que corregirlo, pídeselo al Encargado o Administrador.`, 'error');
+      return false;
+    }
+    if (!confirm(`¿Corregir el horómetro a un valor menor?\n\nActual: ${actual} h\nNueva: ${lectura} h`)) return false;
+    return true;
+  }
+  if (lectura - actual > HOROMETRO_SALTO_SOSPECHOSO) {
+    if (!confirm(`La lectura (${lectura} h) es ${lectura - actual} h mayor que la actual (${actual} h). ¿Es correcta?`)) return false;
+  }
+  return true;
+}
+
+// (5 oct 2026) Traduce el "permission-denied" de Firestore a un mensaje en
+// español que diga QUIÉN puede hacer esa acción, en vez del texto en inglés.
+function mensajeErrorPermiso(e, accion) {
+  const esPermiso = e && (e.code === 'permission-denied' || /permission|insufficient/i.test(e.message || ''));
+  if (!esPermiso) return 'Error: ' + ((e && e.message) || e);
+  const porAccion = {
+    checklist: 'Tu usuario no tiene permiso para guardar checklists u OTs.',
+    planificar: 'Solo Administrador o Encargado puede planificar una OT.',
+    realizar: 'Solo Técnico, Supervisor, Encargado o Administrador puede marcar el trabajo como realizado.',
+    validar: 'Solo Supervisor, Encargado o Administrador puede validar una OT.',
+    rechazar: 'Solo Supervisor, Encargado o Administrador puede marcar una OT como no concluida.',
+    cerrar: 'Solo el Administrador puede cerrar una OT de checklist.',
+    configurar: 'Solo Administrador o Encargado puede cambiar la frecuencia o el horómetro.',
+    horometro: 'Tu usuario no tiene permiso para actualizar el horómetro.',
+  };
+  return '⛔ ' + (porAccion[accion] || 'No tienes permiso para esta acción.');
+}
+
+function nombreUsuarioActual() {
+  return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+}
+
+// (5 oct 2026) Guardado SIN quedarse colgado sin señal. Antes se hacía
+// "await" de cada escritura (checklist, equipo, y cada OT una por una): con
+// la persistencia sin conexión esos await no terminan hasta que vuelve la
+// señal, así que la pantalla se quedaba en "Guardando..." para siempre, y
+// si algo fallaba a la mitad quedaba un checklist sin sus OTs. Ahora:
+//  1. Primero se sacan los folios (fbFolioNuevo nunca tarda más de ~5 s;
+//     sin señal da un folio provisional OT-P…).
+//  2. Checklist + actualización del equipo + todas las OTs van en UN solo
+//     batch: o se guarda todo, o nada.
+//  3. commit() NO se espera: el formulario se cierra enseguida y el aviso
+//     de éxito/error llega después por .then/.catch.
+let _guardandoChecklist = false; // evita doble toque en "Guardar"
 async function submitChecklist() {
-  if (!equipoSeleccionado) return;
+  if (!equipoSeleccionado || _guardandoChecklist) return;
   const tecnicos = getSelectedTecsFrom('cf-tec-grid');
   if (!tecnicos.length) { showToast('Selecciona quién hizo el checklist', 'warn'); return; }
 
@@ -648,22 +710,53 @@ async function submitChecklist() {
       showToast('Escribe la lectura actual del horómetro', 'warn');
       return;
     }
+    if (!validarLecturaHorometro(equipoSeleccionado, lecturaHorometro)) return;
   }
 
-  setLoading(true, 'Guardando checklist...');
+  _guardandoChecklist = true;
+  const btnGuardar = document.getElementById('cf-submit-btn');
+  if (btnGuardar) btnGuardar.disabled = true;
+
+  // Copias locales: el formulario se cierra antes de que termine de subir.
+  const equipo = equipoSeleccionado;
+  const items = itemsFormState.map(it => ({ ...it }));
   const hoy = todayStr();
-  const fallas = itemsFormState.filter(it => it.resultado === 'falla');
-  const creador = (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+  const fallas = items.filter(it => it.resultado === 'falla');
+  const creador = nombreUsuarioActual();
+  const nombreEquipo = equipo.nombre || '(sin nombre)';
 
   try {
+    // 1) Folios primero. Con señal, uno tras otro (el contador es una
+    // transacción; en paralelo chocarían entre sí). En cuanto uno sale
+    // provisional (sin señal), el resto se pide en paralelo para no sumar
+    // 5 s de espera por cada falla.
+    const folios = [];
+    if (fallas.length) {
+      setLoading(true, 'Generando folio(s) de OT...');
+      if (!navigator.onLine) {
+        folios.push(...await Promise.all(fallas.map(() => fbFolioNuevo())));
+      } else {
+        for (let i = 0; i < fallas.length; i++) {
+          const f = await fbFolioNuevo();
+          folios.push(f);
+          if (f.startsWith('OT-P') && i < fallas.length - 1) {
+            folios.push(...await Promise.all(fallas.slice(i + 1).map(() => fbFolioNuevo())));
+            break;
+          }
+        }
+      }
+    }
+
+    // 2) Un solo batch con todo.
+    const batch = db.batch();
     const checklistRef = db.collection('checklists').doc();
-    await checklistRef.set({
-      equipoId: equipoSeleccionado.id,
-      equipoNombre: equipoSeleccionado.nombre || '',
-      equipoLocalidad: equipoSeleccionado.localidad || '',
+    batch.set(checklistRef, {
+      equipoId: equipo.id,
+      equipoNombre: equipo.nombre || '',
+      equipoLocalidad: equipo.localidad || '',
       fecha: hoy,
       tecnicos: tecnicos,
-      items: itemsFormState,
+      items: items,
       tieneFallas: fallas.length > 0,
       creadoPor: creador,
       createdAt: fbTimestamp(),
@@ -671,29 +764,28 @@ async function submitChecklist() {
 
     // Actualiza la próxima fecha del equipo si tiene frecuencia configurada
     // (por días y/o por horómetro — un equipo puede tener las dos a la vez).
-    const actualizacionEquipo = {};
-    if (equipoSeleccionado.checklistFrecuenciaDias) {
-      actualizacionEquipo.checklistUltimaFecha = hoy;
-      actualizacionEquipo.checklistProximaFecha = addDaysStr(hoy, equipoSeleccionado.checklistFrecuenciaDias);
+    // (5 oct 2026) checklistUltimaFecha se guarda SIEMPRE (aunque el equipo
+    // todavía no tenga frecuencia): así, cuando después se le configure una,
+    // la próxima fecha se calcula desde el último checklist real.
+    const actualizacionEquipo = { checklistUltimaFecha: hoy };
+    if (equipo.checklistFrecuenciaDias) {
+      actualizacionEquipo.checklistProximaFecha = addDaysStr(hoy, equipo.checklistFrecuenciaDias);
     }
     if (lecturaHorometro !== null) {
       actualizacionEquipo.horometroActual = lecturaHorometro;
       actualizacionEquipo.horometroUltimoService = lecturaHorometro; // reinicia el conteo de horas
     }
-    if (Object.keys(actualizacionEquipo).length) {
-      await db.collection('equipos').doc(equipoSeleccionado.id).set(actualizacionEquipo, { merge: true });
-    }
+    batch.set(db.collection('equipos').doc(equipo.id), actualizacionEquipo, { merge: true });
 
     // Por cada punto en "Falla", crea una OT pendiente para planificar
-    for (const f of fallas) {
-      const folio = await generarFolio();
-      await db.collection('ots').doc().set({
+    fallas.forEach((f, i) => {
+      batch.set(db.collection('ots').doc(), {
         origen: 'checklist',
         estado: 'pendiente',
-        folio: folio,
-        equipoId: equipoSeleccionado.id,
-        equipoNombre: equipoSeleccionado.nombre || '',
-        equipoLocalidad: equipoSeleccionado.localidad || '',
+        folio: folios[i],
+        equipoId: equipo.id,
+        equipoNombre: equipo.nombre || '',
+        equipoLocalidad: equipo.localidad || '',
         descripcionFalla: f.punto + (f.nota ? ' — ' + f.nota : ''),
         causaFalla: f.causa || '',
         prioridad: f.prioridad || 'media',
@@ -701,46 +793,52 @@ async function submitChecklist() {
         asignadoA: null,
         fechaPlanificada: null,
         creadoPor: creador,
+        creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
         createdAt: fbTimestamp(),
       });
-    }
+    });
+
+    // 3) Se manda sin esperar al servidor.
+    let subido = false, avisoPendiente = false;
+    const msgBase = fallas.length
+      ? `Checklist guardado. Se generaron ${fallas.length} OT(s) pendiente(s).`
+      : 'Checklist guardado sin fallas ✅';
+    batch.commit().then(() => {
+      subido = true;
+      if (avisoPendiente) showToast(`☁️ Checklist de ${nombreEquipo} subido al servidor ✅`);
+    }).catch((err) => {
+      subido = true;
+      console.error('Error al guardar checklist:', err);
+      showToast(`❌ El checklist de ${nombreEquipo} NO se guardó. ` + mensajeErrorPermiso(err, 'checklist'), 'error');
+    });
 
     setLoading(false);
-    showToast(fallas.length ? `Guardado. Se generaron ${fallas.length} OT(s) pendiente(s).` : 'Checklist guardado sin fallas ✅');
     cerrarFormChecklist();
     goTo('hoy', document.querySelectorAll('.nav-btn')[0]);
+    if (!navigator.onLine) {
+      avisoPendiente = true;
+      showToast(msgBase + ' 📵 Se subirá cuando haya señal.', 'warn');
+    } else {
+      showToast(msgBase);
+      setTimeout(() => {
+        if (!subido) { avisoPendiente = true; showToast(msgBase + ' Se subirá cuando haya señal.', 'warn'); }
+      }, 3000);
+    }
   } catch (e) {
+    // Solo llega aquí si falló algo ANTES de mandar (el formulario sigue abierto).
     setLoading(false);
-    showToast('Error al guardar: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'checklist'), 'error');
+  } finally {
+    _guardandoChecklist = false;
+    if (btnGuardar) btnGuardar.disabled = false;
   }
 }
 
 // ══════ FOLIO DE OT (OT-0001, OT-0002...) ══════
-// Se apoya en un contador en /config/otFolioCounter mediante una
-// transacción (evita que dos técnicos guarden el mismo número a la vez).
-// Si no hay conexión (la transacción de Firestore necesita ida y vuelta
-// al servidor, y no funciona en modo sin conexión como sí lo hacen las
-// escrituras normales), se usa un folio provisional que no bloquea el
-// guardado del checklist — se puede identificar y corregir después.
-async function generarFolio() {
-  try {
-    const ref = db.collection('config').doc('otFolioCounter');
-    const nuevo = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const actual = (snap.exists && typeof snap.data().ultimo === 'number') ? snap.data().ultimo : 0;
-      const siguiente = actual + 1;
-      tx.set(ref, { ultimo: siguiente }, { merge: true });
-      return siguiente;
-    });
-    return 'OT-' + String(nuevo).padStart(4, '0');
-  } catch (e) {
-    // Folio provisional sin conexión (29 sep 2026): se le agrega un sufijo
-    // aleatorio corto además del milisegundo — dos celulares sin señal al
-    // mismo tiempo (ej. un apagón de wifi en toda la planta) ya no generan
-    // el mismo folio "OT-PEND-xxxxxx" solo por coincidir en el milisegundo.
-    return 'OT-PEND-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
-  }
-}
+// (5 oct 2026) Ya no hay una copia local de generarFolio(): se usa
+// fbFolioNuevo() de firebase-init.js, el mismo para toda la app (la regla
+// del contador ahora solo acepta {ultimo: anterior+1}). Sin señal da un
+// folio provisional "OT-P…" en vez de quedarse esperando.
 
 // ══════ HISTORIAL DE CHECKLISTS ══════
 function loadChecklists() {
@@ -759,10 +857,10 @@ function renderHistorial() {
   wrap.innerHTML = currentChecklists.map(c => `
     <div class="item-row" style="cursor:default;">
       <div class="item-header">
-        <div class="item-title">${c.equipoNombre || '(sin nombre)'}</div>
+        <div class="item-title">${fbEsc(c.equipoNombre || '(sin nombre)')}</div>
         <span class="tag ${c.tieneFallas ? 'tag-falla' : 'tag-ok'}">${c.tieneFallas ? 'Con fallas' : 'OK'}</span>
       </div>
-      <div class="item-sub">${c.fecha || ''} · ${(c.tecnicos || []).join(', ')}</div>
+      <div class="item-sub">${fbEsc(c.fecha || '')} · ${fbEsc((c.tecnicos || []).join(', '))}</div>
     </div>
   `).join('');
 }
@@ -819,14 +917,14 @@ function renderOts() {
     return;
   }
   wrap.innerHTML = currentOts.map(o => {
-    const tag = OT_ESTADO_TAG[o.estado] || { clase: 'tag-pendiente', texto: o.estado || '—' };
+    const tag = OT_ESTADO_TAG[o.estado] || { clase: 'tag-pendiente', texto: fbEsc(o.estado || '—') };
     let acciones = '';
 
     if (o.estado === 'pendiente' && puedePlanificar) {
       acciones = `
         <div class="row" style="margin-top:10px;">
           <div class="field" style="margin-bottom:0;">
-            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.map(t => `<option value="${t.nombre.replace(/"/g, '&quot;')}">${t.corto || t.nombre}</option>`).join('')}</select>
+            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.map(t => `<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto || t.nombre)}</option>`).join('')}</select>
           </div>
           <div class="field" style="margin-bottom:0;max-width:130px;">
             <input type="date" id="ot-fecha-${o.id}" value="${todayStr()}"/>
@@ -834,15 +932,15 @@ function renderOts() {
         </div>
         <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="planificarOt('${o.id}')">📅 Planificar</button>`;
     } else if (o.estado === 'planificada' || o.estado === 'rechazada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · 📅 ${o.fechaPlanificada || '—'}</div>`;
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · 📅 ${fbEsc(o.fechaPlanificada || '—')}</div>`;
       if (o.estado === 'rechazada' && o.notaRevision) {
-        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? o.revisadoPor + ': ' : ''}${o.notaRevision}</div>`;
+        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
       }
       if (puedeMarcarHecho) {
         acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="marcarOtRealizada('${o.id}')">${o.estado === 'rechazada' ? '🔁 Marcar corregido, enviar a revisión' : '✅ Marcar trabajo realizado'}</button>`;
       }
     } else if (o.estado === 'en_revision') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · Trabajo realizado, en espera de revisión</div>`;
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Trabajo realizado, en espera de revisión</div>`;
       if (puedeRevisar) {
         acciones += `
           <div class="field" style="margin-top:8px;margin-bottom:6px;">
@@ -855,7 +953,7 @@ function renderOts() {
           </div>`;
       }
     } else if (o.estado === 'validada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${o.asignadoA || '—'} · Validado por ${o.revisadoPor || '—'}</div>`;
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Validado por ${fbEsc(o.revisadoPor || '—')}</div>`;
       if (esAdminCierre) {
         acciones += `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="cerrarOtFinal('${o.id}')">🔒 Cerrar OT</button>`;
       }
@@ -869,21 +967,27 @@ function renderOts() {
     return `
       <div class="item-row" style="cursor:default;">
         <div class="item-header">
-          <div class="item-title">${o.folio || o.id} · ${o.equipoNombre || ''}</div>
+          <div class="item-title">${fbEsc(o.folio || o.id)} · ${fbEsc(o.equipoNombre || '')}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
-            ${o.prioridad ? `<span class="tag tag-prioridad-${o.prioridad}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${o.prioridad}</span>` : ''}
+            ${o.prioridad ? `<span class="tag tag-prioridad-${fbEsc(o.prioridad)}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${fbEsc(o.prioridad)}</span>` : ''}
             <span class="tag ${tag.clase}">${tag.texto}</span>
           </div>
         </div>
-        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + o.equipoLocalidad + ' · ' : ''}${o.causaFalla ? '[' + o.causaFalla + '] ' : ''}${o.descripcionFalla || ''}</div>
+        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>
         ${acciones}
         ${o.folio ? `
         <div style="margin-top:8px;">
-          <button class="btn btn-secondary btn-sm" onclick="verCostoRepuestosOt('${o.folio}','${o.id}')">💰 Ver costo de repuestos</button>
+          <button class="btn btn-secondary btn-sm" onclick="verCostoRepuestosOt('${o.id}')">💰 Ver costo de repuestos</button>
           <div id="costo-ot-${o.id}" class="item-sub" style="margin-top:6px;"></div>
         </div>` : ''}
       </div>`;
   }).join('');
+}
+
+// (5 oct 2026) Toda actualización de OT deja editadoPor/editadoEn, y si
+// Firestore la rechaza por permisos se dice en español quién sí puede.
+function camposEdicionOt() {
+  return { editadoPor: nombreUsuarioActual(), editadoEn: fbTimestamp() };
 }
 
 async function planificarOt(otId) {
@@ -891,10 +995,10 @@ async function planificarOt(otId) {
   const fecha = document.getElementById('ot-fecha-' + otId).value;
   if (!tec || !fecha) { showToast('Elige técnico y fecha', 'warn'); return; }
   try {
-    await db.collection('ots').doc(otId).update({ estado: 'planificada', asignadoA: tec, fechaPlanificada: fecha });
+    await db.collection('ots').doc(otId).update({ estado: 'planificada', asignadoA: tec, fechaPlanificada: fecha, ...camposEdicionOt() });
     showToast('OT planificada ✅');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'planificar'), 'error');
   }
 }
 
@@ -904,10 +1008,11 @@ async function marcarOtRealizada(otId) {
       estado: 'en_revision',
       trabajoRealizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
       trabajoRealizadoEn: fbTimestamp(),
+      ...camposEdicionOt(),
     });
     showToast('Marcado como realizado — pasa a revisión ✅');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'realizar'), 'error');
   }
 }
 
@@ -920,10 +1025,11 @@ async function validarOt(otId) {
       revisadoEn: fbTimestamp(),
       revisionResultado: 'buena',
       notaRevision: nota.trim(),
+      ...camposEdicionOt(),
     });
     showToast('OT validada — falta el cierre ✅');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'validar'), 'error');
   }
 }
 
@@ -937,10 +1043,11 @@ async function rechazarOt(otId) {
       revisadoEn: fbTimestamp(),
       revisionResultado: 'rechazada',
       notaRevision: nota,
+      ...camposEdicionOt(),
     });
     showToast('OT regresada como no concluida', 'warn');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'rechazar'), 'error');
   }
 }
 
@@ -959,10 +1066,26 @@ function calcularTiempoRespuestaMin(ot) {
   return Math.max(0, Math.round((Date.now() - creado) / 60000));
 }
 
+// (5 oct 2026) Para que Análisis la cuente bien: FECHA es el día en que
+// el trabajo se HIZO (trabajoRealizadoEn), no el día del cierre (que puede
+// ser una semana después); si no se marcó como realizado, hoy. Se agregan
+// SEMANA (ISO, la misma de Análisis), PLANTA (la del equipo, si la tiene) y
+// equipoId (para la hoja de vida, aunque se renombre el equipo).
+function fechaTrabajoRealizado(ot) {
+  const ts = ot.trabajoRealizadoEn;
+  if (ts && typeof ts.toDate === 'function') return fbFechaLocal(ts.toDate());
+  return todayStr();
+}
+
 function camposParaAnalisis(ot, tiempoRespuestaMin) {
+  const fecha = fechaTrabajoRealizado(ot);
+  const equipo = currentEquipos.find(x => x.id === ot.equipoId);
   return {
     Title: ot.folio || ot.id,
-    FECHA: todayStr(),
+    FECHA: fecha,
+    SEMANA: fbSemanaISO(fecha),
+    PLANTA: (equipo && (equipo.planta || equipo.plantaNombre)) || '',
+    equipoId: ot.equipoId || null,
     LINEA_EQUIPO: ot.equipoLocalidad || '',
     TIPO_MAQUINA: '',
     EQUIPO: ot.equipoNombre || '',
@@ -991,10 +1114,11 @@ async function cerrarOtFinal(otId) {
       fechaCompletada: todayStr(),
       tiempoRespuestaMin,
       ...camposParaAnalisis(o, tiempoRespuestaMin),
+      ...camposEdicionOt(),
     }, { merge: true });
     showToast('OT cerrada ✅ — ya cuenta como preventivo en Análisis');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
   }
 }
 
@@ -1010,6 +1134,7 @@ async function cerrarOtDirecto(otId) {
     fechaCompletada: todayStr(),
     tiempoRespuestaMin,
     ...camposParaAnalisis(o, tiempoRespuestaMin),
+    ...camposEdicionOt(),
   };
   // Si nadie la había revisado todavía, el cierre directo también cuenta como la revisión.
   if (!o.revisadoPor) {
@@ -1021,7 +1146,7 @@ async function cerrarOtDirecto(otId) {
     await db.collection('ots').doc(otId).set(payload, { merge: true });
     showToast('OT cerrada directamente ✅');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
   }
 }
 
@@ -1048,7 +1173,7 @@ function renderConfigPuntos() {
 
   if (!puedeEditarPuntos) {
     info.innerHTML = `<div class="info-box">Solo el Administrador puede cambiar los puntos del checklist. Estos son los que se usan hoy:</div>`;
-    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${p}</div>`).join('')}</div>`;
+    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${fbEsc(p)}</div>`).join('')}</div>`;
     return;
   }
 
@@ -1057,7 +1182,7 @@ function renderConfigPuntos() {
   wrap.innerHTML = lista.map((p, idx) => `
     <div class="row" style="margin-bottom:8px;">
       <div class="field" style="margin-bottom:0;">
-        <input type="text" id="punto-edit-${idx}" value="${(p || '').replace(/"/g, '&quot;')}" placeholder="Punto a revisar..."/>
+        <input type="text" id="punto-edit-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
       </div>
       <div class="field" style="margin-bottom:0;flex:0 0 auto;">
         <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEdit(${idx})">🗑</button>
@@ -1145,9 +1270,15 @@ async function guardarPuntosChecklist() {
 // salidas que tenían costo unitario cargado en Inventario — si un repuesto
 // no tiene precio, se avisa cuántos quedaron fuera en vez de mostrar un
 // total incompleto como si fuera el real.
-async function verCostoRepuestosOt(folio, otId) {
+// (5 oct 2026) El botón ya no lleva el folio escrito dentro del onclick
+// (texto de Firestore dentro de JS en línea = riesgo de inyección): solo
+// pasa el id de la OT y aquí se busca su folio.
+async function verCostoRepuestosOt(otId) {
   const el = document.getElementById('costo-ot-' + otId);
   if (!el) return;
+  const otLocal = currentOts.find(x => x.id === otId);
+  const folio = otLocal && otLocal.folio;
+  if (!folio) { el.textContent = 'Esta OT no tiene folio.'; return; }
   el.textContent = 'Buscando repuestos de esta OT...';
   try {
     const snap = await db.collection('movimientos').where('otFolio', '==', folio).get();
@@ -1219,7 +1350,7 @@ function renderModalPuntosEquipo() {
   wrap.innerHTML = lista.map((p, idx) => `
     <div class="row" style="margin-bottom:8px;">
       <div class="field" style="margin-bottom:0;">
-        <input type="text" id="pe-punto-${idx}" value="${(p || '').replace(/"/g, '&quot;')}" placeholder="Punto a revisar..."/>
+        <input type="text" id="pe-punto-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
       </div>
       <div class="field" style="margin-bottom:0;flex:0 0 auto;">
         <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEquipoEdit(${idx})">🗑</button>
@@ -1330,37 +1461,37 @@ function renderConfig() {
     return `
     <div class="item-row" style="cursor:default;">
       <div class="item-header" style="margin-bottom:8px;">
-        <div class="item-title" style="margin-bottom:0;">${e.nombre || '(sin nombre)'}</div>
+        <div class="item-title" style="margin-bottom:0;">${fbEsc(e.nombre || '(sin nombre)')}</div>
         ${tienePersonalizados ? '<span class="tag tag-planificada">Puntos propios</span>' : '<span class="tag" style="background:var(--border);color:var(--muted);">Lista general</span>'}
       </div>
       <div class="row">
         <div class="field" style="margin-bottom:0;">
           <label>Días</label>
-          <input type="number" min="1" id="cfg-dias-${e.id}" value="${e.checklistFrecuenciaDias || ''}" placeholder="ej: 7"/>
+          <input type="number" min="1" id="cfg-dias-${e.id}" value="${fbEsc(e.checklistFrecuenciaDias || '')}" placeholder="ej: 7"/>
         </div>
         <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
           <button class="btn btn-secondary btn-sm" onclick="guardarFrecuencia('${e.id}')">💾 Guardar</button>
         </div>
       </div>
-      <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + e.checklistProximaFecha : 'Todavía sin próxima fecha calculada'}</div>
+      <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + fbEsc(e.checklistProximaFecha) : 'Todavía sin próxima fecha calculada'}</div>
 
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
         <label>⏱ Horómetro ${usaHorometro ? '<span class="tag tag-planificada" style="margin-left:4px;">Activado</span>' : ''}</label>
         <div class="row" style="margin-top:4px;">
           <div class="field" style="margin-bottom:0;">
             <label style="text-transform:none;font-weight:400;color:var(--muted);">Frecuencia (horas)</label>
-            <input type="number" min="1" id="cfg-horas-${e.id}" value="${e.checklistFrecuenciaHoras || ''}" placeholder="ej: 250"/>
+            <input type="number" min="1" id="cfg-horas-${e.id}" value="${fbEsc(e.checklistFrecuenciaHoras || '')}" placeholder="ej: 250"/>
           </div>
           <div class="field" style="margin-bottom:0;">
             <label style="text-transform:none;font-weight:400;color:var(--muted);">Lectura actual</label>
-            <input type="number" min="0" id="cfg-lectura-${e.id}" value="${e.horometroActual ?? ''}" placeholder="ej: 1200"/>
+            <input type="number" min="0" id="cfg-lectura-${e.id}" value="${fbEsc(e.horometroActual ?? '')}" placeholder="ej: 1200"/>
           </div>
         </div>
         <div class="row" style="margin-top:8px;gap:8px;">
           <button class="btn btn-secondary btn-sm" onclick="guardarHorometroConfig('${e.id}')">💾 ${usaHorometro ? 'Actualizar' : 'Activar'} horómetro</button>
           ${usaHorometro ? `<button class="btn btn-secondary btn-sm" onclick="desactivarHorometro('${e.id}')">✕ Desactivar</button>` : ''}
         </div>
-        ${usaHorometro ? `<div class="item-sub" style="margin-top:6px;">${horasDesdeUltimoServicio(e)}/${e.checklistFrecuenciaHoras} h desde el último servicio</div>` : ''}
+        ${usaHorometro ? `<div class="item-sub" style="margin-top:6px;">${fbEsc(horasDesdeUltimoServicio(e))}/${fbEsc(e.checklistFrecuenciaHoras)} h desde el último servicio</div>` : ''}
       </div>
 
       <div class="row" style="margin-top:10px;gap:8px;">
@@ -1383,6 +1514,7 @@ function logAuditoria(categoria, equipoId, equipoNombre, cambios){
   db.collection('auditoria').add({
     categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
     quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    quienUid: (window.currentUser && window.currentUser.uid) || '', // (5 oct 2026) la regla exige el uid real
     fecha: fbTimestamp(),
   }).catch(err => {
     console.error('Error guardando auditoría:', err);
@@ -1390,25 +1522,42 @@ function logAuditoria(categoria, equipoId, equipoNombre, cambios){
   });
 }
 
-async function guardarFrecuencia(equipoId) {
+// (5 oct 2026) La próxima fecha se cuenta desde el ÚLTIMO checklist real
+// del equipo (checklistUltimaFecha, o si no lo tiene, el más reciente que
+// haya en el historial cargado), no desde hoy — antes, guardar la
+// frecuencia borraba el "vencido" de un equipo atrasado. Sin ningún
+// checklist previo, se cuenta desde hoy.
+function proximaFechaChecklist(equipo, dias) {
+  let ultima = equipo && equipo.checklistUltimaFecha;
+  if (!ultima && equipo) {
+    const delEquipo = currentChecklists.filter(c => c.equipoId === equipo.id && c.fecha).map(c => c.fecha).sort();
+    ultima = delEquipo.length ? delEquipo[delEquipo.length - 1] : null;
+  }
+  return addDaysStr(ultima || todayStr(), dias);
+}
+
+// (5 oct 2026) Escritura que NO se espera (sin señal, el await no termina
+// hasta que vuelve): se avisa enseguida y el error, si lo hay, llega después.
+function guardarSinEsperar(promesa, msgOk, accion) {
+  promesa.catch(e => showToast(mensajeErrorPermiso(e, accion), 'error'));
+  showToast(navigator.onLine ? msgOk : msgOk + ' 📵 Se subirá cuando haya señal.', navigator.onLine ? undefined : 'warn');
+}
+
+function guardarFrecuencia(equipoId) {
   const dias = Number(document.getElementById('cfg-dias-' + equipoId).value || 0);
   if (!dias || dias < 1) { showToast('Escribe un número de días válido', 'warn'); return; }
   const equipoActual = currentEquipos.find(x => x.id === equipoId);
   const diasAntes = equipoActual ? (equipoActual.checklistFrecuenciaDias || null) : null;
-  try {
-    await db.collection('equipos').doc(equipoId).set({
-      checklistFrecuenciaDias: dias,
-      checklistProximaFecha: addDaysStr(todayStr(), dias),
-    }, { merge: true });
-    // Auditoría (29 sep 2026): solo se registra si el número de días de
-    // verdad cambió (evita ruido si alguien toca "Guardar" sin editar nada).
-    if (diasAntes !== dias) {
-      logAuditoria('frecuencia_checklist', equipoId, equipoActual ? equipoActual.nombre : null,
-        [{ campo: 'Frecuencia (días)', anterior: diasAntes != null ? String(diasAntes) : '(sin configurar)', nuevo: String(dias) }]);
-    }
-    showToast('Frecuencia guardada ✅');
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
+  const promesa = db.collection('equipos').doc(equipoId).set({
+    checklistFrecuenciaDias: dias,
+    checklistProximaFecha: proximaFechaChecklist(equipoActual, dias),
+  }, { merge: true });
+  guardarSinEsperar(promesa, 'Frecuencia guardada ✅', 'configurar');
+  // Auditoría (29 sep 2026): solo se registra si el número de días de
+  // verdad cambió (evita ruido si alguien toca "Guardar" sin editar nada).
+  if (diasAntes !== dias) {
+    promesa.then(() => logAuditoria('frecuencia_checklist', equipoId, equipoActual ? equipoActual.nombre : null,
+      [{ campo: 'Frecuencia (días)', anterior: diasAntes != null ? String(diasAntes) : '(sin configurar)', nuevo: String(dias) }]), () => {});
   }
 }
 
@@ -1424,16 +1573,14 @@ async function guardarHorometroConfig(equipoId) {
   const lectura = Number(lecturaInput);
   if (!horas || horas < 1) { showToast('Escribe una frecuencia en horas válida', 'warn'); return; }
   if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe la lectura actual del horómetro', 'warn'); return; }
-  try {
-    await db.collection('equipos').doc(equipoId).set({
-      checklistFrecuenciaHoras: horas,
-      horometroActual: lectura,
-      horometroUltimoService: lectura,
-    }, { merge: true });
-    showToast('Horómetro activado ✅');
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-  }
+  // (5 oct 2026) Misma revisión que en el checklist (bajar la lectura o un
+  // salto enorme se confirman) y sin quedarse esperando sin señal.
+  if (!validarLecturaHorometro(currentEquipos.find(x => x.id === equipoId), lectura)) return;
+  guardarSinEsperar(db.collection('equipos').doc(equipoId).set({
+    checklistFrecuenciaHoras: horas,
+    horometroActual: lectura,
+    horometroUltimoService: lectura,
+  }, { merge: true }), 'Horómetro activado ✅', 'configurar');
 }
 
 async function desactivarHorometro(equipoId) {
@@ -1471,14 +1618,14 @@ function renderHorometro() {
     return `
     <div class="item-row" style="cursor:default;">
       <div class="item-header">
-        <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+        <div class="item-title">${fbEsc(e.nombre || '(sin nombre)')}</div>
         ${vencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
       </div>
-      <div class="item-sub" style="margin-bottom:8px;">${horas}/${e.checklistFrecuenciaHoras} h desde el último servicio</div>
+      <div class="item-sub" style="margin-bottom:8px;">${fbEsc(horas)}/${fbEsc(e.checklistFrecuenciaHoras)} h desde el último servicio</div>
       <div class="row">
         <div class="field" style="margin-bottom:0;">
           <label>Lectura actual</label>
-          <input type="number" min="0" id="hm-lectura-${e.id}" value="${e.horometroActual ?? ''}"/>
+          <input type="number" min="0" id="hm-lectura-${e.id}" value="${fbEsc(e.horometroActual ?? '')}"/>
         </div>
         <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
           <button class="btn btn-secondary btn-sm" onclick="guardarLecturaHorometro('${e.id}')">💾 Guardar</button>
@@ -1492,12 +1639,12 @@ async function guardarLecturaHorometro(equipoId) {
   const lecturaInput = document.getElementById('hm-lectura-' + equipoId).value;
   const lectura = Number(lecturaInput);
   if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe una lectura válida', 'warn'); return; }
-  try {
-    await db.collection('equipos').doc(equipoId).set({ horometroActual: lectura }, { merge: true });
-    showToast('Lectura guardada ✅');
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-  }
+  // (5 oct 2026) Una lectura menor que la actual se rechaza (salvo
+  // Administrador/Encargado confirmando) y un salto de más de 2000 h se
+  // confirma — ver validarLecturaHorometro().
+  if (!validarLecturaHorometro(currentEquipos.find(x => x.id === equipoId), lectura)) return;
+  guardarSinEsperar(db.collection('equipos').doc(equipoId).set({ horometroActual: lectura }, { merge: true }),
+    'Lectura guardada ✅', 'horometro');
 }
 
 // ══════ CARGA MASIVA DE FRECUENCIAS (Encargado/Admin) ══════
@@ -1549,35 +1696,44 @@ async function bulkImportFrecuencias() {
 
   if (!actualizados.length) {
     status.innerHTML = '⚠️ Ningún nombre coincidió con un equipo existente.'
-      + (noEncontrados.length ? '<br>No encontrados: ' + noEncontrados.join(', ') : '');
+      + (noEncontrados.length ? '<br>No encontrados: ' + fbEsc(noEncontrados.join(', ')) : '');
     return;
   }
 
+  // (5 oct 2026) Lotes de máximo 400 (Firestore no acepta más de 500
+  // escrituras por batch) y sin esperar al servidor (sin señal se quedaba
+  // en "Cargando..." para siempre). La próxima fecha se cuenta desde el
+  // último checklist de cada equipo, igual que en guardarFrecuencia().
   try {
-    setLoading(true, 'Cargando frecuencias...');
-    const batch = db.batch();
-    const hoy = todayStr();
-    actualizados.forEach(({ equipo, dias }) => {
-      batch.set(db.collection('equipos').doc(equipo.id), {
-        checklistFrecuenciaDias: dias,
-        checklistProximaFecha: addDaysStr(hoy, dias),
-      }, { merge: true });
-    });
-    await batch.commit();
+    const LOTE = 400;
+    const commits = [];
+    for (let i = 0; i < actualizados.length; i += LOTE) {
+      const batch = db.batch();
+      actualizados.slice(i, i + LOTE).forEach(({ equipo, dias }) => {
+        batch.set(db.collection('equipos').doc(equipo.id), {
+          checklistFrecuenciaDias: dias,
+          checklistProximaFecha: proximaFechaChecklist(equipo, dias),
+        }, { merge: true });
+      });
+      commits.push(batch.commit());
+    }
+    let avisoPendiente = !navigator.onLine;
+    Promise.all(commits).then(() => {
+      if (avisoPendiente) showToast(`☁️ Frecuencias de ${actualizados.length} equipo(s) subidas al servidor ✅`);
+    }).catch(e => showToast('❌ No se guardaron todas las frecuencias. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
 
     let msg = `✅ ${actualizados.length} equipo(s) actualizados`;
     if (noEncontrados.length) msg += `, ${noEncontrados.length} sin coincidencia`;
     if (invalidas.length) msg += `, ${invalidas.length} fila(s) con formato inválido`;
-    showToast(msg);
+    if (avisoPendiente) msg += ' 📵 Se subirá cuando haya señal.';
+    showToast(msg, avisoPendiente ? 'warn' : undefined);
 
-    status.innerHTML = (noEncontrados.length ? '⚠️ No encontrados (revisa el nombre exacto en Inventario): ' + noEncontrados.join(', ') + '<br>' : '')
-      + (invalidas.length ? '⚠️ Filas con formato inválido: ' + invalidas.join(' | ') : '');
+    status.innerHTML = (noEncontrados.length ? '⚠️ No encontrados (revisa el nombre exacto en Inventario): ' + fbEsc(noEncontrados.join(', ')) + '<br>' : '')
+      + (invalidas.length ? '⚠️ Filas con formato inválido: ' + fbEsc(invalidas.join(' | ')) : '');
 
     if (!noEncontrados.length && !invalidas.length) closeModalGeneric('modalBulkFrecuencias');
   } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-  } finally {
-    setLoading(false);
+    showToast(mensajeErrorPermiso(e, 'configurar'), 'error');
   }
 }
 </script>

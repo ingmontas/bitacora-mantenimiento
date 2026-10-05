@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v36';
+const CACHE = 'mantenimiento-v37';
 const ASSETS = [
   './',
   'index.html',
@@ -33,53 +33,77 @@ self.addEventListener('install', e => {
   );
 });
 
+// (5 oct 2026) Librerías externas (Firebase, gráficas, QR, Excel): sus URLs
+// llevan versión fija, así que se guardan aparte la primera vez y luego se
+// sirven del celular. Antes no se guardaban y sin señal Análisis y Hoja de
+// vida quedaban en blanco. Este caché no se borra al cambiar de versión.
+const LIBS = 'mantenimiento-libs-v1';
+const LIB_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com'];
+const esLibreria = url => LIB_HOSTS.includes(url.hostname) || (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'));
+
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE && k !== LIBS).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
+// Red con límite de tiempo: con WiFi débil, si la red no responde en 4 s se
+// usa la copia guardada (si existe) en vez de dejar la pantalla esperando.
+function redConLimite(req, ms) {
+  return new Promise((resolve, reject) => {
+    let listo = false;
+    const t = setTimeout(() => {
+      caches.match(req, { ignoreSearch: true }).then(r => { if (r && !listo) { listo = true; resolve(r); } });
+    }, ms);
+    fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })).then(resp => {
+      clearTimeout(t);
+      if (resp && resp.status === 200) {
+        const clone = resp.clone();
+        // Se guarda sin "?id=…" para no llenar el caché con una copia por equipo.
+        const u = new URL(req.url); u.search = '';
+        caches.open(CACHE).then(c => c.put(u.toString(), clone));
+      }
+      if (!listo) { listo = true; resolve(resp); }
+    }).catch(err => {
+      clearTimeout(t);
+      if (listo) return;
+      // Sin red y sin copia: solo las páginas caen en index.html (nunca un .js).
+      caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === 'navigate' ? caches.match('index.html') : null)).then(r => { listo = true; r ? resolve(r) : reject(err); });
+    });
+  });
+}
+
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
 
-  // Firebase / Firestore / Storage / Google APIs — siempre red, nunca caché.
-  // Firestore ya maneja su propio modo sin conexión internamente; si el
-  // service worker intercepta estas peticiones se puede romper la
-  // sincronización en tiempo real.
-  const skipHosts = ['googleapis.com', 'gstatic.com', 'firebaseio.com', 'google.com'];
-  if (skipHosts.some(h => url.hostname.includes(h))) return;
-  if (url.origin !== self.location.origin) return; // cualquier otro origen externo: red directa
-
-  // (4 oct 2026) Páginas y código de la app (HTML, JS, JSON): RED PRIMERO.
-  // Antes era "caché primero" y por eso, después de cada actualización, los
-  // celulares seguían mostrando la versión vieja hasta cerrar la app varias
-  // veces. Ahora, con internet, siempre se carga lo último publicado (y se
-  // guarda una copia); sin internet, se usa la copia guardada.
-  const esCodigo = e.request.mode === 'navigate' || /\.(html|js|json)$/i.test(url.pathname) || url.pathname.endsWith('/');
-  if (esCodigo && e.request.method === 'GET') {
-    e.respondWith(
-      // cache:'no-cache' = preguntar siempre al servidor si hay versión nueva
-      // (si no cambió, la respuesta es mínima), en vez de usar la del navegador.
-      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(resp => {
-        if (resp && resp.status === 200) {
-          const clone = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
+  if (esLibreria(url)) {
+    // Se sirve la copia guardada al instante y, con señal, se vuelve a pedir
+    // en segundo plano: si alguna vez se guardó una respuesta fallida (las de
+    // otro dominio no dejan ver su estado), se reemplaza en la siguiente visita.
+    e.respondWith(caches.open(LIBS).then(c => c.match(e.request).then(hit => {
+      const red = fetch(e.request).then(resp => {
+        if (resp && (resp.ok || resp.type === 'opaque')) c.put(e.request, resp.clone());
         return resp;
-      }).catch(() => caches.match(e.request, { ignoreSearch: true })
-        .then(r => r || caches.match('index.html')))
-    );
+      });
+      if (hit) { red.catch(() => {}); return hit; }
+      return red;
+    })));
     return;
   }
+  // Base de datos, inicio de sesión y demás servicios de Google: siempre red.
+  if (url.origin !== self.location.origin) return;
 
-  // Imágenes e íconos: caché primero, con respaldo de red
+  const esCodigo = e.request.mode === 'navigate' || /\.(html|js|json)$/i.test(url.pathname) || url.pathname.endsWith('/');
+  if (esCodigo) { e.respondWith(redConLimite(e.request, 4000)); return; }
+
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(resp => {
-        if (resp && resp.status === 200 && e.request.method === 'GET') {
+        if (resp && resp.status === 200) {
           const clone = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
@@ -89,8 +113,6 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Avisos de producción (1 oct 2026): tocar la notificación abre la cola de
-// Avisos en Bitácora (o enfoca la ventana si la app ya está abierta).
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = (e.notification.data && e.notification.data.url) || 'bitacora.html#avisos';

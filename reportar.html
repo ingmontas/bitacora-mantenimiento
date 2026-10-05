@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0F1923"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -159,7 +159,7 @@
       </div>
       <div class="field">
         <label>¿Qué le pasa al equipo?</label>
-        <textarea id="rf-descripcion" placeholder="Describe la falla: qué se ve, se oye o se siente raro..."></textarea>
+        <textarea id="rf-descripcion" maxlength="900" placeholder="Describe la falla: qué se ve, se oye o se siente raro..."></textarea>
       </div>
       <div class="field">
         <label>¿Qué tan urgente es?</label>
@@ -171,7 +171,7 @@
       </div>
       <div class="field">
         <label>Tu nombre</label>
-        <input type="text" id="rf-nombre" placeholder="¿Quién reporta?"/>
+        <input type="text" id="rf-nombre" maxlength="80" placeholder="¿Quién reporta?"/>
       </div>
       <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()">🚨 Enviar reporte</button>
     </div>
@@ -233,6 +233,7 @@
 //     TOTAL_MIN_TECNICO, así que siempre cumple esa regla.
 // ══════════════════════════════════════════════════════════════════════
 
+window.FB_ERROR_PROPIO = true; // esta pantalla muestra su propio aviso de arranque (ver avisoSesion)
 let currentEquipos = [];       // desde /equipos (onSnapshot)
 let equipoSeleccionado = null; // {id, nombre, localidad}
 let prioridadSeleccionada = 'media';
@@ -328,9 +329,9 @@ function renderListaEquipos() {
   wrap.innerHTML = filtrados.length ? filtrados.map(e => `
     <div class="item-row" onclick="abrirForm('${e.id}')">
       <div class="item-header">
-        <div class="item-title">${e.nombre || '(sin nombre)'}</div>
+        <div class="item-title">${escR(e.nombre || '(sin nombre)')}</div>
       </div>
-      <div class="item-sub">${e.localidad ? '📍 ' + e.localidad : ''}</div>
+      <div class="item-sub">${e.localidad ? '📍 ' + escR(e.localidad) : ''}</div>
     </div>`).join('') :
     `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
 }
@@ -384,13 +385,25 @@ async function enviarReporte() {
   const descripcion = (document.getElementById('rf-descripcion').value || '').trim();
   if (!descripcion) { showToast('Describe qué le pasa al equipo', 'warn'); return; }
   let horaParada = document.getElementById('rf-hora').value || horaAhora();
-  if (horaParada > horaAhora()) horaParada = horaAhora(); // no puede estar en el futuro
+  // (5 oct 2026) Una hora "mayor" que la actual es de anoche: una parada de
+  // las 23:30 reportada a las 00:15 queda con la fecha de ayer (antes se
+  // cambiaba a la hora actual y el tiempo de paro salía más corto).
+  let fechaReporte = fechaHoy();
+  if (horaParada > horaAhora()) { const ay = new Date(); ay.setDate(ay.getDate() - 1); fechaReporte = fbFechaLocal(ay); }
   const nombreReporta = (document.getElementById('rf-nombre').value || '').trim();
+
+  // (5 oct 2026) Si ya hay un reporte abierto de esta máquina, se avisa antes
+  // de mandar otro (cada duplicado cerrado contaba como otra falla).
+  const abierto = reportes.find(r => r.equipoId === equipoSeleccionado.id && ['pendiente', 'en_atencion'].includes(r.estado));
+  if (abierto && !confirm(`Ya hay un reporte abierto de ${equipoSeleccionado.nombre || 'esta máquina'} (${abierto.folio || ''}, ${abierto.estado === 'en_atencion' ? 'en atención' : 'esperando técnico'}).\n\n¿Enviar otro reporte de todas formas?`)) return;
 
   setLoading(true, 'Enviando reporte...');
   try {
-    const folio = await generarFolio();
-    await db.collection('ots').doc().set({
+    const folio = await fbFolioNuevo();
+    // (5 oct 2026) No se espera al servidor: sin señal la promesa no termina
+    // hasta reconectar y el operador quedaba en "Enviando…" y reenviaba
+    // (reportes duplicados). Firestore lo guarda en el celular y lo sube solo.
+    db.collection('ots').doc().set({
       origen: 'operador',
       estado: 'pendiente',
       folio: folio,
@@ -405,12 +418,13 @@ async function enviarReporte() {
       creadoPor: nombreReporta || (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
       creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
       maquinaParada: paradaSeleccionada === 'si',
-      fechaReporte: fechaHoy(),
+      fechaReporte: fechaReporte,
       horaParada: horaParada,
       createdAt: fbTimestamp(),
-    });
+    }).catch(e => showToast('⚠️ El reporte ' + folio + ' no se pudo guardar: ' + (e.code === 'permission-denied' ? 'el sistema lo rechazó. Avisa a mantenimiento.' : e.message), 'error'));
 
     setLoading(false);
+    if (!navigator.onLine) showToast('📵 Sin señal: el reporte se enviará solo al volver la conexión', 'warn');
     document.getElementById('exito-folio').textContent = folio;
     document.getElementById('exito-equipo').textContent = equipoSeleccionado.nombre || '';
     goToScreen('screen-exito');
@@ -429,8 +443,9 @@ let estadoEscuchando = false;
 function escucharReportes() {
   if (estadoEscuchando) return;
   estadoEscuchando = true;
-  db.collection('ots').where('origen', '==', 'operador').onSnapshot((snap) => {
-    reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // (5 oct 2026) También los reportes hechos con el QR de la máquina (origen 'qr').
+  db.collection('ots').where('origen', 'in', ['operador', 'qr']).onSnapshot((snap) => {
+    reportes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.estado !== 'anulada');
     renderEstado();
   }, (err) => {
     console.warn('Error leyendo reportes:', err.message);
@@ -488,25 +503,7 @@ function nuevoReporte() {
   goToScreen('screen-elegir');
 }
 
-// ══════ FOLIO DE OT (OT-0001, OT-0002...) — mismo patrón que checklist.html ══════
-async function generarFolio() {
-  try {
-    const ref = db.collection('config').doc('otFolioCounter');
-    const nuevo = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const actual = (snap.exists && typeof snap.data().ultimo === 'number') ? snap.data().ultimo : 0;
-      const siguiente = actual + 1;
-      tx.set(ref, { ultimo: siguiente }, { merge: true });
-      return siguiente;
-    });
-    return 'OT-' + String(nuevo).padStart(4, '0');
-  } catch (e) {
-    // Mismo fix que checklist.html (29 sep 2026): sufijo aleatorio extra
-    // para que dos celulares sin señal al mismo tiempo no generen el mismo
-    // folio provisional solo por coincidir en el milisegundo.
-    return 'OT-PEND-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
-  }
-}
+// (5 oct 2026) El folio sale de fbFolioNuevo() en firebase-init.js (mismo para toda la app).
 </script>
 </body>
 </html>

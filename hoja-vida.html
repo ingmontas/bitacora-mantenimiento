@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0F1923"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -21,8 +21,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- Exportar a Excel con dashboard, generado en el navegador (sin backend).
        ExcelJS escribe fórmulas reales + formato condicional; los gráficos
-       del dashboard se insertan como imagen dibujada con Chart.js. -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+       del dashboard se insertan como imagen dibujada con Chart.js.
+       (5 oct 2026) ExcelJS (~1 MB) ya no se carga en cada visita: se descarga
+       solo al pulsar "Exportar" (ver cargarExcelJS). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     /* ══════════════════════════════════════════════════════════════════
@@ -289,9 +290,10 @@ const PAGINA = 50;
 let hvLimite = PAGINA; // filas visibles del historial; "Mostrar más" suma otra página
 let chartMes = null;
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// (5 oct 2026) Escape común de firebase-init (también escapa ` ); copia local de respaldo.
+const esc = typeof fbEsc === 'function' ? fbEsc : (s => String(s ?? '').replace(/[&<>"'`]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c])));
 const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
-const splitTec = s => (s || '').split(',').map(x => x.trim()).filter(x => x && x !== '—' && x !== '-');
+const splitTec = s => String(s || '').split(',').map(x => x.trim()).filter(x => x && x !== '—' && x !== '-');
 const tipoNorm = t => { t = (t || '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : 'Sin clasificar'; };
 const TIPO_COLOR = { 'Correctivo':'var(--c-corr)', 'Preventivo':'var(--c-prev)', 'Proyecto':'var(--c-proy)' };
 const TIPO_TAG = t => ({ 'Correctivo':'tag-correctivo', 'Preventivo':'tag-preventivo', 'Proyecto':'tag-proyecto' }[t] || 'tag-otro');
@@ -306,7 +308,9 @@ document.addEventListener('DOMContentLoaded', () => {
     cargarDatos();
     updateHeaderStatus();
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-  }).catch((err) => console.warn('Sin sesión activa:', err.message));
+  // (5 oct 2026) El error de arranque ya lo muestra firebase-init (aviso global);
+  // aquí solo se registra sin volver a lanzar (err puede venir vacío).
+  }).catch((err) => console.warn('Sin sesión activa:', err && err.message ? err.message : err));
 
   window.addEventListener('online', updateHeaderStatus);
   window.addEventListener('offline', updateHeaderStatus);
@@ -377,9 +381,15 @@ function intentarAbrirDesdeQrHV() {
 // Qué OTs pertenecen a un equipo. Coincide por nombre de equipo, o por
 // LINEA_EQUIPO cuando la línea y la máquina se llaman igual (caso "Coating":
 // los técnicos anotan partes sueltas como "bomba" o "1" en el campo Equipo).
+// (5 oct 2026) Los nombres se comparan con fbEquipoKey ("Weaving 5" =
+// "weaving5"), igual que Bitácora y Análisis. Se excluyen las OTs anuladas y
+// los avisos (operador/qr) o checklist que aún no están completados — mismo
+// filtro que Bitácora y Análisis.
+const otAnulada = o => o.estado === 'anulada';
+const otCuentaEnHistorial = o => !otAnulada(o) && !(['operador', 'checklist', 'qr'].includes(o.origen) && o.estado !== 'completada');
 function otsDeEquipo(e) {
-  const nombreNorm = normEq(e.nombre);
-  return currentOts.filter(o => o.FECHA && (normEq(o.EQUIPO || o.TIPO_MAQUINA) === nombreNorm || normEq(o.LINEA_EQUIPO) === nombreNorm || (o.equipoId && o.equipoId === e.id)));
+  const k = fbEquipoKey(e.nombre);
+  return currentOts.filter(o => o.FECHA && otCuentaEnHistorial(o) && ((o.equipoId && o.equipoId === e.id) || (k && (fbEquipoKey(o.EQUIPO || o.TIPO_MAQUINA) === k || fbEquipoKey(o.LINEA_EQUIPO) === k))));
 }
 
 // ══════ Screen: elegir equipo ══════
@@ -460,30 +470,30 @@ function mostrarHojaDeVida(equipoOrId) {
     }))
     .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b._createdAtMs - a._createdAtMs));
 
-  pendientesActual = currentOts.filter(o => !o.FECHA && o.equipoId === e.id && ['pendiente','planificada','en_revision','rechazada'].includes(o.estado));
+  // (5 oct 2026) Nunca las anuladas; se agrega 'en_atencion' (aviso que un técnico está atendiendo).
+  pendientesActual = currentOts.filter(o => !o.FECHA && !otAnulada(o) && o.equipoId === e.id && ['pendiente','en_atencion','planificada','en_revision','rechazada'].includes(o.estado));
 
   renderTodo();
 }
 
+// (5 oct 2026) Cada sección se dibuja aparte: si una falla (p. ej. la gráfica
+// sin conexión o una FECHA mal escrita) las demás y el historial se ven igual.
+// Antes renderMes iba de tercera y, si fallaba, el historial quedaba en blanco.
 function renderTodo() {
   hvLimite = PAGINA;
-  renderFacts();
-  renderKpis();
-  renderMes();
-  renderTecnicos();
-  renderTipos();
-  renderPiezas();
-  renderPendientes();
-  renderFiltrosHist();
-  renderHistorial();
+  [renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
+    .forEach(fn => { try { fn(); } catch (err) { console.error('Hoja de vida — ' + fn.name + ':', err); } });
 }
 
+// (5 oct 2026) Devuelve texto ya escapado (la fecha viene de Firestore y se
+// inserta con innerHTML en varias partes).
 function fmtFechaHV(f) {
-  if (!f || f.indexOf('-') === -1) return f || '—';
-  const [y, m, d] = f.split('-');
-  return `${d}/${m}/${y}`;
+  f = String(f || '');
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (esc(f) || '—');
 }
-const fechaD = f => { const d = new Date((f || '') + 'T00:00:00'); return isNaN(d) ? null : d; };
+// (5 oct 2026) Fecha local con fbParseFecha (new Date('YYYY-MM-DD') es UTC).
+const fechaD = f => fbParseFecha(f);
 const hoy0 = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 const diasDesde = f => { const d = fechaD(f); return d ? Math.round((hoy0() - d) / 86400000) : null; };
 
@@ -514,7 +524,7 @@ function renderKpis() {
   const pct = n ? prev / n * 100 : 0;
   const paro = H.reduce((s, r) => s + r.paro, 0);
   // días promedio entre fallas correctivas (días distintos, mínimo 3), mismo criterio que Análisis
-  const dias = [...new Set(corr.map(r => r.fecha).filter(Boolean))].sort();
+  const dias = [...new Set(corr.map(r => r.fecha).filter(f => fechaD(f)))].sort();
   let mtbf = null;
   if (dias.length >= 3) mtbf = (fechaD(dias[dias.length - 1]) - fechaD(dias[0])) / 86400000 / (dias.length - 1);
   const tiles = [
@@ -531,19 +541,30 @@ function renderKpis() {
 
 function renderMes() {
   const H = historialActual;
-  if (chartMes) { chartMes.destroy(); chartMes = null; }
-  const box = document.getElementById('chartMes').parentElement;
-  if (!H.length) { box.style.display = 'none'; return; }
-  box.style.display = '';
+  if (chartMes) { try { chartMes.destroy(); } catch (e) {} chartMes = null; }
+  const cv = document.getElementById('chartMes');
+  const box = cv.parentElement;
   // todos los meses entre la primera y la última OT (incluidos los meses en cero)
-  const keys = H.map(r => r.fecha.slice(0, 7)).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+  // (5 oct 2026) Si ninguna OT tiene FECHA válida, keys queda vacío: antes
+  // keys[0].split reventaba la página.
+  const keys = H.map(r => String(r.fecha || '').slice(0, 7)).filter(k => /^\d{4}-(0[1-9]|1[0-2])$/.test(k)).sort();
+  if (!keys.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  // (5 oct 2026) Sin conexión Chart.js puede no haber cargado: aviso en su lugar.
+  const aviso = box.querySelector('.nochart');
+  if (typeof Chart === 'undefined') {
+    cv.style.display = 'none';
+    if (!aviso) box.insertAdjacentHTML('beforeend', '<div class="nochart" style="color:var(--muted);font-size:13px;padding:30px 0;text-align:center;">Gráficas no disponibles sin conexión</div>');
+    return;
+  }
+  cv.style.display = ''; if (aviso) aviso.remove();
   const meses = [];
   let [y, m] = keys[0].split('-').map(Number);
   const [yf, mf] = keys[keys.length - 1].split('-').map(Number);
   while (y < yf || (y === yf && m <= mf)) { meses.push(y + '-' + String(m).padStart(2, '0')); m++; if (m > 12) { m = 1; y++; } }
   const multiY = new Set(meses.map(k => k.slice(0, 4))).size > 1;
   const label = k => MESES[Number(k.slice(5)) - 1] + (multiY ? ' ' + k.slice(2, 4) : '');
-  const serie = t => meses.map(k => H.filter(r => r.fecha.startsWith(k) && (t === 'Otros' ? !['Correctivo','Preventivo'].includes(r.tipo) : r.tipo === t)).length);
+  const serie = t => meses.map(k => H.filter(r => String(r.fecha || '').startsWith(k) && (t === 'Otros' ? !['Correctivo','Preventivo'].includes(r.tipo) : r.tipo === t)).length);
   const datasets = [
     { label: 'Correctivo', data: serie('Correctivo'), backgroundColor: '#EF6B6B' },
     { label: 'Preventivo', data: serie('Preventivo'), backgroundColor: '#1BAF7A' },
@@ -622,7 +643,7 @@ function renderPiezas() {
 function renderPendientes() {
   const el = document.getElementById('pendList');
   if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0">✅ No hay OTs abiertas para este equipo.</div>'; return; }
-  const est = { pendiente: 'Pendiente', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
+  const est = { pendiente: 'Pendiente', en_atencion: 'En atención', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
   el.innerHTML = pendientesActual.map(o => `
     <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'qr' ? 'Reportada desde el QR' : o.origen === 'checklist' ? 'Detectada en checklist' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
       <span class="tag ${o.prioridad === 'alta' ? 'tag-correctivo' : 'tag-otro'}">${est[o.estado] || esc(o.estado)}</span></div>`).join('');
@@ -714,6 +735,8 @@ function mostrarQrHojaVida() {
   document.getElementById('qr-equipo-sub2').textContent = equipoActual.localidad ? '📍 ' + equipoActual.localidad : '';
   const wrap = document.getElementById('qr-canvas-wrap2');
   wrap.innerHTML = '';
+  // (5 oct 2026) Sin conexión la librería del QR puede no haber cargado.
+  if (typeof QRCode === 'undefined') { showToast('No se pudo cargar el generador de QR (sin conexión)', 'error'); return; }
   // (4 oct 2026) QR único por máquina: abre equipo.html con todas las opciones
   const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'equipo.html?id=' + encodeURIComponent(equipoActual.id);
   new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
@@ -723,7 +746,24 @@ function mostrarQrHojaVida() {
 // ══════ Exportar a Excel con dashboard (generado en el navegador) ══════
 const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA100', red: 'E66767' };
 
+// (5 oct 2026) Carga ExcelJS solo cuando se pide exportar (antes ~1 MB en cada visita).
+let _excelJsPromesa = null;
+function cargarExcelJS() {
+  if (typeof ExcelJS !== 'undefined') return Promise.resolve();
+  if (!_excelJsPromesa) {
+    const tag = document.createElement('script');
+    tag.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    _excelJsPromesa = new Promise((resolve, reject) => {
+      tag.onload = () => (typeof ExcelJS !== 'undefined' ? resolve() : reject(new Error('ExcelJS no disponible')));
+      tag.onerror = () => reject(new Error('no se pudo descargar ExcelJS (¿sin conexión?)'));
+      document.head.appendChild(tag);
+    }).catch(err => { _excelJsPromesa = null; tag.remove(); throw err; }); // permite reintentar
+  }
+  return _excelJsPromesa;
+}
+
 function chartToImage(config, w, h) {
+  if (typeof Chart === 'undefined') return null; // (5 oct 2026) sin Chart.js: el Excel sale sin imágenes
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const chart = new Chart(canvas.getContext('2d'), config);
@@ -736,6 +776,7 @@ async function exportarExcel() {
   if (!historialActual.length) { showToast('Este equipo no tiene historial todavía', 'error'); return; }
   setLoading(true, 'Generando Excel...');
   try {
+    await cargarExcelJS();
     const DATA = historialActual;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Hoja de Vida', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
@@ -753,7 +794,7 @@ async function exportarExcel() {
     ];
     DATA.forEach(r => {
       const row = { folio: r.folio, area: r.area, equipo: [r.equipo, r.pieza].filter(Boolean).join(' · '), tecnico: r.tecnicos.join(', ') || 'Sin técnico registrado', min: r.min, tipo: r.tipo, desc: r.falla, sol: r.solucion };
-      row.fecha = r.fecha ? new Date(r.fecha + 'T00:00:00') : '';
+      row.fecha = fbParseFecha(r.fecha) || r.fecha || '';
       ws.addRow(row);
     });
     ws.getColumn('fecha').numFmt = 'DD/MM/YYYY';
@@ -827,8 +868,10 @@ async function exportarExcel() {
         data: { labels: tecStats.map(t => t.tecnico), datasets: [{ data: tecStats.map(t => t.ots), backgroundColor: '#' + PALETTE.blue }] },
         options: { indexAxis: 'y', responsive: false, animation: false, plugins: { legend: { display: false }, title: { display: true, text: 'N° de OTs por técnico' } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
       }, 520, Math.max(220, 60 + tecStats.length * 34));
-      const barImgId = wb.addImage({ base64: barImg, extension: 'png' });
-      dash.addImage(barImgId, { tl: { col: 4, row: 6 }, ext: { width: 380, height: Math.max(170, 46 + tecStats.length * 26) } });
+      if (barImg) {
+        const barImgId = wb.addImage({ base64: barImg, extension: 'png' });
+        dash.addImage(barImgId, { tl: { col: 4, row: 6 }, ext: { width: 380, height: Math.max(170, 46 + tecStats.length * 26) } });
+      }
     }
     if (tipos.length) {
       const colorTipo = { 'Correctivo': '#' + PALETTE.red, 'Preventivo': '#' + PALETTE.aqua, 'Proyecto': '#' + PALETTE.blue };
@@ -837,8 +880,10 @@ async function exportarExcel() {
         data: { labels: tipos, datasets: [{ data: tipos.map(t => DATA.filter(r => r.tipo === t).length), backgroundColor: tipos.map(t => colorTipo[t] || '#94A3B8') }] },
         options: { responsive: false, animation: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'OTs por tipo de mantenimiento' } } },
       }, 360, 280);
-      const pieImgId = wb.addImage({ base64: pieImg, extension: 'png' });
-      dash.addImage(pieImgId, { tl: { col: 0, row: tipoHdrRow + tipos.length + 1 }, ext: { width: 260, height: 200 } });
+      if (pieImg) {
+        const pieImgId = wb.addImage({ base64: pieImg, extension: 'png' });
+        dash.addImage(pieImgId, { tl: { col: 0, row: tipoHdrRow + tipos.length + 1 }, ext: { width: 260, height: 200 } });
+      }
     }
 
     const buf = await wb.xlsx.writeBuffer();
@@ -847,7 +892,7 @@ async function exportarExcel() {
     const a = document.createElement('a');
     a.href = url; a.download = `Hoja_de_vida_${(equipoActual.nombre || 'equipo').replace(/\s+/g, '_')}.xlsx`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast('✅ Excel descargado');
   } catch (err) {
     console.error(err);
