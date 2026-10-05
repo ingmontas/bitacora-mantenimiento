@@ -301,7 +301,8 @@ function goToScreen(id) {
 // ══════ EQUIPOS (colección compartida con el resto de la app) ══════
 let equipoQueryPendiente = null;
 function loadEquipos() {
-  db.collection('equipos').orderBy('nombre').onSnapshot((snap) => {
+  fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
+    (snap) => {
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderListaEquipos();
     if (equipoQueryPendiente) {
@@ -322,6 +323,12 @@ function intentarAbrirDesdeQuery(equipoId) {
   if (e) abrirForm(e.id);
 }
 
+// (5 oct 2026) La lista se guarda en el celular hasta 12 h para no gastar
+// lecturas; si falta una máquina nueva, este botón la trae del servidor.
+function actualizarListaEquipos() {
+  showToast('Actualizando lista…');
+  fbRefrescarEquipos(false).then(() => showToast('✅ Lista actualizada')).catch(e => showToast('Sin conexión: ' + e.message, 'error'));
+}
 function renderListaEquipos() {
   const busca = (document.getElementById('buscar-equipo').value || '').trim().toLowerCase();
   const wrap = document.getElementById('lista-equipos');
@@ -333,7 +340,7 @@ function renderListaEquipos() {
       </div>
       <div class="item-sub">${e.localidad ? '📍 ' + escR(e.localidad) : ''}</div>
     </div>`).join('') :
-    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
+    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p><button class="btn btn-secondary" style="margin-top:10px;" onclick="actualizarListaEquipos()">🔄 Actualizar lista de equipos</button></div>`;
 }
 
 // ══════ FORMULARIO ══════
@@ -437,25 +444,57 @@ async function enviarReporte() {
 // ══════ ESTADO DE LOS REPORTES — en vivo (1 oct 2026) ══════
 // Producción ve todos los reportes de operador (requiere la regla de
 // firestore.rules que le permite leer /ots con origen 'operador').
+// (5 oct 2026) Cuota gratis de Firebase: antes se escuchaban TODOS los
+// reportes de operador/QR de todos los años (crece sin fin). Ahora solo:
+//  · los abiertos (estado 'pendiente' y 'en_atencion', un listener cada uno);
+//  · los de los días que muestra la pantalla (Hoy / 3 días / 7 días), un
+//    listener por día con fechaReporte == ese día.
+// Todas son consultas de igualdad ('in' / '=='), que Firestore resuelve sin
+// índices compuestos, y todas fijan origen in ['operador','qr'] como pide la
+// regla de lectura del rol Operador. (Dos 'in' en la misma consulta no se
+// permiten en este SDK; un rango de fechas necesitaría un índice compuesto.)
 let reportes = [];
 let diasEstado = 0;
 let estadoEscuchando = false;
+const _repPartes = {};          // clave de listener → lista de reportes
+const _repUnsubDia = new Map(); // 'YYYY-MM-DD' → unsubscribe
+function qReportes() { return db.collection('ots').where('origen', 'in', ['operador', 'qr']); }
+function errorReportes(err) {
+  console.warn('Error leyendo reportes:', err.message);
+  document.getElementById('estado-lista').innerHTML = `<div class="empty"><span class="emoji">🔒</span><p>No se pudo leer el estado de los reportes (${escR(err.code || err.message)}). Pide al administrador que publique las reglas nuevas de Firestore.</p></div>`;
+}
+function escucharParte(clave, q) {
+  return q.onSnapshot((snap) => {
+    _repPartes[clave] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    unirReportes();
+  }, errorReportes);
+}
+function unirReportes() {
+  const porId = new Map();
+  Object.values(_repPartes).forEach(l => l.forEach(r => porId.set(r.id, r)));
+  reportes = [...porId.values()].filter(r => r.estado !== 'anulada');
+  renderEstado();
+}
+// Deja un listener por cada día del período visible (y quita los que sobran,
+// p. ej. al pasar la medianoche o al volver de "7 días" a "Hoy").
+function sincronizarDiasReportes() {
+  const dias = new Set();
+  for (let i = 0; i <= diasEstado; i++) { const d = new Date(); d.setDate(d.getDate() - i); dias.add(fbFechaLocal(d)); }
+  _repUnsubDia.forEach((u, dia) => { if (!dias.has(dia)) { try { u(); } catch (e) {} _repUnsubDia.delete(dia); delete _repPartes['dia:' + dia]; } });
+  dias.forEach(dia => { if (!_repUnsubDia.has(dia)) _repUnsubDia.set(dia, escucharParte('dia:' + dia, qReportes().where('fechaReporte', '==', dia))); });
+}
 function escucharReportes() {
   if (estadoEscuchando) return;
   estadoEscuchando = true;
   // (5 oct 2026) También los reportes hechos con el QR de la máquina (origen 'qr').
-  db.collection('ots').where('origen', 'in', ['operador', 'qr']).onSnapshot((snap) => {
-    reportes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.estado !== 'anulada');
-    renderEstado();
-  }, (err) => {
-    console.warn('Error leyendo reportes:', err.message);
-    document.getElementById('estado-lista').innerHTML = `<div class="empty"><span class="emoji">🔒</span><p>No se pudo leer el estado de los reportes (${escR(err.code || err.message)}). Pide al administrador que publique las reglas nuevas de Firestore.</p></div>`;
-  });
-  setInterval(renderEstado, 60000); // refresca los "hace X min"
+  ['pendiente', 'en_atencion'].forEach(est => escucharParte('estado:' + est, qReportes().where('estado', '==', est)));
+  sincronizarDiasReportes();
+  setInterval(() => { sincronizarDiasReportes(); renderEstado(); }, 60000); // refresca los "hace X min" y el cambio de día
 }
 function verEstado() { goToScreen('screen-estado'); renderEstado(); }
 function setDiasEstado(d) {
   diasEstado = d;
+  if (estadoEscuchando) sincronizarDiasReportes(); // (5 oct 2026) escucha solo los días visibles
   document.querySelectorAll('#seg-dia button').forEach(b => b.classList.toggle('on', Number(b.dataset.d) === d));
   renderEstado();
 }

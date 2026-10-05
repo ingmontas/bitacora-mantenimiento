@@ -208,8 +208,40 @@ function escuchar() {
     db.collection('herramientas').onSnapshot(s => { catalogo = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
     db.collection('herramientas_asignadas').where('estado', '==', 'activa').onSnapshot(s => { asignadas = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
   }
-  db.collection('herramientas_arqueos').onSnapshot(s => { arqueos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+  // (5 oct 2026) Cuota gratis de Firebase: antes se escuchaban TODOS los arqueos
+  // de todos los años. Ahora, en vivo: los de los últimos 400 días y los que
+  // tienen un cargo abierto en RR.HH. (pendiente / enviado), aunque sean viejos.
+  // "Ver arqueos anteriores" lee el resto una sola vez. Consultas de un solo
+  // campo: no necesitan índice compuesto.
+  const col = db.collection('herramientas_arqueos');
+  escucharArqueos('recientes', col.where('fecha', '>=', fbFechaLocal(new Date(Date.now() - DIAS_ARQUEOS * 86400000))), err);
+  escucharArqueos('abiertos', col.where('rrhh.estado', 'in', ['pendiente', 'enviado']), err);
 }
+const DIAS_ARQUEOS = 400;
+const _arqPartes = {};
+let arqueosViejosCargados = false;
+function escucharArqueos(clave, q, err) {
+  q.onSnapshot(s => { _arqPartes[clave] = s.docs.map(d => ({ id: d.id, ...d.data() })); unirArqueos(); }, err);
+}
+function unirArqueos() {
+  const m = new Map();
+  ['viejos', 'abiertos', 'recientes'].forEach(k => (_arqPartes[k] || []).forEach(a => m.set(a.id, a))); // lo en vivo gana
+  arqueos = [...m.values()];
+  render();
+}
+function cargarArqueosViejos() {
+  if (arqueosViejosCargados) return;
+  const desde = fbFechaLocal(new Date(Date.now() - DIAS_ARQUEOS * 86400000));
+  db.collection('herramientas_arqueos').where('fecha', '<', desde).get().then(s => {
+    arqueosViejosCargados = true;
+    _arqPartes.viejos = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    unirArqueos();
+    toast('📚 ' + s.size + ' arqueo(s) anteriores cargados');
+  }).catch(e => toast('⚠️ No se pudieron leer los arqueos anteriores: ' + e.message));
+}
+// Botón para pantallas que muestran el historial de arqueos (no aplica al técnico, que ya ve todos los suyos).
+const btnArqueosViejos = () => (ROL === 'TECNICO' || arqueosViejosCargados) ? ''
+  : `<div style="margin:8px 0"><button class="btn btn-secondary btn-sm" onclick="cargarArqueosViejos()">📚 Ver arqueos anteriores (más de ${DIAS_ARQUEOS} días)</button></div>`;
 
 function render() {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
@@ -278,7 +310,8 @@ function renderTecnico(t) {
       <div style="margin-top:4px">${a.aceptada ? `<span class="tag t-ok">✓ Confirmó ${fmtF(a.aceptadaEn)}</span>` : '<span class="tag t-warn">⏳ Sin confirmar</span>'}</div></div></div></div>`).join('')
       : '<div class="card empty">No tiene herramientas asignadas.</div>'}
     <div class="section">Arqueos (${aqs.length})</div>
-    ${aqs.length ? aqs.map(a => tarjetaArqueo(a, true)).join('') : '<div class="card empty">Sin arqueos registrados.</div>'}`;
+    ${aqs.length ? aqs.map(a => tarjetaArqueo(a, true)).join('') : '<div class="card empty">Sin arqueos registrados.</div>'}
+    ${btnArqueosViejos()}`;
   $('volver').onclick = () => { tecSel = null; render(); };
   if (g) { $('bEntregar').onclick = () => modalEntrega(t); $('bDevolver').onclick = () => modalDevolucion(t); $('bArqueo').onclick = () => modalArqueo(t); }
   $('bActa').onclick = () => imprimirActa(t);
@@ -519,7 +552,7 @@ function renderRRHH() {
     <div class="kpis">
       <div class="kpi"><div class="l">Por enviar a RR.HH.</div><div class="v" style="color:var(--accent)">${money(sum('pendiente'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'pendiente').length} cargo(s)</div></div>
       <div class="kpi"><div class="l">En RR.HH. (por descontar)</div><div class="v" style="color:#a5b4fc">${money(sum('enviado'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'enviado').length} cargo(s)</div></div>
-      <div class="kpi"><div class="l">Descontado</div><div class="v">${money(sum('descontado'))}</div><div class="s">histórico</div></div>
+      <div class="kpi"><div class="l">Descontado</div><div class="v">${money(sum('descontado'))}</div><div class="s">${arqueosViejosCargados ? 'histórico' : 'últimos ' + DIAS_ARQUEOS + ' días'}</div></div>
     </div>
     <div class="banner">El cargo se calcula con el valor de reposición registrado. La decisión de descontar y la forma (monto, cuotas) corresponde a Recursos Humanos, según la política de la empresa y la ley laboral vigente. Cada cargo lleva la constancia del arqueo y la conformidad del técnico.</div>
     <div class="row" style="justify-content:space-between"><div class="seg" id="rSeg">${filtros.map(([k, l]) => `<button class="${rrhhFiltro === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
@@ -532,7 +565,8 @@ function renderRRHH() {
       if (puedeRRHH(r, 'descontado')) acc += `<button class="btn btn-green btn-sm" data-acc="descontar" data-id="${a.id}">✓ Marcar descontado</button>`;
       if (puedeRRHH(r, 'anulado')) acc += `<button class="btn btn-danger btn-sm" data-acc="anular" data-id="${a.id}">Anular</button>`;
       return `<div>${tarjetaArqueo(a, true).replace(/<\/div>$/, '')}${acc ? `<div class="row" style="margin-top:8px">${acc}</div>` : ''}</div></div>`;
-    }).join('') : '<div class="card empty">No hay cargos en este estado.</div>'}`;
+    }).join('') : '<div class="card empty">No hay cargos en este estado.</div>'}
+    ${['descontado', 'anulado', 'todos'].includes(rrhhFiltro) ? btnArqueosViejos() : ''}`;
   $('rSeg').onclick = e => { const b = e.target.closest('[data-f]'); if (b) { rrhhFiltro = b.dataset.f; renderRRHH(); } };
   $('rCsv').onclick = () => exportarCSV(lista);
   $('view').querySelectorAll('[data-acc]').forEach(b => b.onclick = () => accionRRHH(b.dataset.acc, arqueos.find(a => a.id === b.dataset.id)));

@@ -356,11 +356,14 @@
       <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()" style="flex:1"/>
       <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryCSV()">📊 Excel</button>
     </div>
-    <!-- (5 oct 2026) Por rendimiento solo se leen los últimos 400 días;
-         este botón trae todo el historial una vez (ver suscribirOtsRecientes). -->
-    <div id="hist-alcance" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:10px;">
-      <span id="hist-alcance-txt">Mostrando los últimos 400 días.</span>
-      <button class="btn btn-secondary btn-sm" id="hist-completo-btn" style="white-space:nowrap;" onclick="cargarHistorialCompleto()">Cargar historial completo</button>
+    <!-- (5 oct 2026) Por rendimiento y cuota gratis solo se leen los últimos 30 días;
+         "Ver más" suma el siguiente tramo y el otro botón trae todo (ver ampliarHistorial). -->
+    <div id="hist-alcance" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap;">
+      <span id="hist-alcance-txt">Mostrando los últimos 30 días.</span>
+      <span style="display:flex;gap:6px;">
+        <button class="btn btn-secondary btn-sm" id="hist-mas-btn" style="white-space:nowrap;width:auto;" onclick="verMasHistorial()">Ver más (120 días)</button>
+        <button class="btn btn-secondary btn-sm" id="hist-completo-btn" style="white-space:nowrap;width:auto;" onclick="cargarHistorialCompleto()">Cargar historial completo</button>
+      </span>
     </div>
     <div id="history-list"></div>
   </div>
@@ -412,7 +415,7 @@
     </div>
 
     <div class="ms-section-title">🏭 Toda la planta</div>
-    <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 400 días</div>
+    <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 30 días</div>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
       <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
@@ -561,7 +564,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.fbReady.then(() => {
     // (5 oct 2026) Rendimiento: antes se leía TODA la colección /ots en cada
     // apertura (cada vez más lento y más caro en celulares baratos). Ahora:
-    //  1) un listener de los últimos 400 días (Historial, Resumen, Mi semana);
+    //  1) listeners por tramos de fecha, al abrir solo los últimos 30 días
+    //     (ver TRAMOS_DIAS);
     //  2) otro listener solo de los avisos abiertos (pendiente/en_atencion),
     //     que no tienen FECHA todavía y por eso no entran en el primero.
     // "Cargar historial completo" (en Historial) cambia el 1) a lectura total.
@@ -584,13 +588,27 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ══════ LECTURA DE /ots (5 oct 2026 — dos listeners combinados) ══════
-const DIAS_RECIENTES = 400;
-let _docsRecientes = [];       // listener 1: FECHA >= hace 400 días (o todo)
-let _docsAvisosAbiertos = [];  // listener 2: estado pendiente / en_atencion
-let _unsubRecientes = null;
+// ══════ LECTURA DE /ots (5 oct 2026 — listeners por tramos + avisos abiertos) ══════
+// (5 oct 2026, cuota) Con ~2.000 OTs al año, leer 400 días en cada apertura
+// eran ~2.200 lecturas por celular y por vez: 15 celulares abriendo la
+// Bitácora 5 veces al día pasaban de las 50.000 lecturas diarias del plan
+// gratis. Ahora se lee por TRAMOS de fecha que no se pisan (cada OT se cobra
+// una sola vez):
+//   tramo 0: últimos 30 días (siempre; Historial, Mi semana actual)
+//   tramo 1: 30 a 120 días   (al abrir Resumen: tendencia de 12 semanas,
+//                             y hasta 4 semanas atrás con ‹)
+//   tramo 2: 120 a 400 días  (botón "Ver más" en Historial)
+//   tramo 3: lo anterior      ("Cargar historial completo", con aviso)
+// Todos son rangos sobre el mismo campo FECHA: no necesitan índice compuesto.
+const TRAMOS_DIAS = [30, 120, 400, null];
+let _bordesTramos = null;      // fechas 'YYYY-MM-DD' de corte, calculadas una vez
+const _tramos = [];            // [{ unsub, docs }]
+let _nivelTramos = -1;         // último tramo abierto
+let _docsRecientes = [];       // unión de los tramos abiertos
+let _docsAvisosAbiertos = [];  // listener aparte: estado pendiente / en_atencion
 let _historialCompleto = false;
-let _recientesListos = false;  // ya llegó la primera lectura del listener 1
+let _recientesListos = false;  // ya llegó la primera lectura del tramo 0
+const diasCargados = () => _historialCompleto ? Infinity : TRAMOS_DIAS[Math.max(0, _nivelTramos)];
 
 // serverTimestamps:'estimate' → una OT recién creada sin señal trae una hora
 // estimada en vez de null, así se puede ordenar igual que antes.
@@ -598,40 +616,61 @@ function docAOt(doc) {
   return { id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }), _pending: doc.metadata.hasPendingWrites };
 }
 
-function suscribirOtsRecientes(completo) {
-  if (_unsubRecientes) { try { _unsubRecientes(); } catch (e) {} }
-  _historialCompleto = !!completo;
+function abrirTramo(i) {
+  if (!_bordesTramos) _bordesTramos = TRAMOS_DIAS.map(d => d == null ? null : fbFechaLocal(new Date(Date.now() - d * 86400000)));
   let q = db.collection('ots');
   // Sin orderBy: where(FECHA) + orderBy(createdAt) necesitaría un índice
   // compuesto. Se ordena aquí mismo (ver combinarOts).
-  if (!completo) q = q.where('FECHA', '>=', fbFechaLocal(new Date(Date.now() - DIAS_RECIENTES * 86400000)));
+  if (_bordesTramos[i] != null) q = q.where('FECHA', '>=', _bordesTramos[i]);
+  if (i > 0) q = q.where('FECHA', '<', _bordesTramos[i - 1]);
+  const tramo = { docs: [], unsub: null };
+  _tramos[i] = tramo;
   // includeMetadataChanges: para que "SIN SUBIR" se quite en cuanto el
   // servidor confirma, aunque los datos no hayan cambiado.
-  _unsubRecientes = q.onSnapshot({ includeMetadataChanges: true }, (snap) => {
-    _docsRecientes = snap.docs.map(docAOt);
-    _recientesListos = true;
+  tramo.unsub = q.onSnapshot({ includeMetadataChanges: true }, (snap) => {
+    tramo.docs = snap.docs.map(docAOt);
+    if (i === 0) _recientesListos = true;
+    _docsRecientes = [].concat(..._tramos.filter(Boolean).map(t => t.docs));
     combinarOts();
   }, (err) => {
     console.error('Error escuchando OTs:', err);
     showToast('⚠️ Error leyendo la base de datos: ' + err.message, 'error');
   });
+}
+// Abre los tramos hasta 'nivel' (0..3). Cada tramo se abre una sola vez.
+function ampliarHistorial(nivel) {
+  nivel = Math.min(nivel, TRAMOS_DIAS.length - 1);
+  while (_nivelTramos < nivel) abrirTramo(++_nivelTramos);
+  _historialCompleto = _nivelTramos === TRAMOS_DIAS.length - 1;
   actualizarAlcanceUI();
+}
+// Se conserva el nombre de antes: completo = true abre todos los tramos.
+function suscribirOtsRecientes(completo) { ampliarHistorial(completo ? TRAMOS_DIAS.length - 1 : 0); }
+
+function verMasHistorial() {
+  if (_nivelTramos + 1 >= TRAMOS_DIAS.length - 1) return cargarHistorialCompleto();
+  showToast('⏳ Cargando hasta ' + TRAMOS_DIAS[_nivelTramos + 1] + ' días…', 'warn');
+  window.fbReady.then(() => ampliarHistorial(_nivelTramos + 1)).catch(() => {});
 }
 
 function cargarHistorialCompleto() {
   if (_historialCompleto) return;
-  if (!confirm('¿Cargar TODO el historial? En celulares lentos o con pocos datos puede tardar un poco.')) return;
+  if (!confirm('¿Cargar TODO el historial? Lee todas las OTs de todos los años: gasta bastante de la cuota gratis diaria de Firebase y en celulares lentos puede tardar. Al salir de la Bitácora vuelve a los últimos días.')) return;
   showToast('⏳ Cargando historial completo…', 'warn');
-  window.fbReady.then(() => suscribirOtsRecientes(true)).catch(() => {});
+  window.fbReady.then(() => ampliarHistorial(TRAMOS_DIAS.length - 1)).catch(() => {});
 }
 
 function actualizarAlcanceUI() {
   const txt = document.getElementById('hist-alcance-txt');
   const btn = document.getElementById('hist-completo-btn');
+  const mas = document.getElementById('hist-mas-btn');
   const sub = document.getElementById('s-alcance');
-  if (txt) txt.textContent = _historialCompleto ? 'Mostrando todo el historial.' : `Mostrando los últimos ${DIAS_RECIENTES} días.`;
+  const dias = diasCargados();
+  if (txt) txt.textContent = _historialCompleto ? 'Mostrando todo el historial.' : `Mostrando los últimos ${dias} días.`;
   if (btn) btn.style.display = _historialCompleto ? 'none' : '';
-  if (sub) sub.textContent = _historialCompleto ? 'Todos los registros' : `Últimos ${DIAS_RECIENTES} días`;
+  const sig = TRAMOS_DIAS[_nivelTramos + 1];
+  if (mas) { mas.style.display = sig != null ? '' : 'none'; mas.textContent = sig != null ? `Ver más (${sig} días)` : ''; }
+  if (sub) sub.textContent = _historialCompleto ? 'Todos los registros' : `Últimos ${dias} días`;
 }
 
 const _msOrden = r => (r.createdAt && typeof r.createdAt.toMillis === 'function') ? r.createdAt.toMillis()
@@ -1037,7 +1076,8 @@ function updateHeaderStatus() {
 let _equiposCanonicos = []; // [{nombre, localidad}] desde /equipos
 function loadEquiposCanonicos() {
   window.fbReady.then(() => {
-    db.collection('equipos').onSnapshot((snap) => {
+    fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
+    (snap) => {
       _equiposCanonicos = snap.docs.map(d => ({ ...d.data(), id: d.id, nombre: d.data().nombre || '', localidad: d.data().localidad || '' })).filter(e => e.nombre);
       updateEquipoDatalist();
     }, (err) => console.warn('No se pudo leer /equipos (solo afecta las sugerencias de nombre, no bloquea nada):', err.message));
@@ -1092,7 +1132,8 @@ function goTo(screen, btn) {
   document.getElementById('screen-' + screen).classList.add('active');
   btn.classList.add('active');
   if (screen === 'historial') renderHistory();
-  if (screen === 'stats') loadStats();
+  // (5 oct 2026) La tendencia de Mi semana usa 12 semanas: se abre el tramo de 120 días.
+  if (screen === 'stats') { if (_nivelTramos >= 0 && _nivelTramos < 1) ampliarHistorial(1); loadStats(); }
   if (screen === 'avisos') renderAvisos();
   if (screen === 'config') updateHeaderStatus();
 }
@@ -1453,7 +1494,7 @@ function publicarHojaTrasGuardar(record, editing) {
   const eq = _equiposCanonicos.find(e => (editing && editing.equipoId && e.id === editing.equipoId) || keys.includes(normEqKey(e.nombre)));
   if (!eq) return;
   setTimeout(() => {
-    // (5 oct 2026) allRecords ahora trae solo los últimos 400 días: si se
+    // (5 oct 2026) allRecords ahora trae solo los últimos días cargados: si se
     // publicara con eso, la hoja pública perdería el historial viejo. Se
     // completa con una consulta pequeña de las OTs de ESE equipo.
     if (_historialCompleto) { publicarHojaVida(eq, allRecords); return; }
@@ -1464,17 +1505,17 @@ function publicarHojaTrasGuardar(record, editing) {
 }
 // Todas las OTs de un equipo (por equipoId o por cualquiera de los nombres
 // con que se ha escrito), unidas con las que ya están en memoria.
+// (5 oct 2026) Las consultas ahora viven en firebase-init.js (fbOtsDeEquipo),
+// compartidas con Hoja de Vida, el QR y Etiquetas. Lo leído se guarda en
+// memoria por equipo: las OTs de los últimos días cargados vienen en vivo de
+// allRecords (tienen prioridad), así que no hace falta volver a leer.
 async function otsDelEquipoCompletas(eq) {
   const key = fbEquipoKey(eq.nombre);
-  const nombres = new Set([eq.nombre]);
+  const nombres = new Set();
   allRecords.forEach(r => [r.EQUIPO, r.TIPO_MAQUINA, r.LINEA_EQUIPO].forEach(n => { if (n && fbEquipoKey(n) === key) nombres.add(n); }));
-  const lista = [...nombres].slice(0, 10); // 'in' admite hasta 10 valores
-  const col = db.collection('ots');
-  const consultas = [col.where('equipoId', '==', eq.id).get()];
-  ['EQUIPO', 'TIPO_MAQUINA', 'LINEA_EQUIPO'].forEach(campo => consultas.push(col.where(campo, 'in', lista).get()));
-  const snaps = await Promise.all(consultas);
+  const leidas = await fbOtsDeEquipo(eq, { nombres: [...nombres] });
   const porId = new Map(allRecords.map(r => [r.id, r]));
-  snaps.forEach(sn => sn.docs.forEach(d => { if (!porId.has(d.id)) porId.set(d.id, { id: d.id, ...d.data() }); }));
+  leidas.forEach(o => { if (!porId.has(o.id)) porId.set(o.id, o); });
   // Mismo filtro que allRecords: sin anuladas ni avisos/checklist abiertos.
   return [...porId.values()].filter(r => r.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
 }
@@ -1667,7 +1708,13 @@ function msStatsSemana(tec, lunes, cfg) {
   };
 }
 
-function msMoverSemana(n) { msOffset = Math.min(0, msOffset + n); renderMiSemana(); }
+function msMoverSemana(n) {
+  msOffset = Math.min(0, msOffset + n);
+  // (5 oct 2026) Semana elegida + 12 semanas de tendencia: si eso va más atrás
+  // de lo cargado, se abre el siguiente tramo de fechas.
+  if (_nivelTramos >= 0 && (-msOffset + 13) * 7 > diasCargados()) ampliarHistorial(_nivelTramos + 1);
+  renderMiSemana();
+}
 
 function renderMiSemana() {
   const card = document.getElementById('ms-card');
@@ -2090,7 +2137,7 @@ function exportHistoryCSV(full) {
   a.href = url; a.download = 'reporte_bitacora'+suffix+'_'+fbHoy()+'.csv'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
-  showToast('📊 Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${DIAS_RECIENTES} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
+  showToast('📊 Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
 }
 
 // ══════ RESPALDO ══════
@@ -2102,7 +2149,7 @@ function exportBackup() {
   a.href = url; a.download = 'bitacora_respaldo_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
   a.click();
   URL.revokeObjectURL(url);
-  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${DIAS_RECIENTES} días — para todo usa "Cargar historial completo" en Historial`) + ')');
+  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ')');
 }
 
 // ══════ CONFIG ══════

@@ -350,7 +350,7 @@ let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia s
 let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se edita
 
 let currentEquipos = [];      // desde /equipos (onSnapshot)
-let currentOts = [];          // desde /ots donde estado in [pendiente, planificada] (onSnapshot)
+let currentOts = [];          // desde /ots origen checklist y estado en curso (onSnapshot)
 let currentChecklists = [];   // desde /checklists (onSnapshot, últimos 30)
 let equipoSeleccionado = null; // {id, nombre, localidad}
 let itemsFormState = [];       // [{punto, resultado:'ok'|'falla', nota}] mientras se llena el formulario
@@ -478,7 +478,8 @@ function getSelectedTecsFrom(elId) {
 
 // ══════ EQUIPOS (colección compartida con Inventario) ══════
 function loadEquipos() {
-  db.collection('equipos').orderBy('nombre').onSnapshot((snap) => {
+  fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
+    (snap) => {
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderHoy();
     renderConfig();
@@ -803,6 +804,7 @@ async function submitChecklist() {
     const msgBase = fallas.length
       ? `Checklist guardado. Se generaron ${fallas.length} OT(s) pendiente(s).`
       : 'Checklist guardado sin fallas ✅';
+    refrescarEquiposLocal();
     batch.commit().then(() => {
       subido = true;
       if (avisoPendiente) showToast(`☁️ Checklist de ${nombreEquipo} subido al servidor ✅`);
@@ -881,7 +883,12 @@ function loadOts() {
   //  → completada (SOLO Administrador hace el cierre final)
   // Administrador también puede "Cerrar directo" desde cualquier estado, sin
   // pasar por los pasos intermedios (pedido explícito del usuario).
-  db.collection('ots').where('origen', '==', 'checklist').onSnapshot((snap) => {
+  // (5 oct 2026) Cuota gratis de Firebase: antes se escuchaban TODAS las OTs de
+  // checklist de todos los años (también las completadas, que no se muestran).
+  // Ahora solo las que están en curso. '==' + 'in' son filtros de igualdad:
+  // no hace falta índice compuesto.
+  db.collection('ots').where('origen', '==', 'checklist')
+    .where('estado', 'in', ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada']).onSnapshot((snap) => {
     // Orden: primero por prioridad (alta arriba de todo), y dentro de cada
     // prioridad, la más reciente primero — así una guarda de seguridad rota
     // no se pierde debajo de diez limpiezas pendientes.
@@ -1538,7 +1545,11 @@ function proximaFechaChecklist(equipo, dias) {
 
 // (5 oct 2026) Escritura que NO se espera (sin señal, el await no termina
 // hasta que vuelve): se avisa enseguida y el error, si lo hay, llega después.
+// (5 oct 2026) La lista de equipos viene de la copia del celular (caché de
+// 6 h): después de guardar aquí se vuelve a pintar con los cambios locales.
+function refrescarEquiposLocal() { setTimeout(() => fbRefrescarEquipos(true).catch(() => {}), 300); }
 function guardarSinEsperar(promesa, msgOk, accion) {
+  refrescarEquiposLocal();
   promesa.catch(e => showToast(mensajeErrorPermiso(e, accion), 'error'));
   showToast(navigator.onLine ? msgOk : msgOk + ' 📵 Se subirá cuando haya señal.', navigator.onLine ? undefined : 'warn');
 }
@@ -1715,7 +1726,7 @@ async function bulkImportFrecuencias() {
           checklistProximaFecha: proximaFechaChecklist(equipo, dias),
         }, { merge: true });
       });
-      commits.push(batch.commit());
+      commits.push(batch.commit()); refrescarEquiposLocal();
     }
     let avisoPendiente = !navigator.onLine;
     Promise.all(commits).then(() => {

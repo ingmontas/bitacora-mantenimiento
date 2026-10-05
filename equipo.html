@@ -146,7 +146,8 @@ async function iniciar() {
       const e = { id: ID, ...s.data() };
       EQ = { ...(EQ || {}), id: ID, ...Object.fromEntries(CAMPOS_FICHA_PUB.map(k => [k, e[k] || ''])) };
       if (esTec() && !EQ.historial) {
-        const ots = (await db.collection('ots').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+        // (5 oct 2026) Solo las OTs de ESTE equipo (antes leía toda /ots).
+        const ots = await fbOtsDeEquipo(e);
         await publicarHojaVida(e, ots);
         const p2 = await db.collection('equipos_publico').doc(ID).get();
         if (p2.exists) EQ = { ...EQ, ...p2.data() };
@@ -188,17 +189,27 @@ function pintar() {
 let estadoTxt = '', unsub = null, ABIERTOS = [];
 function escucharEstado() {
   if (unsub || !(esTec() || esOp())) return;
-  const ref = esTec() ? db.collection('ots').where('equipoId', '==', ID)
-                      : db.collection('ots').where('origen', 'in', ['operador', 'qr']).where('equipoId', '==', ID);
-  unsub = ref.onSnapshot(snap => {
-    ABIERTOS = snap.docs.map(d => d.data()).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
-    const ab = ABIERTOS.filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+  // (5 oct 2026) Solo los reportes ABIERTOS de este equipo (antes se leían todas
+  // sus OTs de todos los años en cada escaneo). Todo son filtros de igualdad
+  // ('==' / 'in'), así que no hace falta ningún índice compuesto. El operador
+  // no puede tener dos 'in' en la misma consulta (origen y estado), por eso
+  // escucha 'pendiente' y 'en_atencion' por separado.
+  const col = db.collection('ots');
+  const consultas = esTec()
+    ? [col.where('equipoId', '==', ID).where('estado', 'in', ['pendiente', 'en_atencion'])]
+    : ['pendiente', 'en_atencion'].map(est => col.where('origen', 'in', ['operador', 'qr']).where('equipoId', '==', ID).where('estado', '==', est));
+  const partes = consultas.map(() => []);
+  const unsubs = consultas.map((q, i) => q.onSnapshot(snap => {
+    partes[i] = snap.docs.map(d => d.data());
+    ABIERTOS = [].concat(...partes).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+    const ab = ABIERTOS;
     const enAt = ab.find(r => r.estado === 'en_atencion'), pend = ab.filter(r => r.estado === 'pendiente');
     estadoTxt = enAt ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
       : pend.length ? `<div class="estado alerta">⏳ <div><b>Ya hay ${pend.length} reporte(s) esperando técnico</b>${pend[0].horaParada ? ' · desde las ' + esc(pend[0].horaParada) + ' (' + fmtMin(minDesde(pend[0].fechaReporte, pend[0].horaParada)) + ')' : ''}.</div></div>`
       : `<div class="estado ok">✅ <div>Sin reportes abiertos para este equipo.</div></div>`;
     if ($('estado')) $('estado').innerHTML = estadoTxt;
-  }, () => {});
+  }, () => {}));
+  unsub = () => unsubs.forEach(u => u());
 }
 
 // ── Reportar ──

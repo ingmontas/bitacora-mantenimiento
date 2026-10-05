@@ -199,6 +199,8 @@
     <div class="row-actions">
       <button class="btn btn-secondary btn-sm" onclick="volverAlPicker()">← Cambiar equipo</button>
       <button class="btn btn-secondary btn-sm" onclick="mostrarQrHojaVida()">📱 Código QR</button>
+      <!-- (5 oct 2026) El historial se lee una vez por equipo; esto lo vuelve a leer -->
+      <button class="btn btn-secondary btn-sm" onclick="actualizarHojaActual()" title="Volver a leer las OTs de este equipo">🔄 Actualizar</button>
       <span class="grow"></span>
       <button class="btn btn-primary btn-sm" onclick="exportarExcel()">📊 Exportar a Excel</button>
     </div>
@@ -281,7 +283,7 @@
 
 <script>
 let currentEquipos = [];   // desde /equipos
-let currentOts = [];       // desde /ots (todas — se filtra en el cliente por EQUIPO, igual que analisis.html)
+let currentOts = [];       // (5 oct 2026) OTs del equipo abierto (fbOtsDeEquipo), ya no toda /ots
 let equipoActual = null;   // equipo actualmente mostrado en la hoja de vida
 let historialActual = [];  // OTs ya filtradas + ordenadas del equipo actual (sin filtros de la vista)
 let pendientesActual = []; // OTs abiertas (pendiente / planificada) del equipo actual
@@ -338,34 +340,47 @@ function setLoading(on, texto) {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-// ══════ Carga de datos: /equipos y /ots (misma fuente compartida que ══════
-// bitacora/checklist/analisis — se filtra por nombre de equipo en el cliente).
+// ══════ Carga de datos: /equipos y, al abrir un equipo, SUS OTs ══════
+// (5 oct 2026) Antes se escuchaba TODA la colección /ots solo para mostrar
+// un equipo; con los años eso gasta la cuota gratis de Firebase (50.000
+// lecturas/día). Ahora la lista de equipos no necesita OTs (se quitó el
+// contador de OTs por equipo) y al abrir uno se leen solo sus OTs con
+// fbOtsDeEquipo (firebase-init.js), una vez por equipo mientras la página
+// siga abierta. "🔄 Actualizar" vuelve a leerlas del servidor.
 let _qrAutoAbrioHV = false;
+const _otsPorEquipo = new Map();   // id de equipo → OTs (sin duplicados de folio)
 function cargarDatos() {
   setLoading(true, 'Cargando equipos...');
-  db.collection('equipos').orderBy('nombre').onSnapshot((snap) => {
+  fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
+    (snap) => {
+    setLoading(false);
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderPicker();
     intentarAbrirDesdeQrHV();
-  }, (err) => { console.warn('Error leyendo equipos:', err.message); showToast('Error cargando equipos: ' + err.message, 'error'); });
-
-  db.collection('ots').onSnapshot((snap) => {
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }, (err) => { setLoading(false); console.warn('Error leyendo equipos:', err.message); showToast('Error cargando equipos: ' + err.message, 'error'); });
+}
+// Lee (o toma de memoria) las OTs del equipo y vuelve a dibujar su hoja.
+function cargarOtsEquipo(e, fresco) {
+  setLoading(true, 'Cargando historial...');
+  return fbOtsDeEquipo(e, { fresco: !!fresco }).then(docs => {
     // Dos documentos con el mismo número de OT (ej. doble toque en "Guardar")
     // se cuentan una sola vez, igual que en Análisis.
     const vistos = new Set();
-    currentOts = docs.filter(o => {
+    _otsPorEquipo.set(e.id, docs.filter(o => {
       const key = (o.Title || o.id || '').trim();
       if (!key) return true;
       if (vistos.has(key)) return false;
       vistos.add(key);
       return true;
-    });
+    }));
     setLoading(false);
-    renderPicker();
-    if (equipoActual) mostrarHojaDeVida(equipoActual); // refresca si ya hay uno abierto
-  }, (err) => { console.warn('Error leyendo ots:', err.message); setLoading(false); showToast('Error cargando historial: ' + err.message, 'error'); });
+    if (equipoActual && equipoActual.id === e.id) mostrarHojaDeVida(equipoActual);
+  }).catch(err => {
+    console.warn('Error leyendo ots:', err.message); setLoading(false);
+    showToast('Error cargando historial: ' + err.message, 'error');
+  });
 }
+function actualizarHojaActual() { if (equipoActual) cargarOtsEquipo(equipoActual, true); }
 
 function intentarAbrirDesdeQrHV() {
   if (_qrAutoAbrioHV) return;
@@ -402,7 +417,7 @@ function renderPicker() {
     return;
   }
   wrap.innerHTML = lista.map(e => {
-    const n = currentOts.length ? otsDeEquipo(e).length : null;
+    const n = null; // (5 oct 2026) sin contador: contarlas obligaba a leer todas las OTs
     return `
     <div class="item-row" data-eq="${esc(e.id)}">
       <div class="item-header"><div class="item-title">${esc(e.nombre || '(sin nombre)')}</div>${n != null ? `<span class="tag tag-otro">${n} OT${n === 1 ? '' : 's'}</span>` : ''}</div>
@@ -439,9 +454,16 @@ function mostrarHojaDeVida(equipoOrId) {
   document.getElementById('screen-hoja').style.display = 'block';
   document.getElementById('content').classList.add('wide');
 
+  // (5 oct 2026) Las OTs de este equipo se leen la primera vez que se abre.
+  if (!_otsPorEquipo.has(e.id)) {
+    currentOts = [];
+    cargarOtsEquipo(e);
+  } else currentOts = _otsPorEquipo.get(e.id);
+  const otsListas = _otsPorEquipo.has(e.id);
+
   // (4 oct 2026) De paso, deja al día la copia pública que se ve al escanear
   // el QR (equipo.html). Una vez por equipo y por visita a esta pantalla.
-  if (currentOts.length && typeof publicarHojaVida === 'function' && !_publicados.has(e.id) && ['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','ALMACEN'].includes((window.currentUserRole || {}).rol)) {
+  if (otsListas && typeof publicarHojaVida === 'function' && !_publicados.has(e.id) && ['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','ALMACEN'].includes((window.currentUserRole || {}).rol)) {
     _publicados.add(e.id); publicarHojaVida(e, currentOts);
   }
   document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';

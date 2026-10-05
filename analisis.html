@@ -175,7 +175,9 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   <div class="hdr">
     <div class="hdr-title"><div class="dot"></div><div>
       <h1>Panel de Mantenimiento &mdash; Análisis Preventivo &amp; Predictivo</h1>
-      <div class="sub" id="rangeInfo">cargando datos…</div></div></div>
+      <div class="sub" id="rangeInfo">cargando datos…</div>
+      <!-- (5 oct 2026) Carga única (no en vivo) de las OTs anteriores a 13 meses -->
+      <button class="secondary small" id="histCompletoBtn" style="display:none;margin-top:6px;" onclick="cargarHistorialCompletoAn()">📚 Analizar todo el historial</button></div></div>
     <div class="clock"><b id="nowClock">--</b>fecha de referencia (hoy)</div>
   </div>
 
@@ -183,7 +185,10 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   <div class="filterbar" id="filterBar">
     <span class="flbl">Filtros</span>
     <select id="fPeriodo" aria-label="Período">
-      <option value="todo">Todo el historial</option>
+      <!-- (5 oct 2026) Por defecto solo se leen los últimos 13 meses de /ots (cuota
+           gratis de Firebase). "todo" = todo lo cargado; "completo" carga el resto. -->
+      <option value="todo" id="optTodo">Últimos 13 meses (cargados)</option>
+      <option value="completo" id="optCompleto">Todo el historial (cargar…)</option>
       <option value="30">Últimos 30 días</option>
       <option value="90">Últimos 90 días</option>
       <option value="180">Últimos 6 meses</option>
@@ -564,7 +569,12 @@ function render(){
   const fmin = fechas.length ? new Date(fechas.reduce((a,b)=>Math.min(a,b))) : null;
   const fmax = fechas.length ? new Date(fechas.reduce((a,b)=>Math.max(a,b))) : null;
   $('rangeInfo').textContent = rowsAll.length + ' órdenes de trabajo' + (fmin ? ' · del '+fmtDate(fmin)+' al '+fmtDate(fmax) : '')
+    + (_anCompleto ? ' · todo el historial' : ' · últimos '+MESES_AN+' meses (MTBF y riesgo calculados con ese período)')
     + (invalid ? ' · '+invalid+' sin fecha válida, p. ej. reportes pendientes (no se incluyen)' : '');
+  // (5 oct 2026) Selector de período según lo que hay cargado.
+  $('optTodo').textContent = _anCompleto ? 'Todo el historial' : 'Últimos '+MESES_AN+' meses (cargados)';
+  $('optCompleto').hidden = _anCompleto; $('optCompleto').disabled = _anCompleto;
+  $('histCompletoBtn').style.display = _anCompleto ? 'none' : '';
 
   fillSelect('fArea', [...new Set(rowsAll.map(r=>r.area))].sort(), 'Todas las áreas', F.area);
   fillSelect('fTecnico', [...new Set(rowsAll.flatMap(r=>splitTecnicos(r.tecnicos)))].sort(), 'Todos los técnicos', F.tecnico);
@@ -1121,7 +1131,15 @@ $('tabs').addEventListener('click', e=>{ const b=e.target.closest('.tab'); if (b
 document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]'); if (g){ switchTab(g.dataset.goto); window.scrollTo({top:0}); }
 });
-$('fPeriodo').addEventListener('change', e=>{ F.periodo = e.target.value; render(); });
+$('fPeriodo').addEventListener('change', e=>{
+  // (5 oct 2026) "Todo el historial" con solo 13 meses cargados: pide cargar el resto.
+  if (e.target.value === 'completo'){
+    e.target.value = F.periodo;
+    cargarHistorialCompletoAn().then(okk=>{ if (okk){ F.periodo = 'todo'; render(); } });
+    return;
+  }
+  F.periodo = e.target.value; render();
+});
 $('fArea').addEventListener('change', e=>{ F.area = e.target.value; render(); });
 $('fTecnico').addEventListener('change', e=>{ F.tecnico = e.target.value; render(); });
 $('fTipo').addEventListener('change', e=>{ F.tipo = e.target.value; render(); });
@@ -1177,6 +1195,13 @@ $('appendBtn').addEventListener('click', async ()=>{
   }
   st.textContent = `✅ ${ok} de ${buenas.length} OT(s) subidas a la base de datos compartida` + (malas.length?` · ⚠ ${malas.length} rechazada(s) por fecha no válida (usa AAAA-MM-DD), quedan en el cuadro: ${listaMalas}`:'');
   st.style.color = malas.length ? '#fab219' : '#35d0b0';
+  // (5 oct 2026) Las OTs subidas con fecha de hace más de 13 meses no entran al
+  // listener en vivo: si ya se había cargado todo el historial, se relee esa parte.
+  if (_anCompleto && buenas.some(r=>r.fecha < _desdeAn)){
+    db.collection('ots').where('FECHA', '<', _desdeAn).get().then(sn=>{ _docsAnViejos = sn.docs; combinarOtsAn(); }).catch(err=>console.warn(err));
+  } else if (!_anCompleto && buenas.some(r=>r.fecha < _desdeAn)){
+    st.textContent += ` · ℹ️ Las OTs de hace más de ${MESES_AN} meses se ven con "Analizar todo el historial".`;
+  }
   // deja en el cuadro solo las líneas rechazadas, para corregirlas
   const otsMalas = new Set(malas.map(r=>r.ot));
   $('feedArea').value = malas.length ? $('feedArea').value.split('\n').filter(l=>otsMalas.has((l.split('\t')[0]||'').trim())).join('\n') : '';
@@ -1211,7 +1236,6 @@ function otRecordToRow(doc){
 // todos los campos, incluidas anuladas y avisos abiertos); antes exportaba las
 // filas ya procesadas del panel y se perdían campos. Fechas Timestamp → texto
 // ISO. Solo ADMINISTRADOR / ENCARGADO_MANTENIMIENTO.
-let _rawOtDocs = [];
 function plainFirestore(v){
   if (v == null || typeof v !== 'object') return v;
   if (typeof v.toDate === 'function') { try { return v.toDate().toISOString(); } catch(e) { return null; } }
@@ -1220,10 +1244,17 @@ function plainFirestore(v){
   const o = {}; Object.keys(v).forEach(k=>{ o[k] = plainFirestore(v[k]); }); return o;
 }
 const puedeRespaldo = () => typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO');
-function exportAnalisisBackup(){
+async function exportAnalisisBackup(){
   if (!puedeRespaldo()){ $('exportStatus').textContent='El respaldo JSON es solo para administrador o encargado de mantenimiento.'; return; }
-  if (!_rawOtDocs.length){ $('exportStatus').textContent='No hay OTs para exportar.'; return; }
-  const data = _rawOtDocs.map(d=>({id:d.id, ...plainFirestore(d.data())}));
+  // (5 oct 2026) El panel solo tiene 13 meses en memoria: el respaldo lee TODA
+  // la colección una sola vez, solo cuando se pide (no queda escuchando).
+  let docs;
+  try {
+    $('exportStatus').textContent = '⏳ Leyendo todas las OTs para el respaldo…';
+    docs = (await db.collection('ots').get()).docs;
+  } catch(err){ $('exportStatus').textContent = 'No se pudo leer /ots: ' + err.message; return; }
+  if (!docs.length){ $('exportStatus').textContent='No hay OTs para exportar.'; return; }
+  const data = docs.map(d=>({id:d.id, ...plainFirestore(d.data())}));
   const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   const a = document.createElement('a'); a.href=url; a.download='respaldo-ots-'+fbHoy()+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
@@ -1256,49 +1287,96 @@ document.addEventListener('DOMContentLoaded',()=>{
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 });
 
+// ══════ LECTURA DE /ots (5 oct 2026 — cuota gratis de Firebase) ══════
+// Antes este panel escuchaba TODA la colección /ots: cada apertura (y cada
+// reconexión después de ~30 min) volvía a leer todas las OTs de todos los
+// años, y con el tiempo eso se come las 50.000 lecturas diarias del plan
+// gratis. Ahora:
+//  1) en vivo solo las OTs con FECHA de los últimos 13 meses (alcanza para
+//     los filtros de 30/90/180/365 días, MTBF, riesgo y predicción);
+//  2) "Analizar todo el historial" lee UNA vez (get, no en vivo) las OTs
+//     anteriores y las suma a las de 13 meses, que siguen en vivo.
+const MESES_AN = 13;
+let _anCompleto = false;
+let _docsAnRecientes = [];  // listener: FECHA >= desde
+let _docsAnViejos = [];     // get único: FECHA < desde (solo con historial completo)
+let _desdeAn = '';
+function desdeAn(){ const d = new Date(); d.setHours(0,0,0,0); d.setMonth(d.getMonth() - MESES_AN); return fbFechaLocal(d); }
+function suscribirOtsAn(){
+  _desdeAn = desdeAn();
+  db.collection('ots').where('FECHA', '>=', _desdeAn).onSnapshot(async snap=>{
+    // primera vez con la base vacía: se siembra el histórico (si RAW trae datos).
+    // (5 oct 2026) Como ahora la consulta es de 13 meses, antes de sembrar se
+    // confirma que la colección entera esté vacía.
+    if (snap.empty && !_seededAn){
+      _seededAn = true;
+      const seed = parseRaw(RAW);
+      if (seed.length && (await db.collection('ots').limit(1).get()).empty){
+        for (let i=0; i<seed.length; i+=400){
+          const batch = db.batch();
+          seed.slice(i,i+400).forEach(r=>batch.set(db.collection('ots').doc(), {...rowToOtRecord(r), createdAt:fbTimestamp()}));
+          await batch.commit().catch(err=>console.error(err));
+        }
+        return; // el siguiente snapshot ya trae los datos
+      }
+    }
+    _docsAnRecientes = snap.docs;
+    combinarOtsAn();
+  }, err=>{
+    console.error('Error escuchando OTs:', err);
+    $('rangeInfo').textContent = 'Error de conexión a Firebase: '+err.message;
+  });
+}
+let _seededAn = false;
+let _cargandoCompletoAn = null;
+// Devuelve una promesa: true si quedó cargado todo el historial.
+function cargarHistorialCompletoAn(){
+  if (_anCompleto) return Promise.resolve(true);
+  if (_cargandoCompletoAn) return _cargandoCompletoAn;
+  if (!confirm('¿Analizar TODO el historial?\n\nPor defecto el panel usa los últimos '+MESES_AN+' meses. Cargar todos los años lee muchas más OTs y gasta más de la cuota gratis diaria de Firebase (50.000 lecturas). Úsalo solo cuando lo necesites; al recargar la página vuelve a 13 meses.')) return Promise.resolve(false);
+  $('rangeInfo').textContent = '⏳ Cargando todo el historial…';
+  _cargandoCompletoAn = db.collection('ots').where('FECHA', '<', _desdeAn).get().then(snap=>{
+    _docsAnViejos = snap.docs; _anCompleto = true; combinarOtsAn(); return true;
+  }).catch(err=>{
+    console.error('No se pudo cargar el historial completo:', err);
+    alert('No se pudo cargar el historial completo: ' + err.message);
+    render(); return false;
+  }).finally(()=>{ _cargandoCompletoAn = null; });
+  return _cargandoCompletoAn;
+}
+function combinarOtsAn(){
+  // orden estable por id de documento: el dedupe por número de OT siempre conserva el mismo documento
+  const docs = [..._docsAnViejos, ..._docsAnRecientes];
+  // (5 oct 2026) Fuera las OTs anuladas (reportes duplicados) y los avisos
+  // (operador/qr) y OTs de checklist que todavía no están completadas: es el
+  // mismo filtro que usa Bitácora. (Los abiertos no suelen tener FECHA, pero
+  // un aviso en atención o una OT de checklist sí podrían traerla.)
+  const porId = new Map();
+  docs.forEach(d=>porId.set(d.id, d));
+  const rows = [...porId.values()].map(d=>({...otRecordToRow(d.data()), _id:d.id}))
+    .filter(r=>r.estado!=='anulada' && !(['operador','checklist','qr'].includes(r.origen) && r.estado!=='completada'))
+    .sort((a,b)=>a._id.localeCompare(b._id));
+  const vistos = new Set();
+  allRows = rows.filter(r=>{
+    const k = (r.ot||'').trim();
+    if (!k) return true;
+    if (vistos.has(k)) return false;
+    vistos.add(k); return true;
+  });
+  render();
+}
+
 window.fbReady.then(()=>{
   // (5 oct 2026) Catálogo de equipos: nombre oficial para las OTs con equipoId
   // y para unir OTs viejas (sin id) cuyo nombre coincide con un equipo.
-  db.collection('equipos').get().then(s=>{
+  fbEquiposCatalogo(false).then(s=>{ // (5 oct 2026) caché de 12 h
+ 
     const cat = {}, porNombre = {};
     s.docs.forEach(d=>{ const n = (d.data()||{}).nombre; if (n){ cat[d.id] = n; const k = fbEquipoKey(n); if (k && !porNombre[k]) porNombre[k] = d.id; } });
     _equiposCat = cat; _equiposPorNombre = porNombre;
     if (allRows.length) render();
   }).catch(err=>console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err));
-  let seeded = false;
-  db.collection('ots').onSnapshot(async snap=>{
-    // primera vez con la base vacía: se siembra el histórico (si RAW trae datos) usando lotes
-    if (snap.empty && !seeded){
-      seeded = true;
-      const seed = parseRaw(RAW);
-      for (let i=0; i<seed.length; i+=400){
-        const batch = db.batch();
-        seed.slice(i,i+400).forEach(r=>batch.set(db.collection('ots').doc(), {...rowToOtRecord(r), createdAt:fbTimestamp()}));
-        await batch.commit().catch(err=>console.error(err));
-      }
-      if (seed.length) return; // el siguiente snapshot ya trae los datos
-    }
-    // orden estable por id de documento: el dedupe por número de OT siempre conserva el mismo documento
-    _rawOtDocs = snap.docs;
-    // (5 oct 2026) Fuera las OTs anuladas (reportes duplicados) y los avisos
-    // (operador/qr) y OTs de checklist que todavía no están completadas: es el
-    // mismo filtro que usa Bitácora. (Los abiertos no suelen tener FECHA, pero
-    // un aviso en atención o una OT de checklist sí podrían traerla.)
-    const rows = snap.docs.map(d=>({...otRecordToRow(d.data()), _id:d.id}))
-      .filter(r=>r.estado!=='anulada' && !(['operador','checklist','qr'].includes(r.origen) && r.estado!=='completada'))
-      .sort((a,b)=>a._id.localeCompare(b._id));
-    const vistos = new Set();
-    allRows = rows.filter(r=>{
-      const k = (r.ot||'').trim();
-      if (!k) return true;
-      if (vistos.has(k)) return false;
-      vistos.add(k); return true;
-    });
-    render();
-  }, err=>{
-    console.error('Error escuchando OTs:', err);
-    $('rangeInfo').textContent = 'Error de conexión a Firebase: '+err.message;
-  });
+  suscribirOtsAn();
 }).catch(err=>{
   // (5 oct 2026) El aviso grande ya lo muestra firebase-init; aquí solo una línea
   // con el error real (antes decía siempre "revisa firebase-config.js").

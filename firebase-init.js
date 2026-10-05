@@ -179,8 +179,54 @@ function otsDelEquipo(e, ots) {
   const n = _normPub(e.nombre);
   return (ots || []).filter(o => o.FECHA && o.estado !== 'anulada' && !(['operador', 'qr', 'checklist'].includes(o.origen) && o.estado !== 'completada') && (_normPub(o.EQUIPO || o.TIPO_MAQUINA) === n || _normPub(o.LINEA_EQUIPO) === n || (o.equipoId && o.equipoId === e.id)));
 }
+// (5 oct 2026) Todas las OTs de UN equipo sin leer toda la colección /ots
+// (cuota gratis de Firebase: 50.000 lecturas al día). Hace 4 consultas
+// pequeñas y une el resultado por id:
+//   equipoId == e.id  (avisos, checklist y OTs nuevas)
+//   EQUIPO / TIPO_MAQUINA / LINEA_EQUIPO  'in'  [formas de escribir el nombre]
+// Formas: el nombre tal cual, MAYÚSCULAS, minúsculas, Tipo Título, los
+// nombres extra que pase la pantalla (p. ej. los vistos en sus OTs recientes)
+// y variantes sin acentos / sin espacios.
+// Máximo 10 por consulta ('in' de este SDK). Devuelve las OTs SIN filtrar:
+// quien la usa filtra con otsDelEquipo() / fbEquipoKey para el emparejamiento
+// exacto (sin acentos ni espacios). Se guarda en memoria por equipo mientras
+// la página esté abierta; opts.fresco = true vuelve a leer del servidor.
+const _cacheOtsEquipo = new Map();
+function fbFormasNombre(nombre, extras) {
+  const n = (nombre || '').toString();
+  const titulo = n.toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
+  const sinAcento = n.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const pegado = n.replace(/\s+/g, '');
+  // Primero las formas más comunes y los nombres vistos; después variantes
+  // sin acentos / sin espacios ("WEAVING5"), hasta completar 10.
+  const formas = [n, n.trim(), n.toUpperCase(), n.toLowerCase(), titulo].concat(extras || [],
+    [sinAcento, sinAcento.toUpperCase(), pegado, pegado.toUpperCase(), pegado.toLowerCase()]);
+  const key = fbEquipoKey(n);
+  const out = [];
+  formas.forEach(f => { if (f && typeof f === 'string' && !out.includes(f) && (!key || fbEquipoKey(f) === key)) out.push(f); });
+  return out.slice(0, 10);
+}
+function fbOtsDeEquipo(e, opts) {
+  opts = opts || {};
+  if (!e || !e.id || typeof db === 'undefined') return Promise.resolve([]);
+  const k = e.id + '|' + (e.nombre || '');
+  if (!opts.fresco && _cacheOtsEquipo.has(k)) return _cacheOtsEquipo.get(k);
+  const col = db.collection('ots');
+  const formas = fbFormasNombre(e.nombre, opts.nombres);
+  const consultas = [col.where('equipoId', '==', e.id).get()];
+  if (formas.length) ['EQUIPO', 'TIPO_MAQUINA', 'LINEA_EQUIPO'].forEach(campo => consultas.push(col.where(campo, 'in', formas).get()));
+  const p = Promise.all(consultas).then(snaps => {
+    const porId = new Map();
+    snaps.forEach(sn => sn.docs.forEach(d => { if (!porId.has(d.id)) porId.set(d.id, { id: d.id, ...d.data() }); }));
+    return [...porId.values()];
+  });
+  _cacheOtsEquipo.set(k, p);
+  p.catch(() => _cacheOtsEquipo.delete(k)); // si falla, el próximo intento vuelve a leer
+  return p;
+}
 const CAMPOS_FICHA_PUB = ['nombre','localidad','marca','modelo','serie','fabricacion','instalacion','tension','potencia','frecuencia','fase','tamano','peso','madein','caracteristicas','checklistProximaFecha'];
-// e = equipo ({id, nombre, ...}); ots = todas las OTs (opcional: sin ellas solo
+// e = equipo ({id, nombre, ...}); ots = las OTs del equipo (fbOtsDeEquipo) o
+// todas las OTs — se filtran aquí con otsDelEquipo (opcional: sin ellas solo
 // se publica la ficha técnica y se conserva el historial que ya hubiera).
 function publicarHojaVida(e, ots) {
   if (!e || !e.id || typeof db === 'undefined') return Promise.resolve();
@@ -335,4 +381,54 @@ async function fbFolioNuevo() {
     if (e && e.code === 'permission-denied') console.warn('Contador de folios rechazado: revisa /config/otFolioCounter (debe tener ultimo: número).');
     return 'OT-P' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 4).toUpperCase();
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CATÁLOGO DE EQUIPOS CON CACHÉ (5 oct 2026 — para no pagar nunca)
+// El plan gratis de Firebase permite 50.000 lecturas al día. Releer la lista
+// completa de equipos cada vez que alguien abre una pantalla gastaba ~15.000
+// al día. Ahora se usa la copia guardada en el celular y solo se pide al
+// servidor si tiene más de 12 horas, si no hay copia, o si la persona toca
+// "Actualizar". Inventario y Etiquetas siguen en vivo (los usa poca gente).
+// Se entrega un objeto con la misma forma que un snapshot ({docs:[…]}) para
+// que las pantallas no cambien su código de lectura.
+// ══════════════════════════════════════════════════════════════════════
+const FB_EQ_TTL_MS = 12 * 60 * 60 * 1000; // 12 h (una lectura completa al día por celular, aprox.)
+function _fbEqSnap(docs) {
+  const lista = docs.slice().sort((a, b) => String((a.data() || {}).nombre || '').localeCompare(String((b.data() || {}).nombre || ''), 'es', { numeric: true }));
+  return { docs: lista, size: lista.length, empty: !lista.length, forEach: f => lista.forEach(f) };
+}
+async function fbEquiposCatalogo(forzar) {
+  const ref = db.collection('equipos');
+  let ultima = 0;
+  try { ultima = +localStorage.getItem('fbEquiposSync') || 0; } catch (e) {}
+  if (!forzar && Date.now() - ultima < FB_EQ_TTL_MS) {
+    try {
+      const c = await ref.get({ source: 'cache' });
+      if (!c.empty) return _fbEqSnap(c.docs);
+    } catch (e) { /* sin caché local: se va al servidor */ }
+  }
+  try {
+    const s = await ref.get({ source: 'server' });
+    try { localStorage.setItem('fbEquiposSync', String(Date.now())); } catch (e) {}
+    return _fbEqSnap(s.docs);
+  } catch (err) {
+    // sin señal: lo que haya en el celular
+    const c = await ref.get({ source: 'cache' });
+    return _fbEqSnap(c.docs);
+  }
+}
+// Reemplazo de db.collection('equipos').onSnapshot(cb, errCb): entrega una
+// vez la lista y vuelve a entregarla si se llama fbRefrescarEquipos().
+const _fbEqOyentes = [];
+function fbEscucharEquipos(cb, errCb) {
+  _fbEqOyentes.push({ cb, errCb });
+  fbEquiposCatalogo(false).then(cb, errCb || (e => console.warn('equipos:', e.message)));
+  return () => {};
+}
+function fbRefrescarEquipos(soloCelular) {
+  // soloCelular = true: vuelve a entregar la copia local (ya incluye los
+  // cambios hechos en ESTE celular) sin gastar lecturas del servidor.
+  const p = soloCelular ? db.collection('equipos').get({ source: 'cache' }).then(c => _fbEqSnap(c.docs)) : fbEquiposCatalogo(true);
+  return p.then(s => { _fbEqOyentes.forEach(o => { try { o.cb(s); } catch (e) { console.error(e); } }); return s; });
 }

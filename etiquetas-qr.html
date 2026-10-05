@@ -222,17 +222,28 @@ function renderSheet() {
 
 // (4 oct 2026) Lo que se ve al escanear sin usuario sale de /equipos_publico.
 // Al imprimir se publica (o se pone al día) la hoja de vida de esas máquinas.
+// (5 oct 2026) Cuota gratis de Firebase: al imprimir unas pocas etiquetas se
+// leen solo las OTs de esas máquinas (fbOtsDeEquipo). Leer toda /ots una vez
+// queda para "Actualizar todas" o para tandas grandes (más de 30 equipos),
+// donde sale igual o más barato que consultar equipo por equipo.
+const MAX_POR_EQUIPO = 30;
 let _otsCache = null;
 async function leerOts() {
   if (!_otsCache) _otsCache = (await db.collection('ots').get()).docs.map(d => ({ id: d.id, ...d.data() }));
   return _otsCache;
 }
 async function publicar(lista, msg) {
+  const porEquipo = lista.length <= MAX_POR_EQUIPO && typeof fbOtsDeEquipo === 'function';
   let ots = null;
-  try { ots = await leerOts(); } catch (e) { console.warn('ots:', e.message); }
+  if (!porEquipo) { try { ots = await leerOts(); } catch (e) { console.warn('ots:', e.message); } }
   for (let i = 0; i < lista.length; i += 20) {
     if (msg) msg.textContent = `Publicando ${Math.min(i + 20, lista.length)} de ${lista.length}…`;
-    await Promise.all(lista.slice(i, i + 20).map(e => publicarHojaVida(e, ots)));
+    await Promise.all(lista.slice(i, i + 20).map(async e => {
+      let o = ots;
+      // Si no se pudieron leer sus OTs se publica solo la ficha (se conserva el historial que ya había).
+      if (porEquipo) { try { o = await fbOtsDeEquipo(e); } catch (err) { console.warn('ots de', e.nombre, err.message); o = null; } }
+      return publicarHojaVida(e, o);
+    }));
   }
 }
 async function publicarTodas() {
