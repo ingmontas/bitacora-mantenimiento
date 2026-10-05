@@ -244,11 +244,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const avisoSesion = (texto) => {
     document.getElementById('header-sub').textContent = '2026 · Sin sesión';
     document.getElementById('lista-equipos').innerHTML = `<div class="empty"><span class="emoji">⚠️</span><p>${texto}</p>
-      <a class="btn" style="display:block;margin-top:12px;text-decoration:none;text-align:center;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
+      <a class="btn btn-primary" style="display:block;margin-top:12px;text-decoration:none;text-align:center;background:#F59E0B;color:#0F1923;font-weight:800;padding:13px;border-radius:10px;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
       <button class="btn btn-secondary" style="margin-top:8px;" onclick="location.reload()">🔄 Reintentar</button>
       <p style="margin-top:12px;font-size:12.5px;">Sin usuario también puedes reportar escaneando el código QR pegado en la máquina.</p></div>`;
   };
-  setTimeout(() => { if (!sesionLista) avisoSesion('La conexión está tardando más de lo normal. Revisa el internet o la señal y pulsa Reintentar.'); }, 12000);
+  setTimeout(() => { if (!sesionLista) avisoSesion('La conexión está tardando más de lo normal (paso: ' + (window.fbEtapa || '?') + '). Revisa el internet o la señal y pulsa Reintentar.<br><small>Si carga más tarde, la lista aparece sola aquí.</small>'); }, 15000);
   window.fbReady.then(() => {
     sesionLista = true;
     document.getElementById('header-sub').textContent =

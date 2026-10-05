@@ -37,6 +37,11 @@ firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
 const db = firebase.firestore();
+// (5 oct 2026) Algunas redes (WiFi de planta, datos con filtro) bloquean la
+// conexión "en vivo" que usa Firestore por defecto y la app se queda en
+// "Cargando..." para siempre. Con esto Firestore detecta ese caso solo y
+// cambia a un modo compatible (long polling). En redes normales no cambia nada.
+try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) { console.warn('settings:', e.message); }
 const storage = firebase.storage();
 
 // Persistencia offline (igual que en la versión original del proyecto).
@@ -56,8 +61,12 @@ const currentPage = location.pathname.split('/').pop() || 'index.html';
 window.currentUser = null;
 window.currentUserRole = null;
 
+// window.fbEtapa: en qué paso va el arranque (lo muestran las pantallas si
+// tarda demasiado, para saber si el problema es la sesión o la base de datos).
+window.fbEtapa = 'abriendo la sesión';
 window.fbReady = new Promise((resolve, reject) => {
   auth.onAuthStateChanged(async (user) => {
+    window.fbEtapa = user ? 'leyendo tu usuario en la base de datos' : 'sin sesión';
     if (!user || user.isAnonymous) {
       // Sin sesión real: si venía de una sesión anónima vieja, ciérrala
       // para no dejarla dando vueltas en el navegador.
@@ -101,6 +110,7 @@ window.fbReady = new Promise((resolve, reject) => {
       }
 
       window.currentUserRole = snap.data();
+      window.fbEtapa = 'listo';
       resolve();
     } catch (err) {
       reject(err);
