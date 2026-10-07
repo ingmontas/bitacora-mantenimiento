@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0F1923"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Mantenimiento"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<style>
+  :root{
+    --bg:#0F1923; --surface:#1A2535; --card:#202F42; --accent:#F59E0B;
+    --green:#10B981; --red:#EF4444; --blue:#818CF8; --text:#F1F5F9; --muted:#94A3B8; --border:#2D3F55;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,'Inter',system-ui,sans-serif;min-height:100vh;}
+  .wrap{max-width:520px;margin:0 auto;padding:32px 20px 60px;}
+  .hero{text-align:center;margin-bottom:28px;}
+  .hero .emoji{font-size:44px;margin-bottom:10px;}
+  .hero h1{font-size:22px;font-weight:800;margin-bottom:6px;}
+  .hero p{font-size:13px;color:var(--muted);line-height:1.6;}
+  .tiles{display:flex;flex-direction:column;gap:14px;}
+  .tile{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;text-decoration:none;color:var(--text);transition:border-color .15s,transform .1s;}
+  .tile:active{transform:scale(0.98);}
+  .tile:hover{border-color:var(--accent);}
+  .tile .icon{font-size:30px;width:52px;height:52px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--surface);}
+  .tile .info h2{font-size:16px;font-weight:700;margin-bottom:3px;}
+  .tile .info p{font-size:12.5px;color:var(--muted);line-height:1.5;}
+  .status{margin-top:26px;text-align:center;font-size:12px;color:var(--muted);font-family:monospace;}
+  .status b{color:var(--text);}
+  footer{margin-top:40px;text-align:center;font-size:11px;color:var(--muted);line-height:1.7;}
+  footer a{color:var(--accent);text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="emoji">🔧</div>
+    <h1>Mantenimiento 2026</h1>
+    <p>Bitácora, inventario de repuestos y análisis predictivo — sincronizados en la nube entre todos los celulares.</p>
+  </div>
+
+  <div class="tiles">
+    <a class="tile" href="bitacora.html">
+      <div class="icon">📋</div>
+      <div class="info">
+        <h2>Bitácora</h2>
+        <p>Registrar órdenes de trabajo, fallas y soluciones del día a día.</p>
+      </div>
+    </a>
+    <a class="tile" href="reportar.html">
+      <div class="icon">🚨</div>
+      <div class="info">
+        <h2>Reportar parada</h2>
+        <p>Producción avisa una máquina parada o con falla; el técnico recibe el aviso al momento.</p>
+      </div>
+    </a>
+    <a class="tile" href="herramientas.html">
+      <div class="icon">🧰</div>
+      <div class="info">
+        <h2>Herramientas</h2>
+        <p>Herramientas a cargo de cada técnico, arqueos y cargos para Recursos Humanos.</p>
+      </div>
+    </a>
+    <a class="tile" href="almacen.html" id="tile-almacen">
+      <div class="icon">📦</div>
+      <div class="info">
+        <h2>Almacén</h2>
+        <p>Solicitudes de repuestos de los técnicos: entregar o rechazar.</p>
+      </div>
+    </a>
+    <a class="tile" href="etiquetas-qr.html">
+      <div class="icon">🏷️</div>
+      <div class="info">
+        <h2>Etiquetas QR</h2>
+        <p>Imprime los stickers "¿Máquina parada?" para que producción reporte escaneando la máquina.</p>
+      </div>
+    </a>
+    <a class="tile" href="inventario.html">
+      <div class="icon">🧰</div>
+      <div class="info">
+        <h2>Inventario</h2>
+        <p>Repuestos por equipo, stock, fotos, manuales y movimientos.</p>
+      </div>
+    </a>
+    <a class="tile" href="analisis.html">
+      <div class="icon">📊</div>
+      <div class="info">
+        <h2>Análisis</h2>
+        <p>MTBF, riesgo por equipo, desempeño de técnicos y mejora continua — en vivo.</p>
+      </div>
+    </a>
+    <a class="tile" href="checklist.html">
+      <div class="icon">🩺</div>
+      <div class="info">
+        <h2>Checklist</h2>
+        <p>Inspecciones por equipo y generación automática de OT cuando algo falla.</p>
+      </div>
+    </a>
+  </div>
+
+  <div class="status" id="fbStatus">⚪ Conectando a Firebase…</div>
+
+  <footer>
+    Instálala en tu celular: menú del navegador → "Agregar a pantalla de inicio".<br/>
+    Los módulos comparten la misma base de datos en la nube.
+  </footer>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+window.fbReady.then(()=>{
+  // Producción (rol Operador) solo puede reportar paradas: va directo ahí.
+  if (window.currentUserRole && window.currentUserRole.rol === 'OPERADOR') { location.replace('reportar.html'); return; }
+  // Recursos Humanos solo usa la pestaña de cargos por herramientas.
+  if (window.currentUserRole && window.currentUserRole.rol === 'RRHH') { location.replace('herramientas.html#rrhh'); return; }
+  document.getElementById('fbStatus').innerHTML = `🟢 Conectado a Firebase (proyecto <b>${firebaseConfig.projectId}</b>)`;
+}).catch((err)=>{
+  // (5 oct 2026) Muestra la causa real (antes decía siempre "revisa firebase-config.js").
+  document.getElementById('fbStatus').textContent = '🔴 ' + ((err && err.message) || 'No se pudo conectar a Firebase');
+});
+</script>
+</body>
+</html>

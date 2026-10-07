@@ -1,0 +1,3101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0d1117"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Inventario de Repuestos</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0d1117; --panel:#141a22; --panel-2:#1b2330; --line:#262f3d;
+    --text:#e6ebf1; --muted:#8b98ab;
+    --amber:#f0a930; --amber-dim:#4a3419;
+    --red:#ef4b4b; --red-dim:#3a2020;
+    --teal:#35d0b0; --teal-dim:#1a3a33;
+    --blue:#5b9bf0;
+    /* Paleta de estado validada (accesible, ver dataviz skill) — reservada
+       para semáforo de riesgo/stock, nunca reutilizada para otra cosa */
+    --st-good:#0ca30c; --st-good-dim:#0f2e14;
+    --st-warning:#fab219; --st-warning-dim:#3a2f10;
+    --st-serious:#ec835a; --st-serious-dim:#3a2318;
+    --st-critical:#d03b3b; --st-critical-dim:#3a1c1c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  ::-webkit-scrollbar{height:8px;width:8px;} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  .wrap{max-width:1360px;margin:0 auto;padding:26px 22px 80px;}
+
+  /* header */
+  .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px;gap:16px;flex-wrap:wrap;}
+  .hdr-left{display:flex;align-items:center;gap:12px;}
+  .hdr-icon{width:38px;height:38px;border-radius:9px;background:linear-gradient(145deg,var(--amber),#c97f1a);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  h1{font-size:20px;margin:0;font-weight:700;}
+  .hdr-sub{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+  .search-box{position:relative;flex:1;max-width:420px;min-width:220px;}
+  .search-box input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px 14px 10px 36px;border-radius:9px;font-size:13px;font-family:'Space Grotesk';}
+  .search-box input:focus{outline:1px solid var(--amber);}
+  .search-box .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
+
+  /* KPI row */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px;}
+  .kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
+  .kpi .val{font-size:26px;font-weight:700;margin-top:5px;}
+  .kpi.red .val{color:var(--red);} .kpi.amber .val{color:var(--amber);} .kpi.teal .val{color:var(--teal);}
+
+  /* equipo cards grid */
+  .section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .section-hdr h2{font-size:15px;margin:0;}
+  /* Orden y filtros de equipos (4 oct 2026) */
+  .eq-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .eq-toolbar input,.eq-toolbar select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}
+  .eq-toolbar input{flex:1;min-width:180px;}
+  .eq-toolbar .cnt{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .area-hdr{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:10px 0 -2px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  .area-hdr h4{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--amber);}
+  .area-hdr span{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
+  .equipo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:10px;}
+  .equipo-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;cursor:pointer;transition:border-color .15s;position:relative;overflow:hidden;}
+  .equipo-card:hover{border-color:var(--amber-dim);}
+  .equipo-card .badge-loc{position:absolute;top:14px;right:14px;font-size:10px;font-family:'IBM Plex Mono';color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:20px;}
+  .equipo-card h3{margin:0 0 4px;font-size:16px;padding-right:70px;}
+  .equipo-card .meta{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono';margin-bottom:14px;}
+  .equipo-card .stats-row{display:flex;gap:16px;}
+  .equipo-card .stat{font-size:11px;font-family:'IBM Plex Mono';}
+  .equipo-card .stat b{display:block;font-size:17px;font-family:'Space Grotesk';font-weight:700;}
+  .equipo-card .stat.ok b{color:var(--teal);} .equipo-card .stat.sinstock b{color:var(--red);} .equipo-card .stat.bajo b{color:var(--amber);}
+
+  .add-card{background:transparent;border:1.5px dashed var(--line);border-radius:12px;padding:18px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--muted);min-height:130px;}
+  .add-card:hover{border-color:var(--amber);color:var(--amber);}
+  .add-card .plus{font-size:26px;}
+
+  button{font-family:'Space Grotesk';cursor:pointer;}
+  .btn{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;}
+  .btn:hover{filter:brightness(1.08);}
+  .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btn.danger{background:var(--red-dim);color:#ff9494;border:1px solid #5a2a2a;}
+  .btn.sm{padding:6px 11px;font-size:11.5px;}
+  .btn.icon-only{padding:6px 9px;}
+
+  /* detail view */
+  .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;cursor:pointer;margin-bottom:16px;font-family:'IBM Plex Mono';}
+  .back-link:hover{color:var(--text);}
+  .detail-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:18px;}
+  .detail-hdr h2{margin:0 0 4px;font-size:22px;}
+  .detail-hdr .sub{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono';}
+
+  .specs-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .specs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
+  .spec{}
+  .spec .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';margin-bottom:3px;}
+  .spec .v{font-size:13.5px;font-weight:500;}
+  .spec .v.empty{color:var(--muted);font-style:italic;font-weight:400;}
+  .spec.full{grid-column:1/-1;} .spec.full .v{font-weight:400;line-height:1.55;}
+  .ficha-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--panel-2);}
+  .ficha-head{display:flex;gap:8px;align-items:center;cursor:pointer;font-size:14px;}
+  .ficha-head input{width:auto;}
+  .ficha-antes{font-size:11.5px;color:var(--muted);margin:6px 0 8px;line-height:1.5;}
+  .ficha-antes span{font-weight:700;}
+  .ficha-despues{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px;font-size:12.5px;}
+  .ficha-despues div span{display:block;font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
+  .ficha-notas{font-size:11px;color:var(--amber);margin-top:8px;line-height:1.5;}
+  .spec input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;width:100%;font-family:'Space Grotesk';}
+
+  /* parts table */
+  .table-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;}
+  .table-toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+  .filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .fchip{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:'IBM Plex Mono';cursor:pointer;}
+  .fchip.active{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;}
+  tbody td{padding:10px 10px;border-bottom:1px solid #1b212b;vertical-align:middle;}
+  tbody tr:hover{background:#171e28;}
+  .part-name{font-weight:600;}
+  .part-modelo{font-family:'IBM Plex Mono';color:var(--muted);font-size:11.5px;}
+  .part-desc{color:var(--muted);font-size:11.5px;max-width:260px;}
+
+  .gauge-wrap{display:flex;align-items:center;gap:8px;min-width:120px;}
+  .gauge{flex:1;height:7px;background:#1b212b;border-radius:4px;overflow:visible;position:relative;}
+  .gauge-min-mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text);opacity:.55;}
+
+  .thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;border:1px solid var(--line);cursor:pointer;display:block;}
+  .thumb:hover{border-color:var(--amber);}
+  .thumb-placeholder{width:34px;height:34px;border-radius:6px;background:var(--panel-2);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted);}
+  .gauge-fill{height:100%;border-radius:4px;}
+  .gauge-fill.ok{background:var(--st-good);} .gauge-fill.bajo{background:var(--st-warning);} .gauge-fill.sin{background:var(--st-critical);}
+  .gauge-fill.nodata{background:repeating-linear-gradient(45deg,#3a4252,#3a4252 4px,#2a3140 4px,#2a3140 8px);}
+  .qty-num{font-family:'IBM Plex Mono';font-weight:600;font-size:12px;min-width:22px;text-align:right;}
+
+  .stock-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono';white-space:nowrap;}
+  .stock-badge.ok{background:var(--st-good-dim);color:#5fd35f;}
+  .stock-badge.bajo{background:var(--st-warning-dim);color:var(--st-warning);}
+  .stock-badge.sin{background:var(--st-critical-dim);color:#ff8a8a;}
+  .stock-badge.nodata{background:#252c38;color:var(--muted);}
+  .stock-badge.revisar{background:var(--st-serious-dim);color:var(--st-serious);}
+
+  .row-actions{display:flex;gap:5px;opacity:.4;transition:opacity .12s;}
+  tr:hover .row-actions{opacity:1;}
+  .icon-btn{background:none;border:none;color:var(--muted);font-size:13px;padding:3px 5px;border-radius:5px;}
+  .icon-btn:hover{background:var(--panel-2);color:var(--text);}
+
+  input.cell-edit{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:5px;width:52px;font-family:'IBM Plex Mono';font-size:12px;text-align:center;}
+
+  .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty-state .big{font-size:34px;margin-bottom:10px;}
+
+  /* modal */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center;padding:20px;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:560px;width:100%;max-height:85vh;overflow-y:auto;}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal .modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-field{display:flex;flex-direction:column;gap:5px;}
+  .form-field.full{grid-column:1/-1;}
+  .form-field label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-family:'IBM Plex Mono';}
+  .form-field input,.form-field textarea,.form-field select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:'Space Grotesk';width:100%;}
+  .form-field textarea{resize:vertical;min-height:50px;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-2);border:1px solid var(--line);padding:12px 20px;border-radius:9px;font-size:13px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .footer-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);}
+
+  @media(max-width:720px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .form-grid{grid-template-columns:1fr;}
+    table{font-size:11.5px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon">🔧</div>
+      <div>
+        <h1>Inventario de Repuestos</h1>
+        <div class="hdr-sub" id="hdrSub">cargando…</div>
+      </div>
+    </div>
+    <div class="search-box">
+      <span class="icon">🔍</span>
+      <input type="text" id="globalSearch" placeholder="Buscar repuesto en TODOS los equipos… (nombre, modelo, descripción)">
+    </div>
+    <button class="btn secondary sm" id="auditoriaBtn" style="display:none;" onclick="openAuditoria()" title="Quién cambió qué en los datos maestros (equipo, frecuencia, puntos de checklist)">🕵️ Auditoría</button>
+    <button class="btn secondary sm" id="pinBtn" onclick="configurePin()" title="Proteger la eliminación con una clave">🔒 Clave</button>
+    <button class="btn secondary sm" id="refreshBtn" onclick="refreshFromServer()" title="Confirmar que estás al día (la sincronización ya es automática)">🔄 Actualizar</button>
+    <button class="btn secondary sm" id="syncStatusBtn" onclick="openConfigModal()" title="Estado de la conexión a Firebase">⚪ Conectando…</button>
+  </div>
+
+  <div id="searchResultsView" style="display:none;">
+    <div class="section-hdr"><h2 id="searchResultsTitle">Resultados</h2>
+      <span class="btn secondary sm" onclick="clearSearch()">✕ Cerrar búsqueda</span>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead><tr><th>Equipo</th><th>Repuesto</th><th>Modelo</th><th>Descripción</th><th>Stock</th><th>En máquina</th><th>Estado</th></tr></thead>
+        <tbody id="searchResultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="homeView">
+    <div class="kpis" id="kpiRow"></div>
+
+    <div class="section-hdr">
+      <h2>Equipos / Máquinas</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="btn secondary sm" onclick="abrirOrdenarFichas()">🧹 Ordenar fichas técnicas</span>
+        <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
+      </div>
+    </div>
+    <div class="eq-toolbar">
+      <input type="text" id="eqFiltro" placeholder="Filtrar equipos por nombre, marca, modelo o serie…" oninput="renderHome()">
+      <select id="eqPlanta" onchange="guardarOrdenEq();renderHome()" style="display:none;"><option value="">Todas las plantas</option></select>
+      <select id="eqArea" onchange="guardarOrdenEq();renderHome()"><option value="">Todas las áreas</option></select>
+      <select id="eqOrden" onchange="guardarOrdenEq();renderHome()">
+        <option value="area">Agrupar por área</option>
+        <option value="nombre">Nombre A–Z</option>
+        <option value="problemas">Más faltantes primero</option>
+        <option value="recientes">Últimos modificados</option>
+      </select>
+      <span class="cnt" id="eqCnt"></span>
+    </div>
+    <div class="equipo-grid" id="equipoGrid"></div>
+  </div>
+
+  <div id="detailView" style="display:none;"></div>
+
+  <div class="footer-actions">
+    <button class="btn secondary sm" id="btnListaCompra" onclick="exportFaltantes()">🛒 Lista de compra (faltantes)</button>
+    <button class="btn secondary sm" onclick="exportData()">⬇ Exportar respaldo (JSON)</button>
+    <button class="btn secondary sm" id="btnExportHistorial" style="display:none;white-space:normal;max-width:100%;" onclick="exportHistorialCompleto()" title="Movimientos de repuestos, reubicaciones y auditoría — hoy no tienen ningún respaldo aparte">⬇ Respaldo de movimientos/reubicaciones/auditoría</button>
+    <button class="btn secondary sm" onclick="document.getElementById('importFile').click()">⬆ Importar respaldo</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
+</div>
+
+<!-- Modal: nuevo equipo -->
+<div class="modal-bg" id="modalEquipo">
+  <div class="modal">
+    <h3 id="equipoModalTitle">➕ Nuevo equipo / máquina</h3>
+    <div class="modal-sub">Datos generales — puedes dejar campos vacíos y completarlos después</div>
+    <div class="form-grid">
+      <div class="form-field full"><label>Nombre *</label><input id="eq-nombre" placeholder="Ej: VALVE ASSEMBLY"></div>
+      <div class="form-field"><label>Marca</label><input id="eq-marca"></div>
+      <div class="form-field"><label>Modelo</label><input id="eq-modelo"></div>
+      <div class="form-field"><label>Serie</label><input id="eq-serie"></div>
+      <!-- FASE 2 (Módulo 2): antes era texto libre; ahora se elige de la
+           misma lista de Áreas que usa Bitácora (/areas en Firestore), para
+           que un equipo quede ligado a un área real y no a texto suelto
+           ("PLANTA 1" vs "Planta 1" vs "planta1"). Ver loadAreasParaEquipos(). -->
+      <!-- (7 oct 2026) Planta / Línea / Tipo de máquina: los mismos campos que
+           lee la cascada Planta → Área → Línea → Tipo → Equipo de Bitácora.
+           Planta sale de /plantas y Línea de /lineas (filtrada por el Área
+           elegida, areaNombre). Se leen UNA vez por sesión al abrir el
+           formulario (plan gratis: pocas lecturas). Todos son opcionales. -->
+      <div class="form-field"><label>Planta</label><select id="eq-planta"><option value="">Sin planta</option></select></div>
+      <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad" onchange="onEqAreaChange()"><option value="">Seleccionar área...</option></select></div>
+      <div class="form-field"><label>Línea</label><select id="eq-linea" onchange="avisarLineaArea()"><option value="">Sin línea</option></select></div>
+      <div class="form-field"><label>Tipo de máquina</label><input id="eq-tipo" list="eq-tipo-list" placeholder="Ej: Telar circular" autocomplete="off"><datalist id="eq-tipo-list"></datalist></div>
+      <div class="form-field full" id="eq-linea-aviso" style="display:none;font-size:12px;color:var(--amber);margin-top:-4px;"></div>
+      <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
+      <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): rastrear compra/garantía por
+           equipo evita mandar a comprar un repuesto pagado cuando la pieza
+           todavía está cubierta. -->
+      <div class="form-field"><label>Fecha de compra</label><input id="eq-compra" type="date"></div>
+      <div class="form-field"><label>Garantía hasta</label><input id="eq-garantia" type="date"></div>
+      <div class="form-field"><label>Tensión</label><input id="eq-tension" placeholder="220 V"></div>
+      <div class="form-field"><label>Potencia</label><input id="eq-potencia" placeholder="3 KW"></div>
+      <div class="form-field"><label>Frecuencia</label><input id="eq-frecuencia" placeholder="50/60 HZ"></div>
+      <div class="form-field"><label>Tamaño</label><input id="eq-tamano" placeholder="1340x1340x1670mm"></div>
+      <div class="form-field"><label>Peso</label><input id="eq-peso" placeholder="1 ton."></div>
+      <div class="form-field"><label>Fase</label><input id="eq-fase" placeholder="MONO FASICO"></div>
+      <div class="form-field"><label>Made in</label><input id="eq-madein"></div>
+      <div class="form-field full"><label>Características</label><textarea id="eq-caracteristicas" placeholder="Capacidad, presión, refrigerante, centro de carga…"></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalEquipo')">Cancelar</button>
+      <button class="btn" onclick="saveEquipo()">Guardar equipo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nuevo/editar repuesto -->
+<div class="modal-bg" id="modalRepuesto">
+  <div class="modal">
+    <h3 id="repModalTitle">➕ Nuevo repuesto</h3>
+    <div class="modal-sub">Se agrega al equipo que estás viendo</div>
+    <div class="form-grid">
+      <div class="form-field full"><label>Repuesto *</label><input id="rp-nombre" placeholder="Ej: RELE"></div>
+      <div class="form-field"><label>Tipo / Marca</label><input id="rp-tipo" placeholder="Ej: OMRON"></div>
+      <div class="form-field"><label>Modelo</label><input id="rp-modelo"></div>
+      <div class="form-field full"><label>Descripción</label><textarea id="rp-descripcion"></textarea></div>
+      <div class="form-field full"><label>Uso / dónde se usa</label><input id="rp-uso" placeholder="Ej: POSICIÓN DE CILINDRO"></div>
+      <div class="form-field"><label>Stock actual (Qty)</label><input id="rp-qty" type="number" min="0" placeholder="Déjalo vacío si aún no lo cuentas"></div>
+      <div class="form-field"><label>Cantidad en máquina</label><input id="rp-cm" type="number" min="0" placeholder="Opcional"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): costo unitario opcional —
+           permite después calcular cuánto cuestan en repuestos las OTs y el
+           valor total del inventario, sin obligar a llenarlo de una vez. -->
+      <div class="form-field"><label>Costo unitario (opcional)</label><input id="rp-precio" type="number" min="0" step="0.01" placeholder="Ej: 25.50"></div>
+      <div class="form-field"><label>Mínimo (alerta stock bajo)</label><input id="rp-min" type="number" min="0" placeholder="Ej: 5"></div>
+      <div class="form-field"><label>Máximo (tope a comprar)</label><input id="rp-max" type="number" min="0" placeholder="Ej: 30"></div>
+      <div class="form-field full">
+        <label>Foto del repuesto</label>
+        <input type="file" id="rp-imagen-camera" accept="image/*" capture="environment" style="display:none" onchange="handleImageUpload(event)">
+        <input type="file" id="rp-imagen-gallery" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-imagen-camera').click()">📷 Tomar foto</button>
+          <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-imagen-gallery').click()">🖼️ Adjuntar imagen</button>
+        </div>
+        <div id="rp-imagen-preview" style="display:none;margin-top:8px;position:relative;width:fit-content;">
+          <img id="rp-imagen-img" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid var(--line);display:block;">
+          <button type="button" class="btn danger sm" style="margin-top:6px;" onclick="removeImage()">🗑 Quitar foto</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalRepuesto')">Cancelar</button>
+      <button class="btn" onclick="saveRepuesto()">Guardar repuesto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox: ver foto en grande -->
+<div class="modal-bg" id="modalLightbox" onclick="closeModal('modalLightbox')">
+  <img id="lightboxImg" style="max-width:90vw;max-height:85vh;border-radius:10px;">
+</div>
+
+<!-- Modal: estado de conexión a Firebase -->
+<div class="modal-bg" id="modalConfig">
+  <div class="modal" style="max-width:560px;">
+    <h3>☁️ Conexión a Firebase</h3>
+    <div class="modal-sub">Base de datos compartida en tiempo real entre todos los celulares y con Bitácora/Análisis.</div>
+    <div id="fbStatusBox" class="info-box" style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px;font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px;">
+      Comprobando conexión…
+    </div>
+    <div class="info-box" style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px;font-size:12px;color:var(--muted);line-height:1.6;">
+      No hace falta configurar nada aquí — la conexión viene lista desde <code>firebase-config.js</code>. Cualquier repuesto o equipo que agregues aparece en los demás celulares en segundos, y si no hay señal se guarda en este dispositivo y se sube solo al reconectar.
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn secondary sm" onclick="configurePin()">🔒 Cambiar clave de eliminación</button>
+      <button class="btn secondary" onclick="closeModal('modalConfig')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: registrar entrada/salida de stock -->
+<div class="modal-bg" id="modalMovimiento">
+  <div class="modal">
+    <h3 id="movModalTitle">📦 Movimiento de stock</h3>
+    <div class="modal-sub" id="movModalSub"></div>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>Tipo de movimiento</label>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn" id="movTipoEntrada" onclick="setMovTipo('entrada')">📥 Entrada</button>
+          <button type="button" class="btn secondary" id="movTipoSalida" onclick="setMovTipo('salida')">📤 Salida</button>
+        </div>
+      </div>
+      <div class="form-field"><label>Cantidad</label><input id="mov-cantidad" type="number" min="1" value="1"></div>
+      <div class="form-field"><label>Técnico</label><select id="mov-tecnico"></select></div>
+      <div class="form-field full"><label>Motivo / dónde se usó</label><input id="mov-motivo" placeholder="Ej: Reparación de rodillo"></div>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): folio de OT opcional —
+           si se llena, checklist.html puede sumar el costo de los repuestos
+           consumidos en esa OT (cantidad × costo unitario). -->
+      <div class="form-field full"><label>Folio de OT (opcional)</label><input id="mov-otfolio" placeholder="Ej: OT-0012"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalMovimiento')">Cancelar</button>
+      <button class="btn" onclick="confirmMovimiento()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: historial de reubicaciones (29 sep 2026) -->
+<div class="modal-bg" id="modalReubicaciones">
+  <div class="modal" style="max-width:700px;">
+    <h3>🧭 Historial de reubicaciones</h3>
+    <div class="modal-sub" id="reubHistSub"></div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Ubicación anterior</th><th>Ubicación nueva</th><th>Quién</th></tr></thead>
+        <tbody id="reubHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalReubicaciones')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal: auditoría de cambios en datos maestros (29 sep 2026, solo Encargado/Admin) -->
+<div class="modal-bg" id="modalAuditoria">
+  <div class="modal" style="max-width:920px;">
+    <h3>🕵️ Auditoría de cambios</h3>
+    <div class="modal-sub">Quién cambió qué en los datos maestros (datos del equipo, frecuencia de checklist, puntos de checklist) — últimos 200 registros, de más reciente a más antiguo.</div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Quién</th><th>Categoría</th><th>Equipo</th><th>Qué cambió</th></tr></thead>
+        <tbody id="audHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalAuditoria')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal: historial de movimientos -->
+<div class="modal-bg" id="modalMovimientos">
+  <div class="modal" style="max-width:800px;">
+    <h3>🕒 Historial de movimientos</h3>
+    <div class="modal-sub" id="movHistSub"></div>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Técnico</th><th>Repuesto</th><th>Tipo</th><th>Cant.</th><th>Quedó en</th><th>Motivo</th></tr></thead>
+        <tbody id="movHistBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" onclick="closeModal('modalMovimientos')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal: carga masiva de repuestos (pegar tabla) -->
+<div class="modal-bg" id="modalBulk">
+  <div class="modal" style="max-width:720px;">
+    <h3>📋 Carga masiva de repuestos</h3>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por repuesto. Si un repuesto ya existe en este equipo (mismo nombre + tipo + modelo), no se duplica: se suma o se reemplaza su conteo según lo que elijas abajo.</div>
+    <div class="form-field full">
+      <label>Formato de columnas: Repuesto · Tipo · Modelo · Descripción · Uso · Qty · Cant.Máquina · Mínimo · Máximo</label>
+      <textarea id="bulkPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="RELE	OMRON	MY2N-GS-C1	Relé 24VDC 8 pines		4	5	2	10"></textarea>
+    </div>
+    <!-- (5 oct 2026) Antes la carga masiva SIEMPRE sumaba la Qty al stock que
+         ya había, sin decirlo: pegar el conteo físico de la bodega duplicaba
+         el stock. Ahora se elige y queda a la vista. Cada cambio de stock deja
+         un movimiento tipo "ajuste" en el historial. -->
+    <div class="form-field full" style="font-size:12.5px;">
+      <label>Si el repuesto ya existe en este equipo, la Qty pegada…</label>
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:4px 0;"><input type="radio" name="bulkModo" value="sumar" checked style="width:auto;"> <b>Sumar a lo que hay</b> <span style="color:var(--muted);">(llegó mercancía: stock + Qty)</span></label>
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:4px 0;"><input type="radio" name="bulkModo" value="reemplazar" style="width:auto;"> <b>Reemplazar conteo</b> <span style="color:var(--muted);">(conteo físico: el stock queda igual a la Qty)</span></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalBulk')">Cancelar</button>
+      <button class="btn" onclick="bulkImportRepuestos()">Procesar y cargar</button>
+    </div>
+    <div id="bulkStatus" style="font-size:12px;margin-top:10px;color:var(--muted);max-height:160px;overflow:auto;"></div>
+  </div>
+</div>
+
+<!-- Modal: carga masiva de equipos (pegar tabla) -->
+<div class="modal-bg" id="modalBulkEquipos">
+  <div class="modal" style="max-width:860px;">
+    <h3>📋 Carga masiva de equipos</h3>
+    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados, las columnas pueden venir en cualquier orden y también se cargan Planta, Línea y Tipo de máquina y la ficha técnica: Tensión, Potencia, Frecuencia eléctrica, Fase, Tamaño, Peso, Made in y fechas de fabricación, instalación, compra y garantía. Antes de guardar verás una vista previa.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button type="button" class="btn sm" onclick="document.getElementById('bulkEquiposFile').click()">📂 Subir archivo Excel / CSV</button>
+      <button type="button" class="btn secondary sm" onclick="descargarPlantillaEquipos()">⬇ Descargar plantilla</button>
+      <input type="file" id="bulkEquiposFile" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="leerArchivoEquipos(event)">
+    </div>
+    <div class="form-field full">
+      <label>O pega aquí las filas (con o sin encabezados). Sin encabezados el orden es: Nombre* · Marca · Modelo · Serie · Área · Frecuencia de checklist (días)</label>
+      <textarea id="bulkEquiposPasteArea" style="min-height:150px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="Nombre	Marca	Modelo	Serie	Área	Frecuencia&#10;COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Compresor de Aire	7&#10;TELAR 10	STARLINGER	SL-6	A-8812	Weaving	"></textarea>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin:8px 0;cursor:pointer;">
+      <input type="checkbox" id="bulkEquiposSobrescribir" style="width:auto;" onchange="previsualizarEquipos()"> Si el equipo ya existe, reemplazar sus datos con los del archivo (si no se marca, solo se completan los datos vacíos)
+    </label>
+    <div id="bulkEquiposPreview"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalBulkEquipos')">Cancelar</button>
+      <button class="btn secondary" onclick="previsualizarEquipos()">👁 Ver vista previa</button>
+      <button class="btn" id="bulkEquiposOk" onclick="bulkImportEquipos()" disabled>Cargar equipos</button>
+    </div>
+    <div id="bulkEquiposStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalFichas">
+  <div class="modal" style="max-width:860px;">
+    <h3>🧹 Ordenar fichas técnicas</h3>
+    <div class="modal-sub">Equipos que tienen la ficha técnica amontonada en "Modelo". Cada dato se pasa a su campo (potencia, peso, tensión, fechas, país…) y lo demás queda en "Características". Nunca se reemplaza un campo que ya tenía dato. Revisa y desmarca los que no quieras cambiar.</div>
+    <div id="fichasBody" style="max-height:60vh;overflow:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalFichas')">Cancelar</button>
+      <button class="btn" id="fichasOk" onclick="aplicarFichas()">Ordenar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay de carga durante sincronización -->
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(13,17,23,.72);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+  <div style="width:34px;height:34px;border:3px solid #2a3140;border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div id="loadingText" style="color:var(--amber);font-family:'IBM Plex Mono',monospace;font-size:12.5px;">Sincronizando…</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════ NORMALIZACIÓN Y FUSIÓN (evitan duplicados) ═══════════════ */
+function normalizeKey(str){
+  return (str||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
+}
+function partKey(p){
+  // dos repuestos se consideran "el mismo" si coinciden nombre + tipo/marca +
+  // (modelo o, si no hay modelo, descripción). Antes NO se comparaba el tipo,
+  // así que dos piezas distintas con el mismo código de "modelo" pero tipo
+  // diferente (ej. un conector TIPO CURVA y uno TIPO RECTO ambos "DE 1/2 A
+  // M16") se fusionaban por error como si fueran la misma pieza.
+  return normalizeKey(p.r) + '|' + normalizeKey(p.t) + '|' + normalizeKey(p.m || p.d || '');
+}
+function mergeRepuestoInto(list, incoming){
+  const key = partKey(incoming);
+  const existing = list.find(p => partKey(p) === key);
+  if(!existing){ list.push({...incoming}); return {merged:false}; }
+  const prevQ = existing.q!=null ? parseFloat(existing.q) : null;
+  const addQ = incoming.q!=null ? parseFloat(incoming.q) : null;
+  if(prevQ!=null || addQ!=null) existing.q = (prevQ||0) + (addQ||0);
+  ['t','m','d','u'].forEach(k=>{ if(!existing[k] && incoming[k]) existing[k] = incoming[k]; });
+  if((existing.cm==null||existing.cm==='') && incoming.cm!=null) existing.cm = incoming.cm;
+  if((existing.pu==null||existing.pu==='') && incoming.pu!=null) existing.pu = incoming.pu;
+  if((existing.min==null||existing.min==='') && incoming.min!=null) existing.min = incoming.min;
+  if((existing.max==null||existing.max==='') && incoming.max!=null) existing.max = incoming.max;
+  if(!existing.img && incoming.img) existing.img = incoming.img;
+  return {merged:true, total: existing.q};
+}
+function mergeEquipoInto(targetList, importedEquipo){
+  let existing = targetList.find(e => normalizeKey(e.nombre) === normalizeKey(importedEquipo.nombre));
+  if(!existing){ targetList.push(JSON.parse(JSON.stringify(importedEquipo))); return; }
+  ['marca','modelo','serie','localidad','planta','linea','tipoMaquina','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein','caracteristicas'].forEach(k=>{
+    if(!existing[k] && importedEquipo[k]) existing[k] = importedEquipo[k];
+  });
+  if(!existing.manualUrl && importedEquipo.manualUrl){ existing.manualUrl = importedEquipo.manualUrl; existing.manualNombre = importedEquipo.manualNombre; }
+  (importedEquipo.repuestos||[]).forEach(p => mergeRepuestoInto(existing.repuestos, p));
+}
+
+/* ═══════════════ DATOS SEMILLA (quitados 5 oct 2026) ═══════════════ */
+// Antes, si la colección "equipos" se leía vacía (por ejemplo, una lectura
+// que falló a medias o una base nueva), la página subía sola dos equipos de
+// ejemplo (VALVE ASSEMBLY y COATING) con stock inventado. Ya no se inserta
+// nada automáticamente: con la base vacía se muestra un aviso para agregar o
+// importar equipos.
+
+/* ═══════════════ TÉCNICOS (misma lista central que usa Bitácora) ═══════════════ */
+// Antes el técnico de un movimiento de stock era texto libre guardado solo en
+// este celular (localStorage) — eso significaba que "Juan Pérez", "juan perez"
+// y "J. Pérez" contaban como 3 personas distintas entre Inventario y
+// Bitácora/Análisis. Ahora se elige de la misma tecnicos.json.
+const TECNICOS_INV_FALLBACK = [
+  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
+  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
+  { "nombre": "LEBRON", "corto": "LEBRON" },
+  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
+];
+let tecnicosInv = TECNICOS_INV_FALLBACK;
+async function loadTecnicosInventario(){
+  try{
+    const r = await fetch('tecnicos.json?_=' + Date.now());
+    if(r.ok){ const data = await r.json(); if(Array.isArray(data) && data.length) tecnicosInv = data; }
+  }catch(e){ console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message); }
+  const sel = document.getElementById('mov-tecnico');
+  if(sel){
+    // (5 oct 2026) nombres escapados con fbEsc (antes solo se escapaban las comillas del value)
+    sel.innerHTML = '<option value="">Selecciona…</option>' + tecnicosInv.map(t=>`<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto||t.nombre)}</option>`).join('');
+  }
+}
+
+/* ═══════════════ ESTADO ═══════════════ */
+let DB = [];
+let currentEquipoId = null;
+let editingRepIndex = null;
+let repFilter = 'todos'; // todos | sin | bajo | nodata | revisar
+const PARTS_PAGE_SIZE = 60; // evita meter tablas de 700+ filas de una vez al DOM (celulares viejos se ponen lentos)
+let partsShown = PARTS_PAGE_SIZE;
+
+/* ═══════════════ CONEXIÓN A FIREBASE ═══════════════ */
+function openConfigModal(){
+  openModal('modalConfig');
+}
+
+function updateSyncStatus(state){
+  const btn = document.getElementById('syncStatusBtn');
+  if(state==='ok') btn.innerHTML = '🟢 En vivo';
+  else if(state==='syncing') btn.innerHTML = '🟡 Sincronizando…';
+  else if(state==='error') btn.innerHTML = '🔴 Error de conexión';
+  else if(state==='local') btn.innerHTML = '💾 Solo local';
+  else btn.innerHTML = '⚪ Conectando…';
+}
+
+// quita valores `undefined` (Firestore los rechaza) reemplazándolos por null
+function fbSanitize(obj){
+  return JSON.parse(JSON.stringify(obj === undefined ? null : obj));
+}
+
+// Firestore no permite documentos de más de ~1MB. Como cada equipo guarda
+// TODOS sus repuestos en un solo documento, un catálogo muy grande cargado de
+// una vez a un mismo equipo se puede acercar a ese límite. Avisamos antes de
+// que falle en seco.
+function checkEquipoSize(e){
+  const bytes = new Blob([JSON.stringify(e)]).size;
+  const pct = bytes / (1024*1024);
+  if(pct > 0.85){
+    showToast(`⚠️ "${e.nombre}" pesa ${(bytes/1024).toFixed(0)}KB — cerca del límite de 1MB de Firestore. Si vas a cargar más repuestos, considera dividirlos en otro equipo (ej: por módulo del catálogo) para no perder la carga.`);
+  }
+  return bytes;
+}
+// (5 oct 2026) Guardado del equipo COMPLETO (datos + todos sus repuestos).
+// Ya solo se usa para restaurar: "Importar respaldo" y "Deshacer" al borrar
+// un equipo. Todo lo demás (movimientos, editar/agregar/borrar repuestos,
+// fusionar, carga masiva, datos del equipo, manual) escribe SOLO el campo
+// que cambia, y los repuestos van dentro de una transacción (txRepuestos).
+function fbSaveEquipo(e){
+  const { id, ...rest } = e;
+  if(Array.isArray(rest.repuestos)) asegurarIdsRepuestos(rest.repuestos);
+  checkEquipoSize(e);
+  const localUpdatedAt = e.updatedAt; // snapshot ANTES de que este guardado cambie updatedAt
+  db.collection('equipos').doc(id).set(fbSanitizeTs({ ...rest, updatedAt: fbTimestamp() }), { merge: true })
+    .catch(err => { console.error('Error guardando equipo:', err); showToast('⚠️ No se pudo sincronizar: '+err.message); });
+  warnIfEquipoChangedSinceLoad(id, e.nombre, localUpdatedAt);
+}
+
+// (29 sep 2026) Cada guardado de un equipo sube el arreglo COMPLETO de
+// repuestos (y todos sus demás campos), no solo lo que cambió -- así que
+// si dos personas editan el MISMO equipo casi al mismo tiempo (una
+// registrando una entrada de un repuesto, otra agregando uno distinto),
+// el segundo guardado puede sobrescribir sin avisar el cambio del primero.
+// (5 oct 2026) Ese problema ya se resolvió con txRepuestos() (abajo); este
+// aviso queda solo para fbSaveEquipo (restaurar respaldo / deshacer).
+// Nunca bloquea ni retrasa el guardado: es una lectura aparte, en
+// paralelo, que se salta sola si no hay conexión o si algo falla.
+async function warnIfEquipoChangedSinceLoad(equipoId, equipoNombre, localUpdatedAt){
+  if (!navigator.onLine || !localUpdatedAt || typeof localUpdatedAt.toMillis !== 'function') return;
+  try {
+    const remoteSnap = await db.collection('equipos').doc(equipoId).get({ source: 'server' });
+    if (!remoteSnap.exists) return;
+    const remoteUpdatedAt = remoteSnap.data().updatedAt;
+    if (remoteUpdatedAt && typeof remoteUpdatedAt.toMillis === 'function' && remoteUpdatedAt.toMillis() > localUpdatedAt.toMillis()) {
+      showToast(`⚠️ "${equipoNombre}" fue editado por otra persona justo antes de tu guardado — revisa el "🕒 Historial" o "🕵️ Auditoría" de este equipo para confirmar que no se perdió nada.`);
+    }
+  } catch (err) { console.error('No se pudo verificar si el equipo cambió mientras tanto:', err); }
+}
+function fbDeleteEquipoDoc(id){
+  return db.collection('equipos').doc(id).delete();
+}
+
+/* ═══════════════ STOCK SEGURO: ID DE REPUESTO + TRANSACCIONES (5 oct 2026) ═══════════════
+   Antes cada repuesto se identificaba por su POSICIÓN en el arreglo y cada
+   cambio subía el arreglo completo que tenía ESTE celular. Si otro técnico
+   registraba una salida al mismo tiempo, o si la lista cambiaba de orden, se
+   perdían movimientos o se descontaba del repuesto equivocado.
+   Ahora:
+   - cada repuesto tiene un `id` corto y estable (se asigna solo, la primera
+     vez que se abre el equipo o al guardar);
+   - todo cambio de repuestos se hace con db.runTransaction: se lee el
+     documento FRESCO del servidor, se busca el repuesto por id, se calcula
+     la nueva cantidad sobre el valor fresco y se escribe solo `repuestos`
+     (+ updatedAt), junto con su registro en /movimientos;
+   - una transacción necesita conexión: sin señal se avisa y no se pierde
+     lo escrito (el formulario queda abierto). */
+const REP_ID_RE = /^[A-Za-z0-9_-]{4,40}$/;
+const repIdValido = id => typeof id === 'string' && REP_ID_RE.test(id);
+function nuevoRepId(){
+  const az = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  const rnd = (window.crypto && crypto.getRandomValues) ? crypto.getRandomValues(new Uint8Array(10)) : Array.from({length:10}, () => Math.floor(Math.random()*256));
+  for (let i = 0; i < 10; i++) s += az[rnd[i] % az.length];
+  return 'r' + s;
+}
+// Pone id a los repuestos que no tienen (o que traen uno inválido de un
+// respaldo importado). Devuelve cuántos asignó.
+function asegurarIdsRepuestos(lista){
+  let n = 0;
+  const vistos = new Set();
+  (lista || []).forEach(p => {
+    if (!p || typeof p !== 'object') return;
+    if (!repIdValido(p.id) || vistos.has(p.id)) { p.id = nuevoRepId(); n++; }
+    vistos.add(p.id);
+  });
+  return n;
+}
+// Referencia a un repuesto tomada al abrir un formulario: su id y, para
+// repuestos viejos sin id, su posición + su clave (nombre|tipo|modelo).
+function refRepuesto(p, idx){
+  return { id: repIdValido(p && p.id) ? p.id : null, idx, key: partKey(p || {}), r: (p && p.r) || '' };
+}
+// Busca el repuesto en la lista FRESCA. Por id; si la referencia no tenía id
+// (repuesto viejo), por posición SOLO si en esa posición sigue estando el
+// mismo repuesto (misma clave). -1 si ya no está.
+function buscarRepuesto(lista, ref){
+  if (!ref) return -1;
+  if (ref.id) return lista.findIndex(p => p && p.id === ref.id);
+  const p = lista[ref.idx];
+  return (p && partKey(p) === ref.key) ? ref.idx : -1;
+}
+// Error con mensaje para el usuario (se muestra tal cual, sin "Error:").
+function errUsuario(msg){ const e = new Error(msg); e.userMsg = msg; return e; }
+function esErrorSinConexion(err){
+  if (!navigator.onLine) return true;
+  const c = err && err.code;
+  return c === 'unavailable' || c === 'deadline-exceeded' || /offline|network|sin conexi/i.test((err && err.message) || '');
+}
+const MSG_SIN_CONEXION = '📶 Para mover stock se necesita conexión. No se guardó nada: intenta de nuevo cuando haya señal.';
+// Muestra el error de una transacción de repuestos de forma clara.
+function avisarErrorTx(err){
+  if (!(err && err.userMsg)) console.error('Transacción de repuestos:', err);
+  if (err && err.userMsg) showToast('⚠️ ' + err.userMsg);
+  else if (esErrorSinConexion(err)) showToast(MSG_SIN_CONEXION);
+  else if (err && err.code === 'permission-denied') showToast('🔒 Tu usuario no tiene permiso para cambiar el inventario.');
+  else showToast('⚠️ No se pudo guardar: ' + ((err && err.message) || err));
+}
+const TX_SIN_CAMBIOS = { sinCambios: true };
+// Corre `fn(lista, datosEquipo, t, idsNuevos)` dentro de una transacción sobre
+// /equipos/{equipoId}. `lista` es una copia de los repuestos FRESCOS (ya con
+// id); fn la modifica y puede agregar escrituras con t.set(...). Si fn
+// devuelve TX_SIN_CAMBIOS (y no hubo ids nuevos) no se escribe nada.
+// OJO: Firestore puede repetir fn si otro celular escribió en medio: fn no
+// debe cambiar nada fuera de `lista` / `t`.
+async function txRepuestos(equipoId, fn){
+  if (!navigator.onLine) { const e = new Error('offline'); e.code = 'unavailable'; throw e; }
+  const ref = db.collection('equipos').doc(equipoId);
+  return db.runTransaction(async t => {
+    const snap = await t.get(ref);
+    if (!snap.exists) throw errUsuario('Este equipo ya no existe (lo borraron desde otro celular).');
+    const data = snap.data() || {};
+    const lista = Array.isArray(data.repuestos) ? data.repuestos.map(p => ({ ...p })) : [];
+    const idsNuevos = asegurarIdsRepuestos(lista);
+    const res = await fn(lista, data, t, idsNuevos);
+    if (res === TX_SIN_CAMBIOS && !idsNuevos) return res;
+    const repuestos = fbSanitize(lista);
+    const bytes = new Blob([JSON.stringify({ ...data, repuestos })]).size;
+    if (bytes > 1000000) throw errUsuario(`"${data.nombre || 'El equipo'}" pasaría de 1MB (límite de Firestore). Divide los repuestos en otro equipo.`);
+    t.update(ref, { repuestos, updatedAt: fbTimestamp() });
+    return res;
+  });
+}
+// Quién está usando la app (para los registros).
+const quienSoy = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—';
+const miUid = () => (window.currentUser && window.currentUser.uid) || null;
+const redondearQ = x => Math.round(x * 10000) / 10000; // evita 0.30000000000000004
+// Número de una celda/campo: acepta coma decimal ("1,5") y miles con punto
+// ("1.250,5"). Devuelve null si está vacío y NaN si no es un número.
+function parseNumero(txt){
+  let s = (txt == null ? '' : String(txt)).trim().replace(/\s/g, '');
+  if (!s) return null;
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
+  return /^-?\d+(\.\d+)?$/.test(s) ? parseFloat(s) : NaN;
+}
+// Registro de /movimientos (ver forma en confirmMovimiento / bulkImportRepuestos).
+function docMovimiento(equipoId, equipoNombre, p, extra){
+  return {
+    equipoId, equipo: equipoNombre || '', repuestoId: p.id || null, repuesto: p.r || '',
+    quien: quienSoy(), quienUid: miUid(), fecha: fbTimestamp(),
+    ...extra,
+  };
+}
+// Asigna (y guarda) los ids que falten la primera vez que se abre un equipo
+// con repuestos viejos. Una sola vez por equipo y sesión; si no hay señal o
+// no hay permiso, se intenta la próxima vez — mientras tanto los botones
+// usan la posición + verificación de nombre.
+const _idsPendientesHechos = new Set();
+function persistirIdsRepuestos(e){
+  if (!e || _idsPendientesHechos.has(e.id) || !navigator.onLine) return;
+  if (!(e.repuestos || []).some(p => !repIdValido(p && p.id))) return;
+  _idsPendientesHechos.add(e.id);
+  txRepuestos(e.id, () => TX_SIN_CAMBIOS)
+    .catch(err => { _idsPendientesHechos.delete(e.id); console.warn('No se pudieron asignar ids a los repuestos:', err.message); });
+}
+// URL de imagen segura para <img src>: solo https o una imagen embebida.
+const urlImgSegura = u => (typeof u === 'string' && /^(https:\/\/|data:image\/(png|jpe?g|webp|gif);)/i.test(u)) ? u : '';
+
+/* ═══ FOTOS DE REPUESTOS SIN COSTO (5 oct 2026) ═══
+   Storage pide el plan de pago (Blaze). Para no pagar nada, cada foto se
+   guarda comprimida (≈25-50 KB) como documento aparte en Firestore:
+   /fotos_repuestos/{id} = { data: 'data:image/jpeg;base64,…', equipoId, … }.
+   El repuesto solo guarda la referencia "foto:<id>", así el documento del
+   equipo no crece y las otras pantallas no descargan fotos que no muestran.
+   Las fotos se leen solo al abrir un equipo, y quedan guardadas en el celular. */
+const FOTO_PREFIX = 'foto:';
+const _fotosCache = {};      // id → dataURL ('' si no existe)
+const _fotosPidiendo = {};   // id → promesa en curso
+const esRefFoto = v => typeof v === 'string' && v.startsWith(FOTO_PREFIX) && /^[A-Za-z0-9_-]{6,40}$/.test(v.slice(FOTO_PREFIX.length));
+function cargarFoto(ref){
+  const id = ref.slice(FOTO_PREFIX.length);
+  if(id in _fotosCache) return Promise.resolve(_fotosCache[id]);
+  if(!_fotosPidiendo[id]){
+    _fotosPidiendo[id] = db.collection('fotos_repuestos').doc(id).get().then(s => {
+      const d = s.exists ? urlImgSegura(s.data().data) : '';
+      _fotosCache[id] = d;
+      return d;
+    }).catch(() => '').finally(() => { delete _fotosPidiendo[id]; });
+  }
+  return _fotosPidiendo[id];
+}
+// Para pintar: devuelve la imagen si ya está en memoria; si no, la pide y
+// la coloca sola en cada <img data-foto="id"> cuando llega.
+function fotoSrc(v){
+  if(esRefFoto(v)){
+    const id = v.slice(FOTO_PREFIX.length);
+    if(_fotosCache[id]) return _fotosCache[id];
+    cargarFoto(v).then(d => {
+      if(!d) return;
+      document.querySelectorAll('img[data-foto="' + id + '"]').forEach(el => { el.src = d; el.style.visibility = ''; });
+    });
+    return '';
+  }
+  return urlImgSegura(v);
+}
+const tieneFoto = v => esRefFoto(v) || !!urlImgSegura(v);
+function borrarFoto(v){
+  if(esRefFoto(v)){
+    const id = v.slice(FOTO_PREFIX.length);
+    delete _fotosCache[id];
+    return db.collection('fotos_repuestos').doc(id).delete().catch(err => console.warn('No se pudo borrar la foto:', err.message));
+  }
+  return fbDeleteFile(v); // fotos viejas que estuvieran en Storage
+}
+// id de documento para meter dentro de onclick="f('…')": solo letras, números, _ y -.
+const idJs = id => /^[A-Za-z0-9_-]{1,128}$/.test(String(id)) ? String(id) : '';
+// Espera una promesa como máximo `ms`; devuelve 'timeout' si no terminó.
+const conTimeout = (prom, ms) => Promise.race([prom, new Promise(ok => setTimeout(() => ok('timeout'), ms))]);
+
+/* ═══════════════ CARGA EN VIVO (Firestore) ═══════════════ */
+let dbListenerStarted = false;
+async function loadDB(){
+  await window.fbReady;
+  if(dbListenerStarted) return; // el listener ya mantiene DB actualizada
+  dbListenerStarted = true;
+  updateSyncStatus('syncing');
+
+  const equiposRef = db.collection('equipos');
+  // (5 oct 2026) Ya no se suben equipos de ejemplo cuando la colección está
+  // vacía (ver "DATOS SEMILLA" arriba): renderHome() muestra cómo empezar.
+
+  equiposRef.onSnapshot((snap)=>{
+    // (5 oct 2026) equipos creados desde otras pantallas pueden no traer
+    // "repuestos": se normaliza a [] para que nada falle al pintar.
+    DB = snap.docs.map(doc => { const d = doc.data(); return { id: doc.id, ...d, repuestos: Array.isArray(d.repuestos) ? d.repuestos : [] }; }).sort((a, b) => cmpNat(a.nombre, b.nombre));
+    updateSyncStatus('ok');
+    const box = document.getElementById('fbStatusBox');
+    if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${fbEsc(firebaseConfig.projectId)}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
+    // (4 oct 2026) desde el QR único: inventario.html?equipo=<id> abre ese equipo
+    const qEq = !window._qrEqAbierto && new URLSearchParams(location.search).get('equipo');
+    if (qEq) { window._qrEqAbierto = true; if (DB.some(x => x.id === qEq)) { openEquipo(qEq); return; } showToast('⚠️ El equipo del código QR ya no existe'); }
+    if(currentEquipoId){ if(getCurrentEquipo()) renderDetail(); else backHome(); }
+    else renderHome();
+  }, (err)=>{
+    console.error('Error escuchando equipos:', err);
+    updateSyncStatus('error');
+    const box = document.getElementById('fbStatusBox');
+    if(box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${fbEsc(err.message)}`;
+    showToast('⚠️ Error de conexión a Firebase: '+err.message);
+  });
+}
+// (5 oct 2026) saveDB() (subía el equipo completo) se quitó: ver txRepuestos().
+
+/* ═══════════════ HELPERS DE STOCK ═══════════════ */
+function stockStatus(p){
+  if(p.q===null || p.q===undefined || p.q===''){ return 'nodata'; }
+  const q = parseFloat(p.q);
+  if(isNaN(q)) return 'nodata';
+  if(q<=0) return 'sin';
+  const min = parseFloat(p.min);
+  if(!isNaN(min) && min>0){
+    return q < min ? 'bajo' : 'ok';
+  }
+  // sin mínimo definido: se usa el 20% de lo instalado en la máquina como referencia
+  const cm = parseFloat(p.cm);
+  if(!isNaN(cm) && cm>0 && q < cm*0.2) return 'bajo';
+  return 'ok';
+}
+function stockLabel(s){ return {sin:'SIN STOCK', bajo:'BAJO', ok:'OK', nodata:'SIN CONTAR'}[s]; }
+function gaugeRef(p){
+  // referencia (100% de la barra): Máximo si está definido, si no Cantidad en máquina
+  const max = parseFloat(p.max);
+  if(!isNaN(max) && max>0) return max;
+  const cm = parseFloat(p.cm);
+  if(!isNaN(cm) && cm>0) return cm;
+  return null;
+}
+function gaugePct(p){
+  if(stockStatus(p)==='nodata') return 0;
+  const q = parseFloat(p.q)||0;
+  const ref = gaugeRef(p);
+  if(!ref) return q>0? 100:0;
+  return Math.max(3, Math.min(100, Math.round(q/ref*100)));
+}
+function minMarkerPct(p){
+  const min = parseFloat(p.min);
+  const ref = gaugeRef(p);
+  if(isNaN(min) || min<=0 || !ref) return null;
+  return Math.max(0, Math.min(100, Math.round(min/ref*100)));
+}
+// Señala repuestos cuyo Mínimo quedó en el valor genérico (1) que dejan las
+// cargas masivas de catálogos — no es un error, pero conviene revisarlo a
+// mano antes de confiar en la alerta de "stock bajo" de esa fila.
+function minLooksDefault(p){
+  const m = parseFloat(p.min);
+  return !isNaN(m) && m===1;
+}
+
+/* ═══════════════ RENDER: HOME ═══════════════ */
+function renderHome(){
+  const allParts = DB.flatMap(e=>e.repuestos);
+  const sinStock = allParts.filter(p=>stockStatus(p)==='sin').length;
+  const bajo = allParts.filter(p=>stockStatus(p)==='bajo').length;
+  const sinContar = allParts.filter(p=>stockStatus(p)==='nodata').length;
+
+  document.getElementById('hdrSub').textContent = `${DB.length} equipos · ${allParts.length} tipos de repuesto registrados`;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi"><div class="lbl">Equipos</div><div class="val">${DB.length}</div></div>
+    <div class="kpi"><div class="lbl">Tipos de repuesto</div><div class="val">${allParts.length}</div></div>
+    <div class="kpi red"><div class="lbl">Sin stock</div><div class="val">${sinStock}</div></div>
+    <div class="kpi amber"><div class="lbl">Stock bajo</div><div class="val">${bajo}</div></div>
+    ${sinContar? `<div class="kpi"><div class="lbl">Sin contar</div><div class="val" style="color:var(--muted);">${sinContar}</div></div>` : ''}
+  `;
+
+  pintarFiltroPlantas();
+  pintarFiltroAreas();
+  const { lista, orden } = equiposOrdenados();
+  document.getElementById('eqCnt').textContent = lista.length === DB.length ? '' : `${lista.length} de ${DB.length}`;
+  const grid = document.getElementById('equipoGrid');
+  let areaActual = null;
+  grid.innerHTML = lista.map(e=>{
+    let hdr = '';
+    if (orden === 'area' && (e.localidad || '') !== areaActual) {
+      areaActual = e.localidad || '';
+      const n = lista.filter(x => (x.localidad || '') === areaActual).length;
+      hdr = `<div class="area-hdr"><h4>${escInv(areaActual || 'Sin área asignada')}</h4><span>${n} equipo${n === 1 ? '' : 's'}</span></div>`;
+    }
+    const parts = e.repuestos;
+    const sin = parts.filter(p=>stockStatus(p)==='sin').length;
+    const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
+    const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
+    const ok = parts.length - sin - baj - noData;
+    return hdr + `
+      <div class="equipo-card" onclick="openEquipo('${idJs(e.id)}')">
+        ${e.localidad && orden !== 'area' ? `<span class="badge-loc">${escInv(e.localidad)}</span>` : ''}
+        <h3>${escInv(e.nombre)}</h3>
+        <div class="meta">${fbEsc([e.marca,e.modelo].filter(Boolean).join(' · ')) || 'Sin datos de marca/modelo'}</div>
+        <div class="stats-row">
+          <div class="stat ok"><b>${ok}</b>OK</div>
+          <div class="stat bajo"><b>${baj}</b>BAJO</div>
+          <div class="stat sinstock"><b>${sin}</b>SIN STOCK</div>
+          ${noData? `<div class="stat" style="color:var(--muted);"><b style="color:var(--muted);">${noData}</b>SIN CONTAR</div>` : ''}
+          <div class="stat" style="margin-left:auto;color:var(--muted);"><b style="color:var(--text)">${parts.length}</b>TOTAL</div>
+        </div>
+      </div>
+    `;
+  }).join('') + (lista.length ? '' : (DB.length
+      ? `<div class="area-hdr"><span>Ningún equipo coincide con el filtro.</span></div>`
+      // (5 oct 2026) base vacía: ya no se cargan equipos de ejemplo, se explica cómo empezar
+      : `<div class="area-hdr" style="display:block;"><span>📭 Todavía no hay equipos registrados. Agrega uno con <b>＋ Agregar equipo</b>, usa <b>📋 Carga masiva de equipos</b> (Excel) o <b>⬆ Importar respaldo</b> (JSON).</span></div>`)) + `<div class="add-card" onclick="openNewEquipoModal()"><div class="plus">＋</div><div>Agregar equipo</div></div>`;
+}
+
+/* ═══════════════ RENDER: DETALLE DE EQUIPO ═══════════════ */
+async function openEquipo(id){
+  currentEquipoId = id;
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('searchResultsView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+  document.getElementById('globalSearch').value = '';
+  repFilter = 'todos';
+  partsShown = PARTS_PAGE_SIZE;
+  renderDetail(); // DB ya se mantiene al día en vivo por el listener de Firestore
+  updateBtnListaCompra();
+}
+function backHome(){
+  currentEquipoId = null;
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('homeView').style.display = 'block';
+  renderHome();
+  updateBtnListaCompra();
+}
+// El botón "Lista de compra" vive en el pie de página, fuera de homeView/
+// detailView (visible siempre) — este texto avisa si al tocarlo se va a
+// descargar la lista de TODA la planta o solo del equipo que se está viendo
+// (29 sep 2026: antes descargaba siempre todos los equipos aunque se
+// estuviera dentro de uno solo, y eso confundía).
+function updateBtnListaCompra(){
+  const btn = document.getElementById('btnListaCompra');
+  if(!btn) return;
+  const e = currentEquipoId ? getCurrentEquipo() : null;
+  btn.textContent = e ? `🛒 Lista de compra — ${e.nombre}` : '🛒 Lista de compra (faltantes)';
+}
+
+function getCurrentEquipo(){ return DB.find(e=>e.id===currentEquipoId); }
+
+function renderDetail(){
+  const e = getCurrentEquipo();
+  if(!e){ backHome(); return; }
+  const parts = e.repuestos;
+  const sin = parts.filter(p=>stockStatus(p)==='sin').length;
+  const baj = parts.filter(p=>stockStatus(p)==='bajo').length;
+  const noData = parts.filter(p=>stockStatus(p)==='nodata').length;
+
+  // Comparación con Maximo/SAP (28 sep 2026): garantía vigente/vencida se marca
+  // aquí mismo comparando contra la fecha de hoy — así se ve de un vistazo sin
+  // tener que calcular nada al mandar a comprar un repuesto.
+  let garantiaTxt = e.garantiaHasta || '';
+  if (e.garantiaHasta) {
+    const vencida = new Date(e.garantiaHasta + 'T00:00:00') < new Date(new Date().toDateString());
+    garantiaTxt = e.garantiaHasta + (vencida ? ' · ⚠️ Vencida' : ' · ✅ Vigente');
+  }
+  const specs = [
+    ['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie],
+    ['Planta', e.planta], ['Área', e.localidad], ['Línea', e.linea], ['Tipo de máquina', e.tipoMaquina], // (7 oct 2026)
+    ['Fecha fabricación', e.fabricacion], ['Fecha instalación', e.instalacion],
+    ['Fecha de compra', e.fechaCompra], ['Garantía hasta', garantiaTxt],
+    ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia],
+    ['Tamaño', e.tamano], ['Peso', e.peso], ['Fase', e.fase], ['Made in', e.madein],
+    ['Características', e.caracteristicas, true],
+  ];
+
+  const revisar = parts.filter(minLooksDefault).length;
+
+  let filtered = parts;
+  if(repFilter==='sin') filtered = parts.filter(p=>stockStatus(p)==='sin');
+  if(repFilter==='bajo') filtered = parts.filter(p=>stockStatus(p)==='bajo');
+  if(repFilter==='nodata') filtered = parts.filter(p=>stockStatus(p)==='nodata');
+  if(repFilter==='revisar') filtered = parts.filter(minLooksDefault);
+
+  document.getElementById('detailView').innerHTML = `
+    <div class="back-link" onclick="backHome()">← Volver a todos los equipos</div>
+    <div class="detail-hdr">
+      <div>
+        <h2>${fbEsc(e.nombre)}</h2>
+        <div class="sub">${parts.length} repuestos registrados · ${sin} sin stock · ${baj} con stock bajo${noData?` · ${noData} sin contar`:''}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
+        ${necesitaOrden(e) ? `<button class="btn secondary sm" onclick="abrirOrdenarFichas('${idJs(e.id)}')">🧹 Ordenar ficha</button>` : ''}
+        <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
+        <button class="btn secondary sm" onclick="showReubicaciones()">🧭 Reubicaciones</button>
+        <button class="btn secondary sm" onclick="openModal('modalBulk')">📋 Carga masiva</button>
+        <button class="btn secondary sm" onclick="findAndMergeDuplicates()">🧹 Buscar duplicados</button>
+        <button class="btn secondary sm" onclick="deleteEquipo()">🗑 Eliminar equipo</button>
+        <button class="btn sm" onclick="openRepuestoModal()">＋ Agregar repuesto</button>
+      </div>
+    </div>
+
+    <div class="specs-card">
+      <div class="specs-grid">
+        ${specs.map(([k,v,full])=>`<div class="spec ${full?'full':''}"><div class="k">${k}</div><div class="v ${!v?'empty':''}">${v?escInv(v):'sin registrar'}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        ${e.manualUrl ? `
+          <button class="btn secondary sm" onclick="viewManual()">📄 Ver manual — ${fbEsc(e.manualNombre||'PDF')}</button>
+          <button class="btn secondary sm" onclick="enlazarManual()">🔄 Cambiar enlace</button>
+          <button class="btn danger sm" onclick="removeManual()">🗑 Quitar manual</button>
+        ` : `
+          <button class="btn secondary sm" onclick="enlazarManual()">🔗 Agregar manual (enlace de Google Drive)</button>
+        `}
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="filter-chips">
+          <span class="fchip ${repFilter==='todos'?'active':''}" onclick="setRepFilter('todos')">Todos (${parts.length})</span>
+          <span class="fchip ${repFilter==='sin'?'active':''}" onclick="setRepFilter('sin')">🔴 Sin stock (${sin})</span>
+          <span class="fchip ${repFilter==='bajo'?'active':''}" onclick="setRepFilter('bajo')">🟡 Bajo (${baj})</span>
+          ${noData? `<span class="fchip ${repFilter==='nodata'?'active':''}" onclick="setRepFilter('nodata')">⚪ Sin contar (${noData})</span>` : ''}
+          ${revisar? `<span class="fchip ${repFilter==='revisar'?'active':''}" onclick="setRepFilter('revisar')" title="Repuestos con Mínimo=1 (valor genérico dejado por una carga masiva) — conviene revisar cuál debería ser el mínimo real">🔧 Mínimo por revisar (${revisar})</span>` : ''}
+        </div>
+        <input type="text" id="localSearch" placeholder="Filtrar en este equipo…" oninput="partsShown=PARTS_PAGE_SIZE;renderPartsTable()" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:7px 11px;border-radius:7px;font-size:12px;">
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th></th><th>Repuesto</th><th>Tipo/Marca</th><th>Modelo</th><th>Descripción</th><th>Uso</th>
+            <th>Stock</th><th>Mín/Máx</th><th>En máquina</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody id="partsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  renderPartsTable();
+  persistirIdsRepuestos(e); // (5 oct 2026) da id estable a repuestos viejos
+}
+
+function setRepFilter(f){ repFilter = f; partsShown = PARTS_PAGE_SIZE; renderDetail(); }
+
+function renderPartsTable(){
+  const e = getCurrentEquipo();
+  if(!e) return;
+  const localQ = (document.getElementById('localSearch')?.value || '').toLowerCase();
+  let list = e.repuestos.map((p,i)=>({...p, _idx:i}));
+  if(repFilter==='sin') list = list.filter(p=>stockStatus(p)==='sin');
+  if(repFilter==='bajo') list = list.filter(p=>stockStatus(p)==='bajo');
+  if(repFilter==='nodata') list = list.filter(p=>stockStatus(p)==='nodata');
+  if(repFilter==='revisar') list = list.filter(minLooksDefault);
+  if(localQ) list = list.filter(p=> [p.r,p.t,p.m,p.d,p.u].join(' ').toLowerCase().includes(localQ));
+
+  const body = document.getElementById('partsBody');
+  if(!list.length){
+    body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="big">📭</div>No hay repuestos que coincidan.</div></td></tr>`;
+    return;
+  }
+
+  const totalList = list.length;
+  const paginated = list.slice(0, partsShown);
+
+  body.innerHTML = paginated.map(p=>{
+    const st = stockStatus(p);
+    const pct = gaugePct(p);
+    const minPct = minMarkerPct(p);
+    const isNum = !isNaN(parseFloat(p.q));
+    const minMaxTxt = fbEsc([(p.min!=null&&p.min!==''?p.min:'—'), (p.max!=null&&p.max!==''?p.max:'—')].join(' / '));
+    // (5 oct 2026) todo dato del repuesto pasa por fbEsc; la foto solo si es
+    // una URL https/imagen válida, y el lightbox recibe la posición (no la URL).
+    const img = fotoSrc(p.img); const fotoId = esRefFoto(p.img) ? p.img.slice(FOTO_PREFIX.length) : '';
+    return `
+      <tr>
+        <td>${(img || fotoId) ? `<img src="${fbEsc(img)}" ${fotoId ? `data-foto="${fbEsc(fotoId)}"` : ''} ${img ? '' : 'style="visibility:hidden"'} class="thumb" onclick="openLightboxRep(${p._idx})">` : `<div class="thumb-placeholder">📦</div>`}</td>
+        <td class="part-name">${fbEsc(p.r)}${(p.pu!==null && p.pu!==undefined && p.pu!=='' && !isNaN(Number(p.pu))) ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
+        <td class="part-modelo">${fbEsc(p.t||'—')}</td>
+        <td class="part-modelo">${fbEsc(p.m||'—')}</td>
+        <td class="part-desc">${fbEsc(p.d||'—')}</td>
+        <td class="part-modelo">${fbEsc(p.u||'—')}</td>
+        <td>
+          <div class="gauge-wrap">
+            <span class="qty-num">${isNum? fbEsc(p.q) : '—'}</span>
+            <div class="gauge">
+              <div class="gauge-fill ${st}" style="width:${isNum?pct:100}%"></div>
+              ${minPct!=null ? `<div class="gauge-min-mark" style="left:${minPct}%"></div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="mono" style="color:var(--muted);font-size:11px;">${minMaxTxt}${minLooksDefault(p)?' <span class="stock-badge revisar" title="Mínimo genérico (1) dejado por una carga masiva — revísalo">revisar</span>':''}</td>
+        <td class="mono">${(p.cm!==null && p.cm!==undefined && p.cm!=='')? fbEsc(p.cm) : '—'}</td>
+        <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-btn" onclick="openMovimiento(${p._idx},'entrada')" title="Registrar entrada de stock">📥</button>
+            <button class="icon-btn" onclick="openMovimiento(${p._idx},'salida')" title="Registrar salida de stock">📤</button>
+            <button class="icon-btn" onclick="openRepuestoModal(${p._idx})" title="Editar todo">✏️</button>
+            <button class="icon-btn" onclick="deleteRepuesto(${p._idx})" title="Eliminar">🗑</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('') + (totalList>partsShown ? `
+    <tr><td colspan="11" style="text-align:center;padding:16px;">
+      <button class="btn secondary sm" onclick="showMoreParts()">Mostrar más (${totalList-partsShown} restantes) ⌄</button>
+    </td></tr>` : '');
+}
+function showMoreParts(){ partsShown += PARTS_PAGE_SIZE; renderPartsTable(); }
+
+/* ═══════════════ ÁREAS (Módulo 2 — Localidad ahora es un desplegable) ═══
+   Misma colección /areas que usa Bitácora (firestore.rules: lectura
+   esTecnicoOMas()). Aquí solo se lee — agregar un área nueva se hace desde
+   Bitácora, no desde Inventario, para no duplicar ese flujo. */
+const AREAS_INVENTARIO_FALLBACK = [
+  'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
+  'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
+  'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
+  'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
+  'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
+];
+let currentAreasInventario = AREAS_INVENTARIO_FALLBACK.slice();
+
+function renderEquipoLocalidadOptions(valorActual){
+  const sel = document.getElementById('eq-localidad');
+  if(!sel) return;
+  // Si el equipo ya tenía un valor de Localidad de texto libre (ej. "PLANTA
+  // 1", de antes de este cambio) que no está en la lista de Áreas, se agrega
+  // igual como opción para no perder ni esconder ese dato ya guardado.
+  const lista = currentAreasInventario.slice();
+  if (valorActual && !lista.some(a => a.toLowerCase() === valorActual.toLowerCase())) lista.unshift(valorActual);
+  sel.innerHTML = '<option value="">Seleccionar área...</option>'
+    + lista.map(a => `<option value="${fbEsc(a)}"${a === valorActual ? ' selected' : ''}>${fbEsc(a)}</option>`).join(''); // (5 oct 2026) escapado
+}
+
+function loadAreasParaEquipos(){
+  renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
+  window.fbReady.then(() => {
+    db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
+      if (!snap.empty) {
+        currentAreasInventario = snap.docs.map(d => d.data().nombre).filter(Boolean);
+        // (7 oct 2026) planta de cada área (plantaNombre, como en Bitácora) para
+        // proponer la Planta al elegir el Área en el formulario de equipo.
+        plantaDeAreaInv = {};
+        snap.docs.forEach(d => { const a = d.data(); if (a.nombre && a.plantaNombre) plantaDeAreaInv[fbEquipoKey(a.nombre)] = a.plantaNombre; });
+        renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
+      }
+    }, (err) => {
+      console.warn('No se pudo leer /areas, usando lista local de respaldo:', err.message);
+    });
+  }).catch(() => {});
+}
+
+/* ═══════════════ PLANTA / LÍNEA / TIPO DE MÁQUINA (7 oct 2026) ═══════════════
+   Campos que usa la cascada de Bitácora (Planta → Área → Línea → Tipo →
+   Equipo): equipos.planta (= nombre en /plantas), equipos.linea (= nombre en
+   /lineas, cuya areaNombre es la Localidad/Área del equipo) y
+   equipos.tipoMaquina (texto libre). /plantas y /lineas se leen con get()
+   UNA sola vez por sesión, al abrir el formulario o la carga masiva (plan
+   gratis: lecturas acotadas). Sin señal, get() usa la copia del celular; si
+   falla, se vuelve a intentar la próxima vez que se abra el formulario. */
+let plantaDeAreaInv = {};          // fbEquipoKey(área) → plantaNombre (de /areas)
+let plantasInv = null;             // ['PLANTA 1', …] o null si aún no se leyó
+let lineasInv = null;              // [{nombre, areaNombre}] o null si aún no se leyó
+let _catUbicPromesa = null;
+function cargarCatalogoUbicacion(){
+  if (_catUbicPromesa) return _catUbicPromesa;
+  const leer = (col, map) => db.collection(col).orderBy('nombre').get()
+    .then(snap => snap.docs.map(d => map(d.data())).filter(Boolean))
+    .catch(err => { console.warn('No se pudo leer /' + col + ':', err.message); return null; });
+  // solo se lee lo que aún no está en memoria (si una falló, se reintenta solo esa)
+  _catUbicPromesa = window.fbReady.then(() => Promise.all([
+    plantasInv ? plantasInv : leer('plantas', d => d.nombre || ''),
+    lineasInv ? lineasInv : leer('lineas', d => d.nombre ? { nombre: d.nombre, areaNombre: d.areaNombre || '' } : null),
+  ])).then(([pl, li]) => {
+    if (pl) plantasInv = pl;
+    if (li) lineasInv = li;
+    if (!pl || !li) _catUbicPromesa = null;
+  }).catch(() => { _catUbicPromesa = null; });
+  return _catUbicPromesa;
+}
+// Opciones de un <select>: la lista + el valor actual aunque no esté en ella
+// (para no perder ni esconder un dato ya guardado).
+function opcionesSelect(sel, lista, valorActual, vacio){
+  if(!sel) return;
+  const items = lista.slice();
+  // Mismo nombre con otra escritura ("Linea A" vs "LINEA A"): se muestra el
+  // valor guardado tal cual, en lugar del de la lista (así no cuenta como cambio).
+  const i = valorActual ? items.findIndex(x => fbEquipoKey(x.v ?? x) === fbEquipoKey(valorActual)) : -1;
+  if (i >= 0) items[i] = valorActual;
+  else if (valorActual) items.unshift(valorActual);
+  sel.innerHTML = `<option value="">${fbEsc(vacio)}</option>` + items.map(x => {
+    const v = x.v ?? x, t = x.t ?? x;
+    return `<option value="${fbEsc(v)}"${v === valorActual ? ' selected' : ''}>${fbEsc(t)}</option>`;
+  }).join('');
+  sel.value = valorActual || '';
+}
+function renderEquipoPlantaOptions(valorActual){
+  // /plantas + las que ya tienen los equipos; el mismo nombre con otra escritura se muestra una sola vez
+  const lista = [];
+  [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean)].forEach(p => { if (!lista.some(q => fbEquipoKey(q) === fbEquipoKey(p))) lista.push(p); });
+  opcionesSelect(document.getElementById('eq-planta'), lista.sort(cmpNat), valorActual, 'Sin planta');
+}
+// Líneas del Área elegida (sin importar mayúsculas/acentos, como Bitácora).
+// Sin Área elegida se muestran todas, con su área al lado.
+function lineasParaAreaInv(area){
+  const todas = lineasInv || [];
+  if (!area) return todas.map(l => ({ v: l.nombre, t: l.areaNombre ? `${l.nombre} — ${l.areaNombre}` : l.nombre }));
+  const k = fbEquipoKey(area);
+  return [...new Set(todas.filter(l => fbEquipoKey(l.areaNombre) === k).map(l => l.nombre))];
+}
+function renderEquipoLineaOptions(valorActual){
+  const area = document.getElementById('eq-localidad')?.value || '';
+  opcionesSelect(document.getElementById('eq-linea'), lineasParaAreaInv(area), valorActual, 'Sin línea');
+  avisarLineaArea();
+}
+function renderTiposMaquinaDatalist(){
+  const dl = document.getElementById('eq-tipo-list'); if (!dl) return;
+  const vistos = new Map();
+  DB.forEach(e => { const t = (e.tipoMaquina || '').trim(); if (t && !vistos.has(fbEquipoKey(t))) vistos.set(fbEquipoKey(t), t); });
+  dl.innerHTML = [...vistos.values()].sort(cmpNat).map(t => `<option value="${fbEsc(t)}"></option>`).join('');
+}
+// Aviso (no bloquea): la Línea elegida pertenece a otra Área.
+function avisarLineaArea(){
+  const box = document.getElementById('eq-linea-aviso'); if (!box) return;
+  const linea = document.getElementById('eq-linea')?.value || '';
+  const area = document.getElementById('eq-localidad')?.value || '';
+  let msg = '';
+  if (linea && lineasInv) {
+    const regs = lineasInv.filter(l => fbEquipoKey(l.nombre) === fbEquipoKey(linea));
+    if (!regs.length) msg = `⚠️ La línea "${linea}" no está registrada en Líneas.`;
+    else if (area && !regs.some(l => fbEquipoKey(l.areaNombre) === fbEquipoKey(area))) {
+      const otras = [...new Set(regs.map(l => l.areaNombre).filter(Boolean))].join(', ');
+      msg = `⚠️ La línea "${linea}" pertenece ${otras ? 'al área "' + otras + '"' : 'a otra área'}, no a "${area}". Puedes guardar igual.`;
+    }
+  }
+  box.textContent = msg;
+  box.style.display = msg ? '' : 'none';
+}
+function onEqAreaChange(){
+  const area = document.getElementById('eq-localidad').value;
+  // Si el área tiene planta asignada y aún no se eligió planta, se propone.
+  const selP = document.getElementById('eq-planta');
+  const pl = plantaDeAreaInv[fbEquipoKey(area)];
+  if (selP && !selP.value && pl) renderEquipoPlantaOptions(pl);
+  renderEquipoLineaOptions(document.getElementById('eq-linea').value);
+}
+// Llena Planta/Línea/Tipo del formulario y, cuando llega el catálogo, los repinta
+// conservando lo que el usuario ya haya elegido.
+function prepararUbicacionForm(planta, linea, tipo){
+  renderEquipoPlantaOptions(planta || '');
+  renderEquipoLineaOptions(linea || '');
+  document.getElementById('eq-tipo').value = tipo || '';
+  renderTiposMaquinaDatalist();
+  cargarCatalogoUbicacion().then(() => {
+    renderEquipoPlantaOptions(document.getElementById('eq-planta').value);
+    renderEquipoLineaOptions(document.getElementById('eq-linea').value);
+  });
+}
+
+/* ═══════════════ MODALES ═══════════════ */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+let editingEquipoId = null;
+const EQ_FIELD_IDS = ['eq-nombre','eq-marca','eq-modelo','eq-serie','eq-localidad','eq-fabricacion','eq-instalacion','eq-compra','eq-garantia','eq-tension','eq-potencia','eq-frecuencia','eq-tamano','eq-peso','eq-fase','eq-madein','eq-caracteristicas'];
+
+function openNewEquipoModal(){
+  editingEquipoId = null;
+  document.getElementById('equipoModalTitle').textContent = '➕ Nuevo equipo / máquina';
+  EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  renderEquipoLocalidadOptions('');
+  prepararUbicacionForm('', '', '');
+  openModal('modalEquipo');
+}
+function openEditEquipoModal(){
+  const e = getCurrentEquipo();
+  editingEquipoId = e.id;
+  document.getElementById('equipoModalTitle').textContent = '✏️ Editar datos del equipo';
+  document.getElementById('eq-nombre').value = e.nombre||'';
+  document.getElementById('eq-marca').value = e.marca||'';
+  document.getElementById('eq-modelo').value = e.modelo||'';
+  document.getElementById('eq-serie').value = e.serie||'';
+  renderEquipoLocalidadOptions(e.localidad||'');
+  document.getElementById('eq-fabricacion').value = e.fabricacion||'';
+  document.getElementById('eq-instalacion').value = e.instalacion||'';
+  document.getElementById('eq-compra').value = e.fechaCompra||'';
+  document.getElementById('eq-garantia').value = e.garantiaHasta||'';
+  document.getElementById('eq-tension').value = e.tension||'';
+  document.getElementById('eq-potencia').value = e.potencia||'';
+  document.getElementById('eq-frecuencia').value = e.frecuencia||'';
+  document.getElementById('eq-tamano').value = e.tamano||'';
+  document.getElementById('eq-peso').value = e.peso||'';
+  document.getElementById('eq-fase').value = e.fase||'';
+  document.getElementById('eq-madein').value = e.madein||'';
+  document.getElementById('eq-caracteristicas').value = e.caracteristicas||'';
+  prepararUbicacionForm(e.planta||'', e.linea||'', e.tipoMaquina||'');
+  openModal('modalEquipo');
+}
+
+async function saveEquipo(){
+  const nombre = document.getElementById('eq-nombre').value.trim();
+  if(!nombre){ showToast('⚠️ El nombre es obligatorio'); return; }
+  const dupe = DB.find(e2=>normalizeKey(e2.nombre)===normalizeKey(nombre) && e2.id!==editingEquipoId);
+  if(dupe){ showToast('⚠️ Ya existe otro equipo con ese nombre'); return; }
+
+  const datos = {
+    nombre,
+    marca: document.getElementById('eq-marca').value.trim(),
+    modelo: document.getElementById('eq-modelo').value.trim(),
+    serie: document.getElementById('eq-serie').value.trim(),
+    localidad: document.getElementById('eq-localidad').value.trim(),
+    planta: document.getElementById('eq-planta').value.trim(),       // (7 oct 2026)
+    linea: document.getElementById('eq-linea').value.trim(),         // (7 oct 2026)
+    tipoMaquina: document.getElementById('eq-tipo').value.trim(),    // (7 oct 2026)
+    fabricacion: document.getElementById('eq-fabricacion').value,
+    instalacion: document.getElementById('eq-instalacion').value,
+    fechaCompra: document.getElementById('eq-compra').value,
+    garantiaHasta: document.getElementById('eq-garantia').value,
+    tension: document.getElementById('eq-tension').value.trim(),
+    potencia: document.getElementById('eq-potencia').value.trim(),
+    frecuencia: document.getElementById('eq-frecuencia').value.trim(),
+    tamano: document.getElementById('eq-tamano').value.trim(),
+    peso: document.getElementById('eq-peso').value.trim(),
+    fase: document.getElementById('eq-fase').value.trim(),
+    madein: document.getElementById('eq-madein').value.trim(),
+    caracteristicas: document.getElementById('eq-caracteristicas').value.trim(),
+  };
+
+  // Etiquetas legibles para la auditoría — mismas claves que `datos` arriba.
+  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', planta:'Planta', linea:'Línea', tipoMaquina:'Tipo de máquina', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in', caracteristicas:'Características' };
+
+  if(editingEquipoId){
+    const e = DB.find(x=>x.id===editingEquipoId);
+    // Reubicación (29 sep 2026): si cambió la Localidad, se guarda como un
+    // renglón aparte ANTES de sobrescribir — ver logReubicacion() arriba.
+    if((e.localidad||'') !== (datos.localidad||'')){
+      logReubicacion(e, e.localidad, datos.localidad);
+    }
+    // Auditoría (29 sep 2026): se compara cada campo del formulario contra
+    // su valor anterior y solo se registran los que de verdad cambiaron.
+    const cambios = [];
+    Object.keys(datos).forEach(k=>{
+      const antes = e[k] || '';
+      const despues = datos[k] || '';
+      if(antes !== despues) cambios.push({ campo: EQ_FIELD_LABELS[k]||k, anterior: antes, nuevo: despues });
+    });
+    if(!cambios.length){ closeModal('modalEquipo'); showToast('Sin cambios'); return; }
+    logAuditoria('especificaciones_equipo', e.id, e.nombre, cambios);
+    // (5 oct 2026) Antes se subía el equipo COMPLETO (set merge con sus
+    // repuestos, checklist y horómetro tal como estaban en este celular):
+    // podía pisar un movimiento de stock o un checklist hecho en otro celular
+    // mientras el formulario estaba abierto. Ahora solo se actualizan los
+    // campos de este formulario. Sin await: sin señal queda en cola y sube solo.
+    db.collection('equipos').doc(e.id).update({ ...fbSanitize(datos), updatedAt: fbTimestamp() })
+      .catch(err => { console.error('Error guardando equipo:', err); showToast(err.code === 'permission-denied' ? '🔒 Tu usuario no tiene permiso para editar equipos.' : '⚠️ No se pudo guardar el equipo: ' + err.message); });
+    Object.assign(e, datos);
+    // Mantiene al día la copia pública del QR (solo la ficha; el historial no se toca).
+    publicarHojaVida({ ...e, id: e.id });
+    closeModal('modalEquipo');
+    renderDetail();
+    showToast('✅ Datos del equipo guardados');
+    return;
+  }
+
+  await window.fbReady;
+  const ref = db.collection('equipos').doc(); // id generado localmente, sin esperar al servidor
+  const nuevo = { id: ref.id, ...datos, repuestos: [] };
+  // (5 oct 2026) documento nuevo: se crea directo (sin await, funciona sin señal)
+  ref.set(fbSanitizeTs({ ...datos, repuestos: [], updatedAt: fbTimestamp() }))
+    .catch(err => { console.error('Error creando equipo:', err); showToast(err.code === 'permission-denied' ? '🔒 Tu usuario no tiene permiso para crear equipos.' : '⚠️ No se pudo crear el equipo: ' + err.message); });
+  publicarHojaVida({ ...datos, id: ref.id });
+  // Reubicación: un equipo nuevo con Localidad ya asignada cuenta como su
+  // "instalación inicial" en el historial (arranca desde "sin ubicación").
+  if(datos.localidad){
+    logReubicacion(nuevo, '', datos.localidad);
+  }
+  DB.push(nuevo);
+  closeModal('modalEquipo');
+  EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  ['eq-planta','eq-linea','eq-tipo'].forEach(id=>document.getElementById(id).value='');
+  renderHome();
+  showToast('✅ Equipo agregado');
+}
+
+/* ═══════════════ MANUAL DE PARTES (PDF por equipo) ═══════════════ */
+function handleManualUpload(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  if(file.type !== 'application/pdf'){ showToast('⚠️ Solo se aceptan archivos PDF'); ev.target.value=''; return; }
+  const sizeMB = file.size / 1024 / 1024;
+  // (5 oct 2026) tope de 20 MB: un PDF más grande se leía entero en memoria
+  // (como texto base64) y colgaba los celulares baratos.
+  if(sizeMB > 20){ showToast(`⚠️ Este PDF pesa ${sizeMB.toFixed(1)} MB — el máximo es 20 MB. Comprímelo o súbelo por partes.`); ev.target.value=''; return; }
+  if(!navigator.onLine){ showToast('📶 Para subir el manual se necesita conexión.'); ev.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    const eq = getCurrentEquipo();
+    if(!eq){ return; }
+    const prevUrl = eq.manualUrl;
+    showLoading('Subiendo manual…');
+    try{
+      // nombre de archivo sin caracteres raros para la ruta de Storage
+      const nombreSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').slice(-80);
+      const url = await fbUploadDataUrl(e.target.result, `manuales/${eq.id}/${Date.now()}-${nombreSeguro}`);
+      // (5 oct 2026) solo los dos campos del manual, no el equipo completo
+      await conTimeout(db.collection('equipos').doc(eq.id).update({ manualUrl: url, manualNombre: file.name, updatedAt: fbTimestamp() }), 8000);
+      eq.manualUrl = url;
+      eq.manualNombre = file.name;
+      if(prevUrl && prevUrl !== url) fbDeleteFile(prevUrl);
+      showToast('✅ Manual subido');
+    }catch(err){
+      console.error('Error subiendo manual:', err);
+      showToast('❌ No se pudo subir el manual: '+(err.code === 'storage/unauthorized' || err.code === 'permission-denied' ? 'sin permiso.' : err.message));
+    }
+    hideLoading();
+    renderDetail();
+  };
+  reader.readAsDataURL(file);
+  ev.target.value = '';
+}
+// (5 oct 2026) Manual por ENLACE en vez de subir el PDF: subir archivos
+// (Storage) exige el plan de pago de Firebase. El PDF se sube gratis a
+// Google Drive (o cualquier sitio) y aquí se pega su enlace para compartir.
+async function enlazarManual(){
+  const eq = getCurrentEquipo();
+  if(!eq) return;
+  const url = (prompt('Pega el enlace del manual (PDF en Google Drive con acceso "Cualquier persona con el enlace"):', eq.manualUrl || '') || '').trim();
+  if(!url) return;
+  if(!/^https:\/\/[^\s"'<>]+$/i.test(url)){ showToast('⚠️ El enlace debe empezar con https://'); return; }
+  const nombre = (prompt('Nombre del manual (ej. "Manual de partes"):', eq.manualNombre || 'Manual de partes') || 'Manual').trim().slice(0, 80);
+  try{
+    const r = await conTimeout(db.collection('equipos').doc(eq.id).update({ manualUrl: url, manualNombre: nombre, updatedAt: fbTimestamp() }), 8000);
+    if(r === 'timeout') showToast('💾 Guardado en el celular; se subirá cuando haya señal');
+    else showToast('✅ Manual enlazado');
+  }catch(err){ showToast('❌ No se pudo guardar el enlace: ' + err.message); return; }
+  eq.manualUrl = url; eq.manualNombre = nombre;
+  renderDetail();
+}
+function viewManual(){
+  const eq = getCurrentEquipo();
+  if(!eq.manualUrl) return;
+  if(!/^https:\/\//i.test(eq.manualUrl)) return;
+  window.open(eq.manualUrl, '_blank', 'noopener');
+}
+function removeManual(){
+  if(!confirm('¿Quitar el manual de este equipo?')) return;
+  const eq = getCurrentEquipo();
+  const url = eq.manualUrl;
+  // (5 oct 2026) solo los campos del manual; el archivo se borra después de guardar
+  db.collection('equipos').doc(eq.id).update({ manualUrl: null, manualNombre: null, updatedAt: fbTimestamp() })
+    .then(() => fbDeleteFile(url))
+    .catch(err => showToast('⚠️ No se pudo quitar el manual: ' + err.message));
+  eq.manualUrl = null; eq.manualNombre = null;
+  renderDetail();
+  showToast('🗑 Manual eliminado');
+}
+
+/* ═══════════════ INDICADOR DE CARGA ═══════════════ */
+function showLoading(msg){
+  document.getElementById('loadingText').textContent = msg || 'Sincronizando…';
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading(){
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+/* ═══════════════ MOVIMIENTOS DE STOCK (entrada / salida) ═══════════════ */
+let movTipo = 'entrada';
+let movRepRef = null;   // (5 oct 2026) referencia por id (antes: movRepIdx, la posición)
+let movEnCurso = false;
+
+function setMovTipo(t){
+  movTipo = t;
+  document.getElementById('movTipoEntrada').className = t==='entrada' ? 'btn' : 'btn secondary';
+  document.getElementById('movTipoSalida').className = t==='salida' ? 'btn' : 'btn secondary';
+}
+
+function openMovimiento(idx, tipo){
+  const p = getCurrentEquipo().repuestos[idx];
+  if(!p) return;
+  movRepRef = refRepuesto(p, idx);
+  document.getElementById('movModalTitle').textContent = '📦 Movimiento — ' + p.r;
+  document.getElementById('movModalSub').textContent = 'Stock actual: ' + (p.q!=null && p.q!=='' ? p.q : 'sin contar');
+  document.getElementById('mov-cantidad').value = 1;
+  document.getElementById('mov-motivo').value = '';
+  document.getElementById('mov-otfolio').value = '';
+  if(!document.getElementById('mov-tecnico').options.length) loadTecnicosInventario();
+  document.getElementById('mov-tecnico').value = localStorage.getItem('inventario_tecnico_actual') || '';
+  setMovTipo(tipo || 'entrada');
+  openModal('modalMovimiento');
+}
+
+// (5 oct 2026) El movimiento se hace en una transacción: se lee el stock
+// FRESCO del servidor, se busca el repuesto por id, se calcula el nuevo stock
+// sobre ese valor y se guardan juntos el arreglo de repuestos y el registro
+// en /movimientos (o los dos, o ninguno). Antes se restaba sobre el número que
+// tenía este celular y se subía la lista completa: dos salidas casi al mismo
+// tiempo desde dos celulares dejaban el stock mal. Una salida mayor que el
+// stock ya no se permite (antes solo se preguntaba).
+async function confirmMovimiento(){
+  if(movEnCurso) return;
+  const e = getCurrentEquipo();
+  if(!e || !movRepRef) return;
+  const cant = parseNumero(document.getElementById('mov-cantidad').value);
+  if(!(cant > 0)){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+  const tecnico = document.getElementById('mov-tecnico').value.trim();
+  const motivo = document.getElementById('mov-motivo').value.trim();
+  const otFolio = document.getElementById('mov-otfolio').value.trim();
+  if(tecnico) localStorage.setItem('inventario_tecnico_actual', tecnico);
+  const tipo = movTipo, ref = movRepRef, equipoId = e.id;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+
+  movEnCurso = true;
+  showLoading(tipo==='entrada' ? 'Registrando entrada…' : 'Registrando salida…');
+  try{
+    const res = await txRepuestos(equipoId, (lista, data, t) => {
+      const i = buscarRepuesto(lista, ref);
+      if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo o cambió mientras tanto (lo editaron desde otro celular). Revisa la lista y vuelve a intentarlo.`);
+      const p = lista[i];
+      const sinContar = p.q==null || p.q==='' || isNaN(parseFloat(p.q));
+      const prevQ = sinContar ? 0 : parseFloat(p.q);
+      if(tipo==='salida' && cant > prevQ){
+        throw errUsuario(sinContar
+          ? `"${p.r}" está sin contar: registra primero una entrada o pon el stock en ✏️ Editar.`
+          : `No hay suficiente stock de "${p.r}": hay ${prevQ} y quieres sacar ${cant}.`);
+      }
+      const newQ = redondearQ(tipo==='entrada' ? prevQ + cant : prevQ - cant);
+      p.q = newQ;
+      const pu = (p.pu!=null && p.pu!=='' && !isNaN(Number(p.pu))) ? Number(p.pu) : null;
+      const costoTotal = (tipo==='salida' && pu!=null) ? Number((cant * pu).toFixed(2)) : null;
+      t.set(db.collection('movimientos').doc(), docMovimiento(equipoId, data.nombre || e.nombre, p, {
+        tecnico: tecnico||'—', tipo, cantidad: cant, anterior: sinContar ? null : prevQ, quedaEn: newQ,
+        motivo, otFolio: otFolio||null, costoUnitario: pu, costoTotal,
+      }));
+      return { newQ };
+    });
+    closeModal('modalMovimiento');
+    renderDetail();
+    showToast(`${tipo==='entrada'?'📥':'📤'} ${tipo==='entrada'?'Entrada':'Salida'} registrada — nuevo stock: ${res.newQ}`);
+  }catch(err){
+    avisarErrorTx(err); // el formulario queda abierto para reintentar
+  }finally{
+    hideLoading();
+    movEnCurso = false;
+  }
+}
+
+// El historial de movimientos vive en Firestore (colección "movimientos"),
+// compartido entre todos los celulares — ya no es solo de este dispositivo.
+// (5 oct 2026) Los registros nuevos traen equipoId: se busca por id y, para
+// los registros viejos (que solo tienen el nombre), también por nombre.
+async function showMovimientos(){
+  const e = getCurrentEquipo();
+  document.getElementById('movHistSub').textContent = `Cargando movimientos de "${e.nombre}"…`;
+  document.getElementById('movHistBody').innerHTML = '';
+  openModal('modalMovimientos');
+  await window.fbReady;
+  let equipoLog = [];
+  try{
+    const [porId, porNombre] = await Promise.all([
+      db.collection('movimientos').where('equipoId','==', e.id).limit(500).get(),
+      db.collection('movimientos').where('equipo','==', e.nombre).limit(500).get(),
+    ]);
+    const vistos = new Map();
+    porId.docs.forEach(d => vistos.set(d.id, d.data()));
+    // por nombre: solo los viejos sin equipoId (o con el de este mismo equipo)
+    porNombre.docs.forEach(d => { const m = d.data(); if(!m.equipoId || m.equipoId === e.id) vistos.set(d.id, m); });
+    equipoLog = [...vistos.values()];
+    equipoLog.sort((a,b)=> (b.fecha?.toMillis?.()||0) - (a.fecha?.toMillis?.()||0));
+  }catch(err){ showToast('⚠️ No se pudo cargar el historial: '+err.message); }
+  document.getElementById('movHistSub').textContent = `${equipoLog.length} movimiento(s) registrados para "${e.nombre}" — compartido entre todos los celulares.`;
+  const TIPO_MOV = { entrada: ['ok','📥 Entrada'], salida: ['sin','📤 Salida'], ajuste: ['bajo','🔧 Ajuste'] };
+  // (5 oct 2026) todo lo que viene de Firestore pasa por fbEsc
+  document.getElementById('movHistBody').innerHTML = equipoLog.length ? equipoLog.map(m=>{
+    const tm = TIPO_MOV[m.tipo] || ['nodata', fbEsc(m.tipo||'—')];
+    const cant = (m.tipo==='ajuste' && Number(m.cantidad) > 0) ? '+' + m.cantidad : m.cantidad;
+    return `
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${fbEsc(m.tecnico || m.quien || '—')}</td>
+      <td class="part-name">${fbEsc(m.repuesto)}</td>
+      <td><span class="stock-badge ${tm[0]}">${tm[1]}</span></td>
+      <td class="mono">${fbEsc(cant)}</td>
+      <td class="mono">${fbEsc(m.quedaEn)}</td>
+      <td class="part-desc">${fbEsc(m.motivo||'—')}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${fbEsc(m.otFolio)}${m.costoTotal!=null && !isNaN(Number(m.costoTotal))?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
+    </tr>`; }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
+}
+
+// ═══════════════ REUBICACIÓN DE EQUIPO ENTRE ÁREAS (29 sep 2026) ═══════════════
+// Antes, cambiar la "Localidad" de un equipo en "✏️ Editar datos" simplemente
+// sobrescribía el valor — no quedaba ningún rastro de que el equipo estuvo
+// antes en otra área, cuándo se movió, ni quién lo hizo (comparación con
+// Maximo/SAP, sección 12.3 #7: esos sistemas guardan cada instalación/
+// reubicación/desmontaje, no solo la ubicación actual). Se guarda cada
+// cambio en su propia colección compartida ("reubicaciones"), mismo patrón
+// que "movimientos" arriba — nunca se borra ni se sobrescribe, solo se
+// agrega un renglón nuevo por cambio. Ver saveEquipo() para dónde se llama.
+function logReubicacion(equipo, ubicacionAnterior, ubicacionNueva){
+  db.collection('reubicaciones').add({
+    equipoId: equipo.id,
+    equipo: equipo.nombre,
+    ubicacionAnterior: ubicacionAnterior || '(sin ubicación)',
+    ubicacionNueva: ubicacionNueva || '(sin ubicación)',
+    quien: quienSoy(),
+    quienUid: miUid(), // (5 oct 2026) uid de quien lo hizo, para las reglas
+    fecha: fbTimestamp(),
+  }).catch(err => {
+    console.error('Error guardando reubicación:', err);
+    showToast('⚠️ La ubicación se actualizó, pero no se pudo guardar el historial de reubicación: ' + err.message); // (29 sep 2026)
+  });
+}
+
+async function showReubicaciones(){
+  const e = getCurrentEquipo();
+  document.getElementById('reubHistSub').textContent = `Cargando historial de "${e.nombre}"…`;
+  document.getElementById('reubHistBody').innerHTML = '';
+  openModal('modalReubicaciones');
+  await window.fbReady;
+  let log = [];
+  try{
+    const snap = await db.collection('reubicaciones').where('equipoId','==', e.id).limit(200).get();
+    log = snap.docs.map(d=>d.data());
+    log.sort((a,b)=> (b.fecha?.toMillis?.()||0) - (a.fecha?.toMillis?.()||0));
+  }catch(err){ showToast('⚠️ No se pudo cargar el historial: '+err.message); }
+  document.getElementById('reubHistSub').textContent = log.length
+    ? `${log.length} cambio(s) de ubicación registrados para "${e.nombre}".`
+    : `"${e.nombre}" no ha cambiado de ubicación desde que se activó este registro (29 sep 2026) — los cambios de antes de esa fecha no quedaron guardados.`;
+  document.getElementById('reubHistBody').innerHTML = log.length ? log.map(m=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${fbEsc(m.ubicacionAnterior)}</td>
+      <td>${fbEsc(m.ubicacionNueva)}</td>
+      <td>${fbEsc(m.quien)}</td>
+    </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="big">📭</div>Sin reubicaciones registradas todavía.</div></td></tr>`;
+}
+
+// ═══════════════ AUDITORÍA DE CAMBIOS EN DATOS MAESTROS (29 sep 2026) ═══════════════
+// Comparación con Maximo/SAP, sección 12.3 #9: hoy editar los datos de un
+// equipo (o su frecuencia/puntos de checklist, en checklist.html) sobrescribe
+// el documento sin dejar ningún rastro de quién lo cambió ni qué tenía antes.
+// Se guarda un renglón por cada edición REAL (solo los campos que de verdad
+// cambiaron, nunca la lista completa, para no generar ruido) en la colección
+// compartida "auditoria" — de solo-creación por firestore.rules (nunca se
+// puede editar ni borrar un renglón ya escrito, para que el rastro sea
+// confiable). checklist.html escribe aquí también, para las otras dos
+// categorías (frecuencia y puntos de checklist) — por eso el visor de abajo
+// vive en Inventario pero muestra las tres.
+function logAuditoria(categoria, equipoId, equipoNombre, cambios){
+  if(!cambios || !cambios.length) return; // nada cambió de verdad -- no generar ruido
+  db.collection('auditoria').add({
+    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios: fbSanitize(cambios),
+    quien: quienSoy(),
+    // (5 oct 2026) firestore.rules exige quienUid == uid de la sesión y
+    // fecha == hora del servidor (fbTimestamp()).
+    quienUid: miUid(),
+    fecha: fbTimestamp(),
+  }).catch(err => {
+    console.error('Error guardando auditoría:', err);
+    showToast('⚠️ El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message); // (29 sep 2026)
+  });
+}
+
+const AUDITORIA_CATEGORIA_LABEL = {
+  especificaciones_equipo: '🔧 Datos del equipo',
+  frecuencia_checklist: '🗓 Frecuencia de checklist',
+  puntos_checklist_general: '📝 Puntos de checklist (lista general)',
+  puntos_checklist_equipo: '📝 Puntos de checklist (propios del equipo)',
+};
+
+// valor de auditoría legible (los puntos de checklist pueden venir como lista/objeto)
+const fmtAud = v => (v==null || v==='') ? '—' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+async function openAuditoria(){
+  document.getElementById('audHistBody').innerHTML = '';
+  openModal('modalAuditoria');
+  await window.fbReady;
+  let log = [];
+  try{
+    const snap = await db.collection('auditoria').orderBy('fecha','desc').limit(200).get();
+    log = snap.docs.map(d=>d.data());
+  }catch(err){
+    document.getElementById('audHistBody').innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="big">🔒</div>No se pudo cargar — esto es solo para Encargado/Administrador. (${fbEsc(err.message)})</div></td></tr>`;
+    return;
+  }
+  document.getElementById('audHistBody').innerHTML = log.length ? log.map(m=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${m.fecha?.toDate ? m.fecha.toDate().toLocaleString('es-DO') : '—'}</td>
+      <td>${fbEsc(m.quien)}</td>
+      <td>${AUDITORIA_CATEGORIA_LABEL[m.categoria]||fbEsc(m.categoria)}</td>
+      <td>${fbEsc(m.equipoNombre||'—')}</td>
+      <td>${(Array.isArray(m.cambios)?m.cambios:[]).map(c=>`<div style="margin-bottom:2px;"><b>${fbEsc(c.campo)}</b>: <span style="color:var(--muted);">${fbEsc(fmtAud(c.anterior))}</span> → ${fbEsc(fmtAud(c.nuevo))}</div>`).join('')}</td>
+    </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><div class="big">📭</div>Sin cambios registrados todavía.</div></td></tr>`;
+}
+
+/* ═══════════════ CARGA MASIVA (pegar tabla) ═══════════════ */
+// (5 oct 2026) Cambios:
+// - Se elige "Sumar a lo que hay" (como antes, por defecto) o "Reemplazar
+//   conteo" (conteo físico).
+// - Qty/Mínimo/Máximo aceptan coma decimal ("1,5"); un texto que no es número
+//   ya no se convierte en 0 a escondidas: esa fila se marca con error y no se
+//   carga (se avisa cuáles).
+// - Se guarda en una transacción sobre los repuestos FRESCOS del servidor
+//   (ver txRepuestos) y cada repuesto cuyo stock cambió deja un movimiento
+//   tipo "ajuste" en /movimientos (nota "carga masiva").
+let bulkRepEnCurso = false;
+async function bulkImportRepuestos(){
+  if(bulkRepEnCurso) return;
+  const text = document.getElementById('bulkPasteArea').value;
+  const status = document.getElementById('bulkStatus');
+  if(!text.trim()){ showToast('⚠️ Pega la tabla primero'); return; }
+  const modo = (document.querySelector('input[name="bulkModo"]:checked') || {}).value === 'reemplazar' ? 'reemplazar' : 'sumar';
+  const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim());
+  const e = getCurrentEquipo();
+  if(!e) return;
+
+  const filas = [], errores = [];
+  lines.forEach((line, n) => {
+    const c = line.split('\t');
+    if(!c[0] || !c[0].trim()) return;
+    const num = (i, etiqueta, problemas) => {
+      const v = parseNumero(c[i]);
+      if(Number.isNaN(v)) { problemas.push(`${etiqueta} "${(c[i]||'').trim()}" no es un número`); return null; }
+      if(v != null && v < 0) { problemas.push(`${etiqueta} no puede ser negativo`); return null; }
+      return v;
+    };
+    const problemas = [];
+    const obj = {
+      r: c[0].trim(), t:(c[1]||'').trim(), m:(c[2]||'').trim(), d:(c[3]||'').trim(), u:(c[4]||'').trim(),
+      q: num(5, 'Qty', problemas),
+      cm: (c[6]!==undefined && c[6].trim()!=='') ? c[6].trim() : null, // texto libre ("100 PIE")
+      min: num(7, 'Mínimo', problemas),
+      max: num(8, 'Máximo', problemas),
+      img: null
+    };
+    if(problemas.length) errores.push(`Fila ${n+1} (${obj.r}): ${problemas.join('; ')}`);
+    else filas.push(obj);
+  });
+  if(errores.length){
+    status.innerHTML = `<b style="color:var(--red);">${errores.length} fila(s) con error — no se cargan:</b><br>` + errores.map(fbEsc).join('<br>');
+    if(!filas.length){ showToast('⚠️ Ninguna fila válida para cargar'); return; }
+    if(!confirm(`${errores.length} fila(s) tienen números que no se entienden y NO se cargarán (la lista está debajo del cuadro).\n\n¿Cargar las otras ${filas.length}?`)) return;
+  } else status.textContent = '';
+  if(!filas.length){ showToast('⚠️ No hay filas para cargar'); return; }
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+
+  bulkRepEnCurso = true;
+  showLoading('Cargando repuestos…');
+  try{
+    const MAX_MOV_EN_TX = 400; // una transacción admite ~500 escrituras
+    const res = await txRepuestos(e.id, (lista, data, t) => {
+      let added = 0, merged = 0;
+      const antes = new Map(lista.map(p => [p.id, p.q])); // stock fresco antes de la carga
+      for(const inc of filas){
+        const key = partKey(inc);
+        const ex = lista.find(p => partKey(p) === key);
+        if(!ex){ lista.push({ ...inc, id: nuevoRepId() }); added++; continue; }
+        merged++;
+        if(modo === 'reemplazar'){
+          if(inc.q != null) ex.q = inc.q;
+          ['t','m','d','u'].forEach(k=>{ if(!ex[k] && inc[k]) ex[k] = inc[k]; });
+          ['cm','min','max'].forEach(k=>{ if(inc[k]!=null && inc[k]!=='') ex[k] = inc[k]; });
+        } else {
+          mergeRepuestoInto([ex], inc); // misma regla de siempre: suma Qty y completa lo vacío
+        }
+        if(ex.q != null && ex.q !== '') ex.q = redondearQ(parseFloat(ex.q) || 0);
+      }
+      // un movimiento "ajuste" por cada repuesto cuyo stock cambió
+      const cambios = [];
+      lista.forEach(p => {
+        const q0 = antes.has(p.id) ? antes.get(p.id) : null;
+        const a = (q0==null || q0==='' || isNaN(parseFloat(q0))) ? null : parseFloat(q0);
+        const b = (p.q==null || p.q==='' || isNaN(parseFloat(p.q))) ? null : parseFloat(p.q);
+        if(b == null || a === b) return;
+        cambios.push({ p, anterior: a, quedaEn: b, delta: redondearQ(b - (a || 0)) });
+      });
+      const nombreEq = data.nombre || e.nombre;
+      const movs = cambios.map(c => docMovimiento(e.id, nombreEq, c.p, {
+        tecnico: quienSoy(), tipo: 'ajuste', cantidad: c.delta, anterior: c.anterior, quedaEn: c.quedaEn,
+        motivo: 'carga masiva (' + (modo === 'reemplazar' ? 'reemplazar conteo' : 'sumar') + ')', nota: 'carga masiva', modo,
+        otFolio: null, costoUnitario: null, costoTotal: null,
+      }));
+      if(movs.length <= MAX_MOV_EN_TX) { movs.forEach(m => t.set(db.collection('movimientos').doc(), m)); return { added, merged, movs: [], nMovs: movs.length }; }
+      return { added, merged, movs, nMovs: movs.length }; // demasiados: van después en lotes de 400
+    });
+    // Si hubo más de 400 ajustes, se guardan después de la transacción en lotes de 400.
+    for(let i = 0; i < res.movs.length; i += 400){
+      const batch = db.batch();
+      res.movs.slice(i, i + 400).forEach(m => batch.set(db.collection('movimientos').doc(), m));
+      await batch.commit().catch(err => showToast('⚠️ El stock se cargó, pero faltó guardar parte del historial de ajustes: ' + err.message));
+    }
+    closeModal('modalBulk');
+    document.getElementById('bulkPasteArea').value = '';
+    renderDetail();
+    showToast(`✅ Carga masiva: ${res.added} nuevos, ${res.merged} ${modo === 'reemplazar' ? 'con conteo reemplazado' : 'sumados'}${errores.length ? `, ${errores.length} con error` : ''} · ${res.nMovs} ajuste(s) en el historial`);
+  }catch(err){
+    avisarErrorTx(err); // el cuadro queda abierto con lo pegado
+  }finally{
+    hideLoading();
+    bulkRepEnCurso = false;
+  }
+}
+
+/* ═══════════════ CARGA MASIVA DE EQUIPOS ═══════════════
+   Mismo patrón de "pegar tabla" que la carga masiva de repuestos, pero para
+   dar de alta o completar varios equipos de una sola vez (pedido del
+   usuario: "cómo puedo seguir entrando equipos"). Si el nombre ya existe,
+   SOLO se completan los campos que el equipo tenía vacíos — nunca se
+   sobrescribe un dato que ya estaba cargado a mano. La frecuencia de
+   checklist es opcional y, si viene, también deja el equipo listo para
+   aparecer en "Hoy te toca" dentro de checklist.html. */
+function addDaysStrInv(baseStr, dias){
+  const base = baseStr ? new Date(baseStr + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + Number(dias || 0));
+  return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+}
+
+/* ═══════════════ CARGA MASIVA DE EQUIPOS (rehecha 4 oct 2026) ═══════════════
+   - Acepta pegar desde Excel (tabulaciones), CSV con ; o , y archivos .xlsx/.csv.
+   - Reconoce encabezados en cualquier orden; sin encabezados usa el orden fijo.
+   - Con encabezados también llena la ficha técnica: tensión, potencia,
+     frecuencia eléctrica, fase, tamaño, peso, made in y las fechas.
+   - Respeta celdas entre comillas (Excel las usa cuando hay saltos de línea).
+   - Vista previa fila por fila antes de guardar; une filas repetidas.
+   - Guarda en lotes de 400 (Firestore admite hasta 500 escrituras por lote). */
+let bulkEquiposFilas = [];   // filas ya interpretadas, listas para guardar
+const COLS_EQUIPO = [
+  { k: 'nombre',        l: 'Nombre',            alias: ['nombre','equipo','maquina','nombre del equipo','nombre equipo','descripcion'] },
+  { k: 'marca',         l: 'Marca',             alias: ['marca','fabricante'] },
+  { k: 'modelo',        l: 'Modelo',            alias: ['modelo'] },
+  { k: 'serie',         l: 'Serie',             alias: ['serie','serial','numero de serie','n° serie','no. serie','no serie','s/n','sn'] },
+  { k: 'localidad',     l: 'Área',              alias: ['area','localidad','ubicacion','zona','departamento'] }, // (7 oct 2026) 'linea' pasó a su propia columna
+  // (7 oct 2026) mismos campos que la cascada de Bitácora
+  { k: 'planta',        l: 'Planta',            alias: ['planta','plant'] },
+  { k: 'linea',         l: 'Línea',             alias: ['linea','line','linea de produccion'] },
+  { k: 'tipoMaquina',   l: 'Tipo de máquina',   alias: ['tipo de maquina','tipo maquina','tipo de equipo','tipo equipo','tipo'] },
+  { k: 'dias',          l: 'Frec. checklist',   alias: ['frecuencia checklist','frecuencia de checklist','frecuencia checklist (dias)','frecuencia (dias)','dias','checklist','cada cuantos dias'] },
+  { k: 'frecuencia',    l: 'Frec. eléctrica',   alias: ['frecuencia electrica','hz','frecuencia (hz)','frecuencia hz'] },
+  { k: 'tension',       l: 'Tensión',           alias: ['tension','voltaje','voltage','tension (v)','voltaje (v)','v'] },
+  { k: 'potencia',      l: 'Potencia',          alias: ['potencia','kw','hp','potencia (kw)','potencia (hp)'] },
+  { k: 'fase',          l: 'Fase',              alias: ['fase','fases'] },
+  { k: 'tamano',        l: 'Tamaño',            alias: ['tamano','dimensiones','medidas','dimension'] },
+  { k: 'peso',          l: 'Peso',              alias: ['peso','peso (kg)'] },
+  { k: 'madein',        l: 'Made in',           alias: ['made in','origen','pais','pais de origen','procedencia','fabricado en'] },
+  { k: 'fabricacion',   l: 'Fabricación',       alias: ['fecha fabricacion','fecha de fabricacion','fabricacion','ano fabricacion','año fabricacion','ano de fabricacion','año de fabricacion'], fecha: true },
+  { k: 'instalacion',   l: 'Instalación',       alias: ['fecha instalacion','fecha de instalacion','instalacion'], fecha: true },
+  { k: 'fechaCompra',   l: 'Compra',            alias: ['fecha compra','fecha de compra','compra'], fecha: true },
+  { k: 'caracteristicas', l: 'Características',  alias: ['caracteristicas','especificaciones','ficha tecnica','descripcion tecnica','detalles','descripcion'] },
+  { k: 'garantiaHasta', l: 'Garantía hasta',    alias: ['garantia','garantia hasta','vence garantia','fin de garantia','vencimiento garantia'], fecha: true },
+];
+const CAMPOS_FICHA = COLS_EQUIPO.map(c => c.k).filter(k => k !== 'nombre' && k !== 'dias');
+const LBL_EQ = Object.fromEntries(COLS_EQUIPO.map(c => [c.k, c.l]));
+const sinAcentos = s => (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
+
+function openBulkEquiposModal(){
+  document.getElementById('bulkEquiposPasteArea').value = '';
+  document.getElementById('bulkEquiposStatus').textContent = '';
+  document.getElementById('bulkEquiposPreview').innerHTML = '';
+  document.getElementById('bulkEquiposOk').disabled = true;
+  bulkEquiposFilas = [];
+  openModal('modalBulkEquipos');
+  // (7 oct 2026) /plantas y /lineas (una vez por sesión) para reconocer Planta y Línea;
+  // si ya hay una vista previa en pantalla cuando llegan, se recalcula.
+  cargarCatalogoUbicacion().then(() => { if (document.getElementById('bulkEquiposPreview').innerHTML) previsualizarEquipos(); });
+}
+
+// Separa texto en filas/celdas respetando comillas. Detecta el separador.
+function parseTabla(texto){
+  texto = (texto||'').replace(/\r\n?/g,'\n');
+  const primera = texto.split('\n').find(l => l.trim()) || '';
+  const sep = primera.includes('\t') ? '\t' : (primera.includes(';') ? ';' : (primera.includes(',') ? ',' : '\t'));
+  const filas = []; let fila = [], celda = '', comillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    if (comillas) {
+      if (ch === '"' && texto[i+1] === '"') { celda += '"'; i++; }
+      else if (ch === '"') comillas = false;
+      else celda += ch;
+    } else if (ch === '"' && celda === '') comillas = true;
+    else if (ch === sep) { fila.push(celda); celda = ''; }
+    else if (ch === '\n') { fila.push(celda); filas.push(fila); fila = []; celda = ''; }
+    else celda += ch;
+  }
+  fila.push(celda); filas.push(fila);
+  return filas.map(f => f.map(c => c.replace(/\s+/g,' ').trim())).filter(f => f.some(c => c));
+}
+
+// Fecha escrita de cualquier forma → AAAA-MM-DD (lo que usan los campos de fecha).
+// Acepta 2022-06-15, 15/06/2022, 15-06-22, 2022-06 (→ día 1), 2022 (→ 1 de enero)
+// y el número de serie de fecha de Excel (ej. 44713). Día primero, como en
+// Latinoamérica. Devuelve { v, aviso } o { error }.
+function normalizarFecha(txt){
+  const s = (txt || '').trim();
+  if (!s) return { v: '' };
+  const p2 = n => String(n).padStart(2, '0');
+  const ok = (y, m, d) => { const f = new Date(y, m - 1, d); return f.getFullYear() === y && f.getMonth() === m - 1 && f.getDate() === d; };
+  let m;
+  if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s)) && ok(+m[1], +m[2], +m[3])) return { v: `${m[1]}-${p2(m[2])}-${p2(m[3])}` };
+  if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/.exec(s))) {
+    let y = +m[3]; if (y < 100) y += 2000;
+    if (ok(y, +m[2], +m[1])) return { v: `${y}-${p2(m[2])}-${p2(m[1])}` };
+  }
+  if ((m = /^(\d{4})[-/.](\d{1,2})$/.exec(s)) && +m[2] >= 1 && +m[2] <= 12) return { v: `${m[1]}-${p2(m[2])}-01`, aviso: 'sin día: se usó el día 1' };
+  if ((m = /^(\d{1,2})[-/.](\d{4})$/.exec(s)) && +m[1] >= 1 && +m[1] <= 12) return { v: `${m[2]}-${p2(m[1])}-01`, aviso: 'sin día: se usó el día 1' };
+  if (/^(19|20)\d{2}$/.test(s)) return { v: `${s}-01-01`, aviso: 'solo año: se usó el 1 de enero' };
+  if (/^\d{5}$/.test(s) && +s > 20000 && +s < 60000) { const f = new Date(Date.UTC(1899, 11, 30) + (+s) * 86400000); return { v: `${f.getUTCFullYear()}-${p2(f.getUTCMonth() + 1)}-${p2(f.getUTCDate())}` }; }
+  return { error: true };
+}
+
+// Convierte la tabla en filas {nombre, marca, ...} según encabezados o el orden fijo.
+function interpretarEquipos(tabla){
+  if (!tabla.length) return { filas: [], conEncabezado: false, columnas: [] };
+  const head = tabla[0].map(sinAcentos);
+  const mapa = {};
+  COLS_EQUIPO.forEach(col => {
+    // se prueba cada alias en orden de prioridad (ej. "Nombre" antes que "Descripción")
+    for (const a of col.alias.map(sinAcentos)) {
+      const i = head.findIndex((h, j) => h === a && !Object.values(mapa).includes(j));
+      if (i >= 0) { mapa[col.k] = i; break; }
+    }
+  });
+  // "Frecuencia" a secas puede ser la del checklist (días) o la eléctrica (50/60 Hz):
+  // se decide por lo que traen las celdas.
+  const iFrec = head.findIndex(h => h === 'frecuencia');
+  if (iFrec >= 0 && !Object.values(mapa).includes(iFrec)) {
+    const vals = tabla.slice(1).map(f => (f[iFrec] || '').toLowerCase()).filter(Boolean);
+    const electrica = vals.some(v => /hz|\d\s*\/\s*\d/.test(v));
+    if (electrica && mapa.frecuencia === undefined) mapa.frecuencia = iFrec;
+    else if (!electrica && mapa.dias === undefined) mapa.dias = iFrec;
+  }
+  const conEncabezado = mapa.nombre !== undefined;
+  const orden = conEncabezado ? mapa : { nombre: 0, marca: 1, modelo: 2, serie: 3, localidad: 4, dias: 5 };
+  const cuerpo = conEncabezado ? tabla.slice(1) : tabla;
+  const ignoradas = conEncabezado ? tabla[0].filter((h, i) => h && !Object.values(mapa).includes(i)) : [];
+  return { conEncabezado, ignoradas, columnas: COLS_EQUIPO.map(c => c.k).filter(k => orden[k] !== undefined), filas: cuerpo.map((c, n) => {
+    const r = { fila: n + (conEncabezado ? 2 : 1) }; // (7 oct 2026) antes 'linea': ese nombre ahora es la columna Línea
+    COLS_EQUIPO.forEach(col => { r[col.k] = orden[col.k] !== undefined ? (c[orden[col.k]] || '').trim() : ''; });
+    return r;
+  }) };
+}
+
+async function leerArchivoEquipos(ev){
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  const status = document.getElementById('bulkEquiposStatus');
+  try {
+    let texto;
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      status.textContent = 'Leyendo Excel…';
+      if (!window.XLSX) await new Promise((ok, mal) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.')); document.head.appendChild(s); });
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+      const hoja = wb.Sheets[wb.SheetNames[0]];
+      texto = XLSX.utils.sheet_to_csv(hoja, { FS: '\t', blankrows: false, dateNF: 'yyyy-mm-dd' });
+    } else {
+      texto = await f.text();
+    }
+    document.getElementById('bulkEquiposPasteArea').value = texto;
+    status.textContent = `Archivo "${f.name}" leído.`;
+    previsualizarEquipos();
+  } catch (err) { status.textContent = '⚠️ ' + err.message; }
+}
+
+function descargarPlantillaEquipos(){
+  const cab = ['Nombre','Marca','Modelo','Serie','Planta','Área','Línea','Tipo de máquina','Frecuencia checklist (días)','Tensión','Potencia','Frecuencia eléctrica','Fase','Tamaño','Peso','Made in','Fecha fabricación','Fecha instalación','Fecha compra','Garantía hasta'];
+  const ej = ['COMPRESOR 2','INGERSOLL RAND','R11i','SN-4521','Planta 1','Compresor de Aire','','Compresor de tornillo','7','220 V','11 kW','60 Hz','Trifásico','1200x800x1500 mm','350 kg','USA','15/06/2022','01/09/2022','10/05/2022','10/05/2024'];
+  const csv = '﻿' + cab.join(';') + '\n' + ej.join(';') + '\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'plantilla_equipos.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+// Área escrita en el archivo → nombre exacto de un área ya registrada (sin
+// importar mayúsculas ni acentos). Devuelve null si no existe.
+function areaCanonica(txt){
+  const k = sinAcentos(txt);
+  if (!k) return '';
+  const lista = [...currentAreasInventario, ...DB.map(e => e.localidad).filter(Boolean)];
+  return lista.find(a => sinAcentos(a) === k) || null;
+}
+// (7 oct 2026) Igual para Planta (/plantas) y Línea (/lineas); null si no existe.
+function plantaCanonica(txt){
+  const k = fbEquipoKey(txt);
+  if (!k) return '';
+  return [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean)].find(p => fbEquipoKey(p) === k) || null;
+}
+function lineaCanonica(txt){
+  const k = fbEquipoKey(txt);
+  if (!k) return '';
+  return [...(lineasInv || []).map(l => l.nombre), ...DB.map(e => e.linea).filter(Boolean)].find(l => fbEquipoKey(l) === k) || null;
+}
+
+function previsualizarEquipos(){
+  const prev = document.getElementById('bulkEquiposPreview');
+  const okBtn = document.getElementById('bulkEquiposOk');
+  const sobrescribir = document.getElementById('bulkEquiposSobrescribir').checked;
+  const { filas, conEncabezado, columnas, ignoradas } = interpretarEquipos(parseTabla(document.getElementById('bulkEquiposPasteArea').value));
+  bulkEquiposFilas = [];
+  if (!filas.length) { prev.innerHTML = '<div class="info-box" style="padding:10px;color:var(--muted);font-size:12.5px;">Pega filas o sube un archivo para ver la vista previa.</div>'; okBtn.disabled = true; return; }
+
+  const vistos = new Map(); // nombre normalizado → fila (une repetidas dentro del archivo)
+  const salida = [];
+  filas.forEach(f => {
+    const r = { ...f, problemas: [], avisos: [] };
+    if (!r.nombre) { r.estado = 'error'; r.problemas.push('Falta el nombre'); salida.push(r); return; }
+    if (r.dias && !(parseInt(r.dias, 10) > 0)) { r.avisos.push(`Frecuencia de checklist "${r.dias}" no es un número de días: se ignora`); r.dias = ''; }
+    if (r.localidad) { const c = areaCanonica(r.localidad); if (c) r.localidad = c; else r.avisos.push(`Área "${r.localidad}" no está en la lista de Áreas`); }
+    // (7 oct 2026) Planta y Línea: se usa la escritura registrada; si no existe o la
+    // línea es de otra área, solo se avisa (se carga igual, como el Área).
+    if (r.planta) { const c = plantaCanonica(r.planta); if (c) r.planta = c; else if (plantasInv) r.avisos.push(`Planta "${r.planta}" no está en la lista de Plantas`); }
+    if (r.linea) {
+      const c = lineaCanonica(r.linea);
+      if (c) r.linea = c; else if (lineasInv) r.avisos.push(`Línea "${r.linea}" no está en la lista de Líneas`);
+      const regs = (lineasInv || []).filter(l => fbEquipoKey(l.nombre) === fbEquipoKey(r.linea));
+      if (r.localidad && regs.length && !regs.some(l => fbEquipoKey(l.areaNombre) === fbEquipoKey(r.localidad))) r.avisos.push(`Línea "${r.linea}" pertenece al área "${[...new Set(regs.map(l => l.areaNombre))].join(', ')}", no a "${r.localidad}"`);
+    }
+    COLS_EQUIPO.filter(c => c.fecha && r[c.k]).forEach(c => {
+      const n = normalizarFecha(r[c.k]);
+      if (n.error) { r.avisos.push(`${c.l} "${r[c.k]}" no se entiende como fecha: se ignora`); r[c.k] = ''; }
+      else { r[c.k] = n.v; if (n.aviso) r.avisos.push(`${c.l}: ${n.aviso}`); }
+    });
+    const k = normalizeKey(r.nombre);
+    if (vistos.has(k)) { const p = vistos.get(k); [...CAMPOS_FICHA, 'dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.fila}: se unió`); return; }
+    vistos.set(k, r);
+    const ex = DB.find(e => normalizeKey(e.nombre) === k);
+    if (!ex) r.estado = 'nuevo';
+    else {
+      r.existenteId = ex.id;
+      const cambios = {};
+      CAMPOS_FICHA.forEach(c => { if (r[c] && (sobrescribir ? r[c] !== (ex[c]||'') : !ex[c])) cambios[c] = r[c]; });
+      const d = parseInt(r.dias, 10);
+      if (d > 0 && (sobrescribir ? d !== ex.checklistFrecuenciaDias : !ex.checklistFrecuenciaDias)) cambios.dias = d;
+      r.cambios = cambios;
+      r.estado = Object.keys(cambios).length ? 'actualiza' : 'igual';
+    }
+    salida.push(r);
+  });
+  bulkEquiposFilas = salida.filter(r => r.estado === 'nuevo' || r.estado === 'actualiza');
+  const n = e => salida.filter(r => r.estado === e).length;
+  const etiqueta = { nuevo: ['Nuevo', 'var(--teal)'], actualiza: ['Se actualiza', 'var(--amber)'], igual: ['Ya existe, sin cambios', 'var(--muted)'], error: ['Error', 'var(--red)'] };
+  const extras = CAMPOS_FICHA.filter(k => !['marca','modelo','serie','localidad','planta','linea'].includes(k) && columnas.includes(k));
+  // (7 oct 2026) Planta y Línea se muestran junto al Área (Planta › Área › Línea)
+  const celdaArea = r => [r.planta && `<span style="color:var(--muted)">Planta:</span> ${escInv(r.planta)}`, escInv(r.localidad), r.linea && `<span style="color:var(--muted)">Línea:</span> ${escInv(r.linea)}`].filter(Boolean).join('<br>');
+  prev.innerHTML = `
+    <div style="font-size:12.5px;margin:6px 0 8px;line-height:1.6;">
+      ${conEncabezado ? `✅ Columnas reconocidas: <b>${columnas.map(c => LBL_EQ[c]).join(', ')}</b>${ignoradas.length ? `<br>ℹ️ Columnas que no se usan: ${ignoradas.map(escInv).join(', ')}` : ''}` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia. Para cargar también planta, línea, tipo de máquina, tensión, potencia, fechas, etc., agrega una fila de encabezados (descarga la plantilla).'}<br>
+      <b style="color:var(--teal)">${n('nuevo')} nuevos</b> · <b style="color:var(--amber)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--red)">${n('error')} con error (no se cargan)</b>` : ''}
+    </div>
+    <div class="table-card" style="max-height:300px;overflow:auto;margin:0;">
+      <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th>${extras.length ? '<th>Ficha técnica</th>' : ''}<th>Notas</th></tr></thead>
+      <tbody>${salida.map(r => `<tr>
+        <td>${r.fila}</td><td><span style="color:${etiqueta[r.estado][1]};font-weight:700;white-space:nowrap;">${etiqueta[r.estado][0]}</span></td>
+        <td><b>${escInv(r.nombre) || '—'}</b></td><td>${escInv(r.marca)}</td><td>${escInv(r.modelo)}</td><td>${escInv(r.serie)}</td><td style="font-size:11.5px;">${celdaArea(r)}</td><td>${escInv(r.dias)}</td>
+        ${extras.length ? `<td style="font-size:11px;">${extras.filter(k => r[k]).map(k => `<span style="color:var(--muted)">${LBL_EQ[k]}:</span> ${escInv(r[k])}`).join('<br>')}</td>` : ''}
+        <td style="font-size:11px;color:var(--muted);">${[...r.problemas, ...r.avisos, r.estado === 'actualiza' ? 'Cambia: ' + Object.keys(r.cambios).map(c => c === 'dias' ? 'Frec. checklist' : LBL_EQ[c]).join(', ') : ''].filter(Boolean).map(escInv).join('<br>')}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  okBtn.disabled = !bulkEquiposFilas.length;
+  okBtn.textContent = bulkEquiposFilas.length ? `Cargar ${bulkEquiposFilas.length} equipo(s)` : 'Nada que cargar';
+}
+const escInv = s => fbEsc(s); // (5 oct 2026) misma función compartida de firebase-init.js
+
+async function bulkImportEquipos(){
+  previsualizarEquipos(); // recalcula con los datos más recientes
+  const filas = bulkEquiposFilas;
+  const status = document.getElementById('bulkEquiposStatus');
+  if (!filas.length) { showToast('⚠️ No hay equipos nuevos ni cambios para cargar'); return; }
+  await window.fbReady;
+  const hoyStr = fbHoy();
+  const btn = document.getElementById('bulkEquiposOk');
+  btn.disabled = true;
+  let hechos = 0;
+  let enCola = false; // (5 oct 2026) true si algún lote quedó guardado solo en el celular
+  try {
+    for (let i = 0; i < filas.length; i += 400) {
+      const batch = db.batch();
+      filas.slice(i, i + 400).forEach(r => {
+        if (r.estado === 'nuevo') {
+          const datos = { nombre: r.nombre, repuestos: [], updatedAt: fbTimestamp() };
+          CAMPOS_FICHA.forEach(c => { datos[c] = r[c] || ''; });
+          const d = parseInt(r.dias, 10);
+          if (d > 0) { datos.checklistFrecuenciaDias = d; datos.checklistProximaFecha = addDaysStrInv(hoyStr, d); }
+          batch.set(db.collection('equipos').doc(), fbSanitizeTs(datos));
+        } else {
+          const c = { ...r.cambios };
+          if (c.dias) { c.checklistFrecuenciaDias = c.dias; c.checklistProximaFecha = addDaysStrInv(hoyStr, c.dias); delete c.dias; }
+          batch.set(db.collection('equipos').doc(r.existenteId), fbSanitizeTs({ ...c, updatedAt: fbTimestamp() }), { merge: true });
+        }
+      });
+      status.textContent = `Guardando… ${Math.min(i + 400, filas.length)} de ${filas.length}`;
+      // (5 oct 2026) Con la persistencia sin conexión, commit() no termina
+      // hasta que el servidor responde: sin señal la pantalla quedaba en
+      // "Guardando…" para siempre. El lote ya quedó guardado en el celular al
+      // llamar commit(), así que se espera como máximo 8 s y se sigue.
+      const p = batch.commit();
+      if (enCola) { p.catch(err => showToast('⚠️ Un lote de equipos no se pudo subir: ' + err.message)); }
+      else if ((await conTimeout(p, 8000)) === 'timeout') {
+        enCola = true;
+        p.catch(err => showToast('⚠️ Un lote de equipos no se pudo subir: ' + err.message));
+      }
+      hechos = Math.min(i + 400, filas.length);
+    }
+    const nuevos = filas.filter(r => r.estado === 'nuevo').length;
+    if (enCola) showToast(`💾 Guardado en el celular; se subirá cuando haya señal (${nuevos} nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''})`);
+    else showToast(`✅ ${nuevos} equipo(s) nuevo(s)${filas.length - nuevos ? `, ${filas.length - nuevos} actualizado(s)` : ''}`);
+    closeModal('modalBulkEquipos');
+  } catch (err) {
+    console.error(err);
+    status.innerHTML = `⚠️ Se guardaron ${hechos} de ${filas.length}. Error: ${escInv(err.code === 'permission-denied' ? 'tu usuario no tiene permiso para crear equipos (rol Técnico, Almacén, Encargado o Administrador).' : err.message)}`;
+    btn.disabled = false;
+  }
+}
+/* ═══════════════ ORDENAR FICHAS TÉCNICAS (4 oct 2026) ═══════════════
+   Muchos equipos se cargaron con toda la ficha técnica dentro de "Modelo"
+   ("CPQYD · Config. 30-RCH · Motor 31.2 kW · Peso 4820 kg · Fab. 2026-01 ·
+   China · ..."). Esto lee ese texto, reparte cada dato en su campo y deja lo
+   demás en "Características". Nunca reemplaza un campo que ya tenía dato:
+   si choca, el texto se queda en Características y se avisa. Siempre con
+   vista previa; se guarda solo lo que se aprueba. */
+const PAISES = ['china','usa','eeuu','ee.uu.','estados unidos','alemania','italia','japon','japón','taiwan','taiwán','corea','corea del sur','india','brasil','mexico','méxico','españa','francia','turquia','turquía','reino unido','inglaterra','suiza','suecia','canada','canadá','republica dominicana','república dominicana','argentina','colombia','austria','holanda','paises bajos','belgica','bélgica','dinamarca','finlandia','vietnam','tailandia','malasia','polonia','portugal','checa','republica checa'];
+const capitalizar = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Devuelve { cambios: {campo: valor}, caracteristicas: [..], notas: [..], modelo }
+function separarFicha(e){
+  const texto = (e.modelo || '').trim();
+  const partes = texto.split(/\s*[·•|;]\s*|\n+/).map(s => s.trim()).filter(Boolean);
+  const res = { cambios: {}, caract: [], notas: [], modeloPartes: [] };
+  const libre = k => !e[k] && !res.cambios[k];
+  const poner = (k, v, original) => {
+    if (!v) return;
+    if (libre(k)) res.cambios[k] = v;
+    else if (sinAcentos(e[k] || res.cambios[k]) !== sinAcentos(v)) { res.caract.push(original); res.notas.push(`${LBL_EQ[k] || k} ya tenía "${e[k] || res.cambios[k]}": "${original}" queda en Características`); }
+  };
+  partes.forEach((seg, i) => {
+    let s = seg, usado = false;
+    const sn = sinAcentos(s);
+    let m;
+    // fecha de fabricación / instalación
+    if ((m = /^(fab\.?|fabricad[oa]|fabricacion|ano de fabricacion|ano fab\.?|año|ano)\s*:?\s*(.+)$/i.exec(s))) {
+      const f = normalizarFecha(m[2].replace(/^en\s+/i, ''));
+      if (!f.error) { poner('fabricacion', f.v, seg); if (f.aviso) res.notas.push('Fabricación: ' + f.aviso); return; }
+    }
+    if ((m = /^(instalad[oa]|instalacion|instalación|fecha de instalacion)\s*:?\s*(.+)$/i.exec(s))) {
+      const f = normalizarFecha(m[2]); if (!f.error) { poner('instalacion', f.v, seg); return; }
+    }
+    // país de origen
+    if ((m = /^(made in|hecho en|origen|fabricado en|pais)\s*:?\s*(.+)$/i.exec(s))) { poner('madein', capitalizar(m[2].trim()), seg); return; }
+    if (PAISES.includes(sn)) { poner('madein', capitalizar(s), seg); return; }
+    // serie
+    if ((m = /^(s\/n|sn|serie|n[°º]? ?serie|serial)\s*:?\s*(.+)$/i.exec(s))) { poner('serie', m[2].trim(), seg); return; }
+    // peso (solo con la palabra "Peso": "Capacidad 3000 kg" NO es el peso)
+    if ((m = /^peso\s*:?\s*(.+)$/i.exec(s))) { poner('peso', m[1].trim(), seg); return; }
+    // dimensiones
+    if ((m = /^(?:(?:dimensiones|medidas|tama[nñ]o)\s*:?\s*)?(\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?\s*(?:mm|cm|m)?)$/i.exec(s))) { poner('tamano', m[1].trim(), seg); return; }
+    // mantenimiento / horómetro → configuración del checklist
+    if ((m = /(cada|c\/)\s*(\d+)\s*(h|hr|hrs|horas)\b/i.exec(s)) && /(serv|mant|horom)/i.test(sn)) { if (!e.checklistFrecuenciaHoras) res.cambios.checklistFrecuenciaHoras = +m[2]; res.caract.push(seg); return; }
+    if ((m = /^horometro\s*:?\s*(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|horas)?/i.exec(sn))) { if (e.horometroActual == null) { res.cambios.horometroActual = parseFloat(m[1].replace(',', '.')); res.cambios.horometroUltimoService = res.cambios.horometroActual; res.notas.push(`Horómetro ${res.cambios.horometroActual} h tomado como último servicio: ajústalo en Checklist si no es así`); } res.caract.push(seg); return; }
+    if (/^mant(\.|enimiento)?\s/i.test(s) && !e.checklistFrecuenciaDias) {
+      const d = /semanal/i.test(s) ? 7 : /quincenal/i.test(s) ? 15 : /mensual/i.test(s) ? 30 : /trimestral/i.test(s) ? 90 : /diari/i.test(s) ? 1 : ((m = /cada\s*(\d+)\s*d/i.exec(s)) ? +m[1] : 0);
+      if (d) { const hoy = fbHoy();
+        res.cambios.checklistFrecuenciaDias = d; res.cambios.checklistProximaFecha = addDaysStrInv(hoy, d); res.caract.push(seg); return; }
+    }
+    // datos eléctricos dentro del texto (pueden venir varios: "1F 220V 50Hz 1.38 kW")
+    const quitar = re => { const mm = re.exec(s); if (mm) { s = s.replace(mm[0], ' '); usado = true; } return mm; };
+    let t;
+    if ((t = quitar(/\b(\d{2,3}(?:\s*\/\s*\d{2,3})?)\s*(v|vac|vdc|volts?|voltios)\b/i))) poner('tension', t[1].replace(/\s/g, '') + ' ' + t[2].toUpperCase().replace('VOLTIOS','V').replace(/VOLTS?/,'V'), seg);
+    if ((t = quitar(/\b(\d{2}(?:\s*\/\s*\d{2})?)\s*hz\b/i))) poner('frecuencia', t[1].replace(/\s/g, '') + ' Hz', seg);
+    if ((t = quitar(/\b(\d+(?:[.,]\d+)?)\s*(kw|hp|cv)\b/i))) poner('potencia', t[1] + ' ' + (t[2].toLowerCase() === 'kw' ? 'kW' : t[2].toUpperCase()), seg);
+    if ((t = quitar(/\b([13])\s*f\b|\b(monof[aá]sic[oa]|trif[aá]sic[oa]|bif[aá]sic[oa])\b/i))) poner('fase', t[1] ? (t[1] === '1' ? 'Monofásico' : 'Trifásico') : capitalizar(t[2].toLowerCase()), seg);
+    if (usado) {
+      const resto = s.replace(/\b(motor|potencia|tension|tensión|voltaje|alimentacion|alimentación|electrico|eléctrico|frecuencia|fase)\b/gi, '').replace(/[\s,:\-]+/g, ' ').trim();
+      if (resto) res.caract.push(resto);
+      return;
+    }
+    // el modelo: el primer tramo, más los que parecen parte del código (Config., Versión…)
+    if (i === 0 || /^(config\.?|configuraci[oó]n|mod\.?|modelo|versi[oó]n|tipo)\b/i.test(s)) { res.modeloPartes.push(seg); return; }
+    res.caract.push(seg);
+  });
+  res.modelo = res.modeloPartes.join(' · ');
+  if (res.modelo && res.modelo !== texto) res.cambios.modelo = res.modelo;
+  if (res.caract.length) res.cambios.caracteristicas = [e.caracteristicas, res.caract.join(' · ')].filter(Boolean).join(' · ');
+  return res;
+}
+// Un equipo necesita orden si su Modelo trae varios datos juntos.
+const necesitaOrden = e => (/[·•|;\n]/.test(e.modelo || '') || (e.modelo || '').length > 45) && Object.keys(separarFicha(e).cambios).length > 0;
+
+let fichasPropuestas = [];
+function abrirOrdenarFichas(soloId){
+  const lista = DB.filter(e => (!soloId || e.id === soloId) && necesitaOrden(e)).sort((a, b) => cmpNat(a.nombre, b.nombre));
+  fichasPropuestas = lista.map(e => ({ e, r: separarFicha(e) }));
+  const etiquetas = { ...LBL_EQ, modelo: 'Modelo', caracteristicas: 'Características', checklistFrecuenciaHoras: 'Checklist cada (h)', checklistFrecuenciaDias: 'Checklist cada (días)', horometroActual: 'Horómetro actual', horometroUltimoService: 'Horómetro último servicio' };
+  document.getElementById('fichasBody').innerHTML = fichasPropuestas.length ? `
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="fichasTodas" checked style="width:auto;" onchange="document.querySelectorAll('[data-ficha]').forEach(c=>c.checked=this.checked);contarFichas()"> Seleccionar todos (${fichasPropuestas.length})</label>
+    ${fichasPropuestas.map((x, i) => `
+    <div class="ficha-item">
+      <label class="ficha-head"><input type="checkbox" data-ficha="${i}" checked onchange="contarFichas()"> <b>${escInv(x.e.nombre)}</b> <span style="color:var(--muted);font-size:11.5px;">${escInv(x.e.localidad || '')}</span></label>
+      <div class="ficha-antes"><span>Modelo hoy:</span> ${escInv(x.e.modelo)}</div>
+      <div class="ficha-despues">${Object.entries(x.r.cambios).filter(([k]) => !['horometroUltimoService','checklistProximaFecha'].includes(k)).map(([k, v]) => `<div${k === 'caracteristicas' ? ' style="grid-column:1/-1"' : ''}><span>${etiquetas[k] || k}</span>${escInv(v)}</div>`).join('')}</div>
+      ${x.r.notas.length ? `<div class="ficha-notas">${x.r.notas.map(escInv).join('<br>')}</div>` : ''}
+    </div>`).join('')}`
+    : `<div class="empty-state" style="padding:30px 10px;">✅ ${soloId ? 'La ficha de este equipo ya está ordenada.' : 'No hay equipos con la ficha técnica amontonada en Modelo.'}</div>`;
+  contarFichas();
+  openModal('modalFichas');
+}
+function contarFichas(){
+  const n = document.querySelectorAll('[data-ficha]:checked').length;
+  const b = document.getElementById('fichasOk');
+  b.disabled = !n; b.textContent = n ? `Ordenar ${n} equipo(s)` : 'Nada seleccionado';
+}
+async function aplicarFichas(){
+  const elegidos = [...document.querySelectorAll('[data-ficha]:checked')].map(c => fichasPropuestas[+c.dataset.ficha]);
+  if (!elegidos.length) return;
+  const b = document.getElementById('fichasOk'); b.disabled = true;
+  await window.fbReady;
+  try {
+    for (let i = 0; i < elegidos.length; i += 400) {
+      const batch = db.batch();
+      elegidos.slice(i, i + 400).forEach(({ e, r }) => batch.set(db.collection('equipos').doc(e.id), fbSanitizeTs({ ...r.cambios, updatedAt: fbTimestamp() }), { merge: true }));
+      // (5 oct 2026) mismo tope de 8 s que la carga masiva: sin señal queda en cola
+      const p = batch.commit();
+      if ((await conTimeout(p, 8000)) === 'timeout') p.catch(err => showToast('⚠️ No se pudo subir la ficha ordenada: ' + err.message));
+    }
+    // copia pública del QR al día con la ficha nueva (sin esperar)
+    elegidos.forEach(({ e, r }) => publicarHojaVida({ ...e, ...r.cambios, id: e.id }));
+    elegidos.forEach(({ e, r }) => logAuditoria('especificaciones_equipo', e.id, e.nombre,
+      Object.entries(r.cambios).map(([k, v]) => ({ campo: k === 'caracteristicas' ? 'Características' : (LBL_EQ[k] || k), anterior: e[k] ?? '', nuevo: v }))));
+    showToast(`✅ Ficha técnica ordenada en ${elegidos.length} equipo(s)`);
+    closeModal('modalFichas');
+  } catch (err) {
+    showToast('⚠️ No se pudo guardar: ' + (err.code === 'permission-denied' ? 'tu usuario no tiene permiso para editar equipos.' : err.message));
+    b.disabled = false;
+  }
+}
+
+// fbSanitize convierte a JSON y perdería el serverTimestamp: este lo conserva.
+function fbSanitizeTs(obj){
+  const { updatedAt, ...rest } = obj;
+  const limpio = fbSanitize(rest);
+  return updatedAt ? { ...limpio, updatedAt } : limpio;
+}
+
+/* ═══════════════ ORDEN DE EQUIPOS (4 oct 2026) ═══════════════
+   Firestore entrega los equipos en el orden de su id interno (aleatorio):
+   por eso salían desordenados. Ahora se ordenan por nombre con orden
+   "natural" (TELAR 2 antes que TELAR 10) y, por defecto, agrupados por área. */
+const cmpNat = (a, b) => (a || '').toString().localeCompare((b || '').toString(), 'es', { numeric: true, sensitivity: 'base' });
+function cargarOrdenEq(){
+  try { const c = JSON.parse(localStorage.getItem('inv_orden_eq') || '{}');
+    if (c.orden) document.getElementById('eqOrden').value = c.orden;
+    if (c.area !== undefined) document.getElementById('eqArea').dataset.pend = c.area;
+    if (c.planta !== undefined) document.getElementById('eqPlanta').dataset.pend = c.planta;
+  } catch (e) {}
+}
+function guardarOrdenEq(){
+  try { localStorage.setItem('inv_orden_eq', JSON.stringify({ orden: document.getElementById('eqOrden').value, area: document.getElementById('eqArea').value, planta: document.getElementById('eqPlanta').value })); } catch (e) {}
+}
+const tsMs = t => t && typeof t.toMillis === 'function' ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0);
+function equiposOrdenados(){
+  const q = sinAcentos(document.getElementById('eqFiltro')?.value || '');
+  const selA = document.getElementById('eqArea');
+  const area = selA ? selA.value : '';
+  const orden = document.getElementById('eqOrden')?.value || 'area';
+  const planta = document.getElementById('eqPlanta')?.value || ''; // (7 oct 2026)
+  let lista = DB.filter(e => (!area || (area === '__sin__' ? !e.localidad : e.localidad === area))
+    && (!planta || (planta === '__sin__' ? !e.planta : fbEquipoKey(e.planta) === fbEquipoKey(planta)))
+    && (!q || sinAcentos([e.nombre, e.marca, e.modelo, e.serie, e.localidad, e.linea, e.tipoMaquina].join(' ')).includes(q)));
+  const faltan = e => (e.repuestos || []).filter(p => stockStatus(p) === 'sin').length * 1000 + (e.repuestos || []).filter(p => stockStatus(p) === 'bajo').length;
+  if (orden === 'nombre') lista.sort((a, b) => cmpNat(a.nombre, b.nombre));
+  else if (orden === 'problemas') lista.sort((a, b) => faltan(b) - faltan(a) || cmpNat(a.nombre, b.nombre));
+  else if (orden === 'recientes') lista.sort((a, b) => tsMs(b.updatedAt) - tsMs(a.updatedAt) || cmpNat(a.nombre, b.nombre));
+  else lista.sort((a, b) => (!a.localidad) - (!b.localidad) || cmpNat(a.localidad, b.localidad) || cmpNat(a.nombre, b.nombre));
+  return { lista, orden };
+}
+// (7 oct 2026) Filtro de Planta junto al de Área; solo aparece cuando algún
+// equipo ya tiene planta asignada.
+function pintarFiltroPlantas(){
+  const sel = document.getElementById('eqPlanta'); if (!sel) return;
+  const cur = sel.dataset.pend !== undefined ? sel.dataset.pend : sel.value;
+  delete sel.dataset.pend;
+  const cuenta = {}, nombre = {};
+  DB.forEach(e => { const k = e.planta ? fbEquipoKey(e.planta) : '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; if (e.planta && !nombre[k]) nombre[k] = e.planta; });
+  const plantas = Object.keys(nombre).sort((a, b) => cmpNat(nombre[a], nombre[b]));
+  sel.style.display = plantas.length ? '' : 'none';
+  sel.innerHTML = `<option value="">Todas las plantas (${DB.length})</option>` + plantas.map(k => `<option value="${escInv(nombre[k])}">${escInv(nombre[k])} (${cuenta[k]})</option>`).join('')
+    + (plantas.length && cuenta.__sin__ ? `<option value="__sin__">Sin planta (${cuenta.__sin__})</option>` : '');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+}
+function pintarFiltroAreas(){
+  const sel = document.getElementById('eqArea'); if (!sel) return;
+  const cur = sel.dataset.pend !== undefined ? sel.dataset.pend : sel.value;
+  delete sel.dataset.pend;
+  const cuenta = {};
+  DB.forEach(e => { const k = e.localidad || '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; });
+  const areas = Object.keys(cuenta).filter(k => k !== '__sin__').sort(cmpNat);
+  sel.innerHTML = `<option value="">Todas las áreas (${DB.length})</option>` + areas.map(a => `<option value="${escInv(a)}">${escInv(a)} (${cuenta[a]})</option>`).join('')
+    + (cuenta.__sin__ ? `<option value="__sin__">Sin área (${cuenta.__sin__})</option>` : '');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+}
+
+/* ═══════════════ DETECTAR Y FUSIONAR DUPLICADOS ═══════════════ */
+// Agrupa los repuestos de un equipo por partKey (nombre+modelo/descripción
+// normalizado) y fusiona cada grupo de 2+ en una sola fila, sumando el stock.
+// Sirve tanto para limpiar duplicados que ya existían (de antes de esta
+// mejora) como para revisar después de una carga masiva grande.
+function findDuplicateGroups(repuestos){
+  const groups = {};
+  repuestos.forEach((p,i)=>{
+    const key = partKey(p);
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(i);
+  });
+  return Object.values(groups).filter(idxs=>idxs.length>1);
+}
+
+// Fusiona cada grupo de duplicados de `lista` en una sola fila (sumando el
+// stock). Devuelve la lista nueva; no modifica la original.
+function fusionarDuplicados(lista){
+  const nuevos = [];
+  const yaFusionados = new Set();
+  lista.forEach((p,i)=>{
+    if(yaFusionados.has(i)) return;
+    const key = partKey(p);
+    // reconstruye el grupo completo por key (más simple y robusto que usar índices ya corridos)
+    const mismos = lista.map((pp,ii)=>({pp,ii})).filter(({pp})=>partKey(pp)===key);
+    if(mismos.length>1 && !yaFusionados.has(mismos[0].ii)){
+      const base = {...mismos[0].pp}; // conserva el id del primero
+      let qSum = 0, anyQ = false;
+      mismos.forEach(({pp,ii})=>{
+        yaFusionados.add(ii);
+        if(pp.q!=null && pp.q!==''){ qSum += parseFloat(pp.q)||0; anyQ = true; }
+        ['t','m','d','u'].forEach(k=>{ if(!base[k] && pp[k]) base[k]=pp[k]; });
+        if((base.cm==null||base.cm==='') && pp.cm!=null) base.cm = pp.cm;
+        if((base.pu==null||base.pu==='') && pp.pu!=null) base.pu = pp.pu;
+        if((base.min==null||base.min==='') && pp.min!=null) base.min = pp.min;
+        if((base.max==null||base.max==='') && pp.max!=null) base.max = pp.max;
+        if(!base.img && pp.img) base.img = pp.img;
+      });
+      base.q = anyQ ? redondearQ(qSum) : null;
+      nuevos.push(base);
+    } else if(!yaFusionados.has(i)){
+      yaFusionados.add(i);
+      nuevos.push(p);
+    }
+  });
+  return nuevos;
+}
+
+async function findAndMergeDuplicates(){
+  const e = getCurrentEquipo();
+  if(!e) return;
+  const dupGroups = findDuplicateGroups(e.repuestos);
+  if(!dupGroups.length){ showToast('✅ No se encontraron repuestos duplicados en este equipo'); return; }
+
+  const totalFilasDeMas = dupGroups.reduce((s,g)=>s+(g.length-1),0);
+  const preview = dupGroups.slice(0,8).map(idxs=>`• ${e.repuestos[idxs[0]].r} (${idxs.length}×)`).join('\n');
+  const msg = `Se encontraron ${dupGroups.length} repuesto(s) duplicados (mismo nombre+modelo), ${totalFilasDeMas} fila(s) de más:\n\n${preview}${dupGroups.length>8?'\n…y '+(dupGroups.length-8)+' más':''}\n\n¿Fusionar cada grupo en una sola fila, sumando el stock (Qty)? Esta acción no se puede deshacer.`;
+  if(!confirm(msg)) return;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+
+  // (5 oct 2026) La fusión se recalcula dentro de una transacción sobre la
+  // lista FRESCA del servidor (antes se subía la lista de este celular).
+  showLoading('Fusionando duplicados…');
+  try{
+    const res = await txRepuestos(e.id, (lista) => {
+      const grupos = findDuplicateGroups(lista);
+      if(!grupos.length) return TX_SIN_CAMBIOS;
+      const filasDeMas = grupos.reduce((s,g)=>s+(g.length-1),0);
+      const nuevos = fusionarDuplicados(lista);
+      lista.splice(0, lista.length, ...nuevos);
+      return { grupos: grupos.length, filasDeMas };
+    });
+    renderDetail();
+    if(res === TX_SIN_CAMBIOS) showToast('✅ Ya no quedan duplicados (otro celular los fusionó)');
+    else showToast(`🧹 ${res.grupos} grupo(s) fusionados — se quitaron ${res.filasDeMas} fila(s) duplicadas`);
+  }catch(err){
+    avisarErrorTx(err);
+  }finally{
+    hideLoading();
+  }
+}
+
+// OTs abiertas de un equipo (para avisar antes de borrarlo). Si no se puede
+// consultar (sin señal / sin permiso), devuelve null y no se avisa.
+async function contarOtsAbiertas(e){
+  const ABIERTAS = ['pendiente','en_atencion','planificada','en_revision'];
+  try{
+    const qs = [
+      db.collection('ots').where('equipoId','==', e.id).limit(300).get(),
+      db.collection('ots').where('EQUIPO','==', e.nombre).limit(300).get(),
+      db.collection('ots').where('equipoNombre','==', e.nombre).limit(300).get(),
+    ];
+    const r = await conTimeout(Promise.allSettled(qs), 6000);
+    if(r === 'timeout') return null;
+    const ids = new Set();
+    r.forEach(x => { if(x.status === 'fulfilled') x.value.docs.forEach(d => { if(ABIERTAS.includes(d.data().estado)) ids.add(d.id); }); });
+    return r.some(x => x.status === 'fulfilled') ? ids.size : null;
+  }catch(err){ return null; }
+}
+
+async function deleteEquipo(){
+  const e = getCurrentEquipo();
+  // Borrar un equipo completo es solo para Administrador (firestore.rules):
+  // se avisa antes, en vez de borrarlo de la pantalla y fallar en la nube.
+  if (typeof userHasRole === 'function' && !userHasRole('ADMINISTRADOR')) { showToast('🔒 Solo un Administrador puede eliminar equipos completos.'); return; }
+  if(!(await verifyPin())) return;
+  // (5 oct 2026) avisa si el equipo tiene OTs abiertas (no se borran: quedan en el historial)
+  const abiertas = await contarOtsAbiertas(e);
+  const avisoOts = abiertas ? `\n\n⚠️ Tiene ${abiertas} OT(s) abiertas (pendientes / en atención / planificadas). Esas OTs NO se borran, pero quedarán apuntando a un equipo que ya no existe.` : '';
+  if(!confirm(`¿Eliminar "${e.nombre}" y sus ${e.repuestos.length} repuestos?${avisoOts}\n\nSu historial de OTs se conserva. Tendrás unos segundos para deshacerlo con el botón del aviso.`)) return;
+  const backup = JSON.parse(JSON.stringify(e));
+  // (5 oct 2026) se borra también la copia pública del QR (/equipos_publico),
+  // en el mismo lote; antes el QR seguía mostrando la ficha de un equipo borrado.
+  const batch = db.batch();
+  batch.delete(db.collection('equipos').doc(e.id));
+  batch.delete(db.collection('equipos_publico').doc(e.id));
+  batch.commit().catch(err=>showToast('⚠️ No se pudo borrar en la nube: '+err.message));
+  DB = DB.filter(x=>x.id!==backup.id);
+  backHome();
+  let undone = false;
+  showUndoToast(`🗑 Equipo "${backup.nombre}" eliminado`, ()=>{
+    undone = true;
+    fbSaveEquipo(backup);
+    publicarHojaVida(backup); // vuelve la ficha pública (el historial se rehace al guardar en Bitácora)
+    DB.push(backup);
+    openEquipo(backup.id);
+  });
+  // El PDF del manual se borra de Storage solo si no se deshizo a tiempo.
+  setTimeout(()=>{ if(!undone && backup.manualUrl) fbDeleteFile(backup.manualUrl); }, 5300);
+}
+
+let tempImgData = null;
+let editingRepRef = null; // (5 oct 2026) repuesto en edición, por id (ver refRepuesto)
+
+function openRepuestoModal(idx){
+  editingRepIndex = (idx!=null) ? idx : null;
+  editingRepRef = null;
+  tempImgData = null;
+  imgUploadToken++; pendingImgUpload = null; // descarta una subida anterior que siga en curso
+  const title = document.getElementById('repModalTitle');
+  document.getElementById('rp-imagen-camera').value = '';
+  document.getElementById('rp-imagen-gallery').value = '';
+  if(editingRepIndex!=null){
+    const p = getCurrentEquipo().repuestos[editingRepIndex];
+    if(!p){ return; }
+    editingRepRef = refRepuesto(p, editingRepIndex);
+    editingRepRef.qAlAbrir = (p.q===null||p.q===undefined)? '' : String(p.q);
+    title.textContent = '✏️ Editar repuesto';
+    document.getElementById('rp-nombre').value = p.r||'';
+    document.getElementById('rp-tipo').value = p.t||'';
+    document.getElementById('rp-modelo').value = p.m||'';
+    document.getElementById('rp-descripcion').value = p.d||'';
+    document.getElementById('rp-uso').value = p.u||'';
+    document.getElementById('rp-qty').value = editingRepRef.qAlAbrir;
+    document.getElementById('rp-cm').value = (p.cm===null||p.cm===undefined)? '' : p.cm;
+    document.getElementById('rp-precio').value = (p.pu===null||p.pu===undefined)? '' : p.pu;
+    document.getElementById('rp-min').value = (p.min===null||p.min===undefined)? '' : p.min;
+    document.getElementById('rp-max').value = (p.max===null||p.max===undefined)? '' : p.max;
+    // (5 oct 2026) tempImgData guarda la referencia tal cual ("foto:<id>" o URL vieja);
+    // la vista previa se pide aparte.
+    tempImgNueva = false;
+    if(tieneFoto(p.img)){
+      tempImgData = p.img;
+      const v = fotoSrc(p.img);
+      if(v) showImagePreview(v);
+      else { hideImagePreview(); if(esRefFoto(p.img)) cargarFoto(p.img).then(d => { if(d && tempImgData === p.img) showImagePreview(d); }); }
+    } else { hideImagePreview(); }
+  } else {
+    title.textContent = '➕ Nuevo repuesto';
+    tempImgNueva = false;
+    ['rp-nombre','rp-tipo','rp-modelo','rp-descripcion','rp-uso','rp-qty','rp-cm','rp-precio','rp-min','rp-max'].forEach(id=>document.getElementById(id).value='');
+    hideImagePreview();
+  }
+  openModal('modalRepuesto');
+}
+
+function showImagePreview(src){
+  document.getElementById('rp-imagen-img').src = src;
+  document.getElementById('rp-imagen-preview').style.display = 'block';
+}
+function hideImagePreview(){
+  document.getElementById('rp-imagen-preview').style.display = 'none';
+}
+function removeImage(){
+  tempImgData = null; tempImgNueva = false;
+  imgUploadToken++; pendingImgUpload = null;
+  document.getElementById('rp-imagen-camera').value = '';
+  document.getElementById('rp-imagen-gallery').value = '';
+  hideImagePreview();
+}
+
+let pendingImgUpload = null; // (ya no se usa: la foto se guarda junto con el repuesto)
+let imgUploadToken = 0;
+let tempImgNueva = false;    // (5 oct 2026) true = foto recién tomada, falta guardarla
+
+function handleImageUpload(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  if(!/^image\//.test(file.type)){ showToast('⚠️ Elige una imagen'); return; }
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      // (5 oct 2026) máx 400 px y JPEG 0.7 (≈25-50 KB): se guarda en
+      // Firestore, que en el plan gratis permite 1 GB (miles de fotos).
+      const maxDim = 400;
+      let w = img.width, h = img.height;
+      if(w>h && w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+      else if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      if(dataUrl.length > 250000) dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+      tempImgData = dataUrl;
+      tempImgNueva = true;
+      showImagePreview(dataUrl);
+    };
+    img.onerror = ()=> showToast('⚠️ No se pudo leer la imagen');
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openLightbox(src){
+  const u = urlImgSegura(src);
+  if(!u) return;
+  document.getElementById('lightboxImg').src = u;
+  openModal('modalLightbox');
+}
+// (5 oct 2026) La fila pasa su posición, no la URL (una URL dentro de
+// onclick="…" permitía inyectar código).
+function openLightboxRep(idx){
+  const e = getCurrentEquipo();
+  const p = e && e.repuestos[idx];
+  if(!p) return;
+  if(esRefFoto(p.img)) cargarFoto(p.img).then(d => { if(d) openLightbox(d); });
+  else openLightbox(p.img);
+}
+
+// (5 oct 2026) Guardar repuesto (nuevo o editado) en una transacción sobre la
+// lista FRESCA: el repuesto se busca por id y solo se cambia ese. Si el stock
+// del formulario no se tocó, se conserva el stock fresco (otro celular pudo
+// registrar una salida mientras el formulario estaba abierto); si se cambió,
+// se toma como conteo y queda un movimiento "ajuste" en el historial.
+let saveRepEnCurso = false;
+async function saveRepuesto(){
+  if(saveRepEnCurso) return;
+  const nombre = document.getElementById('rp-nombre').value.trim();
+  if(!nombre){ showToast('⚠️ El nombre del repuesto es obligatorio'); return; }
+
+  // (5 oct 2026) Foto nueva: se guarda como documento propio en Firestore
+  // (gratis) y el repuesto queda con la referencia "foto:<id>".
+  const imgAnterior = (editingRepIndex!=null && getCurrentEquipo() && getCurrentEquipo().repuestos[editingRepIndex]) ? getCurrentEquipo().repuestos[editingRepIndex].img : null;
+  if(tempImgNueva && tempImgData && tempImgData.startsWith('data:image/')){
+    if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+    const fref = db.collection('fotos_repuestos').doc();
+    showLoading('Guardando foto…');
+    try{
+      const r = await conTimeout(fref.set({
+        data: tempImgData, equipoId: currentEquipoId || '',
+        creadoPor: quienSoy(), creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
+        creadoEn: fbTimestamp(),
+      }), 15000);
+      if(r === 'timeout'){ hideLoading(); showToast('📶 La foto no termina de guardarse (señal débil). Intenta de nuevo.'); return; }
+    }catch(err){
+      hideLoading();
+      showToast('⚠️ No se pudo guardar la foto: ' + (err.code === 'permission-denied' ? 'sin permiso (publica las reglas nuevas).' : err.message));
+      return;
+    }
+    hideLoading();
+    _fotosCache[fref.id] = tempImgData;
+    tempImgData = FOTO_PREFIX + fref.id;
+    tempImgNueva = false;
+  }
+
+  const qtyRaw = document.getElementById('rp-qty').value.trim();
+  const cmRaw = document.getElementById('rp-cm').value.trim();
+  const precioRaw = document.getElementById('rp-precio').value.trim();
+  const minRaw = document.getElementById('rp-min').value.trim();
+  const maxRaw = document.getElementById('rp-max').value.trim();
+  const obj = {
+    r: nombre,
+    t: document.getElementById('rp-tipo').value.trim(),
+    m: document.getElementById('rp-modelo').value.trim(),
+    d: document.getElementById('rp-descripcion').value.trim(),
+    u: document.getElementById('rp-uso').value.trim(),
+    q: qtyRaw==='' ? null : (parseFloat(qtyRaw)||0),
+    cm: cmRaw==='' ? null : (parseFloat(cmRaw)||0),
+    pu: precioRaw==='' ? null : (parseFloat(precioRaw)||0),
+    min: minRaw==='' ? null : (parseFloat(minRaw)||0),
+    max: maxRaw==='' ? null : (parseFloat(maxRaw)||0),
+    img: tempImgData || null,
+  };
+  const e = getCurrentEquipo();
+  if(!e) return;
+  const ref = editingRepIndex!=null ? editingRepRef : null;
+  if(editingRepIndex!=null && !ref){ showToast('⚠️ Vuelve a abrir el repuesto'); return; }
+  const qTocada = ref ? (qtyRaw !== ref.qAlAbrir) : true;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+  const nuevoId = nuevoRepId();
+  const qNum = v => (v==null || v==='' || isNaN(parseFloat(v))) ? null : parseFloat(v);
+
+  saveRepEnCurso = true;
+  showLoading('Guardando repuesto…');
+  try{
+    const res = await txRepuestos(e.id, (lista, data, t) => {
+      const nombreEq = data.nombre || e.nombre;
+      const ajuste = (p, anterior, motivo) => {
+        const a = qNum(anterior), b = qNum(p.q);
+        if(b == null || a === b) return;
+        t.set(db.collection('movimientos').doc(), docMovimiento(e.id, nombreEq, p, {
+          tecnico: quienSoy(), tipo: 'ajuste', cantidad: redondearQ(b - (a || 0)), anterior: a, quedaEn: b,
+          motivo, nota: motivo, otFolio: null, costoUnitario: null, costoTotal: null,
+        }));
+      };
+      if(ref){
+        const i = buscarRepuesto(lista, ref);
+        if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo o cambió mientras tanto (lo editaron desde otro celular). Cierra y vuelve a abrirlo.`);
+        const actual = lista[i];
+        // stock: si no se tocó en el formulario, vale el FRESCO
+        const qFinal = qTocada ? obj.q : (actual.q===undefined ? null : actual.q);
+        // Si al editar, el nombre+tipo+modelo quedó igual al de OTRO repuesto
+        // que ya existía en este equipo, no lo dejamos como fila duplicada: se
+        // fusiona con ese otro (sumando stock) y se elimina la fila editada.
+        const newKey = partKey(obj);
+        const dupIdx = lista.findIndex((p,i2)=> i2!==i && partKey(p)===newKey);
+        if(dupIdx>=0){
+          const target = lista[dupIdx];
+          const antesT = target.q;
+          const prevQ = qNum(target.q), addQ = qNum(qFinal);
+          if(prevQ!=null || addQ!=null) target.q = redondearQ((prevQ||0) + (addQ||0));
+          ['t','m','d','u'].forEach(k=>{ if(!target[k] && obj[k]) target[k] = obj[k]; });
+          if((target.cm==null||target.cm==='') && obj.cm!=null) target.cm = obj.cm;
+          if((target.pu==null||target.pu==='') && obj.pu!=null) target.pu = obj.pu;
+          if((target.min==null||target.min==='') && obj.min!=null) target.min = obj.min;
+          if((target.max==null||target.max==='') && obj.max!=null) target.max = obj.max;
+          if(!target.img && obj.img) target.img = obj.img;
+          lista.splice(i,1);
+          // el stock del repuesto editado pasa al otro: queda como ajuste de ambos
+          if(qNum(actual.q) != null) ajuste({ ...actual, q: 0 }, actual.q, 'fusión al editar');
+          ajuste(target, antesT, 'fusión al editar');
+          return { msg: `🔗 "${nombre}" ya existía como otro repuesto — se fusionaron en uno solo (stock: ${target.q ?? '—'})` };
+        }
+        const antes = actual.q;
+        lista[i] = { ...actual, ...obj, q: qFinal, id: actual.id };
+        if(qTocada) ajuste(lista[i], antes, 'conteo editado a mano');
+        return { msg: '✅ Repuesto actualizado' };
+      }
+      // nuevo repuesto: si ya existe uno igual (mismo nombre+tipo+modelo) en este equipo, se suma en vez de duplicarse
+      const key = partKey(obj);
+      const ex = lista.find(p => partKey(p) === key);
+      const antesEx = ex ? ex.q : null;
+      const result = mergeRepuestoInto(lista, { ...obj, id: nuevoId });
+      const p = ex || lista[lista.length - 1];
+      if(p.q != null && p.q !== '') p.q = redondearQ(parseFloat(p.q) || 0);
+      ajuste(p, antesEx, ex ? 'alta de repuesto (sumado a uno existente)' : 'alta de repuesto');
+      return { msg: result.merged
+        ? `🔗 Ya existía "${nombre}" — se sumó al stock (nuevo total: ${p.q ?? '—'})`
+        : '✅ Repuesto agregado' };
+    });
+    closeModal('modalRepuesto');
+    // (5 oct 2026) Si se cambió o quitó la foto, la anterior se borra.
+    if(imgAnterior && imgAnterior !== obj.img && esRefFoto(imgAnterior)) borrarFoto(imgAnterior);
+    renderDetail();
+    showToast(res.msg);
+  }catch(err){
+    avisarErrorTx(err); // el formulario queda abierto
+  }finally{
+    hideLoading();
+    saveRepEnCurso = false;
+  }
+}
+
+// (5 oct 2026) Borrar (y deshacer) por id, en transacción sobre la lista fresca.
+async function deleteRepuesto(idx){
+  const e = getCurrentEquipo();
+  const p0 = e && e.repuestos[idx];
+  if(!p0) return;
+  const ref = refRepuesto(p0, idx);
+  if(!(await verifyPin())) return;
+  if(!confirm(`¿Eliminar "${p0.r}"?`)) return;
+  if(!navigator.onLine){ showToast(MSG_SIN_CONEXION); return; }
+  showLoading('Eliminando…');
+  let backup, pos;
+  try{
+    const res = await txRepuestos(e.id, (lista) => {
+      const i = buscarRepuesto(lista, ref);
+      if(i < 0) throw errUsuario(`"${ref.r}" ya no está en este equipo (lo cambiaron desde otro celular).`);
+      const b = { ...lista[i] };
+      lista.splice(i, 1);
+      return { backup: b, pos: i };
+    });
+    backup = res.backup; pos = res.pos;
+  }catch(err){
+    avisarErrorTx(err);
+    return;
+  }finally{
+    hideLoading();
+  }
+  renderDetail();
+  let undone = false;
+  showUndoToast(`🗑 "${backup.r}" eliminado`, async ()=>{
+    undone = true;
+    try{
+      await txRepuestos(e.id, (lista) => {
+        if(lista.some(p => p.id === backup.id)) return TX_SIN_CAMBIOS; // ya estaba
+        lista.splice(Math.min(pos, lista.length), 0, { ...backup });
+      });
+      renderDetail();
+      showToast(`↩️ "${backup.r}" restaurado`);
+    }catch(err){
+      avisarErrorTx(err);
+      // si no se pudo restaurar, la foto sí se borra más tarde
+      undone = false;
+      setTimeout(()=>{ if(!undone && backup.img) borrarFoto(backup.img); }, 1000);
+    }
+  });
+  // La foto en Storage recién se borra si no se deshizo a tiempo — es lo
+  // único de esta acción que de verdad no se puede recuperar después.
+  setTimeout(()=>{ if(!undone && backup.img) borrarFoto(backup.img); }, 5300);
+}
+
+/* ═══════════════ CLAVE DE ELIMINACIÓN (compartida entre todos los celulares) ═══════════════ */
+// La clave se guarda como hash SHA-256 (no en texto plano) para que alguien
+// que llegue a mirar la base de datos de Firestore directamente no pueda
+// leerla tal cual — solo sirve para comparar, no para recuperarla.
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// (4 oct 2026) Estas dos funciones se llamaban desde verifyPin/configurePin
+// pero NUNCA existieron: por eso eliminar siempre fallaba con "No se pudo
+// comprobar la clave". La clave se guarda como hash SHA-256 (nunca en texto)
+// en /config/app, compartida por todos los celulares. Solo Administrador puede
+// crearla o cambiarla (firestore.rules: /config escritura esAdmin()).
+async function fbGetSharedPin(){
+  const snap = await db.collection('config').doc('app').get();
+  if(!snap.exists) return null;
+  const d = snap.data() || {};
+  return d.pinEliminar || d.pinHash || d.pin || null;
+}
+async function fbSetSharedPin(hash){
+  try {
+    await db.collection('config').doc('app').set({
+      pinEliminar: hash || null,
+      pinActualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
+      pinActualizadoEn: fbTimestamp()
+    }, { merge: true });
+  } catch (err) {
+    showToast(err.code === 'permission-denied' ? '🔒 Solo un Administrador puede crear o cambiar la clave de eliminación.' : '⚠️ No se pudo guardar la clave: ' + err.message);
+    throw err;
+  }
+}
+
+async function verifyPin(){
+  await window.fbReady;
+  let pinHash;
+  try{ pinHash = await fbGetSharedPin(); }catch(err){ showToast('⚠️ No se pudo comprobar la clave: '+err.message); return false; }
+  if(!pinHash){
+    const crear = confirm('Todavía no hay una clave configurada para eliminar (es la misma en todos los celulares).\n\n¿Quieres crearla ahora?');
+    if(!crear){ showToast('Eliminación cancelada — no hay clave configurada'); return false; }
+    const nueva = prompt('Crea una clave para proteger la eliminación:');
+    if(!nueva) return false;
+    const confirmacion = prompt('Confirma la clave:');
+    if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden — inténtalo de nuevo'); return false; }
+    try { await fbSetSharedPin(await sha256Hex(nueva)); } catch (e) { return false; }
+    showToast('🔒 Clave configurada — vuelve a tocar eliminar para continuar');
+    return false; // por seguridad, la primera vez solo configura la clave; hay que volver a intentar eliminar
+  }
+  const entered = prompt('🔒 Ingresa la clave para eliminar:');
+  if(entered===null) return false; // canceló
+  if(!(await pinCoincide(entered, pinHash))){ showToast('❌ Clave incorrecta'); return false; }
+  return true;
+}
+// (5 oct 2026) Antes también se aceptaba escribir el HASH guardado tal cual
+// (entered === pinHash): cualquiera que leyera /config/app podía borrar.
+// Ahora: si lo guardado es un hash SHA-256 (64 hex) solo vale la clave cuyo
+// hash coincide; solo una clave vieja guardada en texto plano se compara
+// directo. La clave sigue siendo un freno en pantalla; quién puede borrar de
+// verdad lo deciden las reglas de Firestore.
+async function pinCoincide(entered, guardado){
+  if(/^[0-9a-f]{64}$/i.test(guardado || '')) return (await sha256Hex(entered)) === guardado.toLowerCase();
+  return entered === guardado;
+}
+
+async function configurePin(){
+  await window.fbReady;
+  const current = await fbGetSharedPin().catch(()=>null);
+  if(current){
+    const cambiar = confirm('Ya hay una clave configurada (compartida entre todos los celulares).\n\nAceptar = cambiarla\nCancelar = quitar la protección');
+    if(cambiar){
+      const old = prompt('Ingresa la clave actual:');
+      if(old===null) return;
+      if(!(await pinCoincide(old, current))){ showToast('❌ Clave incorrecta'); return; }
+      const nueva = prompt('Nueva clave:');
+      if(!nueva) return;
+      try { await fbSetSharedPin(await sha256Hex(nueva)); } catch (e) { return; }
+      showToast('✅ Clave actualizada para todos los celulares');
+    } else {
+      const old = prompt('Ingresa la clave actual para quitar la protección:');
+      if(old===null) return;
+      if(!(await pinCoincide(old, current))){ showToast('❌ Clave incorrecta'); return; }
+      try { await fbSetSharedPin(null); } catch (e) { return; }
+      showToast('🔓 Protección de eliminación desactivada');
+    }
+  } else {
+    const nueva = prompt('Crea una clave para proteger la eliminación de repuestos y equipos (será la misma en todos los celulares):');
+    if(!nueva) return;
+    const confirmacion = prompt('Confirma la clave:');
+    if(confirmacion !== nueva){ showToast('❌ Las claves no coinciden, inténtalo de nuevo'); return; }
+    try { await fbSetSharedPin(await sha256Hex(nueva)); } catch (e) { return; }
+    showToast('🔒 Clave configurada — se pedirá para eliminar repuestos o equipos');
+  }
+}
+
+/* ═══════════════ BÚSQUEDA GLOBAL ═══════════════ */
+document.getElementById('globalSearch').addEventListener('input', (ev)=>{
+  const q = ev.target.value.trim().toLowerCase();
+  if(!q){ clearSearch(); return; }
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('searchResultsView').style.display = 'block';
+
+  const results = [];
+  DB.forEach(e=>{
+    e.repuestos.forEach(p=>{
+      if([p.r,p.t,p.m,p.d,p.u].join(' ').toLowerCase().includes(q)){
+        results.push({equipo:e.nombre, equipoId:e.id, ...p});
+      }
+    });
+  });
+
+  document.getElementById('searchResultsTitle').textContent = `${results.length} resultado(s) para "${ev.target.value}"`;
+  document.getElementById('searchResultsBody').innerHTML = results.length ? results.map(p=>{
+    const st = stockStatus(p);
+    return `<tr style="cursor:pointer" onclick="openEquipo('${idJs(p.equipoId)}')">
+      <td class="part-modelo">${fbEsc(p.equipo)}</td>
+      <td class="part-name">${fbEsc(p.r)}</td>
+      <td class="part-modelo">${fbEsc(p.m||'—')}</td>
+      <td class="part-desc">${fbEsc(p.d||'—')}</td>
+      <td class="mono">${fbEsc(p.q ?? '—')}</td>
+      <td class="mono">${fbEsc(p.cm ?? '—')}</td>
+      <td><span class="stock-badge ${st}">${stockLabel(st)}</span></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">🔍</div>Sin resultados en ningún equipo.</div></td></tr>`;
+});
+
+function clearSearch(){
+  document.getElementById('globalSearch').value = '';
+  document.getElementById('searchResultsView').style.display = 'none';
+  if(currentEquipoId){ document.getElementById('detailView').style.display = 'block'; }
+  else { document.getElementById('homeView').style.display = 'block'; renderHome(); }
+}
+
+/* ═══════════════ EXPORT / IMPORT ═══════════════ */
+// CORRECCIÓN (29 sep 2026): este botón vive en el pie de página, visible
+// tanto en la vista de "todos los equipos" como dentro del detalle de UNO
+// solo — pero antes exportaba SIEMPRE los repuestos faltantes de TODA la
+// planta, sin importar si el usuario estaba viendo un equipo específico.
+// Ahora, si hay un equipo abierto (currentEquipoId), la lista se limita a
+// ESE equipo — igual que updateBtnListaCompra() ya avisa en el texto del
+// botón. Si no hay ningún equipo abierto (vista general), se comporta
+// igual que siempre: toda la planta.
+function exportFaltantes(){
+  const equipoActual = currentEquipoId ? getCurrentEquipo() : null;
+  const equiposAExportar = equipoActual ? [equipoActual] : DB;
+  const rows = [];
+  equiposAExportar.forEach(e=>{
+    e.repuestos.forEach(p=>{
+      const st = stockStatus(p);
+      if(st==='sin' || st==='bajo'){
+        rows.push({ equipo:e.nombre, repuesto:p.r, modelo:p.m||'', stock:p.q, minimo:p.min, estado:stockLabel(st) });
+      }
+    });
+  });
+  if(!rows.length){
+    showToast(equipoActual ? `✅ "${equipoActual.nombre}" no tiene repuestos en falta o bajo stock ahora mismo` : '✅ No hay repuestos en falta o bajo stock ahora mismo');
+    return;
+  }
+  let csv = 'Equipo,Repuesto,Modelo,Stock actual,Minimo,Estado\n';
+  const cq = v => String(v ?? '').replace(/"/g, '""'); // (5 oct 2026) comillas dentro de un dato
+  rows.forEach(r=>{ csv += `"${cq(r.equipo)}","${cq(r.repuesto)}","${cq(r.modelo)}",${r.stock??''},${r.minimo??''},"${cq(r.estado)}"\n`; });
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const sufijoArchivo = equipoActual ? '_' + equipoActual.nombre.replace(/[^a-z0-9]+/gi, '_') : '';
+  a.href = url; a.download = 'lista_compra' + sufijoArchivo + '_' + fbHoy() + '.csv'; // (5 oct 2026) fecha local, no UTC
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`🛒 Lista de compra exportada (${rows.length} repuestos)` + (equipoActual ? ` — solo ${equipoActual.nombre}` : ''));
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(DB,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'inventario_repuestos_'+fbHoy()+'.json'; // (5 oct 2026) fecha local, no UTC
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇ Respaldo descargado');
+}
+
+// (29 sep 2026) hasta ahora, /movimientos, /reubicaciones y /auditoria no
+// tenían NINGÚN respaldo exportable -- solo existían dentro de Firebase.
+// Este botón (visible solo para Encargado/Administrador) descarga las tres
+// colecciones completas en un solo archivo JSON, igual patrón que
+// exportData()/exportBackup() de arriba.
+async function exportHistorialCompleto(){
+  showToast('⏳ Generando respaldo de movimientos, reubicaciones y auditoría…');
+  try{
+    await window.fbReady;
+    const [movSnap, reubSnap, audSnap] = await Promise.all([
+      db.collection('movimientos').get(),
+      db.collection('reubicaciones').get(),
+      db.collection('auditoria').get(),
+    ]);
+    const toPlain = (snap) => snap.docs.map(d => {
+      const data = d.data();
+      // fecha puede venir como Timestamp de Firestore -- se convierte a ISO
+      // para que el JSON exportado sea legible fuera de Firebase también.
+      if (data.fecha && typeof data.fecha.toDate === 'function') data.fecha = data.fecha.toDate().toISOString();
+      return { id: d.id, ...data };
+    });
+    const respaldo = {
+      generadoEn: new Date().toISOString(),
+      movimientos: toPlain(movSnap),
+      reubicaciones: toPlain(reubSnap),
+      auditoria: toPlain(audSnap),
+    };
+    const blob = new Blob([JSON.stringify(respaldo, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'respaldo_movimientos_reubicaciones_auditoria_' + fbHoy() + '.json'; // (5 oct 2026) fecha local
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`⬇ Respaldo descargado — ${respaldo.movimientos.length} movimientos, ${respaldo.reubicaciones.length} reubicaciones, ${respaldo.auditoria.length} auditorías`);
+  }catch(err){
+    showToast('⚠️ No se pudo generar el respaldo: ' + err.message);
+  }
+}
+function importData(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!Array.isArray(data)) throw new Error('formato inválido');
+      // (5 oct 2026) un respaldo puede venir editado a mano: ids de equipo
+      // raros (comillas, barras) se reemplazan, porque se usan en botones de
+      // la pantalla; los repuestos reciben su id estable al guardarse.
+      data.forEach(eq => {
+        if(!eq || typeof eq !== 'object') throw new Error('formato inválido');
+        if(eq.id != null && !/^[A-Za-z0-9_-]{1,64}$/.test(String(eq.id))) delete eq.id;
+        if(!Array.isArray(eq.repuestos)) eq.repuestos = [];
+      });
+      const fusionar = confirm('¿Cómo quieres cargar este respaldo?\n\nAceptar = SUMAR/fusionar con lo que ya tienes (recomendado si varios técnicos cargan por separado — no duplica, suma cantidades)\nCancelar = REEMPLAZAR todo (borra lo que había)');
+      showLoading('Importando respaldo…');
+      if(fusionar){
+        data.forEach(eq => mergeEquipoInto(DB, eq));
+        for(const e of DB){
+          if(!e.id) e.id = db.collection('equipos').doc().id; // equipo nuevo del respaldo sin id
+          fbSaveEquipo(e);
+        }
+      } else {
+        for(const old of DB) await fbDeleteEquipoDoc(old.id).catch(()=>{});
+        DB = data;
+        for(const e of DB){
+          if(!e.id) e.id = db.collection('equipos').doc().id;
+          fbSaveEquipo(e);
+        }
+      }
+      hideLoading();
+      backHome();
+      showToast(fusionar? '✅ Datos fusionados y sumados' : '✅ Respaldo importado (reemplazado)');
+    }catch(err){ hideLoading(); showToast('❌ Archivo inválido: '+err.message); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+/* ═══════════════ TOAST ═══════════════ */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.innerHTML = '';
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+// Toast con botón "Deshacer" — para borrados, que ahora dan unos segundos de
+// margen antes de que el borrado (sobre todo el de una foto en Storage) sea
+// verdaderamente irreversible.
+function showUndoToast(msg, onUndo, delayMs=5200){
+  const t = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = msg; // (5 oct 2026) el mensaje trae nombres: como texto, no HTML
+  t.appendChild(span);
+  const btn = document.createElement('button');
+  btn.className = 'btn sm';
+  btn.style.cssText = 'margin-left:12px;padding:4px 10px;';
+  btn.textContent = 'Deshacer';
+  btn.onclick = () => { t.classList.remove('show'); onUndo(); };
+  t.appendChild(btn);
+  t.classList.add('show');
+  toastTimer = setTimeout(()=>t.classList.remove('show'), delayMs);
+}
+
+/* ═══════════════ INIT ═══════════════ */
+async function initApp(){
+  fbRenderMiniNav('inventario');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  loadTecnicosInventario();
+  loadAreasParaEquipos();
+  cargarOrdenEq();
+  // Auditoría (29 sep 2026): botón visible solo para Encargado/Administrador
+  // (mismo criterio que esEncargado() en firestore.rules) — cosmético
+  // nada más, la protección real ya está en las reglas.
+  window.fbReady.then(()=>{
+    const esEncargadoOMas = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO'));
+    const btn = document.getElementById('auditoriaBtn');
+    if (btn) btn.style.display = esEncargadoOMas ? '' : 'none';
+    // (29 sep 2026) mismo criterio de visibilidad que el botón de Auditoría
+    // -- el botón es cosmético, la protección real de lectura ya está en
+    // firestore.rules (esEncargado() para /auditoria).
+    const btnHist = document.getElementById('btnExportHistorial');
+    if (btnHist) btnHist.style.display = esEncargadoOMas ? '' : 'none';
+  }).catch(()=>{});
+  await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
+}
+async function refreshFromServer(){
+  // Con el listener en tiempo real esto ya no hace falta, pero lo dejamos
+  // como botón de "forzar" por si el usuario quiere confirmar que está al día.
+  await window.fbReady;
+  try{
+    await db.collection('equipos').get({ source: 'server' });
+    showToast('✅ Ya estás al día — la app se actualiza sola en tiempo real');
+  }catch(err){
+    showToast('⚠️ Sin conexión: '+err.message);
+  }
+}
+initApp();
+</script>
+</body>
+</html>

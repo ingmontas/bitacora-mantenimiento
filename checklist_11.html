@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Checklist"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Checklist Mantenimiento 2026</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <!-- Comparación con Maximo/SAP (28 sep 2026): QR por equipo para abrir su
+       checklist directo desde el celular, sin buscarlo en la lista — con 26
+       máquinas de Weaving casi idénticas entre sí, el riesgo de llenar el
+       checklist del equipo equivocado es real. Librería pequeña, sin
+       dependencias, solo para DIBUJAR el QR (no hace falta cámara/escáner:
+       la cámara normal del celular ya reconoce QRs con una URL y ofrece
+       abrirla sola). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       NOTA (17 sep 2026): este archivo es un módulo NUEVO e INDEPENDIENTE
+       (Checklists + OTs pendientes generadas desde ellos). A propósito no
+       toca bitacora.html / inventario.html / analisis.html / index.html /
+       firebase-init.js ni el mini-nav compartido — el usuario integrará
+       el enlace a esta página él mismo cuando decida cómo unificarla.
+       El estilo visual/CSS se copió del mismo sistema de diseño que ya
+       usan las otras tres apps, para que se vea igual de consistente.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    #header h1 { font-size: 15px; font-weight: 800; }
+    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #sp-status { font-size: 20px; cursor: pointer; }
+    #nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; }
+    .nav-btn { flex: 1; padding: 8px 4px 10px; background: none; border: none; color: var(--muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
+    .nav-btn.active { color: var(--accent); }
+    .nav-btn span { font-size: 22px; }
+    #content { padding: 14px 14px 80px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+    .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .field { margin-bottom: 13px; }
+    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    textarea { resize: vertical; min-height: 55px; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    .row { display: flex; gap: 10px; }
+    .row .field { flex: 1; }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .btn:active { opacity: .8; }
+    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
+    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .tag-ok { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-falla { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
+    .tag-pendiente { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
+    .tag-planificada { background: #3987e522; color: #7fb3f5; border: 1px solid #3987e544; }
+    .tag-completada { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
+    .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
+    .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
+    .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .toggle-row { display: flex; gap: 6px; }
+    .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .toggle-btn.sel-ok { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .toggle-btn.sel-falla { border-color: var(--red); background: #EF444418; color: var(--red); }
+    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error { background: var(--red); }
+    #toast.warn { background: var(--orange); }
+    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading.show { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .item-row { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); cursor: pointer; }
+    .item-row.due { border-left-color: var(--red); }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 8px; }
+    .item-title { font-weight: 700; font-size: 14px; }
+    .item-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+    .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .empty p { font-size: 14px; line-height: 1.6; }
+    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; display: none; }
+    #offline-bar.show { display: block; }
+    .checklist-punto { background: var(--surface); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); }
+    .checklist-punto-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    .info-box { background: #F59E0B11; border: 1px solid #F59E0B33; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    /* Modal genérico (carga masiva) — mismo patrón visual que inventario.html */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: center; justify-content: center; padding: 20px; }
+    .modal-bg.open { display: flex; }
+    .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
+    .modal-bg .modal h3 { font-size: 16px; margin-bottom: 4px; }
+    .modal-bg .modal .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+    .modal-bg .modal .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .modal-bg .modal .modal-actions .btn { width: auto; flex: 1; }
+    /* Al imprimir el QR, se oculta todo lo demás — el usuario pega esta
+       etiqueta en la máquina, así que no debe salir el resto de la app. */
+    @media print {
+      body * { visibility: hidden; }
+      #qr-print-area, #qr-print-area * { visibility: visible; }
+      #qr-print-area { position: fixed; top: 30px; left: 0; right: 0; margin: 0 auto; color: #000; }
+      #qr-equipo-sub, #qr-print-area > div:last-child { color: #000 !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="offline-bar">📵 Sin conexión — los registros se guardan localmente</div>
+
+<div id="header">
+  <div>
+    <h1>🩺 Checklist Mantenimiento</h1>
+    <small id="header-sub">2026 · Cargando...</small>
+  </div>
+  <div id="sp-status" title="Estado de conexión">⚙️</div>
+</div>
+
+<div id="content">
+
+  <!-- SCREEN: HOY -->
+  <div class="screen active" id="screen-hoy">
+    <div id="hoy-lista-wrap">
+      <div class="card">
+        <div class="card-title">🔔 Hoy te toca</div>
+        <div class="card-sub">Equipos con checklist vencido o que vence hoy</div>
+        <div id="hoy-vencidos"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 Todos los equipos</div>
+        <div class="card-sub">Elige cualquiera para llenar su checklist ahora</div>
+        <input type="text" id="hoy-buscar" placeholder="Buscar equipo..." oninput="renderHoy()" style="margin-bottom:10px;"/>
+        <div id="hoy-todos"></div>
+      </div>
+    </div>
+
+    <!-- FORMULARIO DE CHECKLIST (se muestra al elegir un equipo) -->
+    <div id="checklist-form-wrap" style="display:none;">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div>
+            <div class="card-title" id="cf-equipo-nombre">—</div>
+            <div class="card-sub" id="cf-equipo-sub">—</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="cerrarFormChecklist()">✕ Cerrar</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()">📝 Agregar/editar puntos de este equipo</button>
+        <div id="cf-puntos"></div>
+        <div class="field" id="cf-horometro-field" style="display:none;">
+          <label>Lectura actual del horómetro (horas)</label>
+          <input type="number" min="0" id="cf-horometro" placeholder="ej: 1250"/>
+        </div>
+        <div class="field">
+          <label>Quién lo hizo</label>
+          <div class="tec-grid" id="cf-tec-grid"></div>
+        </div>
+        <button class="btn btn-primary" id="cf-submit-btn" onclick="submitChecklist()">✅ Guardar Checklist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN: HISTORIAL -->
+  <div class="screen" id="screen-historial">
+    <div class="card-title" style="margin-bottom:4px">📂 Historial de Checklists</div>
+    <div class="card-sub" style="margin-bottom:12px">Últimos checklists guardados</div>
+    <button class="btn secondary sm" onclick="exportChecklistsBackup()" style="margin-bottom:12px;" title="Descarga TODO el historial de checklists, no solo los últimos 30 que se ven arriba">⬇ Exportar respaldo completo (JSON)</button>
+    <div id="historial-lista"></div>
+  </div>
+
+  <!-- SCREEN: OTs PENDIENTES -->
+  <div class="screen" id="screen-ots">
+    <div class="card-title" style="margin-bottom:4px">🛠 OTs por Planificar</div>
+    <div class="card-sub" style="margin-bottom:12px">Generadas automáticamente cuando un checklist marca "Falla"</div>
+    <div id="ots-lista"></div>
+  </div>
+
+  <!-- SCREEN: HORÓMETRO (29 sep 2026) — mantenimiento por horas de uso, no
+       solo por días calendario. Solo aparecen aquí los equipos que un
+       Encargado/Admin activó desde Config → "⏱ Horómetro" de ese equipo.
+       Cualquiera con acceso al checklist puede anotar la lectura actual sin
+       tener que abrir el checklist completo — igual de rápido que pasar y
+       apuntar el número en la máquina. -->
+  <div class="screen" id="screen-horometro">
+    <div class="card-title" style="margin-bottom:4px">⏱ Horómetro</div>
+    <div class="card-sub" style="margin-bottom:12px">Anota la lectura actual de las máquinas que se revisan por horas de uso, no por días</div>
+    <div id="horometro-lista"></div>
+  </div>
+
+  <!-- SCREEN: CONFIG -->
+  <div class="screen" id="screen-config">
+    <div class="card">
+      <div class="card-title">📝 Puntos del Checklist</div>
+      <div class="card-sub">La lista que se usa al llenar el checklist de cualquier equipo</div>
+      <div id="config-puntos-info"></div>
+      <div id="config-puntos-lista"></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+      <div class="card-title" style="margin-bottom:0;">⚙️ Configurar Frecuencias</div>
+      <button class="btn btn-secondary btn-sm" id="btn-bulk-frecuencias" style="display:none;" onclick="abrirModalBulkFrecuencias()">📋 Carga masiva</button>
+    </div>
+    <div class="card-sub" style="margin-bottom:12px">Cada cuántos días se debe revisar cada equipo</div>
+    <div id="config-info"></div>
+    <div id="config-lista"></div>
+  </div>
+
+</div>
+
+<!-- MODAL: carga masiva de frecuencias (pegar tabla, igual que en Inventario) -->
+<div class="modal-bg" id="modalBulkFrecuencias">
+  <div class="modal">
+    <h3>📋 Carga masiva de frecuencias</h3>
+    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel): el nombre del equipo tal como está guardado en Inventario, y cada cuántos días se debe revisar. Los nombres que no coincidan con ningún equipo se listan al final, sin tocar nada.</div>
+    <div class="field">
+      <label>Formato: Nombre del equipo · Días</label>
+      <textarea id="bulkFrecPasteArea" style="min-height:200px;font-family:monospace;font-size:12px;" placeholder="COMPRESOR 1	7
+BANDA TRANSPORTADORA A	15"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalBulkFrecuencias')">Cancelar</button>
+      <button class="btn btn-primary" onclick="bulkImportFrecuencias()">Procesar y cargar</button>
+    </div>
+    <div id="bulkFrecStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- MODAL: puntos del checklist propios de un equipo (no todos se revisan igual) -->
+<div class="modal-bg" id="modalPuntosEquipo">
+  <div class="modal">
+    <h3>📝 Puntos de checklist — <span id="pe-equipo-nombre">—</span></h3>
+    <div class="modal-sub">Esta lista se usa SOLO para este equipo en vez de la lista general. Escribe, agrega o borra puntos, y toca "Guardar" al final. Los checklists ya guardados no cambian.</div>
+    <div id="pe-lista"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalPuntosEquipo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPuntosEquipo()">💾 Guardar</button>
+    </div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="usarListaGeneralParaEquipo()">↩️ Usar la lista general (quitar la propia)</button>
+  </div>
+</div>
+
+<!-- MODAL: código QR de un equipo — se pega/imprime en la máquina; al
+     escanearlo con la cámara normal del celular abre directo su checklist. -->
+<div class="modal-bg" id="modalQrEquipo">
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <div id="qr-print-area">
+      <h3 id="qr-equipo-nombre" style="margin-bottom:2px;">—</h3>
+      <div id="qr-equipo-sub" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+      <div id="qr-canvas-wrap" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR único de la máquina: al escanearlo se ofrece reportar parada, checklist, registrar trabajo, hoja de vida y repuestos, según quién lo escanee.</div>
+    </div>
+    <a id="qr-etiqueta-parada" class="btn btn-secondary" style="display:block;margin-top:12px;text-decoration:none;font-size:13px;" href="etiquetas-qr.html">🏷️ Etiqueta "¿Máquina parada?" para producción</a>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalQrEquipo')">Cerrar</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<nav id="nav">
+  <button class="nav-btn active" onclick="goTo('hoy',this)"><span>🔔</span>Hoy</button>
+  <button class="nav-btn" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
+  <button class="nav-btn" onclick="goTo('ots',this)"><span>🛠</span>OTs</button>
+  <button class="nav-btn" id="nav-btn-horometro" style="display:none;" onclick="goTo('horometro',this)"><span>⏱</span>Horómetro</button>
+  <button class="nav-btn" onclick="goTo('config',this)"><span>⚙️</span>Config</button>
+</nav>
+
+<div id="toast"></div>
+<div id="loading"><div class="spinner"></div><div id="loading-text" style="font-size:13px;color:var(--muted)">Guardando...</div></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// CHECKLIST + OTs PENDIENTES — módulo nuevo e independiente (17 sep 2026)
+//
+// Qué hace:
+//  1. Muestra qué equipos "toca" revisar hoy (según una frecuencia en días
+//     configurada por equipo) y deja elegir cualquier otro igual.
+//  2. El checklist es GENÉRICO por ahora (mismos 8 puntos para cualquier
+//     equipo) — más adelante se puede diferenciar por tipo de equipo.
+//  3. Si algún punto queda en "Falla", se crea automáticamente una OT en
+//     la colección /ots (la misma que usa Bitácora) con estado
+//     "pendiente", folio (OT-0001, OT-0002...) y SIN técnico/solución
+//     todavía — queda para que Encargado la planifique después.
+//  4. La pantalla "OTs" permite planificarla (asignar técnico + fecha) y
+//     luego marcarla como completada.
+//  5. "Config" deja fijar cada cuántos días se revisa cada equipo
+//     (Encargado/Admin) — sin eso, el equipo no aparece en "Hoy te toca"
+//     pero sigue pudiéndose revisar manualmente en cualquier momento.
+// ══════════════════════════════════════════════════════════════════════
+
+// Lista de respaldo (se usa mientras no exista /config/checklistPuntos en
+// Firestore, o si no se puede leer). En cuanto Administrador guarda la
+// lista una vez desde "Config", queda en Firestore y esta constante deja
+// de usarse en la práctica — se conserva solo como resguardo.
+const CHECKLIST_PUNTOS_FALLBACK = [
+  'Fugas de aceite/agua/aire',
+  'Ruido o vibración anormal',
+  'Temperatura anormal',
+  'Limpieza general del equipo',
+  'Tornillería/pernos flojos o faltantes',
+  'Estado de guardas de seguridad',
+  'Conexiones eléctricas/cableado visible en mal estado',
+  'Nivel de aceite/lubricación',
+];
+let checklistPuntosActuales = CHECKLIST_PUNTOS_FALLBACK.slice(); // lista general en uso (Firestore u respaldo)
+let checklistPuntosActualizadoEn = null; // (29 sep 2026) para poder avisar si alguien más la cambió mientras se estaba editando -- ver warnIfDocChangedSinceLoad()
+
+// ══════ CAUSAS DE FALLA Y PRIORIDAD (comparación con Maximo/SAP, 28 sep 2026) ══════
+// Mismo catálogo fijo de causas que bitacora.html (lista corta, no editable
+// desde la app por ahora — igual criterio que se usó con los puntos de
+// checklist en su momento: fijarla es preferible a sobre-construir una
+// pantalla de edición antes de tener uso real).
+const CAUSAS_FALLA = [
+  'Fuga', 'Desgaste', 'Falta de lubricación', 'Cuerpo extraño / contaminación',
+  'Eléctrico', 'Descalibración', 'Sobrecalentamiento', 'Corrosión',
+  'Rotura de pieza', 'Error de operación', 'Otro',
+];
+// Prioridad sugerida automáticamente según el texto del punto que falló —
+// el técnico la puede cambiar igual desde el formulario. Sirve para no
+// dejar una guarda de seguridad rota mezclada visualmente con "limpieza
+// pendiente" en la pantalla de OTs.
+function inferirPrioridad(punto) {
+  const p = (punto || '').toLowerCase();
+  if (/guarda|seguridad|el[eé]ctric|cableado/.test(p)) return 'alta';
+  if (/limpieza/.test(p)) return 'baja';
+  return 'media';
+}
+let puntosEditState = null;    // copia de trabajo mientras Administrador edita la lista GENERAL en "Config"
+
+let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia se está editando (modal)
+let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se edita
+
+let currentEquipos = [];      // desde /equipos (onSnapshot)
+let currentOts = [];          // desde /ots origen checklist y estado en curso (onSnapshot)
+let currentChecklists = [];   // desde /checklists (onSnapshot, últimos 30)
+let equipoSeleccionado = null; // {id, nombre, localidad}
+let itemsFormState = [];       // [{punto, resultado:'ok'|'falla', nota}] mientras se llena el formulario
+
+document.addEventListener('DOMContentLoaded', () => {
+  window.fbReady.then(() => {
+    document.getElementById('header-sub').textContent =
+      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
+    loadTecnicos();
+    loadEquipos();
+    loadOts();
+    loadChecklists();
+    loadChecklistPuntos();
+    updateHeaderStatus();
+    if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('checklist');
+  }).catch((err) => {
+    console.warn('Sin sesión activa:', err.message);
+  });
+
+  window.addEventListener('online', updateHeaderStatus);
+  window.addEventListener('offline', updateHeaderStatus);
+});
+
+function updateHeaderStatus() {
+  const bar = document.getElementById('offline-bar');
+  const icon = document.getElementById('sp-status');
+  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
+  else { bar.classList.add('show'); icon.textContent = '📵'; }
+}
+
+function goTo(screen, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (screen === 'hoy') cerrarFormChecklist();
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function setLoading(on, texto) {
+  document.getElementById('loading-text').textContent = texto || 'Guardando...';
+  document.getElementById('loading').classList.toggle('show', !!on);
+}
+
+// (29 sep 2026) hasta ahora checklist.html no tenía ningún botón de
+// respaldo -- solo bitacora.html/inventario.html/analisis.html lo tenían.
+// La pantalla de Historial solo guarda en memoria los últimos 30
+// (.limit(30) en el listener de arriba), así que este botón hace su propia
+// consulta completa, sin límite, para que el respaldo sea de verdad
+// completo, no solo de lo que se ve en pantalla.
+async function exportChecklistsBackup(){
+  showToast('⏳ Generando respaldo completo de checklists…');
+  try{
+    await window.fbReady;
+    const snap = await db.collection('checklists').orderBy('createdAt', 'desc').get();
+    const rows = snap.docs.map(d => {
+      const data = d.data();
+      if (data.createdAt && typeof data.createdAt.toDate === 'function') data.createdAt = data.createdAt.toDate().toISOString();
+      return { id: d.id, ...data };
+    });
+    const blob = new Blob([JSON.stringify({ generadoEn: new Date().toISOString(), checklists: rows }, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'respaldo_checklists_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`⬇ Respaldo descargado — ${rows.length} checklists`);
+  }catch(err){
+    showToast('⚠️ No se pudo generar el respaldo: ' + err.message, 'error');
+  }
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function addDaysStr(baseStr, dias) {
+  const base = baseStr ? new Date(baseStr + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + Number(dias || 0));
+  return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+}
+
+// ══════ TÉCNICOS (mismo patrón que bitacora.html) ══════
+const TECNICOS_FALLBACK = [
+  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
+  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
+  { "nombre": "LEBRON", "corto": "LEBRON" },
+  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" },
+];
+let TECNICOS_LISTA = TECNICOS_FALLBACK;
+
+async function loadTecnicos() {
+  try {
+    const r = await fetch('tecnicos.json?_=' + Date.now());
+    if (r.ok) {
+      const data = await r.json();
+      if (Array.isArray(data) && data.length) TECNICOS_LISTA = data;
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message);
+  }
+}
+
+// (5 oct 2026) Seguridad: todo dato que viene de Firestore o que escribió
+// una persona (nombres de equipo, notas, puntos, folios...) pasa por fbEsc()
+// antes de meterse en innerHTML; los onclick solo reciben ids de documento.
+function renderTecGridInto(elId, seleccionados) {
+  const grid = document.getElementById(elId);
+  grid.innerHTML = TECNICOS_LISTA.map(t => `
+    <button type="button" class="tec-chip${(seleccionados||[]).includes(t.nombre) ? ' sel' : ''}" data-tec="${fbEsc(t.nombre)}" onclick="this.classList.toggle('sel')">${fbEsc(t.corto || t.nombre)}</button>
+  `).join('');
+}
+
+function getSelectedTecsFrom(elId) {
+  return [...document.querySelectorAll('#' + elId + ' .tec-chip.sel')].map(b => b.dataset.tec);
+}
+
+// ══════ EQUIPOS (colección compartida con Inventario) ══════
+function loadEquipos() {
+  fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
+    (snap) => {
+    currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderHoy();
+    renderConfig();
+    renderHorometro();
+    intentarAbrirDesdeQr();
+    // El tab "⏱ Horómetro" en la barra inferior solo se muestra si algún
+    // equipo lo tiene activado (29 sep 2026) — para no mostrar una pantalla
+    // vacía a plantas donde nadie usa mantenimiento por horas todavía.
+    const navBtnHorometro = document.getElementById('nav-btn-horometro');
+    if (navBtnHorometro) navBtnHorometro.style.display = currentEquipos.some(e => e.checklistFrecuenciaHoras) ? '' : 'none';
+  }, (err) => console.warn('Error leyendo equipos:', err.message));
+}
+
+// ══════ MANTENIMIENTO POR HORÓMETRO (29 sep 2026) ══════
+// Además de la frecuencia por días (calendario), un equipo puede tener una
+// frecuencia por horas de uso (checklistFrecuenciaHoras) — pensado para
+// máquinas como el montacargas o el compresor de aire, donde lo que importa
+// es cuánto ha trabajado, no cuántos días han pasado. Un equipo puede tener
+// una, la otra, ninguna o ambas activas a la vez (el que se cumpla primero
+// lo marca "vencido"); esto lo activa Encargado/Admin equipo por equipo
+// desde Config, igual que ya se hace con los puntos propios (10.3).
+//
+// horometroActual: la última lectura conocida de la máquina (se actualiza
+// desde el checklist o desde la pantalla "⏱ Horómetro").
+// horometroUltimoService: la lectura que tenía la máquina quando se hizo el
+// último checklist — el "cero" desde el que se cuentan las horas para el
+// próximo servicio. Se reinicia cada vez que se guarda un checklist de ese
+// equipo (igual patrón que checklistUltimaFecha/checklistProximaFecha).
+function horasDesdeUltimoServicio(e) {
+  if (!e.checklistFrecuenciaHoras) return null;
+  const actual = Number(e.horometroActual) || 0;
+  const base = Number(e.horometroUltimoService) || 0;
+  return actual - base;
+}
+function horometroVencido(e) {
+  const horas = horasDesdeUltimoServicio(e);
+  return horas !== null && horas >= e.checklistFrecuenciaHoras;
+}
+
+function renderHoy() {
+  if (equipoSeleccionado) return; // el formulario está abierto, no repintar la lista debajo
+  const hoy = todayStr();
+  const busca = (document.getElementById('hoy-buscar').value || '').trim().toLowerCase();
+
+  const vencidos = currentEquipos.filter(e =>
+    (e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoy)) || horometroVencido(e)
+  );
+  const wrapV = document.getElementById('hoy-vencidos');
+  wrapV.innerHTML = vencidos.length ? vencidos.map(e => itemRowHtml(e, true)).join('') :
+    `<div class="empty" style="padding:20px 10px;"><span class="emoji">✅</span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
+
+  const todos = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const wrapT = document.getElementById('hoy-todos');
+  wrapT.innerHTML = todos.length ? todos.map(e => itemRowHtml(e, false)).join('') :
+    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
+}
+
+function itemRowHtml(e, marcarVencido) {
+  const prox = e.checklistProximaFecha ? 'Próxima: ' + e.checklistProximaFecha : (e.checklistFrecuenciaDias ? 'Próxima: hoy' : 'Sin frecuencia configurada');
+  let horometroTxt = '';
+  if (e.checklistFrecuenciaHoras) {
+    const horas = horasDesdeUltimoServicio(e);
+    horometroTxt = horometroVencido(e)
+      ? ` · ⏱ Vencido por horómetro (${horas}/${e.checklistFrecuenciaHoras} h)`
+      : ` · ⏱ ${horas}/${e.checklistFrecuenciaHoras} h`;
+  }
+  return `
+    <div class="item-row${marcarVencido ? ' due' : ''}" onclick="abrirFormChecklist('${e.id}')">
+      <div class="item-header">
+        <div class="item-title">${fbEsc(e.nombre || '(sin nombre)')}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
+          <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
+        </div>
+      </div>
+      <div class="item-sub">${e.localidad ? '📍 ' + fbEsc(e.localidad) + ' · ' : ''}${fbEsc(prox)}${fbEsc(horometroTxt)}</div>
+    </div>`;
+}
+
+// ══════ FORMULARIO DE CHECKLIST ══════
+function abrirFormChecklist(equipoId) {
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  equipoSeleccionado = e;
+  // Si este equipo tiene su propia lista de puntos (distinta a la general,
+  // porque no todos los equipos se revisan igual), se usa esa; si no, la general.
+  const puntosParaEsteEquipo = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos : checklistPuntosActuales;
+  itemsFormState = puntosParaEsteEquipo.map(p => ({ punto: p, resultado: 'ok', nota: '', causa: '', prioridad: inferirPrioridad(p) }));
+
+  document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  renderPuntosForm();
+  renderTecGridInto('cf-tec-grid', []);
+
+  const btnEditarPuntos = document.getElementById('cf-btn-editar-puntos');
+  if (btnEditarPuntos) btnEditarPuntos.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR')) ? '' : 'none';
+
+  // Si este equipo usa mantenimiento por horómetro, se pide la lectura
+  // actual en el mismo formulario — ya que de todas formas alguien está
+  // parado frente a la máquina haciendo el checklist.
+  const campoHorometro = document.getElementById('cf-horometro-field');
+  const inputHorometro = document.getElementById('cf-horometro');
+  if (e.checklistFrecuenciaHoras) {
+    campoHorometro.style.display = '';
+    inputHorometro.value = e.horometroActual ?? '';
+  } else {
+    campoHorometro.style.display = 'none';
+    inputHorometro.value = '';
+  }
+
+  document.getElementById('hoy-lista-wrap').style.display = 'none';
+  document.getElementById('checklist-form-wrap').style.display = 'block';
+}
+
+function cerrarFormChecklist() {
+  equipoSeleccionado = null;
+  itemsFormState = [];
+  document.getElementById('checklist-form-wrap').style.display = 'none';
+  document.getElementById('hoy-lista-wrap').style.display = 'block';
+  renderHoy();
+}
+
+function renderPuntosForm() {
+  const wrap = document.getElementById('cf-puntos');
+  wrap.innerHTML = itemsFormState.map((it, idx) => `
+    <div class="checklist-punto">
+      <div class="checklist-punto-label">${fbEsc(it.punto)}</div>
+      <div class="toggle-row">
+        <button type="button" class="toggle-btn${it.resultado === 'ok' ? ' sel-ok' : ''}" onclick="setItemResultado(${idx},'ok')">✅ OK</button>
+        <button type="button" class="toggle-btn${it.resultado === 'falla' ? ' sel-falla' : ''}" onclick="setItemResultado(${idx},'falla')">⚠️ Falla</button>
+      </div>
+      ${it.resultado === 'falla' ? `
+        <div class="row" style="margin-top:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Causa</label>
+            <select onchange="itemsFormState[${idx}].causa=this.value">
+              <option value="">Seleccionar causa...</option>
+              ${CAUSAS_FALLA.map(c => `<option${it.causa === c ? ' selected' : ''}>${fbEsc(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;max-width:130px;">
+            <label>Prioridad</label>
+            <select onchange="itemsFormState[${idx}].prioridad=this.value">
+              ${['alta','media','baja'].map(pr => `<option value="${pr}"${it.prioridad === pr ? ' selected' : ''}>${pr === 'alta' ? '🔴 Alta' : pr === 'media' ? '🟡 Media' : '🟢 Baja'}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${fbEsc(it.nota || '')}</textarea>` : ''}
+    </div>
+  `).join('');
+}
+
+function setItemResultado(idx, val) {
+  itemsFormState[idx].resultado = val;
+  renderPuntosForm();
+}
+
+// (5 oct 2026) Horómetro: una lectura MENOR que la actual casi siempre es
+// un error de dedo (y reinicia mal el conteo de horas). Solo Administrador
+// o Encargado pueden bajarla, y confirmando. Un salto de más de 2000 h
+// también se confirma (ej. un cero de más). Devuelve true si se puede seguir.
+const HOROMETRO_SALTO_SOSPECHOSO = 2000;
+function validarLecturaHorometro(equipo, lectura) {
+  const tieneActual = equipo && equipo.horometroActual !== undefined && equipo.horometroActual !== null && equipo.horometroActual !== '';
+  if (!tieneActual) return true;
+  const actual = Number(equipo.horometroActual);
+  if (isNaN(actual)) return true;
+  if (lectura < actual) {
+    const puedeCorregir = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+    if (!puedeCorregir) {
+      showToast(`La lectura (${lectura} h) es menor que la actual del equipo (${actual} h). Revisa el número; si de verdad hay que corregirlo, pídeselo al Encargado o Administrador.`, 'error');
+      return false;
+    }
+    if (!confirm(`¿Corregir el horómetro a un valor menor?\n\nActual: ${actual} h\nNueva: ${lectura} h`)) return false;
+    return true;
+  }
+  if (lectura - actual > HOROMETRO_SALTO_SOSPECHOSO) {
+    if (!confirm(`La lectura (${lectura} h) es ${lectura - actual} h mayor que la actual (${actual} h). ¿Es correcta?`)) return false;
+  }
+  return true;
+}
+
+// (5 oct 2026) Traduce el "permission-denied" de Firestore a un mensaje en
+// español que diga QUIÉN puede hacer esa acción, en vez del texto en inglés.
+function mensajeErrorPermiso(e, accion) {
+  const esPermiso = e && (e.code === 'permission-denied' || /permission|insufficient/i.test(e.message || ''));
+  if (!esPermiso) return 'Error: ' + ((e && e.message) || e);
+  const porAccion = {
+    checklist: 'Tu usuario no tiene permiso para guardar checklists u OTs.',
+    planificar: 'Solo Administrador o Encargado puede planificar una OT.',
+    realizar: 'Solo Técnico, Supervisor, Encargado o Administrador puede marcar el trabajo como realizado.',
+    validar: 'Solo Supervisor, Encargado o Administrador puede validar una OT.',
+    rechazar: 'Solo Supervisor, Encargado o Administrador puede marcar una OT como no concluida.',
+    cerrar: 'Solo el Administrador puede cerrar una OT de checklist.',
+    configurar: 'Solo Administrador o Encargado puede cambiar la frecuencia o el horómetro.',
+    horometro: 'Tu usuario no tiene permiso para actualizar el horómetro.',
+  };
+  return '⛔ ' + (porAccion[accion] || 'No tienes permiso para esta acción.');
+}
+
+function nombreUsuarioActual() {
+  return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+}
+
+// (5 oct 2026) Guardado SIN quedarse colgado sin señal. Antes se hacía
+// "await" de cada escritura (checklist, equipo, y cada OT una por una): con
+// la persistencia sin conexión esos await no terminan hasta que vuelve la
+// señal, así que la pantalla se quedaba en "Guardando..." para siempre, y
+// si algo fallaba a la mitad quedaba un checklist sin sus OTs. Ahora:
+//  1. Primero se sacan los folios (fbFolioNuevo nunca tarda más de ~5 s;
+//     sin señal da un folio provisional OT-P…).
+//  2. Checklist + actualización del equipo + todas las OTs van en UN solo
+//     batch: o se guarda todo, o nada.
+//  3. commit() NO se espera: el formulario se cierra enseguida y el aviso
+//     de éxito/error llega después por .then/.catch.
+let _guardandoChecklist = false; // evita doble toque en "Guardar"
+async function submitChecklist() {
+  if (!equipoSeleccionado || _guardandoChecklist) return;
+  const tecnicos = getSelectedTecsFrom('cf-tec-grid');
+  if (!tecnicos.length) { showToast('Selecciona quién hizo el checklist', 'warn'); return; }
+
+  // Si el equipo usa horómetro, la lectura es obligatoria — sin ella no se
+  // puede reiniciar el conteo de horas para el próximo servicio.
+  let lecturaHorometro = null;
+  if (equipoSeleccionado.checklistFrecuenciaHoras) {
+    const val = document.getElementById('cf-horometro').value;
+    lecturaHorometro = Number(val);
+    if (val === '' || isNaN(lecturaHorometro) || lecturaHorometro < 0) {
+      showToast('Escribe la lectura actual del horómetro', 'warn');
+      return;
+    }
+    if (!validarLecturaHorometro(equipoSeleccionado, lecturaHorometro)) return;
+  }
+
+  _guardandoChecklist = true;
+  const btnGuardar = document.getElementById('cf-submit-btn');
+  if (btnGuardar) btnGuardar.disabled = true;
+
+  // Copias locales: el formulario se cierra antes de que termine de subir.
+  const equipo = equipoSeleccionado;
+  const items = itemsFormState.map(it => ({ ...it }));
+  const hoy = todayStr();
+  const fallas = items.filter(it => it.resultado === 'falla');
+  const creador = nombreUsuarioActual();
+  const nombreEquipo = equipo.nombre || '(sin nombre)';
+
+  try {
+    // 1) Folios primero. Con señal, uno tras otro (el contador es una
+    // transacción; en paralelo chocarían entre sí). En cuanto uno sale
+    // provisional (sin señal), el resto se pide en paralelo para no sumar
+    // 5 s de espera por cada falla.
+    const folios = [];
+    if (fallas.length) {
+      setLoading(true, 'Generando folio(s) de OT...');
+      if (!navigator.onLine) {
+        folios.push(...await Promise.all(fallas.map(() => fbFolioNuevo())));
+      } else {
+        for (let i = 0; i < fallas.length; i++) {
+          const f = await fbFolioNuevo();
+          folios.push(f);
+          if (f.startsWith('OT-P') && i < fallas.length - 1) {
+            folios.push(...await Promise.all(fallas.slice(i + 1).map(() => fbFolioNuevo())));
+            break;
+          }
+        }
+      }
+    }
+
+    // 2) Un solo batch con todo.
+    const batch = db.batch();
+    const checklistRef = db.collection('checklists').doc();
+    batch.set(checklistRef, {
+      equipoId: equipo.id,
+      equipoNombre: equipo.nombre || '',
+      equipoLocalidad: equipo.localidad || '',
+      fecha: hoy,
+      tecnicos: tecnicos,
+      items: items,
+      tieneFallas: fallas.length > 0,
+      creadoPor: creador,
+      createdAt: fbTimestamp(),
+    });
+
+    // Actualiza la próxima fecha del equipo si tiene frecuencia configurada
+    // (por días y/o por horómetro — un equipo puede tener las dos a la vez).
+    // (5 oct 2026) checklistUltimaFecha se guarda SIEMPRE (aunque el equipo
+    // todavía no tenga frecuencia): así, cuando después se le configure una,
+    // la próxima fecha se calcula desde el último checklist real.
+    const actualizacionEquipo = { checklistUltimaFecha: hoy };
+    if (equipo.checklistFrecuenciaDias) {
+      actualizacionEquipo.checklistProximaFecha = addDaysStr(hoy, equipo.checklistFrecuenciaDias);
+    }
+    if (lecturaHorometro !== null) {
+      actualizacionEquipo.horometroActual = lecturaHorometro;
+      actualizacionEquipo.horometroUltimoService = lecturaHorometro; // reinicia el conteo de horas
+    }
+    batch.set(db.collection('equipos').doc(equipo.id), actualizacionEquipo, { merge: true });
+
+    // Por cada punto en "Falla", crea una OT pendiente para planificar
+    fallas.forEach((f, i) => {
+      batch.set(db.collection('ots').doc(), {
+        origen: 'checklist',
+        estado: 'pendiente',
+        folio: folios[i],
+        equipoId: equipo.id,
+        equipoNombre: equipo.nombre || '',
+        equipoLocalidad: equipo.localidad || '',
+        descripcionFalla: f.punto + (f.nota ? ' — ' + f.nota : ''),
+        causaFalla: f.causa || '',
+        prioridad: f.prioridad || 'media',
+        checklistId: checklistRef.id,
+        asignadoA: null,
+        fechaPlanificada: null,
+        creadoPor: creador,
+        creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
+        createdAt: fbTimestamp(),
+      });
+    });
+
+    // 3) Se manda sin esperar al servidor.
+    let subido = false, avisoPendiente = false;
+    const msgBase = fallas.length
+      ? `Checklist guardado. Se generaron ${fallas.length} OT(s) pendiente(s).`
+      : 'Checklist guardado sin fallas ✅';
+    refrescarEquiposLocal();
+    batch.commit().then(() => {
+      subido = true;
+      if (avisoPendiente) showToast(`☁️ Checklist de ${nombreEquipo} subido al servidor ✅`);
+    }).catch((err) => {
+      subido = true;
+      console.error('Error al guardar checklist:', err);
+      showToast(`❌ El checklist de ${nombreEquipo} NO se guardó. ` + mensajeErrorPermiso(err, 'checklist'), 'error');
+    });
+
+    setLoading(false);
+    cerrarFormChecklist();
+    goTo('hoy', document.querySelectorAll('.nav-btn')[0]);
+    if (!navigator.onLine) {
+      avisoPendiente = true;
+      showToast(msgBase + ' 📵 Se subirá cuando haya señal.', 'warn');
+    } else {
+      showToast(msgBase);
+      setTimeout(() => {
+        if (!subido) { avisoPendiente = true; showToast(msgBase + ' Se subirá cuando haya señal.', 'warn'); }
+      }, 3000);
+    }
+  } catch (e) {
+    // Solo llega aquí si falló algo ANTES de mandar (el formulario sigue abierto).
+    setLoading(false);
+    showToast(mensajeErrorPermiso(e, 'checklist'), 'error');
+  } finally {
+    _guardandoChecklist = false;
+    if (btnGuardar) btnGuardar.disabled = false;
+  }
+}
+
+// ══════ FOLIO DE OT (OT-0001, OT-0002...) ══════
+// (5 oct 2026) Ya no hay una copia local de generarFolio(): se usa
+// fbFolioNuevo() de firebase-init.js, el mismo para toda la app (la regla
+// del contador ahora solo acepta {ultimo: anterior+1}). Sin señal da un
+// folio provisional "OT-P…" en vez de quedarse esperando.
+
+// ══════ HISTORIAL DE CHECKLISTS ══════
+function loadChecklists() {
+  db.collection('checklists').orderBy('createdAt', 'desc').limit(30).onSnapshot((snap) => {
+    currentChecklists = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderHistorial();
+  }, (err) => console.warn('Error leyendo checklists:', err.message));
+}
+
+function renderHistorial() {
+  const wrap = document.getElementById('historial-lista');
+  if (!currentChecklists.length) {
+    wrap.innerHTML = `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = currentChecklists.map(c => `
+    <div class="item-row" style="cursor:default;">
+      <div class="item-header">
+        <div class="item-title">${fbEsc(c.equipoNombre || '(sin nombre)')}</div>
+        <span class="tag ${c.tieneFallas ? 'tag-falla' : 'tag-ok'}">${c.tieneFallas ? 'Con fallas' : 'OK'}</span>
+      </div>
+      <div class="item-sub">${fbEsc(c.fecha || '')} · ${fbEsc((c.tecnicos || []).join(', '))}</div>
+    </div>
+  `).join('');
+}
+
+// ══════ OTs PENDIENTES / PLANIFICADAS ══════
+function loadOts() {
+  // NOTA: se ordena en el cliente (no con .orderBy() en la consulta) para
+  // no depender de crear un índice compuesto en Firebase solo por combinar
+  // where('origen',...) con orderBy('createdAt',...) — con el volumen de
+  // OTs que maneja esta planta, ordenar en JS es más que suficiente.
+  //
+  // ESTADOS (21 sep 2026 — flujo de revisión/cierre):
+  //  pendiente → planificada (Encargado/Admin asigna técnico+fecha)
+  //  → en_revision (el técnico marca "trabajo realizado")
+  //  → rechazada (Supervisor/Encargado/Admin dice "no concluido", con nota;
+  //     el técnico corrige y la vuelve a marcar realizada) O
+  //  → validada (Supervisor/Encargado/Admin dice "buena y válida")
+  //  → completada (SOLO Administrador hace el cierre final)
+  // Administrador también puede "Cerrar directo" desde cualquier estado, sin
+  // pasar por los pasos intermedios (pedido explícito del usuario).
+  // (5 oct 2026) Cuota gratis de Firebase: antes se escuchaban TODAS las OTs de
+  // checklist de todos los años (también las completadas, que no se muestran).
+  // Ahora solo las que están en curso. '==' + 'in' son filtros de igualdad:
+  // no hace falta índice compuesto.
+  db.collection('ots').where('origen', '==', 'checklist')
+    .where('estado', 'in', ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada']).onSnapshot((snap) => {
+    // Orden: primero por prioridad (alta arriba de todo), y dentro de cada
+    // prioridad, la más reciente primero — así una guarda de seguridad rota
+    // no se pierde debajo de diez limpiezas pendientes.
+    const rangoPrioridad = { alta: 0, media: 1, baja: 2 };
+    currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(o => ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'].includes(o.estado))
+      .sort((a, b) => {
+        const rp = (rangoPrioridad[a.prioridad] ?? 1) - (rangoPrioridad[b.prioridad] ?? 1);
+        if (rp !== 0) return rp;
+        return (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0);
+      });
+    renderOts();
+  }, (err) => console.warn('Error leyendo OTs:', err.message));
+}
+
+const OT_ESTADO_TAG = {
+  pendiente:   { clase: 'tag-pendiente',   texto: 'Pendiente' },
+  planificada: { clase: 'tag-planificada', texto: 'Planificada' },
+  en_revision: { clase: 'tag-planificada', texto: 'En revisión' },
+  rechazada:   { clase: 'tag-falla',       texto: 'No concluida' },
+  validada:    { clase: 'tag-completada',  texto: 'Validada · falta cierre' },
+};
+
+function renderOts() {
+  const wrap = document.getElementById('ots-lista');
+  const puedePlanificar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+  const puedeRevisar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  const puedeMarcarHecho = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+  const esAdminCierre = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+
+  if (!currentOts.length) {
+    wrap.innerHTML = `<div class="empty"><span class="emoji">✅</span><p>No hay OTs pendientes por planificar.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = currentOts.map(o => {
+    const tag = OT_ESTADO_TAG[o.estado] || { clase: 'tag-pendiente', texto: fbEsc(o.estado || '—') };
+    let acciones = '';
+
+    if (o.estado === 'pendiente' && puedePlanificar) {
+      acciones = `
+        <div class="row" style="margin-top:10px;">
+          <div class="field" style="margin-bottom:0;">
+            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.map(t => `<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto || t.nombre)}</option>`).join('')}</select>
+          </div>
+          <div class="field" style="margin-bottom:0;max-width:130px;">
+            <input type="date" id="ot-fecha-${o.id}" value="${todayStr()}"/>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="planificarOt('${o.id}')">📅 Planificar</button>`;
+    } else if (o.estado === 'planificada' || o.estado === 'rechazada') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · 📅 ${fbEsc(o.fechaPlanificada || '—')}</div>`;
+      if (o.estado === 'rechazada' && o.notaRevision) {
+        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
+      }
+      if (puedeMarcarHecho) {
+        acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="marcarOtRealizada('${o.id}')">${o.estado === 'rechazada' ? '🔁 Marcar corregido, enviar a revisión' : '✅ Marcar trabajo realizado'}</button>`;
+      }
+    } else if (o.estado === 'en_revision') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Trabajo realizado, en espera de revisión</div>`;
+      if (puedeRevisar) {
+        acciones += `
+          <div class="field" style="margin-top:8px;margin-bottom:6px;">
+            <label>Nota de revisión (obligatoria si no está concluido)</label>
+            <textarea id="ot-nota-rev-${o.id}" placeholder="Qué falta o qué se debe corregir..."></textarea>
+          </div>
+          <div class="row">
+            <button class="btn btn-primary btn-sm" onclick="validarOt('${o.id}')">✅ Buena y válida</button>
+            <button class="btn btn-secondary btn-sm" onclick="rechazarOt('${o.id}')">⚠️ No concluido</button>
+          </div>`;
+      }
+    } else if (o.estado === 'validada') {
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Validado por ${fbEsc(o.revisadoPor || '—')}</div>`;
+      if (esAdminCierre) {
+        acciones += `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="cerrarOtFinal('${o.id}')">🔒 Cerrar OT</button>`;
+      }
+    }
+
+    // Atajo del Administrador: cerrar de una vez, sin pasar por revisión/validación.
+    if (esAdminCierre && o.estado !== 'completada') {
+      acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
+    }
+
+    return `
+      <div class="item-row" style="cursor:default;">
+        <div class="item-header">
+          <div class="item-title">${fbEsc(o.folio || o.id)} · ${fbEsc(o.equipoNombre || '')}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+            ${o.prioridad ? `<span class="tag tag-prioridad-${fbEsc(o.prioridad)}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${fbEsc(o.prioridad)}</span>` : ''}
+            <span class="tag ${tag.clase}">${tag.texto}</span>
+          </div>
+        </div>
+        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>
+        ${acciones}
+        ${o.folio ? `
+        <div style="margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="verCostoRepuestosOt('${o.id}')">💰 Ver costo de repuestos</button>
+          <div id="costo-ot-${o.id}" class="item-sub" style="margin-top:6px;"></div>
+        </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// (5 oct 2026) Toda actualización de OT deja editadoPor/editadoEn, y si
+// Firestore la rechaza por permisos se dice en español quién sí puede.
+function camposEdicionOt() {
+  return { editadoPor: nombreUsuarioActual(), editadoEn: fbTimestamp() };
+}
+
+async function planificarOt(otId) {
+  const tec = document.getElementById('ot-tec-' + otId).value;
+  const fecha = document.getElementById('ot-fecha-' + otId).value;
+  if (!tec || !fecha) { showToast('Elige técnico y fecha', 'warn'); return; }
+  try {
+    await db.collection('ots').doc(otId).update({ estado: 'planificada', asignadoA: tec, fechaPlanificada: fecha, ...camposEdicionOt() });
+    showToast('OT planificada ✅');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'planificar'), 'error');
+  }
+}
+
+async function marcarOtRealizada(otId) {
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'en_revision',
+      trabajoRealizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
+      trabajoRealizadoEn: fbTimestamp(),
+      ...camposEdicionOt(),
+    });
+    showToast('Marcado como realizado — pasa a revisión ✅');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'realizar'), 'error');
+  }
+}
+
+async function validarOt(otId) {
+  const nota = (document.getElementById('ot-nota-rev-' + otId) || {}).value || '';
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'validada',
+      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      revisadoEn: fbTimestamp(),
+      revisionResultado: 'buena',
+      notaRevision: nota.trim(),
+      ...camposEdicionOt(),
+    });
+    showToast('OT validada — falta el cierre ✅');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'validar'), 'error');
+  }
+}
+
+async function rechazarOt(otId) {
+  const nota = ((document.getElementById('ot-nota-rev-' + otId) || {}).value || '').trim();
+  if (!nota) { showToast('Escribe qué falta o qué se debe corregir', 'warn'); return; }
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'rechazada',
+      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      revisadoEn: fbTimestamp(),
+      revisionResultado: 'rechazada',
+      notaRevision: nota,
+      ...camposEdicionOt(),
+    });
+    showToast('OT regresada como no concluida', 'warn');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'rechazar'), 'error');
+  }
+}
+
+// ══════ CIERRE FINAL (Administrador) ══════
+// Al cerrar, además de marcar la OT como completada, se cargan los mismos
+// campos que usa Bitácora/Análisis (TIPO_MANTENIMIENTO, EQUIPO, TECNICOS...)
+// para que esta actividad aparezca en el panel de Análisis clasificada como
+// "Preventivo" (a favor, no como correctivo) y con su tiempo de respuesta —
+// desde que se creó la OT (por una falla detectada en el checklist) hasta
+// que se cerró. No se toca TOTAL_MIN_MAQUINA/TOTAL_MIN_TECNICO (quedan en 0)
+// para no alterar los cálculos de paro de máquina que ya existen en
+// Análisis — el tiempo de respuesta se guarda aparte, en su propio campo.
+function calcularTiempoRespuestaMin(ot) {
+  const creado = ot.createdAt && typeof ot.createdAt.toMillis === 'function' ? ot.createdAt.toMillis() : null;
+  if (!creado) return null;
+  return Math.max(0, Math.round((Date.now() - creado) / 60000));
+}
+
+// (5 oct 2026) Para que Análisis la cuente bien: FECHA es el día en que
+// el trabajo se HIZO (trabajoRealizadoEn), no el día del cierre (que puede
+// ser una semana después); si no se marcó como realizado, hoy. Se agregan
+// SEMANA (ISO, la misma de Análisis), PLANTA (la del equipo, si la tiene) y
+// equipoId (para la hoja de vida, aunque se renombre el equipo).
+function fechaTrabajoRealizado(ot) {
+  const ts = ot.trabajoRealizadoEn;
+  if (ts && typeof ts.toDate === 'function') return fbFechaLocal(ts.toDate());
+  return todayStr();
+}
+
+function camposParaAnalisis(ot, tiempoRespuestaMin) {
+  const fecha = fechaTrabajoRealizado(ot);
+  const equipo = currentEquipos.find(x => x.id === ot.equipoId);
+  return {
+    Title: ot.folio || ot.id,
+    FECHA: fecha,
+    SEMANA: fbSemanaISO(fecha),
+    PLANTA: (equipo && (equipo.planta || equipo.plantaNombre)) || '',
+    equipoId: ot.equipoId || null,
+    LINEA_EQUIPO: ot.equipoLocalidad || '',
+    TIPO_MAQUINA: '',
+    EQUIPO: ot.equipoNombre || '',
+    TIPO_MANTENIMIENTO: 'Preventivo',
+    TECNICOS: ot.asignadoA || ot.trabajoRealizadoPor || '',
+    DESCRIPCION_FALLA: ot.descripcionFalla || '',
+    DESCRIPCION_SOLUCION: ot.notaRevision || 'Verificado mediante checklist preventivo',
+    ME: 'm',
+    GENERA_OT: 'no',
+    PARO_PLANTA: 'no',
+    TOTAL_MIN_MAQUINA: 0,
+    TOTAL_MIN_TECNICO: 0,
+    TIEMPO_RESPUESTA_MIN: tiempoRespuestaMin,
+  };
+}
+
+async function cerrarOtFinal(otId) {
+  const o = currentOts.find(x => x.id === otId);
+  if (!o) return;
+  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
+  try {
+    await db.collection('ots').doc(otId).set({
+      estado: 'completada',
+      cerradoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+      cerradoEn: fbTimestamp(),
+      fechaCompletada: todayStr(),
+      tiempoRespuestaMin,
+      ...camposParaAnalisis(o, tiempoRespuestaMin),
+      ...camposEdicionOt(),
+    }, { merge: true });
+    showToast('OT cerrada ✅ — ya cuenta como preventivo en Análisis');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
+  }
+}
+
+async function cerrarOtDirecto(otId) {
+  const o = currentOts.find(x => x.id === otId);
+  if (!o) return;
+  const nombreAdmin = (window.currentUserRole && window.currentUserRole.nombre) || '';
+  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
+  const payload = {
+    estado: 'completada',
+    cerradoPor: nombreAdmin,
+    cerradoEn: fbTimestamp(),
+    fechaCompletada: todayStr(),
+    tiempoRespuestaMin,
+    ...camposParaAnalisis(o, tiempoRespuestaMin),
+    ...camposEdicionOt(),
+  };
+  // Si nadie la había revisado todavía, el cierre directo también cuenta como la revisión.
+  if (!o.revisadoPor) {
+    payload.revisadoPor = nombreAdmin;
+    payload.revisadoEn = fbTimestamp();
+    payload.revisionResultado = 'buena';
+  }
+  try {
+    await db.collection('ots').doc(otId).set(payload, { merge: true });
+    showToast('OT cerrada directamente ✅');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
+  }
+}
+
+// ══════ PUNTOS DEL CHECKLIST (SOLO Administrador) ══════
+// A diferencia de la frecuencia por equipo (Encargado/Admin), editar QUÉ
+// puntos trae el checklist se restringió a Administrador únicamente, a
+// pedido explícito del usuario — no usa esEncargado(), usa esAdmin() en
+// firestore.rules (misma regla que ya protege /plantas).
+function loadChecklistPuntos() {
+  db.collection('config').doc('checklistPuntos').onSnapshot((snap) => {
+    const data = snap.exists ? snap.data() : null;
+    checklistPuntosActuales = (data && Array.isArray(data.puntos) && data.puntos.length) ? data.puntos : CHECKLIST_PUNTOS_FALLBACK.slice();
+    checklistPuntosActualizadoEn = (data && data.actualizadoEn) ? data.actualizadoEn : null;
+    if (puntosEditState === null) puntosEditState = checklistPuntosActuales.slice(); // solo la primera vez, para no pisar una edición en curso
+    renderConfigPuntos();
+  }, (err) => console.warn('Error leyendo config/checklistPuntos:', err.message));
+}
+
+function renderConfigPuntos() {
+  const puedeEditarPuntos = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+  const info = document.getElementById('config-puntos-info');
+  const wrap = document.getElementById('config-puntos-lista');
+  if (!info || !wrap) return;
+
+  if (!puedeEditarPuntos) {
+    info.innerHTML = `<div class="info-box">Solo el Administrador puede cambiar los puntos del checklist. Estos son los que se usan hoy:</div>`;
+    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${fbEsc(p)}</div>`).join('')}</div>`;
+    return;
+  }
+
+  info.innerHTML = `<div class="info-box">Escribe, agrega o borra puntos, y toca "Guardar lista" al final. Los checklists ya guardados no cambian — esto solo afecta a los que se llenen de ahora en adelante.</div>`;
+  const lista = puntosEditState || [];
+  wrap.innerHTML = lista.map((p, idx) => `
+    <div class="row" style="margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;">
+        <input type="text" id="punto-edit-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
+      </div>
+      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
+        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEdit(${idx})">🗑</button>
+      </div>
+    </div>
+  `).join('') +
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:10px;" onclick="agregarPuntoEdit()">➕ Agregar punto</button>` +
+    `<button class="btn btn-primary" onclick="guardarPuntosChecklist()">💾 Guardar lista</button>`;
+}
+
+function agregarPuntoEdit() {
+  // Guarda primero lo que ya se había escrito en los campos visibles, para
+  // no perderlo al agregar una fila nueva y volver a pintar la lista.
+  sincronizarPuntosEditDesdeInputs();
+  puntosEditState.push('');
+  renderConfigPuntos();
+}
+
+function eliminarPuntoEdit(idx) {
+  sincronizarPuntosEditDesdeInputs();
+  puntosEditState.splice(idx, 1);
+  renderConfigPuntos();
+}
+
+function sincronizarPuntosEditDesdeInputs() {
+  if (!puntosEditState) return;
+  puntosEditState = puntosEditState.map((p, idx) => {
+    const el = document.getElementById('punto-edit-' + idx);
+    return el ? el.value : p;
+  });
+}
+
+// (29 sep 2026) Los puntos de checklist (esta lista general, y la de cada
+// equipo en guardarPuntosEquipo() más abajo) se guardan reemplazando el
+// arreglo completo -- si dos personas los editan casi al mismo tiempo, el
+// segundo guardado puede sobrescribir sin avisar el cambio del primero.
+// Esto no evita esa sobrescritura de raíz (se edita poco, así que el
+// riesgo real es bajo), pero al menos avisa cuando pasó en vez de que
+// nadie se entere -- nunca bloquea ni retrasa el guardado, es una
+// verificación aparte, en paralelo, que se salta sola si no hay conexión.
+async function warnIfDocChangedSinceLoad(ref, localTimestamp, mensaje){
+  if (!navigator.onLine || !localTimestamp || typeof localTimestamp.toMillis !== 'function') return;
+  try {
+    const snap = await ref.get({ source: 'server' });
+    if (!snap.exists) return;
+    const remoteTimestamp = snap.data().updatedAt || snap.data().actualizadoEn;
+    if (remoteTimestamp && typeof remoteTimestamp.toMillis === 'function' && remoteTimestamp.toMillis() > localTimestamp.toMillis()) {
+      showToast(mensaje, 'warn');
+    }
+  } catch (err) { console.error('No se pudo verificar cambios recientes:', err); }
+}
+
+async function guardarPuntosChecklist() {
+  sincronizarPuntosEditDesdeInputs();
+  const limpios = puntosEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  if (!limpios.length) { showToast('Agrega al menos un punto', 'warn'); return; }
+  const antes = (checklistPuntosActuales || []).join(' | ');
+  const despues = limpios.join(' | ');
+  const localActualizadoEn = checklistPuntosActualizadoEn; // snapshot ANTES de este guardado
+  try {
+    await db.collection('config').doc('checklistPuntos').set({ puntos: limpios, actualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '', actualizadoEn: fbTimestamp() });
+    // Auditoría (29 sep 2026): esta lista es general (no de un equipo en
+    // particular), así que equipoId/equipoNombre quedan en null a propósito.
+    if (antes !== despues) {
+      logAuditoria('puntos_checklist_general', null, null,
+        [{ campo: 'Lista general de puntos', anterior: antes || '(vacía)', nuevo: despues }]);
+    }
+    puntosEditState = limpios.slice();
+    showToast('Lista de puntos guardada ✅');
+    warnIfDocChangedSinceLoad(db.collection('config').doc('checklistPuntos'), localActualizadoEn,
+      '⚠️ Otra persona había cambiado la lista general de puntos justo antes de tu guardado — revisa que quedó como querías.');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ PUNTOS DE CHECKLIST PROPIOS DE UN EQUIPO (Administrador) ══════
+// No todos los equipos se revisan igual, así que además de la lista general
+// (arriba) un equipo puede tener su propia lista guardada en
+// equipos/{id}.checklistPuntos. Si no la tiene, sigue usando la general —
+// abrirFormChecklist() decide cuál mostrar al llenar el checklist.
+// ══════ COSTO DE REPUESTOS POR OT (comparación con Maximo/SAP, 28 sep 2026) ══════
+// Lee /movimientos (misma colección que usa inventario.html para entradas/
+// salidas de stock) filtrando por el folio de esta OT. Solo cuenta las
+// salidas que tenían costo unitario cargado en Inventario — si un repuesto
+// no tiene precio, se avisa cuántos quedaron fuera en vez de mostrar un
+// total incompleto como si fuera el real.
+// (5 oct 2026) El botón ya no lleva el folio escrito dentro del onclick
+// (texto de Firestore dentro de JS en línea = riesgo de inyección): solo
+// pasa el id de la OT y aquí se busca su folio.
+async function verCostoRepuestosOt(otId) {
+  const el = document.getElementById('costo-ot-' + otId);
+  if (!el) return;
+  const otLocal = currentOts.find(x => x.id === otId);
+  const folio = otLocal && otLocal.folio;
+  if (!folio) { el.textContent = 'Esta OT no tiene folio.'; return; }
+  el.textContent = 'Buscando repuestos de esta OT...';
+  try {
+    const snap = await db.collection('movimientos').where('otFolio', '==', folio).get();
+    const movs = snap.docs.map(d => d.data()).filter(m => m.tipo === 'salida');
+    if (!movs.length) {
+      el.textContent = 'Sin repuestos registrados con este folio todavía (se cargan desde Inventario → Movimiento → Folio de OT).';
+      return;
+    }
+    let total = 0, sinPrecio = 0;
+    movs.forEach(m => { if (m.costoTotal != null) total += m.costoTotal; else sinPrecio++; });
+    el.innerHTML = `📦 ${movs.length} repuesto(s) · Total: $${total.toFixed(2)}` +
+      (sinPrecio ? ` <span style="color:var(--accent)">(${sinPrecio} sin costo unitario cargado)</span>` : '');
+  } catch (e) {
+    el.textContent = 'Error al buscar: ' + e.message;
+  }
+}
+
+// ══════ QR POR EQUIPO (comparación con Maximo/SAP, 28 sep 2026) ══════
+// La URL codificada en el QR apunta a este mismo archivo con ?equipo=<id> —
+// no hace falta ningún escáner dentro de la app: la cámara normal del
+// celular ya reconoce un QR con una URL y ofrece abrirla directo.
+function mostrarQrEquipo(equipoId, ev) {
+  if (ev) ev.stopPropagation();
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  document.getElementById('qr-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('qr-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  const wrap = document.getElementById('qr-canvas-wrap');
+  wrap.innerHTML = '';
+  // (4 oct 2026) Publica la ficha técnica para quien escanee sin usuario
+  // (el historial se pone al día desde Bitácora / Hoja de vida / Etiquetas).
+  if (typeof publicarHojaVida === 'function') publicarHojaVida(e);
+  // (4 oct 2026) QR único por máquina: abre equipo.html (Reportar + Hoja de vida)
+  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'equipo.html?id=' + encodeURIComponent(equipoId);
+  new QRCode(wrap, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById('qr-etiqueta-parada').href = 'etiquetas-qr.html?equipo=' + encodeURIComponent(equipoId);
+  openModalGeneric('modalQrEquipo');
+}
+
+// Si se abre esta página con ?equipo=<id> en la URL (viene de escanear el QR
+// pegado en la máquina), abre directo su formulario de checklist en cuanto
+// los equipos ya cargaron — una sola vez, para no interrumpir si el usuario
+// después navega a otra pantalla.
+let _qrAutoAbrioIntentado = false;
+function intentarAbrirDesdeQr() {
+  if (_qrAutoAbrioIntentado) return;
+  const params = new URLSearchParams(location.search);
+  const equipoId = params.get('equipo');
+  if (!equipoId) return;
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return; // puede que /equipos aún no haya llegado — se reintenta en el próximo snapshot
+  _qrAutoAbrioIntentado = true;
+  abrirFormChecklist(equipoId);
+}
+
+function abrirModalPuntosEquipo(equipoId) {
+  const e = currentEquipos.find(x => x.id === equipoId);
+  if (!e) return;
+  puntosEquipoEditId = equipoId;
+  puntosEquipoEditState = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos.slice() : checklistPuntosActuales.slice();
+  document.getElementById('pe-equipo-nombre').textContent = e.nombre || '(sin nombre)';
+  renderModalPuntosEquipo();
+  openModalGeneric('modalPuntosEquipo');
+}
+
+function renderModalPuntosEquipo() {
+  const wrap = document.getElementById('pe-lista');
+  const lista = puntosEquipoEditState || [];
+  wrap.innerHTML = lista.map((p, idx) => `
+    <div class="row" style="margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;">
+        <input type="text" id="pe-punto-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
+      </div>
+      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
+        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEquipoEdit(${idx})">🗑</button>
+      </div>
+    </div>
+  `).join('') +
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()">➕ Agregar punto</button>`;
+}
+
+function agregarPuntoEquipoEdit() {
+  sincronizarPuntosEquipoEditDesdeInputs();
+  puntosEquipoEditState.push('');
+  renderModalPuntosEquipo();
+}
+
+function eliminarPuntoEquipoEdit(idx) {
+  sincronizarPuntosEquipoEditDesdeInputs();
+  puntosEquipoEditState.splice(idx, 1);
+  renderModalPuntosEquipo();
+}
+
+function sincronizarPuntosEquipoEditDesdeInputs() {
+  if (!puntosEquipoEditState) return;
+  puntosEquipoEditState = puntosEquipoEditState.map((p, idx) => {
+    const el = document.getElementById('pe-punto-' + idx);
+    return el ? el.value : p;
+  });
+}
+
+async function guardarPuntosEquipo() {
+  if (!puntosEquipoEditId) return;
+  sincronizarPuntosEquipoEditDesdeInputs();
+  const limpios = puntosEquipoEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  if (!limpios.length) { showToast('Agrega al menos un punto, o usa "Usar la lista general"', 'warn'); return; }
+  const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : '(usaba la lista general)';
+  const despues = limpios.join(' | ');
+  const localUpdatedAt = equipoActual && equipoActual.updatedAt; // snapshot ANTES de este guardado
+  try {
+    await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
+    if (antes !== despues) {
+      logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
+        [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: despues }]);
+    }
+    showToast('Puntos guardados para este equipo ✅');
+    refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, limpios);
+    closeModalGeneric('modalPuntosEquipo');
+    warnIfDocChangedSinceLoad(db.collection('equipos').doc(puntosEquipoEditId), localUpdatedAt,
+      `⚠️ "${equipoActual ? equipoActual.nombre : 'Este equipo'}" fue editado por otra persona justo antes de tu guardado — revisa que no se haya perdido ningún cambio.`);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function usarListaGeneralParaEquipo() {
+  if (!puntosEquipoEditId) return;
+  const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : null;
+  try {
+    await db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() });
+    if (antes){
+      logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
+        [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: '(vuelve a usar la lista general)' }]);
+    }
+    showToast('Este equipo vuelve a usar la lista general ✅');
+    refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, checklistPuntosActuales);
+    closeModalGeneric('modalPuntosEquipo');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// Si el formulario de checklist ya está abierto para este mismo equipo,
+// refresca sus puntos al instante (sin perder lo ya marcado en los puntos
+// que sigan igual) en vez de obligar a cerrar y volver a abrir el equipo.
+function editarPuntosDesdeFormulario() {
+  if (!equipoSeleccionado) return;
+  abrirModalPuntosEquipo(equipoSeleccionado.id);
+}
+
+function refrescarFormChecklistSiEsElMismoEquipo(equipoId, nuevaLista) {
+  if (!equipoSeleccionado || equipoSeleccionado.id !== equipoId) return;
+  const anteriorPorTexto = new Map(itemsFormState.map(it => [it.punto, it]));
+  itemsFormState = nuevaLista.map(p => anteriorPorTexto.get(p) || { punto: p, resultado: 'ok', nota: '' });
+  renderPuntosForm();
+}
+
+// ══════ CONFIGURAR FRECUENCIAS (Encargado/Admin) ══════
+function renderConfig() {
+  const puedeConfigurar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+  const info = document.getElementById('config-info');
+  const wrap = document.getElementById('config-lista');
+  const btnBulk = document.getElementById('btn-bulk-frecuencias');
+  if (btnBulk) btnBulk.style.display = puedeConfigurar ? '' : 'none';
+
+  if (!puedeConfigurar) {
+    info.innerHTML = `<div class="info-box">Solo Administrador o Encargado de Mantenimiento pueden cambiar las frecuencias de checklist.</div>`;
+    wrap.innerHTML = '';
+    return;
+  }
+  info.innerHTML = `<div class="info-box">Escribe cada cuántos días se debe revisar el equipo y toca "Guardar". Un equipo sin frecuencia no aparece en "Hoy te toca", pero se puede revisar manualmente cuando quieras. También puedes activar "⏱ Horómetro" en un equipo puntual (ej. montacargas, compresor de aire) para que además se revise por horas de uso, no solo por días.</div>`;
+
+  const puedeEditarPuntosEquipo = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+
+  wrap.innerHTML = currentEquipos.map(e => {
+    const tienePersonalizados = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length > 0;
+    const usaHorometro = !!e.checklistFrecuenciaHoras;
+    return `
+    <div class="item-row" style="cursor:default;">
+      <div class="item-header" style="margin-bottom:8px;">
+        <div class="item-title" style="margin-bottom:0;">${fbEsc(e.nombre || '(sin nombre)')}</div>
+        ${tienePersonalizados ? '<span class="tag tag-planificada">Puntos propios</span>' : '<span class="tag" style="background:var(--border);color:var(--muted);">Lista general</span>'}
+      </div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <label>Días</label>
+          <input type="number" min="1" id="cfg-dias-${e.id}" value="${fbEsc(e.checklistFrecuenciaDias || '')}" placeholder="ej: 7"/>
+        </div>
+        <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="guardarFrecuencia('${e.id}')">💾 Guardar</button>
+        </div>
+      </div>
+      <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + fbEsc(e.checklistProximaFecha) : 'Todavía sin próxima fecha calculada'}</div>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <label>⏱ Horómetro ${usaHorometro ? '<span class="tag tag-planificada" style="margin-left:4px;">Activado</span>' : ''}</label>
+        <div class="row" style="margin-top:4px;">
+          <div class="field" style="margin-bottom:0;">
+            <label style="text-transform:none;font-weight:400;color:var(--muted);">Frecuencia (horas)</label>
+            <input type="number" min="1" id="cfg-horas-${e.id}" value="${fbEsc(e.checklistFrecuenciaHoras || '')}" placeholder="ej: 250"/>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label style="text-transform:none;font-weight:400;color:var(--muted);">Lectura actual</label>
+            <input type="number" min="0" id="cfg-lectura-${e.id}" value="${fbEsc(e.horometroActual ?? '')}" placeholder="ej: 1200"/>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="guardarHorometroConfig('${e.id}')">💾 ${usaHorometro ? 'Actualizar' : 'Activar'} horómetro</button>
+          ${usaHorometro ? `<button class="btn btn-secondary btn-sm" onclick="desactivarHorometro('${e.id}')">✕ Desactivar</button>` : ''}
+        </div>
+        ${usaHorometro ? `<div class="item-sub" style="margin-top:6px;">${fbEsc(horasDesdeUltimoServicio(e))}/${fbEsc(e.checklistFrecuenciaHoras)} h desde el último servicio</div>` : ''}
+      </div>
+
+      <div class="row" style="margin-top:10px;gap:8px;">
+        ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="mostrarQrEquipo('${e.id}')">📱 Código QR</button>
+      </div>
+    </div>
+  `; }).join('');
+}
+
+// ═══════════════ AUDITORÍA DE CAMBIOS EN DATOS MAESTROS (29 sep 2026) ═══════════════
+// Misma colección compartida "auditoria" que usa inventario.html (ver ese
+// archivo para la explicación completa y el visor "🕵️ Auditoría") — aquí
+// solo se escribe, para las dos categorías que se editan desde esta
+// pantalla de Config: frecuencia de checklist y puntos de checklist
+// (general y por equipo). firestore.rules solo permite "create", nunca
+// editar ni borrar un renglón ya escrito.
+function logAuditoria(categoria, equipoId, equipoNombre, cambios){
+  if(!cambios || !cambios.length) return; // nada cambió de verdad -- no generar ruido
+  db.collection('auditoria').add({
+    categoria, equipoId: equipoId||null, equipoNombre: equipoNombre||null, cambios,
+    quien: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—',
+    quienUid: (window.currentUser && window.currentUser.uid) || '', // (5 oct 2026) la regla exige el uid real
+    fecha: fbTimestamp(),
+  }).catch(err => {
+    console.error('Error guardando auditoría:', err);
+    showToast('⚠️ El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message, 'warn'); // (29 sep 2026)
+  });
+}
+
+// (5 oct 2026) La próxima fecha se cuenta desde el ÚLTIMO checklist real
+// del equipo (checklistUltimaFecha, o si no lo tiene, el más reciente que
+// haya en el historial cargado), no desde hoy — antes, guardar la
+// frecuencia borraba el "vencido" de un equipo atrasado. Sin ningún
+// checklist previo, se cuenta desde hoy.
+function proximaFechaChecklist(equipo, dias) {
+  let ultima = equipo && equipo.checklistUltimaFecha;
+  if (!ultima && equipo) {
+    const delEquipo = currentChecklists.filter(c => c.equipoId === equipo.id && c.fecha).map(c => c.fecha).sort();
+    ultima = delEquipo.length ? delEquipo[delEquipo.length - 1] : null;
+  }
+  return addDaysStr(ultima || todayStr(), dias);
+}
+
+// (5 oct 2026) Escritura que NO se espera (sin señal, el await no termina
+// hasta que vuelve): se avisa enseguida y el error, si lo hay, llega después.
+// (5 oct 2026) La lista de equipos viene de la copia del celular (caché de
+// 6 h): después de guardar aquí se vuelve a pintar con los cambios locales.
+function refrescarEquiposLocal() { setTimeout(() => fbRefrescarEquipos(true).catch(() => {}), 300); }
+function guardarSinEsperar(promesa, msgOk, accion) {
+  refrescarEquiposLocal();
+  promesa.catch(e => showToast(mensajeErrorPermiso(e, accion), 'error'));
+  showToast(navigator.onLine ? msgOk : msgOk + ' 📵 Se subirá cuando haya señal.', navigator.onLine ? undefined : 'warn');
+}
+
+function guardarFrecuencia(equipoId) {
+  const dias = Number(document.getElementById('cfg-dias-' + equipoId).value || 0);
+  if (!dias || dias < 1) { showToast('Escribe un número de días válido', 'warn'); return; }
+  const equipoActual = currentEquipos.find(x => x.id === equipoId);
+  const diasAntes = equipoActual ? (equipoActual.checklistFrecuenciaDias || null) : null;
+  const promesa = db.collection('equipos').doc(equipoId).set({
+    checklistFrecuenciaDias: dias,
+    checklistProximaFecha: proximaFechaChecklist(equipoActual, dias),
+  }, { merge: true });
+  guardarSinEsperar(promesa, 'Frecuencia guardada ✅', 'configurar');
+  // Auditoría (29 sep 2026): solo se registra si el número de días de
+  // verdad cambió (evita ruido si alguien toca "Guardar" sin editar nada).
+  if (diasAntes !== dias) {
+    promesa.then(() => logAuditoria('frecuencia_checklist', equipoId, equipoActual ? equipoActual.nombre : null,
+      [{ campo: 'Frecuencia (días)', anterior: diasAntes != null ? String(diasAntes) : '(sin configurar)', nuevo: String(dias) }]), () => {});
+  }
+}
+
+// Activa o recalibra el horómetro de un equipo (Encargado/Admin, misma
+// pantalla que la frecuencia por días). A diferencia de la lectura que se
+// pide en el propio checklist, aquí SÍ se reinicia el conteo de horas
+// (horometroUltimoService = la lectura escrita) — es la forma de decirle
+// al sistema "a partir de esta hora empieza a contar de nuevo", útil tanto
+// para activarlo la primera vez como para corregirlo si alguien se equivocó.
+async function guardarHorometroConfig(equipoId) {
+  const horas = Number(document.getElementById('cfg-horas-' + equipoId).value || 0);
+  const lecturaInput = document.getElementById('cfg-lectura-' + equipoId).value;
+  const lectura = Number(lecturaInput);
+  if (!horas || horas < 1) { showToast('Escribe una frecuencia en horas válida', 'warn'); return; }
+  if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe la lectura actual del horómetro', 'warn'); return; }
+  // (5 oct 2026) Misma revisión que en el checklist (bajar la lectura o un
+  // salto enorme se confirman) y sin quedarse esperando sin señal.
+  if (!validarLecturaHorometro(currentEquipos.find(x => x.id === equipoId), lectura)) return;
+  guardarSinEsperar(db.collection('equipos').doc(equipoId).set({
+    checklistFrecuenciaHoras: horas,
+    horometroActual: lectura,
+    horometroUltimoService: lectura,
+  }, { merge: true }), 'Horómetro activado ✅', 'configurar');
+}
+
+async function desactivarHorometro(equipoId) {
+  if (!confirm('¿Quitar el mantenimiento por horómetro de este equipo? Sigue funcionando por días si tiene frecuencia configurada.')) return;
+  try {
+    await db.collection('equipos').doc(equipoId).update({
+      checklistFrecuenciaHoras: firebase.firestore.FieldValue.delete(),
+      horometroActual: firebase.firestore.FieldValue.delete(),
+      horometroUltimoService: firebase.firestore.FieldValue.delete(),
+    });
+    showToast('Horómetro desactivado ✅');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════ PANTALLA "⏱ HORÓMETRO" — actualizar solo la lectura, abierta a ══════
+// cualquiera con acceso al checklist (no solo Encargado/Admin), para que
+// cualquiera que pase por la máquina pueda anotar el número sin tener que
+// hacer el checklist completo. A diferencia de guardarHorometroConfig(),
+// esto NUNCA reinicia horometroUltimoService — solo actualiza la lectura
+// actual, así que si ya se pasó de las horas configuradas, el equipo
+// aparece "vencido" en Hoy hasta que alguien le haga el checklist.
+function renderHorometro() {
+  const wrap = document.getElementById('horometro-lista');
+  if (!wrap) return;
+  const equiposConHorometro = currentEquipos.filter(e => e.checklistFrecuenciaHoras);
+  if (!equiposConHorometro.length) {
+    wrap.innerHTML = `<div class="empty" style="padding:20px 10px;"><span class="emoji">⏱</span><p>Ningún equipo tiene horómetro activado todavía. Se activa por equipo desde "⚙️ Config".</p></div>`;
+    return;
+  }
+  wrap.innerHTML = equiposConHorometro.map(e => {
+    const vencido = horometroVencido(e);
+    const horas = horasDesdeUltimoServicio(e);
+    return `
+    <div class="item-row" style="cursor:default;">
+      <div class="item-header">
+        <div class="item-title">${fbEsc(e.nombre || '(sin nombre)')}</div>
+        ${vencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
+      </div>
+      <div class="item-sub" style="margin-bottom:8px;">${fbEsc(horas)}/${fbEsc(e.checklistFrecuenciaHoras)} h desde el último servicio</div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <label>Lectura actual</label>
+          <input type="number" min="0" id="hm-lectura-${e.id}" value="${fbEsc(e.horometroActual ?? '')}"/>
+        </div>
+        <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="guardarLecturaHorometro('${e.id}')">💾 Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function guardarLecturaHorometro(equipoId) {
+  const lecturaInput = document.getElementById('hm-lectura-' + equipoId).value;
+  const lectura = Number(lecturaInput);
+  if (lecturaInput === '' || isNaN(lectura) || lectura < 0) { showToast('Escribe una lectura válida', 'warn'); return; }
+  // (5 oct 2026) Una lectura menor que la actual se rechaza (salvo
+  // Administrador/Encargado confirmando) y un salto de más de 2000 h se
+  // confirma — ver validarLecturaHorometro().
+  if (!validarLecturaHorometro(currentEquipos.find(x => x.id === equipoId), lectura)) return;
+  guardarSinEsperar(db.collection('equipos').doc(equipoId).set({ horometroActual: lectura }, { merge: true }),
+    'Lectura guardada ✅', 'horometro');
+}
+
+// ══════ CARGA MASIVA DE FRECUENCIAS (Encargado/Admin) ══════
+// Mismo patrón de UX que "Carga masiva de repuestos" en inventario.html:
+// se pega una tabla copiada de Excel (Nombre del equipo <TAB> Días) y se
+// procesa de una sola vez, en vez de tener que escribir y guardar equipo
+// por equipo en la lista de arriba.
+function openModalGeneric(id) { document.getElementById(id).classList.add('open'); }
+function closeModalGeneric(id) { document.getElementById(id).classList.remove('open'); }
+
+function abrirModalBulkFrecuencias() {
+  document.getElementById('bulkFrecPasteArea').value = '';
+  document.getElementById('bulkFrecStatus').textContent = '';
+  openModalGeneric('modalBulkFrecuencias');
+}
+
+function normalizeKeyChecklist(str) {
+  return (str || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function bulkImportFrecuencias() {
+  const raw = document.getElementById('bulkFrecPasteArea').value;
+  const status = document.getElementById('bulkFrecStatus');
+  const lineas = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (!lineas.length) { showToast('Pega al menos una fila', 'warn'); return; }
+
+  const porNombre = new Map();
+  (currentEquipos || []).forEach(e => porNombre.set(normalizeKeyChecklist(e.nombre), e));
+
+  const actualizados = [];
+  const noEncontrados = [];
+  const invalidas = [];
+
+  lineas.forEach((linea) => {
+    let cols = linea.split('\t').map(c => c.trim()).filter(c => c !== '');
+    if (cols.length < 2) {
+      // Por si se pegó sin tabulación real: separar el último número del resto.
+      const m = linea.match(/^(.*\S)\s+(\d+)\s*$/);
+      if (m) cols = [m[1].trim(), m[2].trim()];
+    }
+    if (cols.length < 2) { invalidas.push(linea); return; }
+    const nombre = cols[0];
+    const dias = parseInt(cols[1], 10);
+    if (!dias || dias < 1) { invalidas.push(linea); return; }
+    const equipo = porNombre.get(normalizeKeyChecklist(nombre));
+    if (!equipo) { noEncontrados.push(nombre); return; }
+    actualizados.push({ equipo, dias });
+  });
+
+  if (!actualizados.length) {
+    status.innerHTML = '⚠️ Ningún nombre coincidió con un equipo existente.'
+      + (noEncontrados.length ? '<br>No encontrados: ' + fbEsc(noEncontrados.join(', ')) : '');
+    return;
+  }
+
+  // (5 oct 2026) Lotes de máximo 400 (Firestore no acepta más de 500
+  // escrituras por batch) y sin esperar al servidor (sin señal se quedaba
+  // en "Cargando..." para siempre). La próxima fecha se cuenta desde el
+  // último checklist de cada equipo, igual que en guardarFrecuencia().
+  try {
+    const LOTE = 400;
+    const commits = [];
+    for (let i = 0; i < actualizados.length; i += LOTE) {
+      const batch = db.batch();
+      actualizados.slice(i, i + LOTE).forEach(({ equipo, dias }) => {
+        batch.set(db.collection('equipos').doc(equipo.id), {
+          checklistFrecuenciaDias: dias,
+          checklistProximaFecha: proximaFechaChecklist(equipo, dias),
+        }, { merge: true });
+      });
+      commits.push(batch.commit()); refrescarEquiposLocal();
+    }
+    let avisoPendiente = !navigator.onLine;
+    Promise.all(commits).then(() => {
+      if (avisoPendiente) showToast(`☁️ Frecuencias de ${actualizados.length} equipo(s) subidas al servidor ✅`);
+    }).catch(e => showToast('❌ No se guardaron todas las frecuencias. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
+
+    let msg = `✅ ${actualizados.length} equipo(s) actualizados`;
+    if (noEncontrados.length) msg += `, ${noEncontrados.length} sin coincidencia`;
+    if (invalidas.length) msg += `, ${invalidas.length} fila(s) con formato inválido`;
+    if (avisoPendiente) msg += ' 📵 Se subirá cuando haya señal.';
+    showToast(msg, avisoPendiente ? 'warn' : undefined);
+
+    status.innerHTML = (noEncontrados.length ? '⚠️ No encontrados (revisa el nombre exacto en Inventario): ' + fbEsc(noEncontrados.join(', ')) + '<br>' : '')
+      + (invalidas.length ? '⚠️ Filas con formato inválido: ' + fbEsc(invalidas.join(' | ')) : '');
+
+    if (!noEncontrados.length && !invalidas.length) closeModalGeneric('modalBulkFrecuencias');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'configurar'), 'error');
+  }
+}
+</script>
+</body>
+</html>

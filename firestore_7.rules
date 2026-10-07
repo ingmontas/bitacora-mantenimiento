@@ -1,0 +1,266 @@
+rules_version = '2';
+// ══════════════════════════════════════════════════════════════════════
+// FASE 1 — Reglas con roles (reemplaza la regla única "cualquier
+// autenticado puede todo"). El rol de cada usuario vive en su documento
+// /usuarios/{uid}; estas reglas lo consultan con get()/exists() en cada
+// evaluación, siguiendo el patrón oficial de Firebase para control de
+// acceso basado en roles (no requiere Cloud Functions ni custom claims).
+// ══════════════════════════════════════════════════════════════════════
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+    function existeUsuario() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+    function usuarioActual() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    function estaActivo() {
+      return existeUsuario() && usuarioActual().activo == true;
+    }
+    function tieneRol(roles) {
+      return estaAutenticado() && existeUsuario() && estaActivo() && usuarioActual().rol in roles;
+    }
+    function esAdmin()            { return tieneRol(['ADMINISTRADOR']); }
+    function esEncargado()        { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO']); }
+    function esSupervisorOMas()   { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR']); }
+    function esTecnicoOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO']); }
+    function esAlmacenOMas()      { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','ALMACEN']); }
+    // Rol Operador (29 sep 2026): cualquier trabajador de planta, NO solo
+    // técnicos, necesita poder reportar una falla desde su celular sin
+    // pasar por el flujo completo de Bitácora — igual que la diferencia
+    // Maximo/SAP entre "notificación" (cualquiera) y "orden de trabajo"
+    // (planificador/técnico). Operador es el rol MÁS restringido de todos:
+    // solo puede leer /equipos (para elegir cuál falló) y crear una OT
+    // "pendiente" con datos mínimos — no puede leer la cola de OTs, ni
+    // checklists, ni análisis, ni nada más.
+    function esOperadorOMas() { return tieneRol(['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','OPERADOR']); }
+    function esOperador()     { return tieneRol(['OPERADOR']); }
+    // Herramientas por técnico (2 oct 2026): rol RRHH (Recursos Humanos) solo
+    // ve los cargos por herramientas y marca si se descontaron.
+    function esRRHH()         { return tieneRol(['RRHH']); }
+    function esTecnico()      { return tieneRol(['TECNICO']); }
+    // Nombre de técnico del usuario: campo "tecnico" de /usuarios o, si no
+    // existe, su "nombre". Debe ser igual al nombre usado en las OTs.
+    function miTecnico() {
+      let t = usuarioActual().get('tecnico', '');
+      return (t != '' && t != null) ? t : usuarioActual().get('nombre', '');
+    }
+    function soloCambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+    // ── Ayudas para validar escrituras (5 oct 2026 — auditoría) ──
+    function estadoViejo() { return resource.data.get('estado', ''); }
+    function estadoNuevo() { return request.resource.data.get('estado', ''); }
+    function cambiaA(e)    { return estadoNuevo() == e && estadoViejo() != e; }
+    function miUid()       { return request.auth == null ? '' : request.auth.uid; }
+
+    match /usuarios/{uid} {
+      allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
+      allow write: if esAdmin();
+    }
+    // /config/app guarda el PIN compartido para borrar en Inventario.
+    match /config/{id} { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esAdmin(); }
+    // Contador de folios OT-0001…: solo se le puede sumar 1 (antes un
+    // operador podía ponerlo en 0 y repetir folios). — 5 oct 2026
+    match /config/otFolioCounter {
+      allow read: if esOperadorOMas();
+      allow create: if esOperadorOMas() && request.resource.data.ultimo == 1;
+      allow update: if esOperadorOMas() && request.resource.data.ultimo is int
+        && request.resource.data.ultimo == resource.data.ultimo + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimo']);
+      allow delete: if false;
+    }
+    match /checklists/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas();
+      allow update: if esEncargado();
+      allow delete: if esAdmin();
+    }
+    match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
+    match /areas/{id}   { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esEncargado(); }
+    match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /equipos/{id} {
+      allow read: if esOperadorOMas() || esAlmacenOMas();
+      allow create, update: if esTecnicoOMas() || esAlmacenOMas();
+      allow delete: if esAdmin();
+    }
+
+    // ── Reportes de parada (Producción y QR público) ──
+    // Forma cerrada: solo estos campos, cada uno con tipo y largo máximo.
+    // Así un reporte —incluso uno anónimo desde la etiqueta QR— no puede
+    // traer campos de técnico (fecha, minutos, solución) ni textos enormes.
+    // (5 oct 2026: antes solo se validaban algunos campos.)
+    function reporteValido(origen) {
+      let d = request.resource.data;
+      return d.origen == origen && d.estado == 'pendiente'
+        && d.keys().hasOnly(['origen','estado','folio','equipoId','equipoNombre','equipoLocalidad',
+             'descripcionFalla','prioridad','creadoPor','creadoPorUid','maquinaParada','fechaReporte',
+             'horaParada','checklistId','asignadoA','fechaPlanificada','createdAt'])
+        && d.equipoId is string && d.equipoId.size() > 0 && d.equipoId.size() <= 100
+        && exists(/databases/$(database)/documents/equipos/$(d.equipoId))
+        && d.descripcionFalla is string && d.descripcionFalla.size() > 0 && d.descripcionFalla.size() <= 1000
+        && d.creadoPor is string && d.creadoPor.size() > 0 && d.creadoPor.size() <= 100
+        && d.prioridad in ['alta','media','baja']
+        && d.folio is string && d.folio.size() > 0 && d.folio.size() <= 30
+        && d.get('equipoNombre', '') is string && d.get('equipoNombre', '').size() <= 120
+        && d.get('equipoLocalidad', '') is string && d.get('equipoLocalidad', '').size() <= 120
+        && d.get('maquinaParada', false) is bool
+        && d.fechaReporte is string && d.fechaReporte.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && d.horaParada is string && d.horaParada.matches('[0-9]{2}:[0-9]{2}')
+        && d.get('asignadoA', null) == null && d.get('checklistId', null) == null && d.get('fechaPlanificada', null) == null
+        && d.get('creadoPorUid', '') == miUid()
+        && d.createdAt == request.time;
+    }
+    // Quien tomó un aviso es el único (o Supervisor y más) que puede
+    // soltarlo, cerrarlo o anularlo. Avisos viejos sin asignadoUid: cualquiera.
+    function puedeSoltarAviso() {
+      let u = resource.data.get('asignadoUid', '');
+      return u == '' || u == null || u == request.auth.uid || esSupervisorOMas();
+    }
+    match /ots/{id} {
+      allow read: if esTecnicoOMas() || (esOperador() && resource.data.origen in ['operador', 'qr']);
+      allow create: if (reporteValido('qr') && request.resource.data.folio.matches('QR-[A-Z0-9]{6,12}'))
+        || (esOperador() && reporteValido('operador'))
+        || esTecnicoOMas();
+      // Cada paso del flujo lo da quien corresponde (antes cualquier técnico
+      // podía cerrar, validar o planificar). — 5 oct 2026
+      allow update: if esTecnicoOMas()
+        && (!cambiaA('planificada') || esEncargado())
+        && (!(cambiaA('validada') || cambiaA('rechazada')) || esSupervisorOMas())
+        && (!(cambiaA('completada') && resource.data.get('origen', '') == 'checklist') || esAdmin())
+        && (!cambiaA('en_atencion') || estadoViejo() == 'pendiente')
+        && (!cambiaA('anulada') || estadoViejo() in ['pendiente', 'en_atencion'])
+        && (estadoViejo() != 'en_atencion' || puedeSoltarAviso())
+        && (estadoViejo() != 'anulada' || esSupervisorOMas());
+      allow delete: if esAdmin();
+    }
+    // Copia pública de cada equipo para el QR (ficha + historial resumido,
+    // sin técnicos, costos ni repuestos). Se lee de a uno sin sesión.
+    match /equipos_publico/{id} {
+      allow get: if true;
+      allow list, write: if esTecnicoOMas() || esAlmacenOMas();
+    }
+    // Fotos de repuestos guardadas en Firestore (gratis) en vez de Storage
+    // (que exige plan de pago). Solo JPEG/PNG en base64, máximo ~300 KB.
+    match /fotos_repuestos/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas();
+      allow create: if (esTecnicoOMas() || esAlmacenOMas())
+        && request.resource.data.keys().hasOnly(['data', 'equipoId', 'creadoPor', 'creadoPorUid', 'creadoEn'])
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 300000
+        && request.resource.data.data.matches('data:image/(jpeg|png);base64,.*')
+        && request.resource.data.creadoPorUid == request.auth.uid
+        && request.resource.data.creadoEn == request.time;
+      allow update: if false;
+      allow delete: if esTecnicoOMas() || esAlmacenOMas();
+    }
+    // (7 oct 2026) Solicitudes de repuestos: el técnico las crea desde la
+    // Bitácora (siempre "pendiente"); solo Almacén las entrega o rechaza.
+    match /solicitudes_repuestos/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas();
+      allow create: if esTecnicoOMas()
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.cantidad is number && request.resource.data.cantidad > 0
+        && request.resource.data.descripcion is string && request.resource.data.descripcion.size() > 0
+        && request.resource.data.tecnicoUid == request.auth.uid;
+      allow update: if esAlmacenOMas()
+        && resource.data.estado == 'pendiente'
+        && request.resource.data.estado in ['entregado', 'rechazado']
+        && soloCambia(['estado', 'atendidoPor', 'atendidoPorUid', 'atendidoEn', 'nota']);
+      allow delete: if false;
+    }
+    // Movimientos de stock: quién y cuándo los pone Firebase, no el celular.
+    match /movimientos/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas();
+      allow create: if (esAlmacenOMas() || esTecnicoOMas())
+        && request.resource.data.quienUid == request.auth.uid
+        && request.resource.data.fecha == request.time
+        && request.resource.data.tipo in ['entrada', 'salida', 'ajuste'];
+      allow update, delete: if esAdmin();
+    }
+    // Reubicaciones: también Almacén (antes le daba error al cambiar área).
+    match /reubicaciones/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas();
+      allow create: if esTecnicoOMas() || esAlmacenOMas();
+      allow update, delete: if esAdmin();
+    }
+    match /repuestos/{id}          { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esAlmacenOMas(); }
+    match /planes_preventivos/{id} { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    match /solicitudes_compra/{id} { allow read: if esAlmacenOMas(); allow write: if esAlmacenOMas() || esEncargado(); }
+    match /proveedores/{id}        { allow read: if esAlmacenOMas(); allow write: if esEncargado(); }
+    // Auditoría: nadie puede escribir a nombre de otro ni cambiar la hora.
+    match /auditoria/{id} {
+      allow read: if esEncargado();
+      allow create: if (esTecnicoOMas() || esAlmacenOMas())
+        && request.resource.data.quienUid == request.auth.uid
+        && request.resource.data.fecha == request.time;
+      allow update, delete: if false;
+    }
+
+    // ══════ Herramientas por técnico (arqueos y cargos a RR.HH.) ══════
+    match /herramientas/{id} {
+      allow read: if esTecnicoOMas() || esAlmacenOMas() || esRRHH();
+      allow create, update: if esAlmacenOMas()
+        && (request.resource.data.get('stockBodega', null) == null || request.resource.data.stockBodega >= 0);
+      allow delete: if esAdmin();
+    }
+    match /herramientas_asignadas/{id} {
+      // (7 oct 2026) Los técnicos ven las herramientas activas de todos para
+      // anotar en la Bitácora cuáles se usaron en cada trabajo.
+      allow read: if esAlmacenOMas() || esTecnicoOMas() || esRRHH();
+      allow create: if esAlmacenOMas() && request.resource.data.cantidad >= 0;
+      allow update: if (esAlmacenOMas() && request.resource.data.get('cantidad', 0) >= 0)
+        // RR.HH. al anular un cargo devuelve las herramientas a la custodia.
+        || (esRRHH() && soloCambia(['cantidad', 'estado', 'reabiertaEn', 'reabiertaPor', 'motivoReapertura'])
+            && request.resource.data.cantidad > resource.data.cantidad && request.resource.data.estado == 'activa')
+        || (esTecnico() && resource.data.tecnico == miTecnico()
+            && soloCambia(['aceptada', 'aceptadaEn', 'aceptadaPor'])
+            && request.resource.data.aceptada == true);
+      allow delete: if esAdmin();
+    }
+    // Un arqueo nace con la conformidad del técnico pendiente y el cargo sin
+    // enviar; el estado del cargo solo avanza por los pasos válidos y su
+    // historial solo crece (antes se podía marcar "descontado" desde
+    // Almacén, devolverlo a pendiente o borrar el historial). — 5 oct 2026
+    function arqueoNuevoValido() {
+      let d = request.resource.data;
+      return d.conformidad.estado == 'pendiente' && d.conformidad.keys().hasOnly(['estado'])
+        && d.totalCargo is number && d.totalCargo >= 0
+        && d.rrhh.estado == (d.totalCargo > 0 ? 'pendiente' : 'no_aplica')
+        && d.rrhh.historial.size() == 0
+        && d.realizadoPorUid == request.auth.uid;
+    }
+    function cambioRRHHValido() {
+      let ant = resource.data.get('rrhh', {});
+      let hAnt = ant.get('historial', []);
+      let de = ant.get('estado', 'pendiente');
+      let nue = request.resource.data.rrhh;
+      let a = nue.estado;
+      return soloCambia(['rrhh'])
+        && nue.historial.size() == hAnt.size() + 1
+        && nue.historial[0:hAnt.size()] == hAnt
+        && nue.get('porUid', '') == request.auth.uid
+        && ((de == 'pendiente' && a == 'enviado' && esAlmacenOMas())
+          || (de == 'enviado' && a == 'descontado' && esRRHH())
+          || (de in ['pendiente', 'enviado'] && a == 'anulado' && (esEncargado() || esRRHH())));
+    }
+    match /herramientas_arqueos/{id} {
+      // (7 oct 2026) Los técnicos ven las herramientas activas de todos para
+      // anotar en la Bitácora cuáles se usaron en cada trabajo.
+      allow read: if esAlmacenOMas() || esTecnicoOMas() || esRRHH();
+      allow create: if esAlmacenOMas() && arqueoNuevoValido();
+      allow update: if cambioRRHHValido()
+        || (esTecnico() && resource.data.tecnico == miTecnico() && soloCambia(['conformidad'])
+            && resource.data.conformidad.estado == 'pendiente'
+            && request.resource.data.conformidad.estado in ['conforme', 'no_conforme']);
+      allow delete: if false;
+    }
+    match /herramientas_movimientos/{id} {
+      allow read: if esAlmacenOMas() || esSupervisorOMas() || esRRHH();
+      allow create: if (esAlmacenOMas() || (esRRHH() && request.resource.data.tipo == 'arqueo_anulado'))
+        && request.resource.data.get('porUid', '') == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

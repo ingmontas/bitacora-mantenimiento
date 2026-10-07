@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0B2545"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Almacén — Solicitudes de repuestos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       ALMACÉN — SOLICITUDES DE REPUESTOS (7 oct 2026)
+       El técnico solicita los repuestos desde la Bitácora (cada uno queda en
+       /solicitudes_repuestos con estado "pendiente"). Aquí Almacén los
+       entrega o los rechaza; el técnico ve el estado en su trabajo.
+       Cuando se conecte el programa de almacén, "Entregar" descontará el
+       stock de ese programa por el código.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #F4F6FA; --card: #fff; --line: #DCE3EC; --navy: #0B2545; --blue: #2563EB;
+      --text: #0B1B2E; --label: #5B6B82; --muted: #7A8AA1; --soft: #F7F9FC;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: 'Barlow', -apple-system, system-ui, sans-serif; font-size: 15px; min-height: 100vh; }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    #top { position: sticky; top: 0; z-index: 5; background: var(--navy); color: #fff; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    #top small { font-size: 11px; color: #A9C1E8; }
+    #top h1 { font-size: 19px; font-weight: 700; }
+    .seg { display: flex; background: #16345F; border-radius: 12px; padding: 4px; gap: 4px; }
+    .seg button { flex: 1; font: inherit; font-weight: 700; font-size: 13.5px; height: 40px; border-radius: 9px; border: none; cursor: pointer; background: transparent; color: #A9C1E8; }
+    .seg button.on { background: #fff; color: var(--navy); }
+    .lista { padding: 10px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 40px; }
+    .sol { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .sol .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .sol .eq { font-weight: 700; font-size: 17px; }
+    .sol .sub { font-size: 13px; color: var(--label); }
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--label); }
+    .item { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .item .cod { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); }
+    .item .desc { font-weight: 600; }
+    .pide { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+    .pide span { font-size: 10.5px; color: var(--label); text-transform: uppercase; letter-spacing: .06em; }
+    .pide b { font-size: 24px; }
+    .acc { display: flex; gap: 8px; }
+    .acc button { font: inherit; font-weight: 700; height: 46px; border-radius: 10px; cursor: pointer; }
+    .rech { flex: 1; border: 1px solid #DC2626; background: #fff; color: #B91C1C; }
+    .ent { flex: 2; border: none; background: #16A34A; color: #fff; }
+    .acc button[disabled] { opacity: .5; }
+    .estado { font-size: 13px; font-weight: 700; padding: 8px 10px; border-radius: 8px; text-align: center; }
+    .estado.entregado { background: #DCFCE7; color: #166534; }
+    .estado.rechazado { background: #FEE2E2; color: #991B1B; }
+    .vacio { text-align: center; color: var(--label); padding: 48px 12px; line-height: 1.6; }
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; width: 90%; max-width: 380px; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 99; }
+    #toast.show { opacity: 1; }
+    #toast.err { background: #B91C1C; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div id="top">
+    <div><small id="quien">Almacén</small><h1>Solicitudes de repuestos</h1></div>
+    <div class="seg" id="tabs">
+      <button data-t="pendiente" class="on">Pendientes</button>
+      <button data-t="hechas">Atendidas</button>
+    </div>
+  </div>
+  <div class="lista" id="lista"><div class="vacio">Cargando…</div></div>
+</div>
+<div id="toast"></div>
+<script>
+const esc = fbEsc;
+let tab = 'pendiente', pendientes = [], atendidas = [];
+const enCurso = new Set();
+const ROLES = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'ALMACEN'];
+
+function toast(t, err) { const el = document.getElementById('toast'); el.textContent = t; el.className = 'show' + (err ? ' err' : ''); setTimeout(() => el.className = '', 3000); }
+const horaDe = ts => ts && ts.toDate ? ts.toDate().toTimeString().slice(0, 5) : '';
+const fechaCorta = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') ? f.slice(8, 10) + '/' + f.slice(5, 7) : (f || '');
+
+window.fbReady.then(() => {
+  const u = window.currentUserRole || {};
+  document.getElementById('quien').textContent = 'Almacén · ' + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('almacen');
+  if (!ROLES.includes(u.rol)) {
+    document.getElementById('lista').innerHTML = '<div class="vacio">🔒 Esta pantalla es para Almacén, Encargado o Administrador.</div>';
+    return;
+  }
+  // Pendientes: en vivo. Atendidas: solo los últimos 30 días (para no gastar
+  // lecturas del plan gratis con el historial completo).
+  db.collection('solicitudes_repuestos').where('estado', '==', 'pendiente').onSnapshot(s => {
+    pendientes = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    pintar();
+  }, err => { document.getElementById('lista').innerHTML = `<div class="vacio">No se pudieron leer las solicitudes: ${esc(err.message)}</div>`; });
+  const desde = new Date(); desde.setDate(desde.getDate() - 30);
+  db.collection('solicitudes_repuestos').where('fechaSolicitud', '>=', fbFechaLocal(desde)).onSnapshot(s => {
+    atendidas = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.estado !== 'pendiente');
+    pintar();
+  }, () => {});
+}).catch(() => {});
+
+document.getElementById('tabs').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  tab = b.dataset.t;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  pintar();
+});
+
+function pintar() {
+  document.querySelector('#tabs [data-t="pendiente"]').textContent = 'Pendientes (' + pendientes.length + ')';
+  const orden = (a, b) => ((a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0) - (b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0));
+  const lista = tab === 'pendiente' ? pendientes.slice().sort(orden) : atendidas.slice().sort((a, b) => -orden(a, b));
+  const el = document.getElementById('lista');
+  if (!lista.length) { el.innerHTML = `<div class="vacio">${tab === 'pendiente' ? '✅ No hay solicitudes pendientes.' : 'No hay solicitudes atendidas en los últimos 30 días.'}</div>`; return; }
+  el.innerHTML = lista.map(s => `
+    <div class="sol">
+      <div class="cab">
+        <div><div class="eq">${esc(s.equipoNombre || '—')}</div><div class="sub">${esc(s.tecnico || '—')} · ${esc(fechaCorta(s.fechaSolicitud))} ${esc(horaDe(s.creadoEn))}</div></div>
+        <span class="mono">${esc(s.folio || '')}</span>
+      </div>
+      <div class="item">
+        <div style="min-width:0">
+          ${s.codigo ? `<div class="cod">${esc(s.codigo)}</div>` : ''}
+          <div class="desc">${esc(s.descripcion || '')}</div>
+        </div>
+        <div class="pide"><span>Pide</span><b>${esc(s.cantidad)}</b></div>
+      </div>
+      ${s.estado === 'pendiente'
+        ? `<div class="acc"><button class="rech" data-id="${esc(s.id)}" data-a="rechazar" ${enCurso.has(s.id) ? 'disabled' : ''}>Rechazar</button><button class="ent" data-id="${esc(s.id)}" data-a="entregar" ${enCurso.has(s.id) ? 'disabled' : ''}>Entregar</button></div>`
+        : `<div class="estado ${s.estado === 'entregado' ? 'entregado' : 'rechazado'}">${s.estado === 'entregado' ? 'Entregado' : 'Rechazado'}${s.atendidoPor ? ' por ' + esc(s.atendidoPor) : ''}${s.nota ? ' · ' + esc(s.nota) : ''}</div>`}
+    </div>`).join('');
+}
+
+document.getElementById('lista').addEventListener('click', ev => {
+  const b = ev.target.closest('button[data-a]'); if (!b) return;
+  const s = pendientes.find(x => x.id === b.dataset.id); if (!s) return;
+  let nota = '';
+  if (b.dataset.a === 'rechazar') {
+    nota = (prompt('¿Por qué se rechaza? (ej. no hay en almacén)') || '').trim();
+    if (!nota) return;
+  }
+  enCurso.add(s.id); pintar();
+  // No se espera al servidor: sin señal se guarda en el celular y sube después.
+  db.collection('solicitudes_repuestos').doc(s.id).update({
+    estado: b.dataset.a === 'entregar' ? 'entregado' : 'rechazado',
+    atendidoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
+    atendidoPorUid: (window.currentUser && window.currentUser.uid) || '',
+    atendidoEn: fbTimestamp(),
+    nota: nota.slice(0, 200),
+  }).catch(err => { toast('No se pudo guardar: ' + (err.code === 'permission-denied' ? 'sin permiso.' : err.message), true); })
+    .finally(() => { enCurso.delete(s.id); pintar(); });
+  toast(b.dataset.a === 'entregar' ? '✅ Marcado como entregado' : 'Solicitud rechazada');
+});
+</script>
+</body>
+</html>

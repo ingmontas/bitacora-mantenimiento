@@ -1,7 +1,6 @@
 [
-  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
-  { "nombre": "ANTONIO SANTANA #805", "corto": "ANTONIO #805" },
-  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
-  { "nombre": "LEBRON", "corto": "LEBRON" },
-  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
+  {"nombre": "FELIX M. GIL #777", "corto": "FELIX #777"},
+  {"nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628"},
+  {"nombre": "LEBRON", "corto": "LEBRON"},
+  {"nombre": "LUIS CARLOS", "corto": "LUIS CARLOS"}
 ]
