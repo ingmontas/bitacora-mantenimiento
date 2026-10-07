@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+  <meta name="theme-color" content="#0B2545"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Bitácora"/>
@@ -16,160 +16,284 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <!-- (7 oct 2026) Diseño claro "CMMS" aprobado (fuente Barlow; si no carga, usa la del sistema). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
   <style>
+    /* (7 oct 2026) Paleta clara aprobada (mockup "Registro de trabajo"):
+       fondo #F4F6FA, tarjetas blancas, barra superior azul marino, azul
+       #2563EB como color principal. Los nombres de variables se conservan
+       para no tocar cada pantalla; --accent ahora es el azul principal. */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
-      --blue: #818CF8; --orange: #F97316;
-      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --bg: #F4F6FA; --surface: #F1F4F9; --card: #FFFFFF; --navy: #0B2545;
+      --accent: #2563EB; --accent-dark: #1E40AF; --chip: #E8EFFD;
+      --green: #16A34A; --green-txt: #15803D; --red: #DC2626; --red-txt: #B91C1C;
+      --blue: #2563EB; --purple: #7C3AED; --orange: #C2410C;
+      --text: #0B1B2E; --text2: #24344B; --muted: #5B6B82; --muted2: #7A8AA1; --border: #DCE3EC; --line: #F1F4F9;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+      --nav-h: 58px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
-    #header h1 { font-size: 15px; font-weight: 800; }
-    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
-    #sp-status { font-size: 20px; cursor: pointer; }
-    #nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; }
-    .nav-btn { flex: 1; padding: 8px 4px 10px; background: none; border: none; color: var(--muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
+    html { background: var(--bg); }
+    body { background: var(--bg); color: var(--text); font-family: 'Barlow', -apple-system, 'Inter', system-ui, sans-serif; font-size: 15px; max-width: 480px; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
+    /* Barra de páginas que pinta firebase-init.js (estilos en línea oscuros): se pasa a azul marino. */
+    #fbMiniNav { background: var(--navy) !important; border-bottom: 1px solid #16345F !important; }
+    #fbMiniNav a { color: #A9C1E8 !important; background: transparent !important; }
+    #fbMiniNav a[href="bitacora.html"] { color: #fff !important; background: #ffffff1f !important; }
+    #fbMiniNav span, #fbMiniNav button { color: #A9C1E8 !important; border-color: #2B4A75 !important; }
+    /* (7 oct 2026) Ya no es sticky: la barra de páginas (#fbMiniNav) también lo es y se montaban una sobre otra. */
+    #header { background: var(--navy); color: #fff; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 200; }
+    #header h1 { font-size: 17px; font-weight: 700; }
+    #header small { font-size: 11px; color: #A9C1E8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: block; margin-top: 1px; }
+    #sp-status { font-size: 20px; cursor: pointer; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+    #nav { display: flex; background: #fff; border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; box-shadow: 0 -2px 10px rgba(11,37,69,.06); }
+    .nav-btn { flex: 1; min-height: 56px; padding: 8px 4px 9px; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 10px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
     .nav-btn.active { color: var(--accent); }
-    .nav-btn span { font-size: 22px; }
-    #content { padding: 14px 14px 80px; }
+    .nav-btn span { font-size: 21px; }
+    #content { padding: 12px 12px 84px; }
     .screen { display: none; }
     .screen.active { display: block; }
-    .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
-    .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
-    .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-    .field { margin-bottom: 13px; }
-    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
-    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
-    textarea { resize: vertical; min-height: 70px; }
-    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    .card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid var(--border); }
+    .card-title { font-size: 19px; font-weight: 700; margin-bottom: 2px; color: var(--text); }
+    .card-sub { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+    .field { margin-bottom: 12px; }
+    label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 15px; outline: none; font-family: inherit; appearance: none; -webkit-appearance: none; min-height: 44px; }
+    select { padding-right: 30px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A8AA1' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+    input::placeholder, textarea::placeholder { color: var(--muted2); }
+    textarea { resize: vertical; min-height: 70px; line-height: 1.4; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #2563EB22; }
+    input[type=checkbox] { appearance: auto; -webkit-appearance: checkbox; width: 20px; height: 20px; min-height: 0; padding: 0; margin: 0; accent-color: var(--accent); flex-shrink: 0; box-shadow: none; }
     .row { display: flex; gap: 10px; }
     .row .field { flex: 1; min-width: 0; } /* (5 oct 2026) min-width:0 evita que las 3 horas desborden la pantalla */
     .col-sm { width: 80px; flex-shrink: 0; }
-    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
-    .btn:active { opacity: .8; }
-    .btn-primary { background: var(--accent); color: #0F1923; }
-    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn { width: 100%; min-height: 44px; padding: 12px; border-radius: 10px; border: none; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s, background .15s; }
+    .btn:active { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: #fff; color: var(--text2); border: 1px solid var(--border); }
     .btn-danger { background: var(--red); color: #fff; }
-    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
+    .btn-sm { padding: 8px 14px; font-size: 13.5px; border-radius: 10px; width: auto; }
     .btn-row { display: flex; gap: 8px; }
-    .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
-    /* Paleta validada (misma familia que Análisis/Inventario): categórica
-       blue/aqua/red para tipo de mantenimiento, y semáforo de estado para
-       urgencia — ver dataviz skill. */
-    .tag-preventivo { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
-    .tag-correctivo { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
-    .tag-proyecto { background: #3987e522; color: #7fb3f5; border: 1px solid #3987e544; }
-    .tag-local { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B33; }
-    .tag-synced { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
-    .tag-paro { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
-    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
+    .tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    /* (7 oct 2026) Colores de tipo de trabajo del diseño aprobado:
+       Correctivo rojo, Preventivo verde, Proyecto morado (fondos claros). */
+    .tag-preventivo { background: #DCFCE7; color: #166534; }
+    .tag-correctivo { background: #FEE2E2; color: #991B1B; }
+    .tag-proyecto { background: #EDE9FE; color: #5B21B6; }
+    .tag-local { background: #FEF3C7; color: #92400E; }
+    .tag-synced { background: var(--surface); color: var(--muted); }
+    .tag-paro { background: #FEE2E2; color: #991B1B; }
+    .tag-prioridad-alta { background: #FEE2E2; color: #991B1B; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
-    .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
-    .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
-    .toggle-row { display: flex; gap: 6px; }
-    .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-    .toggle-btn.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
-    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
+    /* Segmentados (antes botones sueltos) */
+    .toggle-row { display: flex; gap: 3px; background: var(--surface); border-radius: 10px; padding: 3px; }
+    .toggle-btn { flex: 1; min-width: 0; min-height: 44px; padding: 0 8px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
+    .toggle-btn.sel { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(11,37,69,.15); }
+    #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: #DC2626; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: #16A34A; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: #7C3AED; }
+    #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: #DC2626; }
+    #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 18px; font-size: 14.5px; font-weight: 600; max-width: 360px; text-align: center; box-shadow: 0 6px 24px rgba(11,37,69,.25); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
     #toast.warn { background: var(--orange); }
-    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading { position: fixed; inset: 0; background: rgba(244,246,250,.85); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
     #loading.show { display: flex; }
     .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .hist-item { background: var(--card); border-radius: 10px; padding: 13px; margin-bottom: 10px; border-left: 3px solid var(--border); }
+    .hist-item { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--border); border-left: 4px solid var(--border); }
     .hist-item.preventivo { border-left-color: var(--green); }
     .hist-item.correctivo { border-left-color: var(--red); }
-    .hist-item.proyecto { border-left-color: var(--blue); }
+    .hist-item.proyecto { border-left-color: var(--purple); }
     .hist-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7px; gap: 8px; }
-    .hist-title { font-weight: 700; font-size: 14px; }
-    .hist-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .hist-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
-    .hist-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+    .hist-header > div:first-child { min-width: 0; }
+    .hist-title { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+    .hist-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .hist-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; justify-content: flex-end; max-width: 45%; }
+    .hist-desc { font-size: 13.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
     .hist-desc strong { color: var(--text); }
-    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .stat-box { background: var(--card); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border); }
-    .stat-num { font-size: 34px; font-weight: 900; line-height: 1; }
-    .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 4px; text-transform: uppercase; }
+    .hist-uso { font-size: 12.5px; color: var(--text2); margin-top: 6px; font-weight: 600; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .stat-box { background: var(--card); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border); min-width: 0; }
+    .stat-num { font-size: 32px; font-weight: 700; line-height: 1; }
+    .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 700; margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
     .bar-wrap { margin-bottom: 10px; }
-    .bar-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-    .bar-track { background: var(--surface); border-radius: 4px; height: 7px; }
-    .bar-fill { background: var(--accent); border-radius: 4px; height: 7px; transition: width .6s; }
-    .info-box { background: #F59E0B11; border: 1px solid #F59E0B33; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px; }
+    .bar-track { background: #EEF2F7; border-radius: 4px; height: 8px; }
+    .bar-fill { background: var(--accent); border-radius: 4px; height: 8px; transition: width .6s; }
+    .info-box { background: #EFF4FF; border: 1px solid #C7D7FB; border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 13.5px; color: var(--text2); line-height: 1.6; }
     .code-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-    .code-chip { background: var(--surface); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; color: var(--muted); }
-    .sync-banner { background: #F59E0B18; border: 1px solid #F59E0B44; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .sync-banner p { font-size: 13px; color: var(--accent); font-weight: 600; }
-    .sync-banner small { font-size: 11px; color: var(--muted); display: block; }
-    #search-box { margin-bottom: 12px; position: relative; }
+    .code-chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+    .sync-banner { background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sync-banner p { font-size: 13.5px; color: #92400E; font-weight: 700; }
+    .sync-banner small { font-size: 12px; color: var(--muted); display: block; }
+    .sync-banner.sync-err { background: #FEF2F2; border-color: #FCA5A5; }
+    .sync-banner.sync-err p { color: var(--red-txt); }
+    .sync-banner.sync-edit { background: var(--chip); border-color: #BFD0F8; }
+    .sync-banner.sync-edit p { color: var(--accent-dark); }
+    #search-box { margin-bottom: 10px; position: relative; }
     #search-box input { padding-left: 36px; }
     #search-box::before { content: "🔍"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 15px; }
     .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
     .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
-    .empty p { font-size: 14px; line-height: 1.6; }
-    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; display: none; }
+    .empty p { font-size: 14.5px; line-height: 1.6; }
+    #offline-bar { background: var(--red); color: #fff; text-align: center; padding: 6px; font-size: 12.5px; font-weight: 600; display: none; }
     #offline-bar.show { display: block; }
     /* SP METHOD TABS */
     .method-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .method-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
-    .method-tab.active { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .method-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
+    .method-tab.active { border-color: var(--accent); background: var(--chip); color: var(--accent-dark); }
     .method-panel { display: none; }
     .method-panel.active { display: block; }
     /* ══ Resumen del técnico ("Mi semana") — 1 oct 2026 ══ */
-    .ms-weeknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
-    .ms-weeknav button { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 38px; height: 34px; font-size: 18px; font-weight: 700; cursor: pointer; }
-    .ms-weeknav button:disabled { opacity: .3; cursor: default; }
-    .ms-weeknav .lbl { text-align: center; font-size: 13px; font-weight: 700; line-height: 1.3; }
-    .ms-weeknav .lbl small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+    .ms-weeknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+    .ms-weeknav button { background: #fff; border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 44px; height: 44px; font-size: 20px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+    .ms-weeknav button:disabled { opacity: .35; cursor: default; }
+    .ms-weeknav .lbl { text-align: center; font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .ms-weeknav .lbl small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
     .ms-kpis { grid-template-columns: 1fr 1fr; }
     .ms-kpis .stat-box { padding: 12px 8px; }
     .ms-kpis .stat-num { font-size: 24px; }
-    .ms-kpis .stat-foot { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
-    .ms-day { display: grid; grid-template-columns: 42px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px; }
+    .ms-kpis .stat-foot { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+    .ms-day { display: grid; grid-template-columns: 46px 1fr 70px; gap: 8px; align-items: center; font-size: 12.5px; margin-bottom: 8px; }
     .ms-day .d { font-weight: 700; color: var(--muted); }
     .ms-day .d.hoy { color: var(--accent); }
-    .ms-day .track { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: var(--surface); }
+    .ms-day .track { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: #EEF2F7; }
     .ms-day .w { background: var(--green); }
-    .ms-day .i { background: repeating-linear-gradient(45deg, #EF444455 0 4px, #EF444522 4px 8px); }
-    .ms-day .x { background: var(--blue); }
+    .ms-day .i { background: repeating-linear-gradient(45deg, #DC262666 0 4px, #DC262626 4px 8px); }
+    .ms-day .x { background: var(--purple); }
     .ms-day .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
     .ms-day .v b { color: var(--text); }
-    .ms-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .ms-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 4px; }
     .ms-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
-    .ms-cfg { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-    .ms-cfg select { width: auto; padding: 5px 8px; font-size: 12px; }
-    .ms-cfg input[type=checkbox] { width: auto; appearance: auto; margin-right: 4px; vertical-align: -2px; }
+    .ms-cfg { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .ms-cfg select { width: auto; padding: 5px 30px 5px 10px; font-size: 13px; }
+    .ms-cfg input[type=checkbox] { margin-right: 6px; vertical-align: -4px; }
+    .ms-cfg span { display: inline-flex; align-items: center; min-height: 44px; }
     .ms-metric { display: grid; grid-template-columns: 1fr 76px auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
     .ms-metric:last-child { border-bottom: none; }
-    .ms-metric .name { font-size: 13px; font-weight: 600; }
-    .ms-metric .name small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+    .ms-metric .name { font-size: 13.5px; font-weight: 600; min-width: 0; }
+    .ms-metric .name small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 2px; }
     .ms-spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
-    .ms-spark i { flex: 1; background: #94A3B855; border-radius: 2px 2px 0 0; min-height: 2px; }
+    .ms-spark i { flex: 1; background: #C9D3E1; border-radius: 2px 2px 0 0; min-height: 2px; }
     .ms-spark i.cur { background: var(--accent); }
-    .ms-delta { font-size: 12px; font-weight: 700; text-align: right; white-space: nowrap; }
-    .ms-delta.bien { color: var(--green); } .ms-delta.mal { color: var(--red); } .ms-delta.neutro { color: var(--muted); }
-    .ms-insight { background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin-bottom: 8px; }
-    .ms-ot { background: var(--surface); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; border-left: 3px solid var(--border); font-size: 12.5px; }
-    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--blue); }
+    .ms-delta { font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; }
+    .ms-delta.bien { color: var(--green-txt); } .ms-delta.mal { color: var(--red-txt); } .ms-delta.neutro { color: var(--muted); }
+    .ms-insight { background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; margin-bottom: 8px; color: var(--text2); }
+    .ms-ot { background: #F7F9FC; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid var(--border); font-size: 13px; }
+    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--purple); }
     .ms-ot .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; margin-bottom: 3px; }
-    .ms-ot .meta { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-    .ms-ot .sol { color: #35d0b0; font-size: 11.5px; margin-top: 3px; line-height: 1.45; }
-    .ms-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
+    .ms-ot .meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .ms-ot .sol { color: var(--green-txt); font-size: 12px; margin-top: 3px; line-height: 1.45; overflow-wrap: anywhere; }
+    .ms-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 18px 0 8px; }
     /* ══ Avisos de producción — 1 oct 2026 ══ */
     .nav-btn { position: relative; }
     .nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 6px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; padding: 0 5px; text-align: center; }
-    .av-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
+    .av-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
     .av-card.pendiente { border-left-color: var(--red); }
-    .av-card.pendiente.parada { box-shadow: 0 0 0 1px #EF444455; }
+    .av-card.pendiente.parada { box-shadow: 0 0 0 1px #FCA5A5; }
     .av-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-    .av-eq { font-weight: 800; font-size: 15px; }
-    .av-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
-    .av-desc { font-size: 13px; margin: 8px 0 4px; line-height: 1.5; }
-    .av-timer { text-align: right; font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .av-top > div:first-child { min-width: 0; }
+    .av-eq { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+    .av-meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; overflow-wrap: anywhere; }
+    .av-desc { font-size: 14px; margin: 8px 0 4px; line-height: 1.5; overflow-wrap: anywhere; }
+    .av-timer { text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
     .av-timer b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
-    .av-timer.tarde b { color: var(--red); }
+    .av-timer.tarde b { color: var(--red-txt); }
+    .av-dup { display: inline-block; margin-top: 5px; background: #FFEDD5; color: #9A3412; border: 1px solid #FDBA74; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
+
+    /* ══ (7 oct 2026) Formulario único "Nueva entrada" / "Cerrar aviso" ══ */
+    .nf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 2px 8px; }
+    .nf-title { font-size: 20px; font-weight: 700; color: var(--text); min-width: 0; }
+    .nf-sub { font-size: 13px; color: var(--muted); margin: -4px 2px 8px; }
+    .nf-sub:empty { display: none; }
+    .fecha-chip { position: relative; display: flex; align-items: center; gap: 6px; margin: 0; flex-shrink: 0; min-height: 44px; padding: 0 12px; border-radius: 10px; background: var(--navy); color: #fff; font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; cursor: pointer; }
+    .fecha-chip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; min-height: 0; padding: 0; border: none; cursor: pointer; }
+    .fecha-chip svg { opacity: .75; }
+    .nf-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .nf-card > * { min-width: 0; }
+    .nf-lbl { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+    .nf-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .nf-count { font-size: 12.5px; color: var(--muted2); }
+    .eq-sel { height: 50px; border: 2px solid var(--accent); font-size: 17px; font-weight: 700; padding: 0 36px 0 12px; background-position: right 12px center; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); text-overflow: ellipsis; }
+    .eq-sel.vacio { color: var(--muted); font-weight: 600; }
+    .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill { position: relative; display: flex; align-items: center; gap: 5px; margin: 0; min-height: 44px; max-width: 100%; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: #F7F9FC; color: var(--text2); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
+    .pill .pk { color: var(--muted2); font-weight: 500; }
+    .pill .pv { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+    .pill .pv.vacio { color: var(--muted2); font-weight: 500; }
+    .pill select { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; opacity: 0; cursor: pointer; padding: 0; border: none; font-size: 16px; }
+    .pill:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #2563EB22; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .box-sel { display: flex; align-items: center; gap: 4px; margin: 0; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 0 0 0 10px; height: 44px; font-size: 13px; color: var(--muted2); font-weight: 500; letter-spacing: 0; text-transform: none; }
+    .box-sel:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #2563EB22; }
+    .box-sel select { border: none; min-height: 0; height: 42px; padding: 0 26px 0 2px; flex: 1; min-width: 0; font-weight: 600; background-color: transparent; box-shadow: none !important; text-overflow: ellipsis; }
+    .nf-card textarea { min-height: 52px; padding: 10px 12px; }
+    .tboxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .tbox { display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; min-width: 0; height: 54px; border: 1px solid var(--border); border-radius: 10px; font-size: 10.5px; font-weight: 600; color: var(--muted2); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+    .tbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #2563EB22; }
+    .tbox input { border: none; box-shadow: none !important; min-height: 0; height: 26px; padding: 0; text-align: center; font-family: var(--mono); font-size: 15px; background: transparent; width: 100%; min-width: 0; }
+    .tbox input::-webkit-calendar-picker-indicator { display: none; }
+    .dur { font-size: 13.5px; color: var(--muted); text-align: center; min-height: 18px; }
+    .dur b { color: var(--text); }
+    details.mas { border-top: 1px solid var(--line); padding-top: 4px; }
+    details.mas summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--accent); white-space: nowrap; }
+    details.mas summary::-webkit-details-marker { display: none; }
+    details.mas summary::before { content: '▸'; font-size: 13px; transition: transform .15s; }
+    details.mas[open] summary::before { transform: rotate(90deg); }
+    details.mas summary small { flex: 1 1 auto; font-weight: 500; color: var(--muted2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
+    .mas-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 2px; }
+    .mas-body .nf-lbl { margin-bottom: 4px; display: block; }
+    .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+    .dd-btn[aria-expanded="true"] { border-color: var(--accent); }
+    .dd-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+    .dd-btn .chev { flex-shrink: 0; transition: transform .15s; }
+    .dd-panel { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+    .dd-panel[hidden] { display: none; }
+    .chk-row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 12px; margin: 0; background: #fff; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
+    .chk-row:last-child { border-bottom: none; }
+    .chk-row .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chk-row .n small { font-family: var(--mono); font-size: 11.5px; color: var(--muted2); font-weight: 500; margin-left: 6px; }
+    .chk-row .o { font-size: 12.5px; color: var(--muted2); font-weight: 500; flex-shrink: 0; max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dd-nota { padding: 12px; font-size: 13.5px; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips:empty { display: none; }
+    .chip { position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 38px; padding: 0 10px 0 12px; border-radius: 999px; border: none; background: var(--chip); color: var(--accent-dark); font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .chip::after { content: ''; position: absolute; inset: -3px 0; }
+    .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .chip svg { flex-shrink: 0; }
+    .seg-sm { flex-shrink: 0; }
+    .seg-sm .toggle-btn { flex: none; padding: 0 12px; font-size: 14px; }
+    #card-rep.aviso { border: 2px solid var(--accent); }
+    #card-rep.falta { border-color: var(--red); box-shadow: 0 0 0 3px #DC262622; }
+    .rep-lista { display: flex; flex-direction: column; gap: 6px; }
+    .rep-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 6px 8px 10px; min-height: 52px; }
+    .rep-item .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .rep-item .t b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rep-item .t span { font-size: 12.5px; color: var(--muted2); }
+    .rep-item .t code { font-family: var(--mono); }
+    .est { font-size: 11.5px; font-weight: 700; padding: 4px 8px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
+    .est-pendiente { background: #FEF3C7; color: #92400E; }
+    .est-entregado { background: #DCFCE7; color: #166534; }
+    .est-rechazado { background: #FEE2E2; color: #991B1B; }
+    .est-nuevo { background: var(--chip); color: var(--accent-dark); }
+    .est-otro { background: var(--surface); color: var(--muted); }
+    .rep-x { width: 44px; height: 44px; flex-shrink: 0; border: none; background: none; color: var(--muted); border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .rep-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 64px; gap: 6px; }
+    .rep-add input { padding: 0 8px; height: 44px; min-width: 0; }
+    .rep-add #rep-codigo { font-family: var(--mono); font-size: 13px; }
+    .rep-add #rep-cant { text-align: center; }
+    .btn-add { width: 100%; min-height: 44px; border-radius: 10px; border: 1px dashed var(--accent); background: #EFF4FF; color: var(--accent); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .rep-nota { font-size: 12.5px; color: var(--muted); }
+    .aviso-banner { background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .aviso-banner .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .aviso-banner .k { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #B91C1C; }
+    .aviso-banner .f { font-family: var(--mono); font-size: 12px; color: #B91C1C; overflow-wrap: anywhere; }
+    .aviso-banner .d { font-size: 14px; color: #7F1D1D; line-height: 1.45; overflow-wrap: anywhere; }
+    .aviso-banner .c { align-self: flex-end; background: none; border: none; color: #B91C1C; font-family: inherit; font-weight: 700; font-size: 13.5px; min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; }
+    .submit-bar { position: sticky; bottom: var(--nav-h); z-index: 50; margin: 4px -12px 0; padding: 10px 12px 12px; background: var(--bg); border-top: 1px solid var(--border); }
+    .btn-submit { min-height: 52px; border-radius: 12px; font-size: 16px; }
+    .btn-submit.cerrar { background: var(--green); }
   </style>
 </head>
 <body>
@@ -187,166 +311,164 @@
 <div id="content">
 
   <!-- SCREEN: NUEVO -->
+  <!-- (7 oct 2026) Formulario único (diseño claro aprobado): "Nueva entrada",
+       "Editar entrada" y "Cerrar aviso" son el MISMO formulario; el modo lo
+       pone setModoForm(). Tarjetas: Equipo (cascada Planta → Área → Línea →
+       Tipo → Equipo), Trabajo, Técnicos, Herramientas usadas y Repuestos. -->
   <div class="screen active" id="screen-nuevo">
     <!-- (5 oct 2026) Registros que Firebase rechazó: se guardó una copia en
          este celular para no perder lo escrito (ver BORRADOR_KEY). -->
-    <div id="borrador-banner" class="sync-banner" style="display:none;background:#EF444418;border-color:#EF444455;flex-wrap:wrap;"></div>
-    <div id="edit-banner" class="sync-banner" style="display:none;background:#818CF818;border-color:#818CF844;">
+    <div id="borrador-banner" class="sync-banner sync-err" style="display:none;flex-wrap:wrap;"></div>
+    <div id="edit-banner" class="sync-banner sync-edit" style="display:none;">
       <div>
-        <p style="color:var(--blue);">✏️ Editando registro existente</p>
+        <p>✏️ Editando registro existente</p>
         <small>Los cambios reemplazarán la entrada original</small>
       </div>
       <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancelar</button>
     </div>
-    <div class="card">
-      <div class="card-title" id="form-title">📋 Nueva Entrada</div>
-      <div class="card-sub" id="form-sub">Registra el trabajo realizado</div>
 
-      <div class="row">
-        <div class="field">
-          <label>Fecha *</label>
-          <input type="date" id="f-fecha"/>
-        </div>
-        <div class="field col-sm">
-          <label>Semana</label>
-          <!-- (5 oct 2026) La semana ya no se escribe a mano: sale sola de la
-               Fecha (semana ISO, igual que Análisis). Se muestra solo de referencia. -->
-          <input type="number" id="f-semana" min="1" max="53" readonly title="Se calcula sola a partir de la fecha"/>
-        </div>
+    <div class="nf-head">
+      <div class="nf-title" id="form-title">Nueva entrada</div>
+      <!-- (7 oct 2026) La fecha va compacta ("07/10 · S41"); al tocarla se abre
+           el calendario del celular. La semana ISO se calcula sola. -->
+      <label class="fecha-chip" id="fecha-chip" title="Toca para cambiar la fecha">
+        <span id="fecha-txt">—</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+        <input type="date" id="f-fecha" aria-label="Fecha del trabajo"/>
+      </label>
+      <input type="number" id="f-semana" readonly hidden title="Se calcula sola a partir de la fecha"/>
+    </div>
+    <div class="nf-sub" id="form-sub"></div>
+
+    <section class="aviso-banner" id="aviso-banner" style="display:none" aria-live="polite"></section>
+
+    <!-- ── EQUIPO ── -->
+    <section class="nf-card" id="card-equipo">
+      <label class="nf-lbl" for="f-equipo-sel">Equipo *</label>
+      <select id="f-equipo-sel" class="eq-sel vacio" aria-label="Equipo">
+        <option value="">Seleccionar equipo…</option>
+      </select>
+      <!-- Trabajo que no es de una máquina del inventario: "Otro (escribir)…" -->
+      <input type="text" id="f-equipo" placeholder="Escribe el equipo o el trabajo…" list="equipo-list" autocomplete="off" style="display:none" aria-label="Equipo (texto libre)"/>
+      <datalist id="equipo-list"></datalist>
+      <div class="pills">
+        <label class="pill"><span class="pk">Planta</span><span class="pv vacio" id="pv-planta">—</span>
+          <select id="f-planta" aria-label="Planta"><option value="">Seleccionar planta...</option></select></label>
+        <label class="pill"><span class="pk">Área</span><span class="pv vacio" id="pv-area">—</span>
+          <select id="f-linea" aria-label="Área"><option value="">Seleccionar área...</option></select></label>
+        <label class="pill"><span class="pk">Línea</span><span class="pv vacio" id="pv-linea">—</span>
+          <select id="f-sublinea" aria-label="Línea"><option value="">— Ninguna / No aplica —</option></select></label>
+        <label class="pill"><span class="pk">Tipo</span><span class="pv vacio" id="pv-tipo">—</span>
+          <select id="f-tipo-sel" aria-label="Tipo de máquina"><option value="">— Sin elegir —</option></select></label>
       </div>
+      <input type="text" id="f-tipo-maq" placeholder="Escribe el tipo de máquina…" style="display:none" aria-label="Tipo de máquina (texto libre)"/>
+    </section>
 
-      <div class="field">
-        <label>Planta *</label>
-        <!-- FASE 2b (Módulo 2): igual patrón que Área — se lee en vivo de
-             /plantas (Admin puede agregar una planta nueva sin tocar
-             código). El Área se filtra según la planta elegida aquí. -->
-        <select id="f-planta">
-          <option value="">Seleccionar planta...</option>
-        </select>
+    <!-- ── TRABAJO ── -->
+    <section class="nf-card" id="card-trabajo">
+      <div class="toggle-row" id="tipo-mto-group" role="group" aria-label="Tipo de mantenimiento">
+        <button type="button" class="toggle-btn sel" data-val="Correctivo" onclick="selectToggle('tipo-mto-group',this)">Correctivo</button>
+        <button type="button" class="toggle-btn" data-val="Preventivo" onclick="selectToggle('tipo-mto-group',this)">Preventivo</button>
+        <button type="button" class="toggle-btn" data-val="Proyecto" onclick="selectToggle('tipo-mto-group',this)">Proyecto</button>
       </div>
-
-      <div class="field">
-        <label>Área *</label>
-        <!-- FASE 2 (Módulo 2): las <option> ya no van fijas en el HTML.
-             loadAreas() las pinta desde la colección /areas de Firestore
-             (con una lista local de respaldo si no hay conexión todavía),
-             y Encargado/Admin puede agregar áreas nuevas sin tocar código
-             — ver renderAreaOptions()/onAreaSelectChange() más abajo. -->
-        <select id="f-linea">
-          <option value="">Seleccionar área...</option>
-        </select>
+      <!-- Comparación con Maximo/SAP (28 sep 2026): causa estructurada de una
+           lista corta (ver CAUSAS_FALLA) además de la descripción libre. -->
+      <div class="grid2">
+        <label class="box-sel">Causa<select id="f-causa" aria-label="Causa de la falla"><option value="">Elegir…</option></select></label>
+        <input type="text" id="f-pieza" placeholder="Pieza / componente" aria-label="Pieza o componente"/>
       </div>
-
-      <div class="field">
-        <label>Línea (opcional)</label>
-        <!-- FASE 2c (Módulo 2): sub-nivel opcional dentro de Área — no
-             todas las áreas tienen líneas todavía. Mismo patrón de
-             autoservicio, reservado a Encargado/Admin para agregar. -->
-        <select id="f-sublinea">
-          <option value="">— Ninguna / No aplica —</option>
-        </select>
+      <textarea id="f-falla" placeholder="Falla: ¿qué pasó? *" aria-label="Descripción de la falla"></textarea>
+      <textarea id="f-solucion" placeholder="Solución: ¿cómo se resolvió?" aria-label="Descripción de la solución"></textarea>
+      <div class="tboxes">
+        <label class="tbox">Paró<input type="time" id="f-hinicio" aria-label="Hora en que paró la máquina"/></label>
+        <label class="tbox">Llegó<input type="time" id="f-htecnico" aria-label="Hora en que llegó el técnico"/></label>
+        <label class="tbox">Terminó<input type="time" id="f-hfinal" aria-label="Hora en que terminó"/></label>
       </div>
-
-      <div class="row">
-        <div class="field">
-          <label>Tipo Máquina</label>
-          <input type="text" id="f-tipo-maq" placeholder="ej: extruder"/>
-        </div>
-        <div class="field">
-          <label>Equipo</label>
-          <input type="text" id="f-equipo" placeholder="ej: #6" list="equipo-list" autocomplete="off"/>
-          <datalist id="equipo-list"></datalist>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Pieza / Componente</label>
-        <input type="text" id="f-pieza" placeholder="ej: rodamiento, filtro..."/>
-      </div>
-
-      <!-- Comparación con Maximo/SAP (28 sep 2026): además de la descripción libre,
-           una causa estructurada de una lista corta permite después contestar en
-           Análisis "¿cuál es la causa de falla más común?" sin tener que leer
-           notas de texto una por una. Ver CAUSAS_FALLA_FALLBACK. -->
-      <div class="field">
-        <label>Causa (categoría)</label>
-        <select id="f-causa"><option value="">Seleccionar causa...</option></select>
-      </div>
-
-      <div class="field">
-        <label>Descripción de la Falla (detalle) *</label>
-        <textarea id="f-falla" placeholder="¿Qué pasó?"></textarea>
-      </div>
-
-      <div class="field">
-        <label>Descripción de la Solución</label>
-        <textarea id="f-solucion" placeholder="¿Cómo se resolvió?"></textarea>
-      </div>
-
-      <div class="card" style="background:var(--surface);padding:12px;margin-bottom:13px;">
-        <label style="margin-bottom:10px;">⏱ Tiempos</label>
-        <div class="row">
-          <div class="field"><label>H. Inicio</label><input type="time" id="f-hinicio"/></div>
-          <div class="field"><label>H. Técnico</label><input type="time" id="f-htecnico"/></div>
-          <div class="field"><label>H. Final</label><input type="time" id="f-hfinal"/></div>
-        </div>
-        <div id="duracion-display" style="font-size:12px;color:var(--accent);font-weight:600;min-height:16px;"></div>
-      </div>
-
-      <div class="field">
-        <label>Tipo de Mantenimiento *</label>
-        <div class="toggle-row" id="tipo-mto-group">
-          <button class="toggle-btn sel" data-val="Correctivo" onclick="selectToggle('tipo-mto-group',this)">⚠️ Correctivo</button>
-          <button class="toggle-btn" data-val="Preventivo" onclick="selectToggle('tipo-mto-group',this)">🛡 Preventivo</button>
-          <button class="toggle-btn" data-val="Proyecto" onclick="selectToggle('tipo-mto-group',this)">🏗 Proyecto</button>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="field">
-          <label>M / E</label>
-          <div class="toggle-row" id="me-group">
-            <button class="toggle-btn sel" data-val="m" onclick="selectToggle('me-group',this)">M</button>
-            <button class="toggle-btn" data-val="e" onclick="selectToggle('me-group',this)">E</button>
-            <button class="toggle-btn" data-val="m/e" onclick="selectToggle('me-group',this)">M/E</button>
+      <div id="duracion-display" class="dur"></div>
+      <details class="mas" id="mas-opciones">
+        <summary>Más opciones <small id="mas-resumen">M/E · Genera OT · Paró planta · Prioridad</small></summary>
+        <div class="mas-body">
+          <div class="grid2">
+            <div>
+              <span class="nf-lbl">M / E</span>
+              <div class="toggle-row" id="me-group">
+                <button type="button" class="toggle-btn sel" data-val="m" onclick="selectToggle('me-group',this)">M</button>
+                <button type="button" class="toggle-btn" data-val="e" onclick="selectToggle('me-group',this)">E</button>
+                <button type="button" class="toggle-btn" data-val="m/e" onclick="selectToggle('me-group',this)">M/E</button>
+              </div>
+            </div>
+            <div>
+              <span class="nf-lbl">Genera OT</span>
+              <div class="toggle-row" id="ot-group">
+                <button type="button" class="toggle-btn" data-val="si" onclick="selectToggle('ot-group',this)">Sí</button>
+                <button type="button" class="toggle-btn sel" data-val="no" onclick="selectToggle('ot-group',this)">No</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <span class="nf-lbl">¿Paró la planta?</span>
+            <div class="toggle-row" id="paro-group">
+              <button type="button" class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)">🚨 Sí, paró</button>
+              <button type="button" class="toggle-btn sel" data-val="no" onclick="selectToggle('paro-group',this)">No</button>
+            </div>
+          </div>
+          <!-- Comparación con Maximo/SAP (28 sep 2026): prioridad simple. -->
+          <div>
+            <span class="nf-lbl">Prioridad</span>
+            <div class="toggle-row" id="prioridad-group">
+              <button type="button" class="toggle-btn" data-val="alta" onclick="selectToggle('prioridad-group',this)">Alta</button>
+              <button type="button" class="toggle-btn sel" data-val="media" onclick="selectToggle('prioridad-group',this)">Media</button>
+              <button type="button" class="toggle-btn" data-val="baja" onclick="selectToggle('prioridad-group',this)">Baja</button>
+            </div>
           </div>
         </div>
-        <div class="field">
-          <label>Genera OT</label>
-          <div class="toggle-row" id="ot-group">
-            <button class="toggle-btn" data-val="si" onclick="selectToggle('ot-group',this)">Sí</button>
-            <button class="toggle-btn sel" data-val="no" onclick="selectToggle('ot-group',this)">No</button>
-          </div>
+      </details>
+    </section>
+
+    <!-- ── TÉCNICOS ── (lista de tecnicos.json) -->
+    <section class="nf-card" id="card-tec">
+      <div class="nf-row"><span class="nf-lbl">Técnicos</span><span class="nf-count" id="tec-count"></span></div>
+      <button type="button" class="dd-btn" id="tec-btn" aria-expanded="false" aria-controls="tec-panel">
+        <span>Seleccionar técnicos</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="dd-panel" id="tec-panel" hidden></div>
+      <div class="chips" id="tec-chips"></div>
+    </section>
+
+    <!-- ── HERRAMIENTAS USADAS ── (asignaciones activas de los técnicos elegidos) -->
+    <section class="nf-card" id="card-herr">
+      <div class="nf-row"><span class="nf-lbl">Herramientas usadas</span><span class="nf-count" id="herr-count">0 seleccionadas</span></div>
+      <button type="button" class="dd-btn" id="herr-btn" aria-expanded="false" aria-controls="herr-panel">
+        <span>Seleccionar herramientas</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="dd-panel" id="herr-panel" hidden></div>
+      <div class="chips" id="herr-chips"></div>
+    </section>
+
+    <!-- ── REPUESTOS ── (cada repuesto nuevo crea una solicitud a almacén; sin costos) -->
+    <section class="nf-card" id="card-rep">
+      <div class="nf-row">
+        <span class="nf-lbl" id="rep-titulo">Repuestos</span>
+        <div class="toggle-row seg-sm" id="rep-group" role="group" aria-label="¿Se usaron repuestos?">
+          <button type="button" class="toggle-btn" data-val="no">Sin</button>
+          <button type="button" class="toggle-btn" data-val="si">Con repuestos</button>
         </div>
       </div>
-
-      <div class="field">
-        <label>¿Paró la Planta?</label>
-        <div class="toggle-row" id="paro-group">
-          <button class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)" style="color:var(--red)">🚨 Sí, paró</button>
-          <button class="toggle-btn sel" data-val="no" onclick="selectToggle('paro-group',this)">No</button>
+      <div id="rep-con" hidden>
+        <div class="rep-lista" id="rep-lista"></div>
+        <div class="rep-add" style="margin-top:6px;">
+          <input type="text" id="rep-codigo" placeholder="Código" aria-label="Código de almacén" autocomplete="off"/>
+          <input type="text" id="rep-desc" placeholder="Descripción" aria-label="Descripción del repuesto" autocomplete="off"/>
+          <input type="number" id="rep-cant" placeholder="Cant." aria-label="Cantidad" inputmode="numeric" min="1" step="1"/>
         </div>
+        <button type="button" class="btn-add" id="rep-add-btn" style="margin-top:6px;">+ Solicitar a almacén</button>
       </div>
+    </section>
 
-      <!-- Comparación con Maximo/SAP (28 sep 2026): prioridad simple para poder
-           distinguir en Análisis/listas qué se atiende primero. -->
-      <div class="field">
-        <label>Prioridad</label>
-        <div class="toggle-row" id="prioridad-group">
-          <button class="toggle-btn" data-val="alta" onclick="selectToggle('prioridad-group',this)" style="color:var(--red)">🔴 Alta</button>
-          <button class="toggle-btn sel" data-val="media" onclick="selectToggle('prioridad-group',this)">🟡 Media</button>
-          <button class="toggle-btn" data-val="baja" onclick="selectToggle('prioridad-group',this)">🟢 Baja</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Técnicos Asignados</label>
-        <div class="tec-grid" id="tec-grid">
-          <!-- se llena automáticamente desde tecnicos.json -->
-        </div>
-      </div>
-
-      <button class="btn btn-primary" id="submit-btn" onclick="submitForm()">✅ Registrar en Bitácora</button>
+    <div class="submit-bar">
+      <button class="btn btn-primary btn-submit" id="submit-btn" onclick="submitForm()">Guardar</button>
     </div>
   </div>
 
@@ -391,8 +513,8 @@
       <div id="ms-dias"></div>
       <div class="ms-legend">
         <span style="--c:var(--green)">Trabajado en OTs</span>
-        <span style="--c:#EF444477">Sin OT registrada (inactivo)</span>
-        <span style="--c:var(--blue)">Horas extra</span>
+        <span style="--c:#DC262666">Sin OT registrada (inactivo)</span>
+        <span style="--c:var(--purple)">Horas extra</span>
       </div>
       <div class="ms-cfg">
         Jornada:
@@ -404,7 +526,7 @@
 
     <div class="card" id="ms-avance-card">
       <div style="font-weight:700;margin-bottom:2px;">📈 Avance de mejora</div>
-      <div class="card-sub">Últimas 8 semanas (la barra naranja es la semana elegida). Cada valor se compara con el promedio de las 4 semanas anteriores; si la semana va a la mitad, los totales se comparan a la misma altura.</div>
+      <div class="card-sub">Últimas 8 semanas (la barra azul es la semana elegida). Cada valor se compara con el promedio de las 4 semanas anteriores; si la semana va a la mitad, los totales se comparan a la misma altura.</div>
       <div id="ms-insights"></div>
       <div id="ms-trend"></div>
     </div>
@@ -519,6 +641,18 @@ function miNombreUsuario() {
 function syncSemanaDesdeFecha() {
   const f = document.getElementById('f-fecha').value;
   document.getElementById('f-semana').value = fbSemanaISO(f) || '';
+  actualizarFechaChip();
+}
+// (7 oct 2026) La fecha se muestra compacta en la cabecera: "07/10 · S41".
+function actualizarFechaChip() {
+  const f = document.getElementById('f-fecha').value;
+  const d = fbParseFecha(f);
+  const el = document.getElementById('fecha-txt');
+  if (!el) return;
+  if (!d) { el.textContent = 'Fecha'; return; }
+  const p2 = n => String(n).padStart(2, '0');
+  const anio = d.getFullYear() !== new Date().getFullYear() ? '/' + String(d.getFullYear()).slice(2) : '';
+  el.textContent = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}${anio} · S${fbSemanaISO(f)}`;
 }
 
 // ══════ INIT ══════
@@ -533,6 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-hinicio').value = t;
   document.getElementById('f-htecnico').value = t;
 
+  initFormularioUnico(); // (7 oct 2026) equipo en cascada, técnicos, herramientas y repuestos
   updateHeaderStatus();
   loadTecnicos();
   loadPlantas();
@@ -544,8 +679,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderBorradorBanner();
   document.getElementById('f-fecha').addEventListener('change', syncSemanaDesdeFecha);
   document.getElementById('f-fecha').addEventListener('input', syncSemanaDesdeFecha);
-  document.getElementById('f-hinicio').addEventListener('change', updateDuration);
-  document.getElementById('f-hfinal').addEventListener('change', updateDuration);
+  ['f-hinicio', 'f-htecnico', 'f-hfinal'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateDuration);
+    document.getElementById(id).addEventListener('input', updateDuration);
+  });
   document.getElementById('f-planta').addEventListener('change', onPlantaSelectChange);
   document.getElementById('f-linea').addEventListener('change', onAreaSelectChange);
   document.getElementById('f-sublinea').addEventListener('change', onLineaSelectChange);
@@ -713,13 +850,14 @@ function renderCausasOptions(valorActual) {
   if (!sel) return;
   const lista = CAUSAS_FALLA.slice();
   if (valorActual && !lista.includes(valorActual)) lista.unshift(valorActual);
-  sel.innerHTML = '<option value="">Seleccionar causa...</option>'
+  sel.innerHTML = '<option value="">Elegir…</option>' // (7 oct 2026) corto: va dentro de la caja "Causa"
     + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${esc(c)}</option>`).join(''); // (5 oct 2026) escapado: la causa puede venir de un registro
 }
 
 // ══════ ABRIR CON EQUIPO YA ELEGIDO (desde el QR único, 4 oct 2026) ══════
-// equipo.html → "Registrar trabajo" abre bitacora.html?equipo=<id>: se llena
-// Equipo y, si existe en la lista de la planta elegida, el Área del equipo.
+// equipo.html → "Registrar trabajo" abre bitacora.html?equipo=<id>.
+// (7 oct 2026) Ahora se elige ese equipo en la cascada y se llenan Planta,
+// Área, Línea y Tipo con los datos del equipo (ver aplicarEquipo).
 function prefillEquipoDesdeQR() {
   const id = new URLSearchParams(location.search).get('equipo');
   if (!id) return;
@@ -727,16 +865,8 @@ function prefillEquipoDesdeQR() {
     try {
       const s = await db.collection('equipos').doc(id).get();
       if (!s.exists) { showToast('⚠️ El equipo del código QR ya no existe', 'error'); return; }
-      const e = s.data();
-      document.getElementById('f-equipo').value = e.nombre || '';
-      const ponerArea = () => {
-        const sel = document.getElementById('f-linea');
-        const loc = (e.localidad || '').trim().toLowerCase();
-        const opt = loc && [...sel.options].find(o => o.value && o.value.trim().toLowerCase() === loc);
-        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change')); }
-        return !!opt;
-      };
-      if (!ponerArea()) setTimeout(ponerArea, 1500); // las áreas pueden tardar en llegar
+      const e = s.data() || {};
+      aplicarEquipo({ id: s.id, nombre: e.nombre || '', localidad: e.localidad || '', planta: e.planta || '', linea: e.linea || '', tipoMaquina: e.tipoMaquina || '' });
       showToast('📋 Equipo: ' + (e.nombre || ''));
       history.replaceState(null, '', location.pathname);
     } catch (err) { console.warn('No se pudo precargar el equipo del QR:', err.message); }
@@ -744,13 +874,13 @@ function prefillEquipoDesdeQR() {
 }
 
 // ══════ LISTA DE TÉCNICOS (centralizada en tecnicos.json) ══════
+// (7 oct 2026) Respaldo igual a tecnicos.json: ANTONIO SANTANA #805 ya no
+// trabaja aquí (sus OTs viejas conservan su nombre, pero no se ofrece).
 const TECNICOS_FALLBACK = [
   { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
-  { "nombre": "ANTONIO SANTANA #805", "corto": "ANTONIO #805" },
   { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
   { "nombre": "LEBRON", "corto": "LEBRON" },
-  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" },
-  { "nombre": "ARISTOSTELE #2434", "corto": "ARISTOSTELE #2434" }
+  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
 ];
 
 async function loadTecnicos() {
@@ -759,7 +889,7 @@ async function loadTecnicos() {
     const r = await fetch('tecnicos.json?_=' + Date.now()); // evita caché vieja
     if (r.ok) {
       const data = await r.json();
-      if (Array.isArray(data) && data.length) lista = data;
+      if (Array.isArray(data) && data.length) lista = data.filter(t => t && t.nombre);
     }
   } catch (e) {
     console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message);
@@ -767,16 +897,13 @@ async function loadTecnicos() {
   window._tecLista = lista;
   renderTecGrid(lista);
   if (document.getElementById('screen-stats').classList.contains('active')) renderMiSemana();
+  // (7 oct 2026) En una entrada nueva queda marcado el técnico que inició sesión.
+  window.fbReady.then(() => { preseleccionarTecnicoPropio(); renderHerrUI(); }).catch(() => {});
 }
 
 function renderTecGrid(lista) {
-  const grid = document.getElementById('tec-grid');
-  const seleccionados = getSelectedTecs(); // conserva selección si ya había alguna
-  // (5 oct 2026) Nombres escapados con fbEsc (antes solo se cambiaba la comilla doble).
-  grid.innerHTML = lista.map(t => `
-    <button class="tec-chip${seleccionados.includes(t.nombre)?' sel':''}" data-tec="${esc(t.nombre)}" onclick="toggleTec(this)">${esc(t.corto || t.nombre)}</button>
-  `).join('');
-
+  // (7 oct 2026) El formulario ahora usa el menú con casillas (renderTecUI).
+  renderTecUI();
   const preview = document.getElementById('tec-actual-list');
   if (preview) {
     preview.innerHTML = lista.map(t => `<span class="code-chip">${esc(t.nombre)}</span>`).join('') || '<span style="color:var(--muted);font-size:12px;">Sin técnicos cargados</span>';
@@ -801,14 +928,34 @@ function guardarPlantaActual(nombre) {
   try { localStorage.setItem(PLANTA_LS_KEY, nombre || ''); } catch (e) {}
 }
 
+// (7 oct 2026) Valor de un <select> sin las opciones especiales ("➕ Agregar…", "Otro…").
+const OTRO = '__otro__';
+const NUEVA = '__nueva__';
+const eqK = s => fbEquipoKey(s);
+function valSel(id) {
+  const el = document.getElementById(id);
+  const v = el ? el.value : '';
+  return (v === NUEVA || v === OTRO) ? '' : v;
+}
+// (7 oct 2026) Pinta las opciones de un <select> de la cascada. Si el valor
+// actual (de un registro viejo o de un equipo) no está en la lista, se agrega
+// igual para no perderlo.
+function opcionesConValor(lista, valor) {
+  const l = lista.slice();
+  if (valor && valor !== NUEVA && valor !== OTRO && !l.includes(valor)) l.unshift(valor);
+  return l.map(x => `<option value="${esc(x)}"${x === valor ? ' selected' : ''}>${esc(x)}</option>`).join('');
+}
+
 function renderPlantaOptions(lista, valorActual) {
   const sel = document.getElementById('f-planta');
   if (!sel) return;
   const valor = valorActual !== undefined ? valorActual : sel.value;
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
   sel.innerHTML = '<option value="">Seleccionar planta...</option>'
-    + lista.map(p => `<option${p === valor ? ' selected' : ''}>${esc(p)}</option>`).join('') // (5 oct 2026) escapado
+    + opcionesConValor(lista, valor) // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar planta nueva…</option>' : '');
+  sel.value = valor === NUEVA ? '' : (valor || '');
+  actualizarPills();
 }
 
 function loadPlantas() {
@@ -819,10 +966,15 @@ function loadPlantas() {
     db.collection('plantas').orderBy('nombre').onSnapshot((snap) => {
       if (!snap.empty) {
         currentPlantas = snap.docs.map(d => d.data().nombre).filter(Boolean);
-        let actual = document.getElementById('f-planta').value || leerPlantaGuardada();
+        const antes = valSel('f-planta');
+        let actual = antes || leerPlantaGuardada();
         if (!actual && currentPlantas.length === 1) actual = currentPlantas[0];
+        // (7 oct 2026) "PLANTA 1" guardada y "Planta 1" en la lista son la misma.
+        actual = currentPlantas.find(p => eqK(p) === eqK(actual)) || actual;
         renderPlantaOptions(currentPlantas, actual);
-        refrescarAreaYLinea();
+        // Solo se repinta la cascada si la planta cambió (para no borrar el área
+        // que ya puso un equipo del QR o un registro que se está editando).
+        if (eqK(actual) !== eqK(antes)) refrescarAreaYLinea();
       }
     }, (err) => {
       console.warn('No se pudo leer /plantas, usando lista local de respaldo:', err.message);
@@ -837,7 +989,7 @@ async function onPlantaSelectChange() {
     if (!nombre) { renderPlantaOptions(currentPlantas, ''); refrescarAreaYLinea(); return; }
     if (currentPlantas.some(p => p.toLowerCase() === nombre.toLowerCase())) {
       showToast('⚠️ Esa planta ya existe', 'error');
-      renderPlantaOptions(currentPlantas, nombre);
+      renderPlantaOptions(currentPlantas, currentPlantas.find(p => p.toLowerCase() === nombre.toLowerCase()));
       refrescarAreaYLinea();
       return;
     }
@@ -849,8 +1001,7 @@ async function onPlantaSelectChange() {
       });
       showToast('✅ Planta "' + nombre + '" agregada', 'success');
       setTimeout(() => {
-        const s = document.getElementById('f-planta');
-        if (s && [...s.options].some(o => o.value === nombre)) s.value = nombre;
+        renderPlantaOptions(currentPlantas, nombre);
         guardarPlantaActual(nombre);
         refrescarAreaYLinea();
       }, 400);
@@ -865,13 +1016,10 @@ async function onPlantaSelectChange() {
   refrescarAreaYLinea();
 }
 
-// Repinta Área (filtrada por la planta elegida) y Línea (vacía, hasta elegir
-// área) — se llama cada vez que cambia la planta seleccionada.
+// (7 oct 2026) Al cambiar la planta se repinta todo lo de abajo (Área, Línea,
+// Tipo, Equipo) y se borra solo lo que ya no corresponde.
 function refrescarAreaYLinea() {
-  const planta = document.getElementById('f-planta')?.value || '';
-  renderAreaOptions(nombresAreasParaPlanta(planta), '');
-  renderLineaOptions([], '');
-  updateEquipoDatalist();
+  cascadaDesde(0);
 }
 
 // ══════ LISTA DE ÁREAS (FASE 2 — antes eran 26 <option> fijas en el HTML) ══════
@@ -895,7 +1043,7 @@ let currentAreas = AREAS_FALLBACK.slice();
 // cualquier planta, para nunca esconder un área vieja por un dato faltante).
 function nombresAreasParaPlanta(plantaNombre) {
   return currentAreas
-    .filter(a => !plantaNombre || !a.plantaNombre || a.plantaNombre === plantaNombre)
+    .filter(a => !plantaNombre || !a.plantaNombre || eqK(a.plantaNombre) === eqK(plantaNombre))
     .map(a => a.nombre);
 }
 
@@ -908,8 +1056,10 @@ function renderAreaOptions(lista, valorActual) {
   // la opción, para no dejarlo tocar un botón que Firebase le va a rechazar.
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
   sel.innerHTML = '<option value="">Seleccionar área...</option>'
-    + lista.map(a => `<option${a === valor ? ' selected' : ''}>${esc(a)}</option>`).join('') // (5 oct 2026) escapado
+    + opcionesConValor(lista, valor) // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar área nueva…</option>' : '');
+  sel.value = valor === NUEVA ? '' : (valor || '');
+  actualizarPills();
 }
 
 function loadAreas() {
@@ -917,12 +1067,12 @@ function loadAreas() {
   // vacío mientras Firebase conecta) y luego escucha /areas en tiempo real,
   // igual que la lista de OTs: si Encargado/Admin agrega un área desde otro
   // celular, aparece aquí sola sin recargar la página.
-  renderAreaOptions(nombresAreasParaPlanta(document.getElementById('f-planta')?.value));
+  renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')));
   window.fbReady.then(() => {
     db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
       if (!snap.empty) {
         currentAreas = snap.docs.map(d => ({ nombre: d.data().nombre, plantaNombre: d.data().plantaNombre || '' })).filter(a => a.nombre);
-        renderAreaOptions(nombresAreasParaPlanta(document.getElementById('f-planta')?.value));
+        renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')));
         updateEquipoDatalist();
       }
       // Si la colección todavía está vacía (primera vez que corre esto en
@@ -941,25 +1091,24 @@ function loadAreas() {
 async function onAreaSelectChange() {
   const sel = document.getElementById('f-linea');
   if (sel.value !== '__nueva__') {
-    renderLineaOptions(nombresLineasParaArea(sel.value), '');
-    updateEquipoDatalist();
+    cascadaDesde(1); // (7 oct 2026) Línea, Tipo y Equipo se filtran por el área
     return;
   }
 
-  const plantaActual = document.getElementById('f-planta').value;
+  const plantaActual = valSel('f-planta');
   if (!plantaActual) {
     showToast('⚠️ Primero selecciona una Planta', 'error');
     renderAreaOptions(nombresAreasParaPlanta(''), '');
+    cascadaDesde(1);
     return;
   }
 
   const nombre = (window.prompt('Nombre de la nueva área (ej: "Zona de Carga"):') || '').trim();
-  if (!nombre) { renderAreaOptions(nombresAreasParaPlanta(plantaActual), ''); renderLineaOptions([], ''); updateEquipoDatalist(); return; }
+  if (!nombre) { renderAreaOptions(nombresAreasParaPlanta(plantaActual), ''); cascadaDesde(1); return; }
   if (currentAreas.some(a => a.nombre.toLowerCase() === nombre.toLowerCase())) {
     showToast('⚠️ Esa área ya existe', 'error');
-    renderAreaOptions(nombresAreasParaPlanta(plantaActual), nombre);
-    renderLineaOptions(nombresLineasParaArea(nombre), '');
-    updateEquipoDatalist();
+    renderAreaOptions(nombresAreasParaPlanta(plantaActual), currentAreas.find(a => a.nombre.toLowerCase() === nombre.toLowerCase()).nombre);
+    cascadaDesde(1);
     return;
   }
   try {
@@ -971,17 +1120,12 @@ async function onAreaSelectChange() {
     });
     showToast('✅ Área "' + nombre + '" agregada', 'success');
     // El onSnapshot de loadAreas() repinta el <select> solo en cuanto Firebase
-    // confirme el nuevo documento; cuando llegue, deja seleccionada el área
-    // recién creada en vez de dejar el formulario en "Seleccionar área...".
-    setTimeout(() => {
-      const s = document.getElementById('f-linea');
-      if (s && [...s.options].some(o => o.value === nombre)) { s.value = nombre; renderLineaOptions([], ''); updateEquipoDatalist(); }
-    }, 400);
+    // confirme el nuevo documento; se deja seleccionada el área recién creada.
+    setTimeout(() => { renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')), nombre); cascadaDesde(1); }, 400);
   } catch (e) {
     showToast('❌ No se pudo agregar el área: ' + e.message, 'error');
     renderAreaOptions(nombresAreasParaPlanta(plantaActual), '');
-    renderLineaOptions([], '');
-    updateEquipoDatalist();
+    cascadaDesde(1);
   }
 }
 
@@ -993,25 +1137,27 @@ let currentLineas = []; // empieza vacía — no hay respaldo local porque es nu
 
 function nombresLineasParaArea(areaNombre) {
   if (!areaNombre) return [];
-  return currentLineas.filter(l => l.areaNombre === areaNombre).map(l => l.nombre);
+  return currentLineas.filter(l => eqK(l.areaNombre) === eqK(areaNombre)).map(l => l.nombre); // (7 oct 2026) sin importar mayúsculas/acentos
 }
 
 function renderLineaOptions(lista, valorActual) {
   const sel = document.getElementById('f-sublinea');
   if (!sel) return;
   const valor = valorActual !== undefined ? valorActual : sel.value;
-  const areaElegida = document.getElementById('f-linea')?.value || '';
-  const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO') && areaElegida && areaElegida !== '__nueva__';
+  const areaElegida = valSel('f-linea');
+  const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO') && !!areaElegida;
   sel.innerHTML = '<option value="">— Ninguna / No aplica —</option>'
-    + lista.map(l => `<option${l === valor ? ' selected' : ''}>${esc(l)}</option>`).join('') // (5 oct 2026) escapado
+    + opcionesConValor(lista, valor) // (5 oct 2026) escapado
     + (puedeAgregar ? '<option value="__nueva__">➕ Agregar línea nueva…</option>' : '');
+  sel.value = valor === NUEVA ? '' : (valor || '');
+  actualizarPills();
 }
 
 function loadLineas() {
   window.fbReady.then(() => {
     db.collection('lineas').orderBy('nombre').onSnapshot((snap) => {
       currentLineas = snap.docs.map(d => ({ nombre: d.data().nombre, areaNombre: d.data().areaNombre || '' })).filter(l => l.nombre);
-      renderLineaOptions(nombresLineasParaArea(document.getElementById('f-linea')?.value));
+      renderLineaOptions(nombresLineasParaArea(valSel('f-linea')));
     }, (err) => {
       console.warn('No se pudo leer /lineas:', err.message);
     });
@@ -1020,14 +1166,15 @@ function loadLineas() {
 
 async function onLineaSelectChange() {
   const sel = document.getElementById('f-sublinea');
-  if (sel.value !== '__nueva__') return;
+  if (sel.value !== '__nueva__') { cascadaDesde(2); return; } // (7 oct 2026) Tipo y Equipo se filtran por la línea
 
-  const areaActual = document.getElementById('f-linea').value;
+  const areaActual = valSel('f-linea');
   const nombre = (window.prompt('Nombre de la nueva línea (ej: "Línea 2"):') || '').trim();
-  if (!nombre) { renderLineaOptions(nombresLineasParaArea(areaActual), ''); return; }
-  if (currentLineas.some(l => l.areaNombre === areaActual && l.nombre.toLowerCase() === nombre.toLowerCase())) {
+  if (!nombre) { renderLineaOptions(nombresLineasParaArea(areaActual), ''); cascadaDesde(2); return; }
+  if (currentLineas.some(l => eqK(l.areaNombre) === eqK(areaActual) && l.nombre.toLowerCase() === nombre.toLowerCase())) {
     showToast('⚠️ Esa línea ya existe en esta área', 'error');
-    renderLineaOptions(nombresLineasParaArea(areaActual), nombre);
+    renderLineaOptions(nombresLineasParaArea(areaActual), nombresLineasParaArea(areaActual).find(l => l.toLowerCase() === nombre.toLowerCase()));
+    cascadaDesde(2);
     return;
   }
   try {
@@ -1038,13 +1185,11 @@ async function onLineaSelectChange() {
       creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
     });
     showToast('✅ Línea "' + nombre + '" agregada', 'success');
-    setTimeout(() => {
-      const s = document.getElementById('f-sublinea');
-      if (s && [...s.options].some(o => o.value === nombre)) s.value = nombre;
-    }, 400);
+    setTimeout(() => { renderLineaOptions(nombresLineasParaArea(valSel('f-linea')), nombre); cascadaDesde(2); }, 400);
   } catch (e) {
     showToast('❌ No se pudo agregar la línea: ' + e.message, 'error');
     renderLineaOptions(nombresLineasParaArea(areaActual), '');
+    cascadaDesde(2);
   }
 }
 
@@ -1063,24 +1208,22 @@ function updateHeaderStatus() {
   icon.onclick = () => goTo('config', document.getElementById('nav-config'));
 }
 
-// (29 sep 2026) El campo Equipo es texto libre a propósito — a diferencia
-// de checklist.html/reportar.html, que sí obligan a elegir de /equipos,
-// aquí se necesita poder anotar algo aunque todavía no esté cargado en
-// Inventario. Pero el texto libre puro fragmenta el MTBF en Análisis:
-// "Weaving 5", "weaving5" y "Weaving  5" contaban como 3 equipos distintos.
-// Se agrega /equipos como fuente de nombres CANÓNICOS (los mismos que usa
-// Inventario/Checklist), y normalizarNombreEquipo() en submitForm() corrige
-// en silencio cualquier variante de mayúsculas/espacios que coincida con
-// uno ya cargado — sin bloquear ni cambiar cómo se escribe, solo evita que
-// la misma máquina quede partida en varios nombres por un typo de forma.
-let _equiposCanonicos = []; // [{nombre, localidad}] desde /equipos
+// (29 sep 2026) /equipos es la fuente de nombres CANÓNICOS (los mismos que
+// usa Inventario/Checklist): normalizarNombreEquipo() en submitForm() corrige
+// en silencio cualquier variante de mayúsculas/espacios que coincida con uno
+// ya cargado ("Weaving 5", "weaving5" y "Weaving  5" eran 3 equipos en el MTBF).
+// (7 oct 2026) Ahora además es la lista del selector "Equipo *" y de la
+// cascada (planta, localidad = área, linea, tipoMaquina de cada equipo).
+let _equiposCanonicos = []; // [{id, nombre, localidad, planta, linea, tipoMaquina, …}] desde /equipos
 function loadEquiposCanonicos() {
   window.fbReady.then(() => {
     fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
     (snap) => {
       _equiposCanonicos = snap.docs.map(d => ({ ...d.data(), id: d.id, nombre: d.data().nombre || '', localidad: d.data().localidad || '' })).filter(e => e.nombre);
-      updateEquipoDatalist();
-    }, (err) => console.warn('No se pudo leer /equipos (solo afecta las sugerencias de nombre, no bloquea nada):', err.message));
+      const ids = new Set(_equiposCanonicos.map(e => e.id));
+      _eqExtra = _eqExtra.filter(e => !ids.has(e.id));
+      repintarListasEquipo();
+    }, (err) => console.warn('No se pudo leer /equipos (solo afecta la lista de equipos, no bloquea nada):', err.message));
   }).catch(() => {});
 }
 // (29 sep 2026) OJO: se quitan TODOS los espacios (no solo se colapsan a
@@ -1094,28 +1237,427 @@ function normalizarNombreEquipo(valorTipeado) {
   return canon ? canon.nombre : valorTipeado; // si no hay match, se deja tal como se escribió (equipo nuevo, aún no cargado en Inventario)
 }
 
-// Sugiere equipos ya usados (mismo Área) para evitar que el mismo equipo quede
-// registrado con nombres distintos ("Weaving #17" vs "weaving 17") — eso rompe
-// el cálculo de MTBF en Análisis porque cada variante cuenta como un equipo
-// aparte. No obliga a elegir de la lista, solo autocompleta. Los nombres
-// canónicos de /equipos (29 sep 2026) van primero, para que la sugerencia
-// que se ve al escribir sea la forma correcta, no la primera variante que
-// alguien haya tipeado antes.
+// Sugerencias para "Otro (escribir)…": equipos ya usados en el Área elegida,
+// para no escribir el mismo equipo con nombres distintos. No obliga.
 function updateEquipoDatalist() {
   const dl = document.getElementById('equipo-list');
   if (!dl) return;
-  const linea = document.getElementById('f-linea')?.value;
+  const linea = valSel('f-linea');
   const vistos = new Set();
   _equiposCanonicos.forEach(e => {
-    if (linea && e.localidad && e.localidad !== linea) return;
+    if (linea && e.localidad && eqK(e.localidad) !== eqK(linea)) return;
     vistos.add(e.nombre.trim());
   });
   allRecords.forEach(r => {
     if (!r.EQUIPO) return;
-    if (linea && r.LINEA_EQUIPO !== linea) return;
-    vistos.add(r.EQUIPO.trim());
+    if (linea && eqK(r.LINEA_EQUIPO) !== eqK(linea)) return;
+    vistos.add(String(r.EQUIPO).trim());
   });
   dl.innerHTML = [...vistos].sort().map(v => `<option value="${esc(v)}"></option>`).join(''); // (5 oct 2026) fbEsc en vez de solo la comilla
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FORMULARIO ÚNICO (7 oct 2026) — diseño claro aprobado
+// "Nueva entrada", "Editar entrada" y "Cerrar aviso" son el mismo formulario.
+// ══════════════════════════════════════════════════════════════════════
+let _modoForm = 'nuevo'; // 'nuevo' | 'editar' | 'aviso'
+
+function initFormularioUnico() {
+  const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
+  on('f-equipo-sel', 'change', onEquipoSelChange);
+  on('f-tipo-sel', 'change', onTipoSelChange);
+  on('f-tipo-maq', 'input', actualizarPills);
+  on('f-tipo-maq', 'change', () => cascadaDesde(3));
+  // En computadora el calendario no siempre se abre al tocar el campo invisible.
+  on('f-fecha', 'click', e => { try { e.target.showPicker(); } catch (er) {} });
+  // Técnicos
+  on('tec-btn', 'click', () => toggleDropdown('tec'));
+  on('tec-panel', 'change', e => {
+    const cb = e.target.closest('input[data-i]');
+    const t = cb && (window._tecLista || [])[+cb.dataset.i];
+    if (!t) return;
+    const sel = _tecSel.filter(n => n !== t.nombre);
+    if (cb.checked) sel.push(t.nombre);
+    _tecSel = sel;
+    renderTecUI();
+    onTecsCambiaron();
+  });
+  on('tec-chips', 'click', e => {
+    const b = e.target.closest('[data-i]');
+    if (!b) return;
+    _tecSel.splice(+b.dataset.i, 1);
+    renderTecUI();
+    onTecsCambiaron();
+  });
+  // Herramientas
+  on('herr-btn', 'click', () => toggleDropdown('herr'));
+  on('herr-panel', 'change', e => {
+    const cb = e.target.closest('input[data-i]');
+    const h = cb && _herrVis[+cb.dataset.i];
+    if (!h) return;
+    if (cb.checked) _herrSel.set(h.asignacionId, { ...h }); else _herrSel.delete(h.asignacionId);
+    renderHerrUI();
+  });
+  on('herr-chips', 'click', e => {
+    const b = e.target.closest('[data-i]');
+    const h = b && _herrSelLista[+b.dataset.i];
+    if (!h) return;
+    _herrSel.delete(h.asignacionId);
+    renderHerrUI();
+  });
+  // Repuestos
+  on('rep-group', 'click', e => { const b = e.target.closest('[data-val]'); if (b) setRepModo(b.dataset.val); });
+  on('rep-add-btn', 'click', () => agregarRepuesto());
+  ['rep-codigo', 'rep-desc', 'rep-cant'].forEach(id => on(id, 'keydown', e => { if (e.key === 'Enter') { e.preventDefault(); agregarRepuesto(); } }));
+  on('rep-lista', 'click', e => {
+    const b = e.target.closest('.rep-x[data-i]');
+    if (!b) return;
+    const it = _repItems[+b.dataset.i];
+    if (it && !it.solicitudId) { _repItems.splice(+b.dataset.i, 1); renderRepUI(); }
+  });
+  // Barra fija de "Guardar" justo encima del menú inferior.
+  const ajustarNavH = () => { const n = document.getElementById('nav'); if (n && n.offsetHeight) document.documentElement.style.setProperty('--nav-h', n.offsetHeight + 'px'); };
+  ajustarNavH();
+  window.addEventListener('resize', ajustarNavH);
+
+  setModoForm('nuevo');
+  _repModo = 'no';
+  renderTipoOptions('');
+  renderEquipoOptions('');
+  renderTecUI();
+  renderHerrUI();
+  renderRepUI();
+  updateDuration();
+  cargarHerramientasAsignadas();
+}
+
+// Pone títulos, botón y avisos según el modo del formulario.
+function setModoForm(modo, aviso) {
+  _modoForm = modo;
+  document.getElementById('form-title').textContent = { nuevo: 'Nueva entrada', editar: 'Editar entrada', aviso: 'Cerrar aviso' }[modo] || 'Nueva entrada';
+  document.getElementById('form-sub').textContent = '';
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = modo === 'aviso' ? 'Terminé — cerrar aviso' : modo === 'editar' ? 'Guardar cambios' : 'Guardar';
+  btn.classList.toggle('cerrar', modo === 'aviso');
+  document.getElementById('edit-banner').style.display = modo === 'editar' ? 'flex' : 'none';
+  const ab = document.getElementById('aviso-banner');
+  if (modo === 'aviso' && aviso) {
+    ab.innerHTML = `<div class="h"><span class="k">${aviso.origen === 'qr' ? 'Aviso por QR' : 'Aviso de producción'}</span><span class="f">${esc(aviso.folio || '')}</span></div>
+      <div class="d">“${esc(aviso.descripcionFalla || '—')}” — ${esc(aviso.creadoPor || '—')}${aviso.horaParada ? ' · parada desde ' + esc(aviso.horaParada) : ''}</div>
+      <button type="button" class="c" onclick="cancelEdit()">Cancelar</button>`;
+    ab.style.display = '';
+  } else { ab.style.display = 'none'; ab.innerHTML = ''; }
+  const card = document.getElementById('card-rep');
+  card.classList.toggle('aviso', modo === 'aviso');
+  card.classList.remove('falta');
+  document.getElementById('rep-titulo').textContent = modo === 'aviso' ? '¿Repuestos? *' : 'Repuestos';
+}
+
+// ── Equipo en cascada: Planta → Área → Línea → Tipo → Equipo ──
+// Mientras el inventario esté incompleto la coincidencia es tolerante: un
+// equipo sin planta, sin área, sin línea o sin tipo aparece bajo cualquiera.
+let _eqExtra = []; // equipos que aún no llegaron con el catálogo (QR, edición)
+function catalogoEquipos() {
+  const ids = new Set(_equiposCanonicos.map(e => e.id));
+  return _equiposCanonicos.concat(_eqExtra.filter(e => !ids.has(e.id)));
+}
+function equipoPorId(id) { return (id && id !== OTRO) ? catalogoEquipos().find(e => e.id === id) || null : null; }
+function tipoActual() {
+  const s = document.getElementById('f-tipo-sel');
+  return s.value === OTRO ? document.getElementById('f-tipo-maq').value.replace(/\s+/g, ' ').trim() : s.value;
+}
+function filtrosEquipo() { return { planta: valSel('f-planta'), area: valSel('f-linea'), linea: valSel('f-sublinea'), tipo: tipoActual() }; }
+function equipoCoincide(e, f, sinTipo) {
+  const ok = (dato, filtro) => !filtro || !dato || eqK(dato) === eqK(filtro);
+  return ok(e.planta, f.planta) && ok(e.localidad, f.area) && ok(e.linea, f.linea) && (sinTipo || ok(e.tipoMaquina, f.tipo));
+}
+function tiposDisponibles(f) {
+  const m = new Map();
+  catalogoEquipos().forEach(e => {
+    const t = String(e.tipoMaquina || '').trim();
+    if (t && equipoCoincide(e, f, true) && !m.has(eqK(t))) m.set(eqK(t), t);
+  });
+  return [...m.values()].sort((a, b) => a.localeCompare(b, 'es'));
+}
+function renderTipoOptions(valor) {
+  const sel = document.getElementById('f-tipo-sel');
+  const lista = tiposDisponibles(filtrosEquipo());
+  let v = valor || '';
+  v = lista.find(t => eqK(t) === eqK(v)) || v;
+  sel.innerHTML = '<option value="">— Sin elegir —</option>' + opcionesConValor(lista, v) + `<option value="${OTRO}">Otro (escribir)…</option>`;
+  sel.value = v;
+  actualizarPills();
+}
+function setTipo(valor) {
+  const txt = document.getElementById('f-tipo-maq');
+  txt.value = '';
+  txt.style.display = 'none';
+  renderTipoOptions(valor || '');
+}
+function renderEquipoOptions(valorId) {
+  const sel = document.getElementById('f-equipo-sel');
+  const f = filtrosEquipo();
+  const lista = catalogoEquipos().filter(e => equipoCoincide(e, f));
+  const actual = equipoPorId(valorId);
+  if (actual && !lista.includes(actual)) lista.push(actual);
+  lista.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
+  sel.innerHTML = '<option value="">Seleccionar equipo…</option>'
+    + lista.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}${!f.area && e.localidad ? ' — ' + esc(e.localidad) : ''}</option>`).join('')
+    + `<option value="${OTRO}">Otro (escribir)…</option>`;
+  sel.value = valorId === OTRO ? OTRO : (actual ? actual.id : '');
+  sel.classList.toggle('vacio', !sel.value);
+  document.getElementById('f-equipo').style.display = sel.value === OTRO ? '' : 'none';
+}
+// Muestra en cada pastilla (Planta / Área / Línea / Tipo) lo que está elegido.
+function actualizarPills() {
+  const pon = (selId, pvId, otroTxt) => {
+    const s = document.getElementById(selId), pv = document.getElementById(pvId);
+    if (!s || !pv) return;
+    let t = '';
+    if (s.value === OTRO) t = otroTxt || 'Otro';
+    else if (s.value && s.value !== NUEVA) t = s.value;
+    pv.textContent = t || '—';
+    pv.classList.toggle('vacio', !t);
+  };
+  pon('f-planta', 'pv-planta');
+  pon('f-linea', 'pv-area');
+  pon('f-sublinea', 'pv-linea');
+  pon('f-tipo-sel', 'pv-tipo', (document.getElementById('f-tipo-maq') || {}).value);
+}
+// nivel: 0 planta, 1 área, 2 línea, 3 tipo. Repinta los niveles de abajo
+// conservando lo elegido si todavía coincide; lo que ya no coincide se limpia.
+function cascadaDesde(nivel) {
+  if (nivel <= 0) {
+    const areas = nombresAreasParaPlanta(valSel('f-planta')), a = valSel('f-linea');
+    renderAreaOptions(areas, (a && areas.find(x => eqK(x) === eqK(a))) || '');
+  }
+  if (nivel <= 1) {
+    const lins = nombresLineasParaArea(valSel('f-linea')), l = valSel('f-sublinea');
+    renderLineaOptions(lins, (l && lins.find(x => eqK(x) === eqK(l))) || '');
+  }
+  if (nivel <= 2 && document.getElementById('f-tipo-sel').value !== OTRO) {
+    const t = valSel('f-tipo-sel');
+    renderTipoOptions((t && tiposDisponibles(filtrosEquipo()).find(x => eqK(x) === eqK(t))) || '');
+  }
+  let eqId = document.getElementById('f-equipo-sel').value;
+  if (eqId && eqId !== OTRO) { const e = equipoPorId(eqId); if (!e || !equipoCoincide(e, filtrosEquipo())) eqId = ''; }
+  renderEquipoOptions(eqId);
+  actualizarPills();
+  updateEquipoDatalist();
+}
+// Llegó (o cambió) el catálogo: se repintan Tipo y Equipo sin borrar nada.
+function repintarListasEquipo() {
+  if (document.getElementById('f-tipo-sel').value !== OTRO) renderTipoOptions(valSel('f-tipo-sel'));
+  renderEquipoOptions(document.getElementById('f-equipo-sel').value);
+  actualizarPills();
+  updateEquipoDatalist();
+}
+// Elegir un equipo del inventario llena Planta / Área / Línea / Tipo con sus datos.
+function aplicarEquipo(e) {
+  if (!e || !e.id) return;
+  if (!catalogoEquipos().some(x => x.id === e.id)) _eqExtra.push(e);
+  if (e.planta) {
+    const p = currentPlantas.find(x => eqK(x) === eqK(e.planta)) || e.planta;
+    renderPlantaOptions(currentPlantas, p);
+    guardarPlantaActual(p);
+  }
+  let A = valSel('f-linea');
+  if (e.localidad) A = (currentAreas.find(a => eqK(a.nombre) === eqK(e.localidad)) || {}).nombre || e.localidad;
+  renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')), A);
+  const lins = nombresLineasParaArea(A);
+  let L = valSel('f-sublinea');
+  if (e.linea) L = lins.find(x => eqK(x) === eqK(e.linea)) || e.linea;
+  else if (L && !lins.some(x => eqK(x) === eqK(L))) L = '';
+  renderLineaOptions(lins, L);
+  if (e.tipoMaquina) setTipo(e.tipoMaquina);
+  else if (document.getElementById('f-tipo-sel').value !== OTRO) renderTipoOptions(valSel('f-tipo-sel'));
+  document.getElementById('f-equipo').value = '';
+  renderEquipoOptions(e.id);
+  actualizarPills();
+  updateEquipoDatalist();
+}
+function onEquipoSelChange() {
+  const sel = document.getElementById('f-equipo-sel');
+  sel.classList.toggle('vacio', !sel.value);
+  const txt = document.getElementById('f-equipo');
+  if (sel.value === OTRO) { txt.style.display = ''; txt.focus(); return; }
+  txt.style.display = 'none';
+  if (sel.value) aplicarEquipo(equipoPorId(sel.value));
+}
+function onTipoSelChange() {
+  const sel = document.getElementById('f-tipo-sel'), txt = document.getElementById('f-tipo-maq');
+  if (sel.value === OTRO) { txt.style.display = ''; txt.focus(); }
+  else { txt.style.display = 'none'; txt.value = ''; }
+  cascadaDesde(3);
+}
+// Restaura el equipo de un registro (edición, aviso o copia local).
+function setEquipoDesdeRecord(r) {
+  const txt = document.getElementById('f-equipo');
+  txt.value = '';
+  let id = '';
+  if (r.equipoId) {
+    if (!equipoPorId(r.equipoId)) _eqExtra.push({ id: r.equipoId, nombre: r.EQUIPO || '(equipo)', localidad: r.LINEA_EQUIPO || '', planta: r.PLANTA || '', linea: r.LINEA || '', tipoMaquina: r.TIPO_MAQUINA || '' });
+    id = r.equipoId;
+  } else if (r.EQUIPO) {
+    const canon = _equiposCanonicos.find(e => normEqKey(e.nombre) === normEqKey(r.EQUIPO));
+    if (canon) id = canon.id; else { id = OTRO; txt.value = r.EQUIPO; }
+  }
+  renderEquipoOptions(id);
+}
+
+// ── Menús desplegables (Técnicos / Herramientas) ──
+function toggleDropdown(cual, abrir) {
+  ['tec', 'herr'].forEach(k => {
+    const panel = document.getElementById(k + '-panel');
+    const on = k === cual ? (abrir != null ? abrir : panel.hidden) : false;
+    panel.hidden = !on;
+    document.getElementById(k + '-btn').setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+}
+const ICON_X = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+function chipHtml(texto, i, aria) {
+  return `<button type="button" class="chip" data-i="${i}" aria-label="${esc(aria)}" title="${esc(aria)}"><span>${esc(texto)}</span>${ICON_X}</button>`;
+}
+
+// ── Técnicos (lista de tecnicos.json; fichas azules con ✕) ──
+let _tecSel = []; // nombres completos, como se guardan en TECNICOS
+function getSelectedTecs() { return _tecSel.slice(); }
+function setSelectedTecs(lista) {
+  const out = [];
+  (lista || []).forEach(n => { n = String(n || '').trim(); if (n && !out.includes(n)) out.push(n); });
+  _tecSel = out;
+  renderTecUI();
+  onTecsCambiaron();
+}
+// Mismo técnico aunque cambie la forma de escribirlo ("FELIX M. GIL #777" / "Felix #777").
+function mismoTecnico(a, b) {
+  const na = msNorm(a), nb = msNorm(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const cod = s => (s.match(/#\s*\d+/) || [''])[0].replace(/\s/g, '');
+  return !!cod(na) && cod(na) === cod(nb);
+}
+function tecCorto(nombre) {
+  const t = (window._tecLista || []).find(x => mismoTecnico(x.nombre, nombre));
+  return (t && (t.corto || t.nombre)) || nombre || '';
+}
+function renderTecUI() {
+  const lista = window._tecLista || [];
+  const panel = document.getElementById('tec-panel');
+  if (!panel) return;
+  panel.innerHTML = lista.length
+    ? lista.map((t, i) => `<label class="chk-row"><input type="checkbox" data-i="${i}"${_tecSel.includes(t.nombre) ? ' checked' : ''}/><span class="n">${esc(t.corto || t.nombre)}</span></label>`).join('')
+    : '<div class="dd-nota">Cargando técnicos…</div>';
+  document.getElementById('tec-chips').innerHTML = _tecSel.map((n, i) => chipHtml(tecCorto(n), i, 'Quitar técnico ' + n)).join('');
+  document.getElementById('tec-count').textContent = _tecSel.length ? _tecSel.length + (_tecSel.length === 1 ? ' elegido' : ' elegidos') : '';
+}
+function onTecsCambiaron() {
+  // Las herramientas marcadas de un técnico que se quitó dejan de contar.
+  for (const [k, h] of [..._herrSel]) if (!_tecSel.some(t => mismoTecnico(t, h.tecnico))) _herrSel.delete(k);
+  renderHerrUI();
+}
+function preseleccionarTecnicoPropio() {
+  if (window.editingRecord || _tecSel.length) return;
+  const lista = (window._tecLista || []).map(t => t.nombre);
+  const propio = msTecnicoDelUsuario(lista);
+  const hit = propio && lista.find(n => mismoTecnico(n, propio));
+  if (hit) setSelectedTecs([hit]);
+}
+
+// ── Herramientas usadas (asignaciones activas de herramientas.html) ──
+// Se lee UNA vez al abrir el formulario (y como mucho cada 5 min) para no
+// gastar cuota: herramientas_asignadas where estado == 'activa'.
+let _herrAsign = null, _herrEstado = 'idle', _herrTs = 0;
+const _herrSel = new Map(); // asignacionId → {asignacionId, herramientaId, codigo, nombre, tecnico}
+let _herrVis = [], _herrSelLista = [];
+function cargarHerramientasAsignadas(forzar) {
+  if (_herrEstado === 'cargando') return;
+  if (!forzar && _herrEstado === 'ok' && Date.now() - _herrTs < 5 * 60000) return;
+  _herrEstado = 'cargando';
+  renderHerrUI();
+  window.fbReady
+    .then(() => db.collection('herramientas_asignadas').where('estado', '==', 'activa').get())
+    .then(snap => {
+      _herrAsign = snap.docs.map(d => {
+        const x = d.data() || {};
+        return { asignacionId: d.id, herramientaId: String(x.herramientaId || ''), codigo: String(x.codigo || ''), nombre: String(x.nombre || ''), tecnico: String(x.tecnico || '') };
+      }).filter(h => h.nombre || h.codigo);
+      _herrEstado = 'ok';
+      _herrTs = Date.now();
+      renderHerrUI();
+    })
+    .catch(err => {
+      console.warn('No se pudieron leer las herramientas asignadas:', err && err.message);
+      _herrEstado = 'error';
+      renderHerrUI();
+    });
+}
+function renderHerrUI() {
+  const panel = document.getElementById('herr-panel');
+  if (!panel) return;
+  _herrVis = (_herrAsign || []).filter(h => _tecSel.some(t => mismoTecnico(t, h.tecnico)))
+    .sort((a, b) => tecCorto(a.tecnico).localeCompare(tecCorto(b.tecnico)) || (a.nombre || a.codigo).localeCompare(b.nombre || b.codigo));
+  let html;
+  if (!_tecSel.length) html = '<div class="dd-nota">Elige primero los técnicos.</div>';
+  else if (_herrEstado === 'error') html = '<div class="dd-nota">⚠️ No se pudieron leer las herramientas asignadas (sin señal o sin permiso). Puedes guardar igual.</div>';
+  else if (!_herrAsign) html = '<div class="dd-nota">Cargando herramientas…</div>';
+  else if (!_herrVis.length) html = '<div class="dd-nota">Sin herramientas asignadas a los técnicos elegidos</div>';
+  else html = _herrVis.map((h, i) => `<label class="chk-row"><input type="checkbox" data-i="${i}"${_herrSel.has(h.asignacionId) ? ' checked' : ''}/><span class="n">${esc(h.nombre || h.codigo)}${h.codigo && h.nombre ? `<small>${esc(h.codigo)}</small>` : ''}</span><span class="o">${esc(tecCorto(h.tecnico))}</span></label>`).join('');
+  panel.innerHTML = html;
+  _herrSelLista = [..._herrSel.values()];
+  document.getElementById('herr-chips').innerHTML = _herrSelLista.map((h, i) => chipHtml(h.nombre || h.codigo, i, 'Quitar herramienta ' + (h.nombre || h.codigo))).join('');
+  document.getElementById('herr-count').textContent = _herrSelLista.length + (_herrSelLista.length === 1 ? ' seleccionada' : ' seleccionadas');
+}
+
+// ── Repuestos (sin costos): cada repuesto nuevo crea una solicitud a almacén ──
+let _repModo = null;   // 'si' | 'no' | null (al cerrar un aviso hay que elegir)
+let _repItems = [];    // [{codigo, descripcion, cantidad, solicitudId|null}]
+let _repEstados = {};  // solicitudId → estado leído de solicitudes_repuestos
+const REP_ETQ = { pendiente: 'Pendiente', entregado: 'Entregado', rechazado: 'Rechazado' };
+function setRepModo(m) {
+  if (m === 'no' && _repItems.some(i => i.solicitudId)) {
+    showToast('⚠️ Esta OT ya tiene repuestos solicitados a almacén', 'error');
+    m = 'si';
+  }
+  _repModo = m;
+  renderRepUI();
+}
+function renderRepUI() {
+  document.querySelectorAll('#rep-group .toggle-btn').forEach(b => b.classList.toggle('sel', b.dataset.val === _repModo));
+  document.getElementById('rep-con').hidden = _repModo !== 'si';
+  if (_repModo) document.getElementById('card-rep').classList.remove('falta');
+  document.getElementById('rep-lista').innerHTML = _repItems.map((it, i) => {
+    let badge;
+    if (!it.solicitudId) badge = '<span class="est est-nuevo">Por solicitar</span>';
+    else {
+      const e = _repEstados[it.solicitudId];
+      badge = REP_ETQ[e] ? `<span class="est est-${e}">${REP_ETQ[e]}</span>` : '<span class="est est-otro">Solicitado</span>';
+    }
+    return `<div class="rep-item"${it.solicitudId ? ' style="padding-right:10px"' : ''}><div class="t"><b>${esc(it.descripcion)}</b><span>${it.codigo ? `<code>${esc(it.codigo)}</code> · ` : ''}Cant. ${esc(it.cantidad)}</span></div>${badge}${it.solicitudId ? '' : `<button type="button" class="rep-x" data-i="${i}" aria-label="Quitar repuesto">${ICON_X}</button>`}</div>`;
+  }).join('') || '<div class="rep-nota">Agrega cada repuesto abajo; la solicitud a almacén se envía al guardar.</div>';
+}
+function agregarRepuesto() {
+  const c = document.getElementById('rep-codigo'), d = document.getElementById('rep-desc'), q = document.getElementById('rep-cant');
+  const descripcion = d.value.replace(/\s+/g, ' ').trim();
+  const cantidad = Number(String(q.value).replace(',', '.'));
+  if (!descripcion) { showToast('⚠️ Escribe la descripción del repuesto', 'error'); d.focus(); return false; }
+  if (!(cantidad > 0) || cantidad > 100000) { showToast('⚠️ La cantidad debe ser mayor que 0', 'error'); q.focus(); return false; }
+  _repItems.push({ codigo: c.value.replace(/\s+/g, ' ').trim().slice(0, 60), descripcion: descripcion.slice(0, 200), cantidad, solicitudId: null });
+  c.value = ''; d.value = ''; q.value = '';
+  renderRepUI();
+  return true;
+}
+// Al editar una OT: estado actual de sus solicitudes (una sola consulta).
+function cargarEstadosSolicitudes(otId) {
+  if (!otId || !_repItems.some(i => i.solicitudId)) return;
+  window.fbReady
+    .then(() => db.collection('solicitudes_repuestos').where('otId', '==', otId).get())
+    .then(snap => {
+      if (!window.editingRecord || window.editingRecord.id !== otId) return;
+      snap.docs.forEach(d => { _repEstados[d.id] = (d.data() || {}).estado || ''; });
+      renderRepUI();
+    })
+    .catch(err => console.warn('No se pudo leer el estado de los repuestos:', err && err.message));
 }
 
 // ══════ NAVIGATION ══════
@@ -1153,10 +1695,7 @@ function selectToggleByValue(groupId, val) {
   const btn = [...document.querySelectorAll(`#${groupId} [data-val]`)].find(b => b.dataset.val === String(val));
   if (btn) selectToggle(groupId, btn);
 }
-function toggleTec(btn) { btn.classList.toggle('sel'); }
-function getSelectedTecs() {
-  return [...document.querySelectorAll('#tec-grid .tec-chip.sel')].map(b => b.dataset.tec);
-}
+// (7 oct 2026) getSelectedTecs() ahora está con el menú de técnicos (más arriba).
 function timeToMin(t) {
   if (!t) return 0;
   const [h,m] = t.split(':').map(Number);
@@ -1165,18 +1704,28 @@ function timeToMin(t) {
 // (5 oct 2026) Antes '00:00' contaba como "vacío" (0 es falso) y un trabajo
 // que cruzaba la medianoche (23:30 → 01:10) no mostraba duración. Ahora usa
 // fbHoraAMin (null = vacío) y fbMinutosEntre (sabe cruzar la medianoche).
+// (7 oct 2026) Muestra "Parada X · Técnico Y" como en el diseño aprobado.
+const fmtHM = m => { const h = Math.floor(m / 60), mm = m % 60; return h ? `${h} h ${mm} m` : `${mm} m`; };
 function updateDuration() {
   const hIni = document.getElementById('f-hinicio').value;
+  const hTec = document.getElementById('f-htecnico').value;
   const hFin = document.getElementById('f-hfinal').value;
   const el = document.getElementById('duracion-display');
-  if (fbHoraAMin(hIni) != null && fbHoraAMin(hFin) != null) {
-    const diff = fbMinutosEntre(hIni, hFin);
-    if (diff > 0) {
-      el.textContent = `⏳ Duración: ${diff} min (${(diff/60).toFixed(1)} hrs)${fbHoraAMin(hFin) < fbHoraAMin(hIni) ? ' · cruza la medianoche' : ''}`;
-      return;
+  const partes = [];
+  let cruza = false;
+  if (fbHoraAMin(hFin) != null) {
+    if (fbHoraAMin(hIni) != null) {
+      const d = fbMinutosEntre(hIni, hFin);
+      if (d > 0) partes.push(`Parada <b>${fmtHM(d)}</b>`);
+      cruza = fbHoraAMin(hFin) < fbHoraAMin(hIni);
+    }
+    if (fbHoraAMin(hTec) != null) {
+      const d = fbMinutosEntre(hTec, hFin);
+      if (d > 0) partes.push(`Técnico <b>${fmtHM(d)}</b>`);
     }
   }
-  el.textContent = '';
+  // Solo números calculados aquí: no hay datos de usuario en este HTML.
+  el.innerHTML = partes.length ? partes.join(' · ') + (cruza ? ' · cruza la medianoche' : '') : 'Pon la hora en que terminó para ver la duración';
 }
 
 // ══════ EDITAR REGISTRO ══════
@@ -1185,12 +1734,9 @@ function editRecord(idx) {
   if (!r) return;
   window.editingRecord = r;
   fillFormFromRecord(r);
-
-  document.getElementById('edit-banner').style.display = 'flex';
-  document.getElementById('form-title').textContent = '✏️ Editar Entrada';
-  document.getElementById('form-sub').textContent = 'Corrige los datos y guarda';
-  document.getElementById('submit-btn').textContent = '💾 Guardar Cambios';
-
+  setModoForm('editar');
+  cargarEstadosSolicitudes(r.id);
+  cargarHerramientasAsignadas();
   goTo('nuevo', document.getElementById('nav-nuevo'));
   window.scrollTo(0,0);
 }
@@ -1199,15 +1745,17 @@ function fillFormFromRecord(r) {
   document.getElementById('f-fecha').value = r.FECHA || '';
   // (5 oct 2026) La semana se recalcula desde la fecha (semana ISO).
   document.getElementById('f-semana').value = fbSemanaISO(r.FECHA) || r.SEMANA || '';
-  // Planta → Área → Línea se repintan en cascada (en vez de asignar .value
-  // directo) para que el <select> de Área muestre las opciones de la planta
-  // correcta del registro, y el de Línea las de esa área — FASE 2b/2c.
-  document.getElementById('f-planta').value = r.PLANTA || '';
+  actualizarFechaChip();
+  // (7 oct 2026) Cascada Planta → Área → Línea → Tipo → Equipo con los valores
+  // del registro (si un valor ya no está en las listas, se agrega igual).
+  renderPlantaOptions(currentPlantas, r.PLANTA || '');
   guardarPlantaActual(r.PLANTA || '');
   renderAreaOptions(nombresAreasParaPlanta(r.PLANTA || ''), r.LINEA_EQUIPO || '');
   renderLineaOptions(nombresLineasParaArea(r.LINEA_EQUIPO || ''), r.LINEA || '');
-  document.getElementById('f-tipo-maq').value = r.TIPO_MAQUINA || '';
-  document.getElementById('f-equipo').value = r.EQUIPO || '';
+  setTipo(r.TIPO_MAQUINA || '');
+  setEquipoDesdeRecord(r);
+  actualizarPills();
+  updateEquipoDatalist();
   document.getElementById('f-pieza').value = r.PIEZA || '';
   renderCausasOptions(r.CAUSA_FALLA || '');
   document.getElementById('f-falla').value = r.DESCRIPCION_FALLA || '';
@@ -1223,10 +1771,23 @@ function fillFormFromRecord(r) {
   selectToggleByValue('paro-group', r.PARO_PLANTA || 'no');
   selectToggleByValue('prioridad-group', r.PRIORIDAD || 'media');
 
-  const tecsSeleccionados = (r.TECNICOS || '').split(',').map(s => s.trim()).filter(Boolean);
-  document.querySelectorAll('#tec-grid .tec-chip').forEach(chip => {
-    chip.classList.toggle('sel', tecsSeleccionados.includes(chip.dataset.tec));
+  // Técnicos (los nombres viejos que ya no están en tecnicos.json se conservan como ficha)
+  setSelectedTecs(msSplit(r.TECNICOS));
+  // Herramientas usadas
+  _herrSel.clear();
+  (Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS : []).forEach(h => {
+    if (h && h.asignacionId) _herrSel.set(h.asignacionId, { asignacionId: h.asignacionId, herramientaId: h.herramientaId || '', codigo: h.codigo || '', nombre: h.nombre || '', tecnico: h.tecnico || '' });
   });
+  renderHerrUI();
+  // Repuestos
+  _repEstados = {};
+  _repItems = (Array.isArray(r.REPUESTOS) ? r.REPUESTOS : []).filter(i => i && i.descripcion)
+    .map(i => ({ codigo: String(i.codigo || ''), descripcion: String(i.descripcion), cantidad: Number(i.cantidad) || 0, solicitudId: i.solicitudId || null }));
+  _repModo = (r.REPUESTOS_USADOS === 'si' || r.REPUESTOS_USADOS === 'no') ? r.REPUESTOS_USADOS : (_repItems.length ? 'si' : 'no');
+  if (_repModo === 'no' && _repItems.some(i => i.solicitudId)) _repModo = 'si';
+  ['rep-codigo', 'rep-desc', 'rep-cant'].forEach(id => { document.getElementById(id).value = ''; });
+  renderRepUI();
+  toggleDropdown(null);
 }
 
 function cancelEdit() {
@@ -1235,12 +1796,7 @@ function cancelEdit() {
 
 function exitEditMode() {
   window.editingRecord = null;
-  document.querySelector('#edit-banner p').textContent = '✏️ Editando registro existente';
-  document.querySelector('#edit-banner small').textContent = 'Los cambios reemplazarán la entrada original';
-  document.getElementById('edit-banner').style.display = 'none';
-  document.getElementById('form-title').textContent = '📋 Nueva Entrada';
-  document.getElementById('form-sub').textContent = 'Registra el trabajo realizado';
-  document.getElementById('submit-btn').textContent = '✅ Registrar en Bitácora';
+  setModoForm('nuevo');
   resetForm();
 }
 
@@ -1256,15 +1812,49 @@ function msgErrorFirestore(e, contexto) {
   return (e && e.message) || String(e);
 }
 
+// (7 oct 2026) Documento de solicitudes_repuestos (contrato con Almacén).
+function docSolicitudRepuesto(item, record, otId, folio) {
+  return {
+    otId, folio: folio || '',
+    equipoId: record.equipoId || '', equipoNombre: record.EQUIPO || '',
+    tecnico: avMiNombre(), tecnicoUid: (window.currentUser && window.currentUser.uid) || '',
+    codigo: item.codigo || '', descripcion: item.descripcion || '', cantidad: Number(item.cantidad) || 0,
+    estado: 'pendiente', fechaSolicitud: fbHoy(), creadoEn: fbTimestamp(),
+  };
+}
+
 async function submitForm() {
   if (_submitting) return;
-  const planta = document.getElementById('f-planta').value;
-  const linea = document.getElementById('f-linea').value;
-  const sublinea = document.getElementById('f-sublinea').value;
+  const planta = valSel('f-planta');
+  const linea = valSel('f-linea');
+  const sublinea = valSel('f-sublinea');
   const falla = document.getElementById('f-falla').value.trim();
   const fecha = document.getElementById('f-fecha').value;
-  if (!planta || !linea || !falla) { showToast('⚠️ Completa Planta, Área y Descripción de Falla', 'error'); return; }
+  // (7 oct 2026) Equipo del inventario, o texto libre con "Otro (escribir)…".
+  const eqSel = document.getElementById('f-equipo-sel').value;
+  const eqInv = equipoPorId(eqSel);
+  const eqTexto = eqSel === OTRO ? document.getElementById('f-equipo').value.replace(/\s+/g, ' ').trim() : '';
+  const faltan = [];
+  if (!eqInv && !eqTexto) faltan.push('Equipo');
+  if (!planta) faltan.push('Planta');
+  if (!linea) faltan.push('Área');
+  if (!falla) faltan.push('Falla');
+  if (faltan.length) { showToast('⚠️ Completa: ' + faltan.join(', '), 'error'); return; }
   if (!fbParseFecha(fecha)) { showToast('⚠️ Falta la Fecha', 'error'); return; }
+  // (7 oct 2026) Al cerrar un aviso hay que decir si se usaron repuestos.
+  if (_modoForm === 'aviso' && !_repModo) {
+    const card = document.getElementById('card-rep');
+    card.classList.add('falta');
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    showToast('⚠️ Indica si usaste repuestos (Sin / Con repuestos)', 'error');
+    return;
+  }
+  if (_repModo === 'si') {
+    // Lo que quedó escrito en la fila de agregar (sin tocar "+ Solicitar") también cuenta.
+    const pendiente = ['rep-codigo', 'rep-desc', 'rep-cant'].some(id => document.getElementById(id).value.trim());
+    if (pendiente && !agregarRepuesto()) return;
+    if (!_repItems.length) { showToast('⚠️ Agrega al menos un repuesto, o elige "Sin"', 'error'); return; }
+  }
 
   _submitting = true;
   const btn = document.getElementById('submit-btn');
@@ -1285,14 +1875,29 @@ async function submitForm() {
   const semana = fbSemanaISO(fecha);
   document.getElementById('f-semana').value = semana || '';
 
+  // (29 sep 2026) normalizarNombreEquipo corrige en silencio variantes de
+  // mayúsculas/espacios de un equipo ya cargado en Inventario; (7 oct 2026) si
+  // el texto libre coincide con un equipo del inventario, se liga su equipoId.
+  const equipoNombre = eqInv ? eqInv.nombre : normalizarNombreEquipo(eqTexto);
+  const equipoId = eqInv ? eqInv.id : ((_equiposCanonicos.find(e => normEqKey(e.nombre) === normEqKey(equipoNombre)) || {}).id || '');
+
+  await window.fbReady.catch(()=>{});
+  // (7 oct 2026) Repuestos: los nuevos reciben aquí el id de su solicitud a almacén.
+  const repModo = (_repModo === 'no' && _repItems.some(i => i.solicitudId)) ? 'si' : (_repModo || 'no');
+  const items = repModo === 'si' ? _repItems.map(i => ({ ...i })) : [];
+  const nuevasSol = [];
+  items.forEach(i => {
+    if (!i.solicitudId) { const ref = db.collection('solicitudes_repuestos').doc(); i.solicitudId = ref.id; nuevasSol.push({ ref, item: i }); }
+  });
+
   const record = {
     SEMANA: semana,
     FECHA: fecha,
     PLANTA: planta,
     LINEA_EQUIPO: linea,
     LINEA: sublinea,
-    TIPO_MAQUINA: document.getElementById('f-tipo-maq').value.trim(),
-    EQUIPO: normalizarNombreEquipo(document.getElementById('f-equipo').value.trim()), // (29 sep 2026) corrige en silencio variantes de mayúsculas/espacios de un equipo ya cargado en Inventario
+    TIPO_MAQUINA: tipoActual(),
+    EQUIPO: equipoNombre,
     PIEZA: document.getElementById('f-pieza').value.trim(),
     CAUSA_FALLA: document.getElementById('f-causa').value,
     DESCRIPCION_FALLA: falla,
@@ -1308,10 +1913,16 @@ async function submitForm() {
     TIPO_MANTENIMIENTO: getToggle('tipo-mto-group') || 'Correctivo',
     PARO_PLANTA: getToggle('paro-group') || 'no',
     TECNICOS: getSelectedTecs().join(', '),
+    // (7 oct 2026) Repuestos y herramientas usadas (sin costos).
+    REPUESTOS_USADOS: repModo,
+    REPUESTOS: items.map(i => ({ codigo: i.codigo || '', descripcion: i.descripcion, cantidad: Number(i.cantidad) || 0, solicitudId: i.solicitudId })),
+    HERRAMIENTAS: [..._herrSel.values()].map(h => ({ asignacionId: h.asignacionId, herramientaId: h.herramientaId || '', codigo: h.codigo || '', nombre: h.nombre || '', tecnico: h.tecnico || '' })),
   };
+  if (equipoId) record.equipoId = equipoId;
+  const idsNuevasSol = nuevasSol.map(s => s.ref.id);
+  const txtRep = nuevasSol.length ? ` · ${nuevasSol.length} repuesto${nuevasSol.length === 1 ? '' : 's'} solicitado${nuevasSol.length === 1 ? '' : 's'} a almacén` : '';
 
   document.getElementById('loading').classList.add('show');
-  await window.fbReady.catch(()=>{});
 
   // ═══ MODO EDICIÓN: actualizar un registro ya existente ═══
   if (window.editingRecord) {
@@ -1320,30 +1931,36 @@ async function submitForm() {
     record.Title = editing.Title || editing.folio || ('OT-' + Date.now());
     const esCierreAviso = ['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada';
     // (5 oct 2026) Copia local ANTES de mandar el cambio (ver BORRADOR_KEY).
-    borradorAgregar({ id: editing.id, modo: 'editar', record: { ...record }, editing: { id: editing.id, origen: editing.origen || '', estado: editing.estado || '', folio: editing.folio || '', Title: editing.Title || '' }, ts: Date.now() });
+    borradorAgregar({ id: editing.id, modo: 'editar', record: { ...record }, nuevasSolicitudes: idsNuevasSol, editing: { id: editing.id, origen: editing.origen || '', estado: editing.estado || '', folio: editing.folio || '', Title: editing.Title || '' }, ts: Date.now() });
     // Cerrar un aviso de producción: el mismo documento pasa a OT completada.
     if (esCierreAviso) {
       Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: fbHoy() });
     }
     // (5 oct 2026) Quién y cuándo editó (lo pide la auditoría).
     Object.assign(record, { editadoPor: miNombreUsuario(), editadoEn: fbTimestamp() });
-    // No esperamos (await) la confirmación del servidor: con la persistencia
-    // offline de Firestore, el cambio se ve al instante en este celular y se
-    // sube solo en cuanto haya señal — no queremos que la app se quede
-    // "cargando" congelada si no hay conexión ahora mismo.
+    const cambios = { ...record };
+    // Ya no es un equipo del inventario: se quita el equipoId viejo (el aviso conserva el suyo).
+    if (!record.equipoId && editing.equipoId && !esCierreAviso) cambios.equipoId = firebase.firestore.FieldValue.delete();
+    // (7 oct 2026) La OT y sus solicitudes de repuestos van en UN lote: o se
+    // guarda todo o nada. No se espera (await) la confirmación del servidor:
+    // con la persistencia offline el cambio se ve al instante y se sube solo
+    // en cuanto haya señal.
+    const batch = db.batch();
+    batch.update(db.collection('ots').doc(editing.id), cambios);
+    nuevasSol.forEach(s => batch.set(s.ref, docSolicitudRepuesto(s.item, record, editing.id, editing.folio || record.Title)));
     publicarHojaTrasGuardar(record, editing);
-    db.collection('ots').doc(editing.id).update(record)
+    batch.commit()
       .then(() => borradorQuitar(editing.id))
       .catch((e) => {
         console.error('Error actualizando OT:', e);
         borradorMarcarFallido(editing.id, msgErrorFirestore(e, esCierreAviso ? 'aviso' : ''));
       });
     document.getElementById('loading').classList.remove('show');
-    showToast(navigator.onLine ? '✅ Cambios guardados' : '💾 Guardado local — se subirá al volver la señal', navigator.onLine ? 'success' : 'warn');
+    showToast((navigator.onLine ? (esCierreAviso ? '✅ Aviso cerrado' : '✅ Cambios guardados') : '💾 Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
     exitEditMode();
     goTo('historial', document.getElementById('nav-historial'));
     _submitting = false;
-    btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
+    btn.disabled = false; btn.style.opacity = '';
     return;
   }
 
@@ -1356,9 +1973,12 @@ async function submitForm() {
   record.Title = folio;
   // Id generado aquí (en vez de .add) para poder guardar la copia local con él.
   const ref = db.collection('ots').doc();
-  borradorAgregar({ id: ref.id, modo: 'crear', record: { ...record }, ts: Date.now() });
+  borradorAgregar({ id: ref.id, modo: 'crear', record: { ...record }, nuevasSolicitudes: idsNuevasSol, ts: Date.now() });
   publicarHojaTrasGuardar(record);
-  ref.set({ ...record, createdAt: fbTimestamp() })
+  const batch = db.batch();
+  batch.set(ref, { ...record, createdAt: fbTimestamp() });
+  nuevasSol.forEach(s => batch.set(s.ref, docSolicitudRepuesto(s.item, record, ref.id, folio)));
+  batch.commit()
     .then(() => borradorQuitar(ref.id))
     .catch((e) => {
       console.error('Error guardando OT:', e);
@@ -1366,9 +1986,10 @@ async function submitForm() {
     });
 
   document.getElementById('loading').classList.remove('show');
-  showToast(navigator.onLine ? '✅ Registrado en la bitácora compartida (' + folio + ')' : '📵 Sin conexión — guardado local, se subirá después', navigator.onLine ? 'success' : 'warn');
+  showToast((navigator.onLine ? '✅ Registrado en la bitácora compartida (' + folio + ')' : '📵 Sin conexión — guardado local, se subirá después') + txtRep, navigator.onLine ? 'success' : 'warn');
 
   resetForm();
+  window.scrollTo(0, 0);
   _submitting = false;
   btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
 }
@@ -1429,15 +2050,23 @@ function borradorRecuperar(id) {
   goTo('nuevo', document.getElementById('nav-nuevo'));
   // Si estaba editando otra OT, se sale de ese modo para no sobrescribirla.
   if (window.editingRecord) exitEditMode();
-  fillFormFromRecord(b.record || {});
+  // (7 oct 2026) Las solicitudes de repuestos iban en el mismo lote que la OT:
+  // si la OT no se subió, ellas tampoco — esos repuestos vuelven a "Por solicitar".
+  const rec = { ...(b.record || {}) };
+  const nuevas = b.nuevasSolicitudes || [];
+  if (Array.isArray(rec.REPUESTOS)) rec.REPUESTOS = rec.REPUESTOS.map(i => (i && nuevas.includes(i.solicitudId)) ? { ...i, solicitudId: null } : i);
   if (b.modo === 'editar') {
     // Se vuelve a editar el MISMO documento (no se crea uno nuevo).
     const actual = allRecords.find(r => r.id === b.id) || avisos.find(r => r.id === b.id);
     window.editingRecord = actual || { ...(b.editing || {}), id: b.id };
-    document.getElementById('edit-banner').style.display = 'flex';
-    document.getElementById('form-title').textContent = '✏️ Editar Entrada';
+  }
+  fillFormFromRecord(rec);
+  if (b.modo === 'editar') {
+    const ed = window.editingRecord;
+    const esAviso = ['operador', 'qr'].includes(ed.origen) && ed.estado !== 'completada';
+    setModoForm(esAviso ? 'aviso' : 'editar', ed);
     document.getElementById('form-sub').textContent = 'Recuperado de la copia local — revisa y guarda';
-    document.getElementById('submit-btn').textContent = '💾 Guardar Cambios';
+    cargarEstadosSolicitudes(b.id);
   }
   borradoresGuardar(borradoresLeer().filter(x => x.id !== id));
   renderBorradorBanner();
@@ -1491,7 +2120,8 @@ function revisarBorradoresConfirmados() {
 function publicarHojaTrasGuardar(record, editing) {
   if (typeof publicarHojaVida !== 'function') return;
   const keys = [record.EQUIPO, record.TIPO_MAQUINA, record.LINEA_EQUIPO].map(normEqKey).filter(Boolean);
-  const eq = _equiposCanonicos.find(e => (editing && editing.equipoId && e.id === editing.equipoId) || keys.includes(normEqKey(e.nombre)));
+  const eqId = record.equipoId || (editing && editing.equipoId) || '';
+  const eq = _equiposCanonicos.find(e => (eqId && e.id === eqId) || keys.includes(normEqKey(e.nombre))); // (7 oct 2026) primero por equipoId
   if (!eq) return;
   setTimeout(() => {
     // (5 oct 2026) allRecords ahora trae solo los últimos días cargados: si se
@@ -1529,23 +2159,39 @@ function resetForm() {
   syncSemanaDesdeFecha();
   // f-planta NO se limpia a propósito: el mismo celular casi siempre reporta
   // desde la misma planta, así que se queda seleccionada para la próxima
-  // entrada (ver PLANTA_LS_KEY). Área y Línea sí vuelven a "Seleccionar...".
-  ['f-linea','f-sublinea','f-tipo-maq','f-equipo','f-pieza','f-falla','f-solucion'].forEach(id => {
+  // entrada (ver PLANTA_LS_KEY). Área, Línea, Tipo y Equipo sí se limpian.
+  ['f-tipo-maq','f-equipo','f-pieza','f-falla','f-solucion','rep-codigo','rep-desc','rep-cant'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')), '');
   renderLineaOptions([], '');
+  setTipo('');
+  renderEquipoOptions('');
+  actualizarPills();
+  updateEquipoDatalist();
+  renderCausasOptions('');
   const t = d.toTimeString().slice(0,5);
   document.getElementById('f-hinicio').value = t;
   document.getElementById('f-htecnico').value = t;
   document.getElementById('f-hfinal').value = '';
-  document.getElementById('duracion-display').textContent = '';
-  document.querySelectorAll('.tec-chip').forEach(c => c.classList.remove('sel'));
+  updateDuration();
   selectToggle('tipo-mto-group', document.querySelector('#tipo-mto-group [data-val="Correctivo"]'));
   selectToggle('me-group', document.querySelector('#me-group [data-val="m"]'));
   selectToggle('ot-group', document.querySelector('#ot-group [data-val="no"]'));
   selectToggle('paro-group', document.querySelector('#paro-group [data-val="no"]'));
   selectToggle('prioridad-group', document.querySelector('#prioridad-group [data-val="media"]'));
+  document.getElementById('mas-opciones').open = false;
+  // (7 oct 2026) Técnicos: queda marcado el que inició sesión; herramientas y repuestos vacíos.
+  _tecSel = [];
+  renderTecUI();
+  preseleccionarTecnicoPropio();
+  _herrSel.clear();
+  renderHerrUI();
+  _repItems = []; _repEstados = {}; _repModo = 'no';
+  renderRepUI();
+  toggleDropdown(null);
+  cargarHerramientasAsignadas();
 }
 
 // ══════ HISTORY ══════
@@ -1576,6 +2222,10 @@ function renderHistory() {
       ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta">🔴 ALTA</span>' : ''}`;
     const sem = fbSemanaISO(r.FECHA) || r.SEMANA || '?';
     const minMaq = Number(r.TOTAL_MIN_MAQUINA) || 0;
+    // (7 oct 2026) Línea compacta de repuestos / herramientas usadas.
+    const nRep = Array.isArray(r.REPUESTOS) ? r.REPUESTOS.length : 0;
+    const nHer = Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS.length : 0;
+    const uso = [nRep ? `🔩 ${nRep} repuesto${nRep === 1 ? '' : 's'}` : '', nHer ? `🧰 ${nHer} herramienta${nHer === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     return `<div class="hist-item ${tipo}">
       <div class="hist-header">
         <div>
@@ -1586,8 +2236,9 @@ function renderHistory() {
       </div>
       <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+esc(r.CAUSA_FALLA)+'] ' : ''}${esc(r.DESCRIPCION_FALLA||'—')}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
+      ${uso ? `<div class="hist-uso">${uso}</div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-        ${minMaq > 0 ? `<div style="font-size:11px;color:var(--muted);">⏱ ${minMaq} min máquina</div>` : '<div></div>'}
+        ${minMaq > 0 ? `<div style="font-size:12px;color:var(--muted);">⏱ ${minMaq} min máquina</div>` : '<div></div>'}
         <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})">✏️ Editar</button>
       </div>
     </div>`;
@@ -1977,7 +2628,7 @@ function renderAvisos() {
       : (mio || esSup || !r.asignadoUid)
         ? `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${esc(r.id)}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${esc(r.id)}')">↩ Soltar</button>` : ''}</div>`
         : `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:8px;">🔧 Lo está atendiendo ${esc(r.asignadoA || 'otro técnico')}</div>`;
-    const badgeDup = previo ? `<div style="display:inline-block;margin-top:5px;background:#F9731622;color:var(--orange);border:1px solid #F9731655;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;">⚠️ Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
+    const badgeDup = previo ? `<div class="av-dup">⚠️ Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
     return `<div class="av-card ${r.estado === 'pendiente' ? 'pendiente' : 'en_atencion'} ${r.maquinaParada ? 'parada' : ''}">
       <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')}</div><div class="av-meta">📍 ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
         <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '⛔ parada' : '⚠️ falla'}<b>${avFmt(min)}</b></div></div>
@@ -2045,22 +2696,25 @@ function cerrarAviso(id) {
   const fecha = fbParseFecha(r.fechaReporte) ? r.fechaReporte : fbHoy();
   const tec = r.asignadoA || avMiNombre();
   const eq = avEquipo(r);
+  // (7 oct 2026) La cascada se llena con los datos del equipo del aviso.
+  const eqInv = r.equipoId ? _equiposCanonicos.find(x => x.id === r.equipoId) : null;
   const pseudo = {
     FECHA: fecha, SEMANA: fbSemanaISO(fecha),
-    PLANTA: leerPlantaGuardada() || document.getElementById('f-planta').value || (currentPlantas.length === 1 ? currentPlantas[0] : ''),
-    LINEA_EQUIPO: eq.localidad, EQUIPO: eq.nombre,
+    PLANTA: (eqInv && eqInv.planta) || leerPlantaGuardada() || valSel('f-planta') || (currentPlantas.length === 1 ? currentPlantas[0] : ''),
+    LINEA_EQUIPO: eq.localidad, LINEA: (eqInv && eqInv.linea) || '', TIPO_MAQUINA: (eqInv && eqInv.tipoMaquina) || '',
+    EQUIPO: eq.nombre, equipoId: r.equipoId || '',
     DESCRIPCION_FALLA: r.descripcionFalla || '', CAUSA_FALLA: r.causaFalla || '',
     H_INICIO: r.horaParada || '', H_TECNICO: r.horaLlegada || avAhora(), H_FINAL: avAhora(),
     TIPO_MANTENIMIENTO: 'Correctivo', PARO_PLANTA: 'no', PRIORIDAD: r.prioridad || 'media', TECNICOS: tec,
   };
   window.editingRecord = r;
   fillFormFromRecord(pseudo);
-  document.getElementById('edit-banner').style.display = 'flex';
-  document.querySelector('#edit-banner p').textContent = `🚨 Cerrando aviso ${r.folio || ''} — ${eq.nombre}`;
-  document.querySelector('#edit-banner small').textContent = 'Revisa área, pieza, causa y escribe la solución. Al guardar, producción verá el aviso como resuelto.';
-  document.getElementById('form-title').textContent = '✅ Cerrar aviso de producción';
-  document.getElementById('form-sub').textContent = 'Las horas ya vienen del reporte';
-  document.getElementById('submit-btn').textContent = '✅ Guardar y cerrar aviso';
+  // (7 oct 2026) Mismo formulario en modo "Cerrar aviso": franja roja con el
+  // reporte, botón verde y la pregunta de repuestos SIN respuesta por defecto.
+  _repModo = null;
+  renderRepUI();
+  setModoForm('aviso', r);
+  cargarHerramientasAsignadas();
   goTo('nuevo', document.getElementById('nav-nuevo'));
   window.scrollTo(0, 0);
   setTimeout(() => { const s = document.getElementById('f-solucion'); if (s) s.focus(); }, 300);
@@ -2109,7 +2763,7 @@ function loadStats() {
     document.getElementById('semana-bars').innerHTML = sems.map(([k,v])=>`
       <div class="bar-wrap">
         <div class="bar-label"><span>Sem ${Number(k.slice(5))} · ${k.slice(0,4)}</span><strong>${v}</strong></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${(v/maxS*100).toFixed(1)}%;background:var(--blue)"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(v/maxS*100).toFixed(1)}%;background:var(--navy)"></div></div>
       </div>`).join('');
   }
 }
@@ -2124,10 +2778,12 @@ function csvEscape(v){
 function exportHistoryCSV(full) {
   const rows = full ? allRecords : ((window._historyCache && window._historyCache.length) ? window._historyCache : allRecords);
   if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
-  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad'];
+  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad','Repuestos','Herramientas'];
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
-    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD]
+    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD,
+      (Array.isArray(r.REPUESTOS) ? r.REPUESTOS : []).map(i => `${i.cantidad} x ${i.descripcion}${i.codigo ? ' (' + i.codigo + ')' : ''}`).join('; '), // (7 oct 2026)
+      (Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS : []).map(h => h.nombre || h.codigo).join('; ')]
       .map(csvEscape).join(',') + '\n';
   });
   const suffix = (!full && document.getElementById('search-input').value.trim()) ? '_filtrado' : '';

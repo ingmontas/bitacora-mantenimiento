@@ -229,6 +229,7 @@
     </div>
     <div class="eq-toolbar">
       <input type="text" id="eqFiltro" placeholder="Filtrar equipos por nombre, marca, modelo o serie…" oninput="renderHome()">
+      <select id="eqPlanta" onchange="guardarOrdenEq();renderHome()" style="display:none;"><option value="">Todas las plantas</option></select>
       <select id="eqArea" onchange="guardarOrdenEq();renderHome()"><option value="">Todas las áreas</option></select>
       <select id="eqOrden" onchange="guardarOrdenEq();renderHome()">
         <option value="area">Agrupar por área</option>
@@ -266,7 +267,16 @@
            misma lista de Áreas que usa Bitácora (/areas en Firestore), para
            que un equipo quede ligado a un área real y no a texto suelto
            ("PLANTA 1" vs "Planta 1" vs "planta1"). Ver loadAreasParaEquipos(). -->
-      <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad"><option value="">Seleccionar área...</option></select></div>
+      <!-- (7 oct 2026) Planta / Línea / Tipo de máquina: los mismos campos que
+           lee la cascada Planta → Área → Línea → Tipo → Equipo de Bitácora.
+           Planta sale de /plantas y Línea de /lineas (filtrada por el Área
+           elegida, areaNombre). Se leen UNA vez por sesión al abrir el
+           formulario (plan gratis: pocas lecturas). Todos son opcionales. -->
+      <div class="form-field"><label>Planta</label><select id="eq-planta"><option value="">Sin planta</option></select></div>
+      <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad" onchange="onEqAreaChange()"><option value="">Seleccionar área...</option></select></div>
+      <div class="form-field"><label>Línea</label><select id="eq-linea" onchange="avisarLineaArea()"><option value="">Sin línea</option></select></div>
+      <div class="form-field"><label>Tipo de máquina</label><input id="eq-tipo" list="eq-tipo-list" placeholder="Ej: Telar circular" autocomplete="off"><datalist id="eq-tipo-list"></datalist></div>
+      <div class="form-field full" id="eq-linea-aviso" style="display:none;font-size:12px;color:var(--amber);margin-top:-4px;"></div>
       <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
       <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
       <!-- Comparación con Maximo/SAP (28 sep 2026): rastrear compra/garantía por
@@ -456,7 +466,7 @@
 <div class="modal-bg" id="modalBulkEquipos">
   <div class="modal" style="max-width:860px;">
     <h3>📋 Carga masiva de equipos</h3>
-    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados, las columnas pueden venir en cualquier orden y también se carga la ficha técnica: Tensión, Potencia, Frecuencia eléctrica, Fase, Tamaño, Peso, Made in y fechas de fabricación, instalación, compra y garantía. Antes de guardar verás una vista previa.</div>
+    <div class="modal-sub">Sube el archivo de Excel o copia las filas desde Excel y pégalas aquí. Si la primera fila trae encabezados, las columnas pueden venir en cualquier orden y también se cargan Planta, Línea y Tipo de máquina y la ficha técnica: Tensión, Potencia, Frecuencia eléctrica, Fase, Tamaño, Peso, Made in y fechas de fabricación, instalación, compra y garantía. Antes de guardar verás una vista previa.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <button type="button" class="btn sm" onclick="document.getElementById('bulkEquiposFile').click()">📂 Subir archivo Excel / CSV</button>
       <button type="button" class="btn secondary sm" onclick="descargarPlantillaEquipos()">⬇ Descargar plantilla</button>
@@ -531,7 +541,7 @@ function mergeRepuestoInto(list, incoming){
 function mergeEquipoInto(targetList, importedEquipo){
   let existing = targetList.find(e => normalizeKey(e.nombre) === normalizeKey(importedEquipo.nombre));
   if(!existing){ targetList.push(JSON.parse(JSON.stringify(importedEquipo))); return; }
-  ['marca','modelo','serie','localidad','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein','caracteristicas'].forEach(k=>{
+  ['marca','modelo','serie','localidad','planta','linea','tipoMaquina','fabricacion','instalacion','fechaCompra','garantiaHasta','tension','potencia','frecuencia','tamano','peso','fase','madein','caracteristicas'].forEach(k=>{
     if(!existing[k] && importedEquipo[k]) existing[k] = importedEquipo[k];
   });
   if(!existing.manualUrl && importedEquipo.manualUrl){ existing.manualUrl = importedEquipo.manualUrl; existing.manualNombre = importedEquipo.manualNombre; }
@@ -552,7 +562,6 @@ function mergeEquipoInto(targetList, importedEquipo){
 // Bitácora/Análisis. Ahora se elige de la misma tecnicos.json.
 const TECNICOS_INV_FALLBACK = [
   { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
-  { "nombre": "ANTONIO SANTANA #805", "corto": "ANTONIO #805" },
   { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
   { "nombre": "LEBRON", "corto": "LEBRON" },
   { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
@@ -921,6 +930,7 @@ function renderHome(){
     ${sinContar? `<div class="kpi"><div class="lbl">Sin contar</div><div class="val" style="color:var(--muted);">${sinContar}</div></div>` : ''}
   `;
 
+  pintarFiltroPlantas();
   pintarFiltroAreas();
   const { lista, orden } = equiposOrdenados();
   document.getElementById('eqCnt').textContent = lista.length === DB.length ? '' : `${lista.length} de ${DB.length}`;
@@ -1008,7 +1018,8 @@ function renderDetail(){
     garantiaTxt = e.garantiaHasta + (vencida ? ' · ⚠️ Vencida' : ' · ✅ Vigente');
   }
   const specs = [
-    ['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie], ['Localidad', e.localidad],
+    ['Marca', e.marca], ['Modelo', e.modelo], ['Serie', e.serie],
+    ['Planta', e.planta], ['Área', e.localidad], ['Línea', e.linea], ['Tipo de máquina', e.tipoMaquina], // (7 oct 2026)
     ['Fecha fabricación', e.fabricacion], ['Fecha instalación', e.instalacion],
     ['Fecha de compra', e.fechaCompra], ['Garantía hasta', garantiaTxt],
     ['Tensión', e.tension], ['Potencia', e.potencia], ['Frecuencia', e.frecuencia],
@@ -1183,12 +1194,123 @@ function loadAreasParaEquipos(){
     db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
       if (!snap.empty) {
         currentAreasInventario = snap.docs.map(d => d.data().nombre).filter(Boolean);
+        // (7 oct 2026) planta de cada área (plantaNombre, como en Bitácora) para
+        // proponer la Planta al elegir el Área en el formulario de equipo.
+        plantaDeAreaInv = {};
+        snap.docs.forEach(d => { const a = d.data(); if (a.nombre && a.plantaNombre) plantaDeAreaInv[fbEquipoKey(a.nombre)] = a.plantaNombre; });
         renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
       }
     }, (err) => {
       console.warn('No se pudo leer /areas, usando lista local de respaldo:', err.message);
     });
   }).catch(() => {});
+}
+
+/* ═══════════════ PLANTA / LÍNEA / TIPO DE MÁQUINA (7 oct 2026) ═══════════════
+   Campos que usa la cascada de Bitácora (Planta → Área → Línea → Tipo →
+   Equipo): equipos.planta (= nombre en /plantas), equipos.linea (= nombre en
+   /lineas, cuya areaNombre es la Localidad/Área del equipo) y
+   equipos.tipoMaquina (texto libre). /plantas y /lineas se leen con get()
+   UNA sola vez por sesión, al abrir el formulario o la carga masiva (plan
+   gratis: lecturas acotadas). Sin señal, get() usa la copia del celular; si
+   falla, se vuelve a intentar la próxima vez que se abra el formulario. */
+let plantaDeAreaInv = {};          // fbEquipoKey(área) → plantaNombre (de /areas)
+let plantasInv = null;             // ['PLANTA 1', …] o null si aún no se leyó
+let lineasInv = null;              // [{nombre, areaNombre}] o null si aún no se leyó
+let _catUbicPromesa = null;
+function cargarCatalogoUbicacion(){
+  if (_catUbicPromesa) return _catUbicPromesa;
+  const leer = (col, map) => db.collection(col).orderBy('nombre').get()
+    .then(snap => snap.docs.map(d => map(d.data())).filter(Boolean))
+    .catch(err => { console.warn('No se pudo leer /' + col + ':', err.message); return null; });
+  // solo se lee lo que aún no está en memoria (si una falló, se reintenta solo esa)
+  _catUbicPromesa = window.fbReady.then(() => Promise.all([
+    plantasInv ? plantasInv : leer('plantas', d => d.nombre || ''),
+    lineasInv ? lineasInv : leer('lineas', d => d.nombre ? { nombre: d.nombre, areaNombre: d.areaNombre || '' } : null),
+  ])).then(([pl, li]) => {
+    if (pl) plantasInv = pl;
+    if (li) lineasInv = li;
+    if (!pl || !li) _catUbicPromesa = null;
+  }).catch(() => { _catUbicPromesa = null; });
+  return _catUbicPromesa;
+}
+// Opciones de un <select>: la lista + el valor actual aunque no esté en ella
+// (para no perder ni esconder un dato ya guardado).
+function opcionesSelect(sel, lista, valorActual, vacio){
+  if(!sel) return;
+  const items = lista.slice();
+  // Mismo nombre con otra escritura ("Linea A" vs "LINEA A"): se muestra el
+  // valor guardado tal cual, en lugar del de la lista (así no cuenta como cambio).
+  const i = valorActual ? items.findIndex(x => fbEquipoKey(x.v ?? x) === fbEquipoKey(valorActual)) : -1;
+  if (i >= 0) items[i] = valorActual;
+  else if (valorActual) items.unshift(valorActual);
+  sel.innerHTML = `<option value="">${fbEsc(vacio)}</option>` + items.map(x => {
+    const v = x.v ?? x, t = x.t ?? x;
+    return `<option value="${fbEsc(v)}"${v === valorActual ? ' selected' : ''}>${fbEsc(t)}</option>`;
+  }).join('');
+  sel.value = valorActual || '';
+}
+function renderEquipoPlantaOptions(valorActual){
+  // /plantas + las que ya tienen los equipos; el mismo nombre con otra escritura se muestra una sola vez
+  const lista = [];
+  [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean)].forEach(p => { if (!lista.some(q => fbEquipoKey(q) === fbEquipoKey(p))) lista.push(p); });
+  opcionesSelect(document.getElementById('eq-planta'), lista.sort(cmpNat), valorActual, 'Sin planta');
+}
+// Líneas del Área elegida (sin importar mayúsculas/acentos, como Bitácora).
+// Sin Área elegida se muestran todas, con su área al lado.
+function lineasParaAreaInv(area){
+  const todas = lineasInv || [];
+  if (!area) return todas.map(l => ({ v: l.nombre, t: l.areaNombre ? `${l.nombre} — ${l.areaNombre}` : l.nombre }));
+  const k = fbEquipoKey(area);
+  return [...new Set(todas.filter(l => fbEquipoKey(l.areaNombre) === k).map(l => l.nombre))];
+}
+function renderEquipoLineaOptions(valorActual){
+  const area = document.getElementById('eq-localidad')?.value || '';
+  opcionesSelect(document.getElementById('eq-linea'), lineasParaAreaInv(area), valorActual, 'Sin línea');
+  avisarLineaArea();
+}
+function renderTiposMaquinaDatalist(){
+  const dl = document.getElementById('eq-tipo-list'); if (!dl) return;
+  const vistos = new Map();
+  DB.forEach(e => { const t = (e.tipoMaquina || '').trim(); if (t && !vistos.has(fbEquipoKey(t))) vistos.set(fbEquipoKey(t), t); });
+  dl.innerHTML = [...vistos.values()].sort(cmpNat).map(t => `<option value="${fbEsc(t)}"></option>`).join('');
+}
+// Aviso (no bloquea): la Línea elegida pertenece a otra Área.
+function avisarLineaArea(){
+  const box = document.getElementById('eq-linea-aviso'); if (!box) return;
+  const linea = document.getElementById('eq-linea')?.value || '';
+  const area = document.getElementById('eq-localidad')?.value || '';
+  let msg = '';
+  if (linea && lineasInv) {
+    const regs = lineasInv.filter(l => fbEquipoKey(l.nombre) === fbEquipoKey(linea));
+    if (!regs.length) msg = `⚠️ La línea "${linea}" no está registrada en Líneas.`;
+    else if (area && !regs.some(l => fbEquipoKey(l.areaNombre) === fbEquipoKey(area))) {
+      const otras = [...new Set(regs.map(l => l.areaNombre).filter(Boolean))].join(', ');
+      msg = `⚠️ La línea "${linea}" pertenece ${otras ? 'al área "' + otras + '"' : 'a otra área'}, no a "${area}". Puedes guardar igual.`;
+    }
+  }
+  box.textContent = msg;
+  box.style.display = msg ? '' : 'none';
+}
+function onEqAreaChange(){
+  const area = document.getElementById('eq-localidad').value;
+  // Si el área tiene planta asignada y aún no se eligió planta, se propone.
+  const selP = document.getElementById('eq-planta');
+  const pl = plantaDeAreaInv[fbEquipoKey(area)];
+  if (selP && !selP.value && pl) renderEquipoPlantaOptions(pl);
+  renderEquipoLineaOptions(document.getElementById('eq-linea').value);
+}
+// Llena Planta/Línea/Tipo del formulario y, cuando llega el catálogo, los repinta
+// conservando lo que el usuario ya haya elegido.
+function prepararUbicacionForm(planta, linea, tipo){
+  renderEquipoPlantaOptions(planta || '');
+  renderEquipoLineaOptions(linea || '');
+  document.getElementById('eq-tipo').value = tipo || '';
+  renderTiposMaquinaDatalist();
+  cargarCatalogoUbicacion().then(() => {
+    renderEquipoPlantaOptions(document.getElementById('eq-planta').value);
+    renderEquipoLineaOptions(document.getElementById('eq-linea').value);
+  });
 }
 
 /* ═══════════════ MODALES ═══════════════ */
@@ -1203,6 +1325,7 @@ function openNewEquipoModal(){
   document.getElementById('equipoModalTitle').textContent = '➕ Nuevo equipo / máquina';
   EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
   renderEquipoLocalidadOptions('');
+  prepararUbicacionForm('', '', '');
   openModal('modalEquipo');
 }
 function openEditEquipoModal(){
@@ -1226,6 +1349,7 @@ function openEditEquipoModal(){
   document.getElementById('eq-fase').value = e.fase||'';
   document.getElementById('eq-madein').value = e.madein||'';
   document.getElementById('eq-caracteristicas').value = e.caracteristicas||'';
+  prepararUbicacionForm(e.planta||'', e.linea||'', e.tipoMaquina||'');
   openModal('modalEquipo');
 }
 
@@ -1241,6 +1365,9 @@ async function saveEquipo(){
     modelo: document.getElementById('eq-modelo').value.trim(),
     serie: document.getElementById('eq-serie').value.trim(),
     localidad: document.getElementById('eq-localidad').value.trim(),
+    planta: document.getElementById('eq-planta').value.trim(),       // (7 oct 2026)
+    linea: document.getElementById('eq-linea').value.trim(),         // (7 oct 2026)
+    tipoMaquina: document.getElementById('eq-tipo').value.trim(),    // (7 oct 2026)
     fabricacion: document.getElementById('eq-fabricacion').value,
     instalacion: document.getElementById('eq-instalacion').value,
     fechaCompra: document.getElementById('eq-compra').value,
@@ -1256,7 +1383,7 @@ async function saveEquipo(){
   };
 
   // Etiquetas legibles para la auditoría — mismas claves que `datos` arriba.
-  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in', caracteristicas:'Características' };
+  const EQ_FIELD_LABELS = { nombre:'Nombre', marca:'Marca', modelo:'Modelo', serie:'Serie', localidad:'Localidad', planta:'Planta', linea:'Línea', tipoMaquina:'Tipo de máquina', fabricacion:'Fecha fabricación', instalacion:'Fecha instalación', fechaCompra:'Fecha de compra', garantiaHasta:'Garantía hasta', tension:'Tensión', potencia:'Potencia', frecuencia:'Frecuencia', tamano:'Tamaño', peso:'Peso', fase:'Fase', madein:'Made in', caracteristicas:'Características' };
 
   if(editingEquipoId){
     const e = DB.find(x=>x.id===editingEquipoId);
@@ -1306,6 +1433,7 @@ async function saveEquipo(){
   DB.push(nuevo);
   closeModal('modalEquipo');
   EQ_FIELD_IDS.forEach(id=>document.getElementById(id).value='');
+  ['eq-planta','eq-linea','eq-tipo'].forEach(id=>document.getElementById(id).value='');
   renderHome();
   showToast('✅ Equipo agregado');
 }
@@ -1755,7 +1883,11 @@ const COLS_EQUIPO = [
   { k: 'marca',         l: 'Marca',             alias: ['marca','fabricante'] },
   { k: 'modelo',        l: 'Modelo',            alias: ['modelo'] },
   { k: 'serie',         l: 'Serie',             alias: ['serie','serial','numero de serie','n° serie','no. serie','no serie','s/n','sn'] },
-  { k: 'localidad',     l: 'Área',              alias: ['area','localidad','ubicacion','linea','zona','departamento'] },
+  { k: 'localidad',     l: 'Área',              alias: ['area','localidad','ubicacion','zona','departamento'] }, // (7 oct 2026) 'linea' pasó a su propia columna
+  // (7 oct 2026) mismos campos que la cascada de Bitácora
+  { k: 'planta',        l: 'Planta',            alias: ['planta','plant'] },
+  { k: 'linea',         l: 'Línea',             alias: ['linea','line','linea de produccion'] },
+  { k: 'tipoMaquina',   l: 'Tipo de máquina',   alias: ['tipo de maquina','tipo maquina','tipo de equipo','tipo equipo','tipo'] },
   { k: 'dias',          l: 'Frec. checklist',   alias: ['frecuencia checklist','frecuencia de checklist','frecuencia checklist (dias)','frecuencia (dias)','dias','checklist','cada cuantos dias'] },
   { k: 'frecuencia',    l: 'Frec. eléctrica',   alias: ['frecuencia electrica','hz','frecuencia (hz)','frecuencia hz'] },
   { k: 'tension',       l: 'Tensión',           alias: ['tension','voltaje','voltage','tension (v)','voltaje (v)','v'] },
@@ -1781,6 +1913,9 @@ function openBulkEquiposModal(){
   document.getElementById('bulkEquiposOk').disabled = true;
   bulkEquiposFilas = [];
   openModal('modalBulkEquipos');
+  // (7 oct 2026) /plantas y /lineas (una vez por sesión) para reconocer Planta y Línea;
+  // si ya hay una vista previa en pantalla cuando llegan, se recalcula.
+  cargarCatalogoUbicacion().then(() => { if (document.getElementById('bulkEquiposPreview').innerHTML) previsualizarEquipos(); });
 }
 
 // Separa texto en filas/celdas respetando comillas. Detecta el separador.
@@ -1852,7 +1987,7 @@ function interpretarEquipos(tabla){
   const cuerpo = conEncabezado ? tabla.slice(1) : tabla;
   const ignoradas = conEncabezado ? tabla[0].filter((h, i) => h && !Object.values(mapa).includes(i)) : [];
   return { conEncabezado, ignoradas, columnas: COLS_EQUIPO.map(c => c.k).filter(k => orden[k] !== undefined), filas: cuerpo.map((c, n) => {
-    const r = { linea: n + (conEncabezado ? 2 : 1) };
+    const r = { fila: n + (conEncabezado ? 2 : 1) }; // (7 oct 2026) antes 'linea': ese nombre ahora es la columna Línea
     COLS_EQUIPO.forEach(col => { r[col.k] = orden[col.k] !== undefined ? (c[orden[col.k]] || '').trim() : ''; });
     return r;
   }) };
@@ -1881,8 +2016,8 @@ async function leerArchivoEquipos(ev){
 }
 
 function descargarPlantillaEquipos(){
-  const cab = ['Nombre','Marca','Modelo','Serie','Área','Frecuencia checklist (días)','Tensión','Potencia','Frecuencia eléctrica','Fase','Tamaño','Peso','Made in','Fecha fabricación','Fecha instalación','Fecha compra','Garantía hasta'];
-  const ej = ['COMPRESOR 2','INGERSOLL RAND','R11i','SN-4521','Compresor de Aire','7','220 V','11 kW','60 Hz','Trifásico','1200x800x1500 mm','350 kg','USA','15/06/2022','01/09/2022','10/05/2022','10/05/2024'];
+  const cab = ['Nombre','Marca','Modelo','Serie','Planta','Área','Línea','Tipo de máquina','Frecuencia checklist (días)','Tensión','Potencia','Frecuencia eléctrica','Fase','Tamaño','Peso','Made in','Fecha fabricación','Fecha instalación','Fecha compra','Garantía hasta'];
+  const ej = ['COMPRESOR 2','INGERSOLL RAND','R11i','SN-4521','Planta 1','Compresor de Aire','','Compresor de tornillo','7','220 V','11 kW','60 Hz','Trifásico','1200x800x1500 mm','350 kg','USA','15/06/2022','01/09/2022','10/05/2022','10/05/2024'];
   const csv = '﻿' + cab.join(';') + '\n' + ej.join(';') + '\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = 'plantilla_equipos.csv'; a.click(); URL.revokeObjectURL(url);
@@ -1895,6 +2030,17 @@ function areaCanonica(txt){
   if (!k) return '';
   const lista = [...currentAreasInventario, ...DB.map(e => e.localidad).filter(Boolean)];
   return lista.find(a => sinAcentos(a) === k) || null;
+}
+// (7 oct 2026) Igual para Planta (/plantas) y Línea (/lineas); null si no existe.
+function plantaCanonica(txt){
+  const k = fbEquipoKey(txt);
+  if (!k) return '';
+  return [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean)].find(p => fbEquipoKey(p) === k) || null;
+}
+function lineaCanonica(txt){
+  const k = fbEquipoKey(txt);
+  if (!k) return '';
+  return [...(lineasInv || []).map(l => l.nombre), ...DB.map(e => e.linea).filter(Boolean)].find(l => fbEquipoKey(l) === k) || null;
 }
 
 function previsualizarEquipos(){
@@ -1912,13 +2058,22 @@ function previsualizarEquipos(){
     if (!r.nombre) { r.estado = 'error'; r.problemas.push('Falta el nombre'); salida.push(r); return; }
     if (r.dias && !(parseInt(r.dias, 10) > 0)) { r.avisos.push(`Frecuencia de checklist "${r.dias}" no es un número de días: se ignora`); r.dias = ''; }
     if (r.localidad) { const c = areaCanonica(r.localidad); if (c) r.localidad = c; else r.avisos.push(`Área "${r.localidad}" no está en la lista de Áreas`); }
+    // (7 oct 2026) Planta y Línea: se usa la escritura registrada; si no existe o la
+    // línea es de otra área, solo se avisa (se carga igual, como el Área).
+    if (r.planta) { const c = plantaCanonica(r.planta); if (c) r.planta = c; else if (plantasInv) r.avisos.push(`Planta "${r.planta}" no está en la lista de Plantas`); }
+    if (r.linea) {
+      const c = lineaCanonica(r.linea);
+      if (c) r.linea = c; else if (lineasInv) r.avisos.push(`Línea "${r.linea}" no está en la lista de Líneas`);
+      const regs = (lineasInv || []).filter(l => fbEquipoKey(l.nombre) === fbEquipoKey(r.linea));
+      if (r.localidad && regs.length && !regs.some(l => fbEquipoKey(l.areaNombre) === fbEquipoKey(r.localidad))) r.avisos.push(`Línea "${r.linea}" pertenece al área "${[...new Set(regs.map(l => l.areaNombre))].join(', ')}", no a "${r.localidad}"`);
+    }
     COLS_EQUIPO.filter(c => c.fecha && r[c.k]).forEach(c => {
       const n = normalizarFecha(r[c.k]);
       if (n.error) { r.avisos.push(`${c.l} "${r[c.k]}" no se entiende como fecha: se ignora`); r[c.k] = ''; }
       else { r[c.k] = n.v; if (n.aviso) r.avisos.push(`${c.l}: ${n.aviso}`); }
     });
     const k = normalizeKey(r.nombre);
-    if (vistos.has(k)) { const p = vistos.get(k); [...CAMPOS_FICHA, 'dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.linea}: se unió`); return; }
+    if (vistos.has(k)) { const p = vistos.get(k); [...CAMPOS_FICHA, 'dias'].forEach(c => { if (!p[c] && r[c]) p[c] = r[c]; }); p.avisos.push(`Repetido en la fila ${r.fila}: se unió`); return; }
     vistos.set(k, r);
     const ex = DB.find(e => normalizeKey(e.nombre) === k);
     if (!ex) r.estado = 'nuevo';
@@ -1936,17 +2091,19 @@ function previsualizarEquipos(){
   bulkEquiposFilas = salida.filter(r => r.estado === 'nuevo' || r.estado === 'actualiza');
   const n = e => salida.filter(r => r.estado === e).length;
   const etiqueta = { nuevo: ['Nuevo', 'var(--teal)'], actualiza: ['Se actualiza', 'var(--amber)'], igual: ['Ya existe, sin cambios', 'var(--muted)'], error: ['Error', 'var(--red)'] };
-  const extras = CAMPOS_FICHA.filter(k => !['marca','modelo','serie','localidad'].includes(k) && columnas.includes(k));
+  const extras = CAMPOS_FICHA.filter(k => !['marca','modelo','serie','localidad','planta','linea'].includes(k) && columnas.includes(k));
+  // (7 oct 2026) Planta y Línea se muestran junto al Área (Planta › Área › Línea)
+  const celdaArea = r => [r.planta && `<span style="color:var(--muted)">Planta:</span> ${escInv(r.planta)}`, escInv(r.localidad), r.linea && `<span style="color:var(--muted)">Línea:</span> ${escInv(r.linea)}`].filter(Boolean).join('<br>');
   prev.innerHTML = `
     <div style="font-size:12.5px;margin:6px 0 8px;line-height:1.6;">
-      ${conEncabezado ? `✅ Columnas reconocidas: <b>${columnas.map(c => LBL_EQ[c]).join(', ')}</b>${ignoradas.length ? `<br>ℹ️ Columnas que no se usan: ${ignoradas.map(escInv).join(', ')}` : ''}` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia. Para cargar también tensión, potencia, fechas, etc., agrega una fila de encabezados (descarga la plantilla).'}<br>
+      ${conEncabezado ? `✅ Columnas reconocidas: <b>${columnas.map(c => LBL_EQ[c]).join(', ')}</b>${ignoradas.length ? `<br>ℹ️ Columnas que no se usan: ${ignoradas.map(escInv).join(', ')}` : ''}` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia. Para cargar también planta, línea, tipo de máquina, tensión, potencia, fechas, etc., agrega una fila de encabezados (descarga la plantilla).'}<br>
       <b style="color:var(--teal)">${n('nuevo')} nuevos</b> · <b style="color:var(--amber)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--red)">${n('error')} con error (no se cargan)</b>` : ''}
     </div>
     <div class="table-card" style="max-height:300px;overflow:auto;margin:0;">
       <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th>${extras.length ? '<th>Ficha técnica</th>' : ''}<th>Notas</th></tr></thead>
       <tbody>${salida.map(r => `<tr>
-        <td>${r.linea}</td><td><span style="color:${etiqueta[r.estado][1]};font-weight:700;white-space:nowrap;">${etiqueta[r.estado][0]}</span></td>
-        <td><b>${escInv(r.nombre) || '—'}</b></td><td>${escInv(r.marca)}</td><td>${escInv(r.modelo)}</td><td>${escInv(r.serie)}</td><td>${escInv(r.localidad)}</td><td>${escInv(r.dias)}</td>
+        <td>${r.fila}</td><td><span style="color:${etiqueta[r.estado][1]};font-weight:700;white-space:nowrap;">${etiqueta[r.estado][0]}</span></td>
+        <td><b>${escInv(r.nombre) || '—'}</b></td><td>${escInv(r.marca)}</td><td>${escInv(r.modelo)}</td><td>${escInv(r.serie)}</td><td style="font-size:11.5px;">${celdaArea(r)}</td><td>${escInv(r.dias)}</td>
         ${extras.length ? `<td style="font-size:11px;">${extras.filter(k => r[k]).map(k => `<span style="color:var(--muted)">${LBL_EQ[k]}:</span> ${escInv(r[k])}`).join('<br>')}</td>` : ''}
         <td style="font-size:11px;color:var(--muted);">${[...r.problemas, ...r.avisos, r.estado === 'actualiza' ? 'Cambia: ' + Object.keys(r.cambios).map(c => c === 'dias' ? 'Frec. checklist' : LBL_EQ[c]).join(', ') : ''].filter(Boolean).map(escInv).join('<br>')}</td></tr>`).join('')}</tbody></table>
     </div>`;
@@ -2143,10 +2300,11 @@ function cargarOrdenEq(){
   try { const c = JSON.parse(localStorage.getItem('inv_orden_eq') || '{}');
     if (c.orden) document.getElementById('eqOrden').value = c.orden;
     if (c.area !== undefined) document.getElementById('eqArea').dataset.pend = c.area;
+    if (c.planta !== undefined) document.getElementById('eqPlanta').dataset.pend = c.planta;
   } catch (e) {}
 }
 function guardarOrdenEq(){
-  try { localStorage.setItem('inv_orden_eq', JSON.stringify({ orden: document.getElementById('eqOrden').value, area: document.getElementById('eqArea').value })); } catch (e) {}
+  try { localStorage.setItem('inv_orden_eq', JSON.stringify({ orden: document.getElementById('eqOrden').value, area: document.getElementById('eqArea').value, planta: document.getElementById('eqPlanta').value })); } catch (e) {}
 }
 const tsMs = t => t && typeof t.toMillis === 'function' ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0);
 function equiposOrdenados(){
@@ -2154,14 +2312,30 @@ function equiposOrdenados(){
   const selA = document.getElementById('eqArea');
   const area = selA ? selA.value : '';
   const orden = document.getElementById('eqOrden')?.value || 'area';
+  const planta = document.getElementById('eqPlanta')?.value || ''; // (7 oct 2026)
   let lista = DB.filter(e => (!area || (area === '__sin__' ? !e.localidad : e.localidad === area))
-    && (!q || sinAcentos([e.nombre, e.marca, e.modelo, e.serie, e.localidad].join(' ')).includes(q)));
+    && (!planta || (planta === '__sin__' ? !e.planta : fbEquipoKey(e.planta) === fbEquipoKey(planta)))
+    && (!q || sinAcentos([e.nombre, e.marca, e.modelo, e.serie, e.localidad, e.linea, e.tipoMaquina].join(' ')).includes(q)));
   const faltan = e => (e.repuestos || []).filter(p => stockStatus(p) === 'sin').length * 1000 + (e.repuestos || []).filter(p => stockStatus(p) === 'bajo').length;
   if (orden === 'nombre') lista.sort((a, b) => cmpNat(a.nombre, b.nombre));
   else if (orden === 'problemas') lista.sort((a, b) => faltan(b) - faltan(a) || cmpNat(a.nombre, b.nombre));
   else if (orden === 'recientes') lista.sort((a, b) => tsMs(b.updatedAt) - tsMs(a.updatedAt) || cmpNat(a.nombre, b.nombre));
   else lista.sort((a, b) => (!a.localidad) - (!b.localidad) || cmpNat(a.localidad, b.localidad) || cmpNat(a.nombre, b.nombre));
   return { lista, orden };
+}
+// (7 oct 2026) Filtro de Planta junto al de Área; solo aparece cuando algún
+// equipo ya tiene planta asignada.
+function pintarFiltroPlantas(){
+  const sel = document.getElementById('eqPlanta'); if (!sel) return;
+  const cur = sel.dataset.pend !== undefined ? sel.dataset.pend : sel.value;
+  delete sel.dataset.pend;
+  const cuenta = {}, nombre = {};
+  DB.forEach(e => { const k = e.planta ? fbEquipoKey(e.planta) : '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; if (e.planta && !nombre[k]) nombre[k] = e.planta; });
+  const plantas = Object.keys(nombre).sort((a, b) => cmpNat(nombre[a], nombre[b]));
+  sel.style.display = plantas.length ? '' : 'none';
+  sel.innerHTML = `<option value="">Todas las plantas (${DB.length})</option>` + plantas.map(k => `<option value="${escInv(nombre[k])}">${escInv(nombre[k])} (${cuenta[k]})</option>`).join('')
+    + (plantas.length && cuenta.__sin__ ? `<option value="__sin__">Sin planta (${cuenta.__sin__})</option>` : '');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
 }
 function pintarFiltroAreas(){
   const sel = document.getElementById('eqArea'); if (!sel) return;
