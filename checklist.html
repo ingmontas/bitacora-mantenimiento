@@ -85,6 +85,24 @@
     .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
     .toggle-btn.sel-ok { border-color: var(--green); background: #10B98118; color: var(--green); }
     .toggle-btn.sel-falla { border-color: var(--red); background: #EF444418; color: var(--red); }
+    /* (14 oct 2026) Cuatro respuestas por punto (Conforme / No conforme / No aplica / No inspeccionado) */
+    .res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .toggle-btn.sel-na { border-color: #94A3B8; background: #94A3B818; color: #CBD5E1; }
+    .toggle-btn.sel-ni { border-color: var(--orange); background: #F9731618; color: var(--orange); }
+    .checklist-punto.sin-resp { border-color: #F59E0B66; }
+    .checklist-punto.res-falla { border-color: #EF444466; }
+    .med-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .med-row input { flex: 1; font-size: 16px; font-weight: 700; }
+    .med-rango { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .med-fuera { color: var(--red); font-weight: 700; font-size: 12px; margin: -2px 0 8px; }
+    .cf-progreso { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+    .foto-mini { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+    .hist-det { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; display: none; }
+    .item-row.abierto .hist-det { display: block; }
+    .hist-item { font-size: 12px; padding: 5px 0; border-bottom: 1px dashed var(--border); line-height: 1.45; }
+    .ed-punto { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; margin-bottom: 8px; }
+    .ed-med { display: flex; gap: 6px; margin-top: 6px; }
+    .ed-med input { padding: 8px; font-size: 13px; }
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
@@ -126,7 +144,7 @@
 </head>
 <body>
 
-<div id="offline-bar">📵 Sin conexión — los registros se guardan localmente</div>
+<div id="offline-bar">📵 Sin conexión — se guarda en el celular y se sube solo al volver la señal</div>
 
 <div id="header">
   <div>
@@ -165,6 +183,7 @@
           <button class="btn btn-secondary btn-sm" onclick="cerrarFormChecklist()">✕ Cerrar</button>
         </div>
         <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()">📝 Agregar/editar puntos de este equipo</button>
+        <div class="cf-progreso"><span id="cf-progreso-txt"></span><button type="button" class="btn btn-secondary btn-sm" id="cf-todo-ok" onclick="marcarRestoConforme()">✅ El resto Conforme</button></div>
         <div id="cf-puntos"></div>
         <div class="field" id="cf-horometro-field" style="display:none;">
           <label>Lectura actual del horómetro (horas)</label>
@@ -254,7 +273,7 @@ BANDA TRANSPORTADORA A	15"></textarea>
 <div class="modal-bg" id="modalBulkListas">
   <div class="modal">
     <h3>📥 Listas de checklist por equipo</h3>
-    <div class="modal-sub">Una fila por cada punto: en la primera columna el <b>nombre del equipo</b> (igual que en Inventario) y en la segunda el <b>punto a revisar</b>. Repite el nombre del equipo en tantas filas como puntos tenga. También sirve una fila por equipo con los puntos en columnas seguidas. La lista de cada equipo del archivo <b>reemplaza</b> la que tenía; los equipos que no estén en el archivo no cambian.</div>
+    <div class="modal-sub">Una fila por cada punto: en la primera columna el <b>nombre del equipo</b> (igual que en Inventario) y en la segunda el <b>punto a revisar</b>. Si el punto es una medición, llena también <b>Unidad, Mínimo y Máximo</b> (ver la plantilla). Repite el nombre del equipo en tantas filas como puntos tenga. También sirve una fila por equipo con los puntos en columnas seguidas. La lista de cada equipo del archivo <b>reemplaza</b> la que tenía; los equipos que no estén en el archivo no cambian.</div>
     <div class="row" style="gap:8px;margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bulkListasFile').click()">📂 Abrir Excel / CSV</button>
       <button class="btn btn-secondary btn-sm" onclick="descargarPlantillaListas()">⬇️ Plantilla</button>
@@ -377,6 +396,79 @@ function inferirPrioridad(punto) {
   if (/limpieza/.test(p)) return 'baja';
   return 'media';
 }
+// ══════ PUNTOS CON MEDICIÓN (14 oct 2026) ══════
+// Un punto de la lista puede ser un texto ("Fugas de aceite") o un objeto
+// con medición: { p: 'Temperatura del motor', unidad: '°C', min: 20, max: 80 }.
+// Si la lectura sale del rango, el punto queda "No conforme" solo.
+const RESULTADOS = {
+  ok:    { txt: 'Conforme',         ico: '✅', cls: 'sel-ok' },
+  falla: { txt: 'No conforme',      ico: '⚠️', cls: 'sel-falla' },
+  na:    { txt: 'No aplica',        ico: '➖', cls: 'sel-na' },
+  ni:    { txt: 'No inspeccionado', ico: '⏸', cls: 'sel-ni' },
+};
+const numOk = v => v !== undefined && v !== null && v !== '' && !isNaN(Number(v));
+function puntoTexto(x) { return typeof x === 'string' ? x : ((x && x.p) || ''); }
+function puntoMed(x) {
+  if (!x || typeof x !== 'object') return null;
+  const min = numOk(x.min) ? Number(x.min) : null, max = numOk(x.max) ? Number(x.max) : null;
+  if (min === null && max === null && !x.unidad) return null;
+  return { unidad: String(x.unidad || '').slice(0, 20), min, max };
+}
+function rangoTxt(m) {
+  if (!m) return '';
+  const u = m.unidad ? ' ' + m.unidad : '';
+  if (m.min !== null && m.max !== null) return `${m.min} – ${m.max}${u}`;
+  if (m.min !== null) return `mín. ${m.min}${u}`;
+  if (m.max !== null) return `máx. ${m.max}${u}`;
+  return m.unidad || '';
+}
+function fueraDeRango(m, v) {
+  if (!m || !numOk(v)) return false;
+  const n = Number(v);
+  return (m.min !== null && n < m.min) || (m.max !== null && n > m.max);
+}
+function puntoResumen(x) { const m = puntoMed(x); return puntoTexto(x) + (m ? ' [' + rangoTxt(m) + ']' : ''); }
+// Para los editores: objeto de trabajo { p, med, unidad, min, max }
+function puntoAEdicion(x) { const m = puntoMed(x); return { p: puntoTexto(x), med: !!m, unidad: m ? m.unidad : '', min: m && m.min !== null ? m.min : '', max: m && m.max !== null ? m.max : '' }; }
+function edicionAPunto(e) {
+  const p = (e.p || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!p) return null;
+  if (!e.med) return p;
+  const o = { p };
+  if (String(e.unidad || '').trim()) o.unidad = String(e.unidad).trim().slice(0, 20);
+  if (numOk(e.min)) o.min = Number(e.min);
+  if (numOk(e.max)) o.max = Number(e.max);
+  return (o.unidad || 'min' in o || 'max' in o) ? o : p;
+}
+// Editor de una lista de puntos (lo usan la lista general y la de cada equipo)
+function htmlEditorPuntos(lista, pref, fnDel, fnMed) {
+  return lista.map((e, idx) => `
+    <div class="ed-punto">
+      <div class="row" style="gap:6px;">
+        <div class="field" style="margin-bottom:0;"><input type="text" id="${pref}-${idx}" value="${fbEsc(e.p || '')}" placeholder="Punto a revisar..."/></div>
+        <button type="button" class="btn btn-secondary btn-sm" title="Medición con límites" style="${e.med ? 'background:#3987e533;color:#7fb3f5;' : ''}" onclick="${fnMed}(${idx})">📏</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="${fnDel}(${idx})">🗑</button>
+      </div>
+      ${e.med ? `<div class="ed-med">
+        <input type="text" id="${pref}-u-${idx}" value="${fbEsc(e.unidad || '')}" placeholder="Unidad (°C, bar…)"/>
+        <input type="number" inputmode="decimal" step="any" id="${pref}-min-${idx}" value="${fbEsc(e.min)}" placeholder="Mínimo"/>
+        <input type="number" inputmode="decimal" step="any" id="${pref}-max-${idx}" value="${fbEsc(e.max)}" placeholder="Máximo"/>
+      </div>` : ''}
+    </div>`).join('');
+}
+function leerEditorPuntos(lista, pref) {
+  return lista.map((e, idx) => {
+    const g = id => document.getElementById(id);
+    const t = g(pref + '-' + idx);
+    return {
+      p: t ? t.value : e.p, med: e.med,
+      unidad: g(pref + '-u-' + idx) ? g(pref + '-u-' + idx).value : e.unidad,
+      min: g(pref + '-min-' + idx) ? g(pref + '-min-' + idx).value : e.min,
+      max: g(pref + '-max-' + idx) ? g(pref + '-max-' + idx).value : e.max,
+    };
+  });
+}
+
 let puntosEditState = null;    // copia de trabajo mientras Administrador edita la lista GENERAL en "Config"
 
 let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia se está editando (modal)
@@ -601,8 +693,9 @@ function abrirFormChecklist(equipoId) {
   equipoSeleccionado = e;
   // Si este equipo tiene su propia lista de puntos (distinta a la general,
   // porque no todos los equipos se revisan igual), se usa esa; si no, la general.
-  const puntosParaEsteEquipo = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos : checklistPuntosActuales;
-  itemsFormState = puntosParaEsteEquipo.map(p => ({ punto: p, resultado: 'ok', nota: '', causa: '', prioridad: inferirPrioridad(p) }));
+  // (14 oct 2026) Cada punto empieza SIN respuesta: el técnico marca uno por
+  // uno (o "El resto Conforme"), así no se guarda un "OK" que nadie revisó.
+  itemsFormState = puntosEfectivos(e).map(nuevoItemForm);
 
   document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
@@ -637,14 +730,26 @@ function cerrarFormChecklist() {
   renderHoy();
 }
 
+function nuevoItemForm(x) {
+  const punto = puntoTexto(x);
+  return { punto, med: puntoMed(x), resultado: null, valor: '', nota: '', causa: '', prioridad: inferirPrioridad(punto), motivo: '', fotoData: '' };
+}
+
 function renderPuntosForm() {
   const wrap = document.getElementById('cf-puntos');
-  wrap.innerHTML = itemsFormState.map((it, idx) => `
-    <div class="checklist-punto">
-      <div class="checklist-punto-label">${fbEsc(it.punto)}</div>
-      <div class="toggle-row">
-        <button type="button" class="toggle-btn${it.resultado === 'ok' ? ' sel-ok' : ''}" onclick="setItemResultado(${idx},'ok')">✅ OK</button>
-        <button type="button" class="toggle-btn${it.resultado === 'falla' ? ' sel-falla' : ''}" onclick="setItemResultado(${idx},'falla')">⚠️ Falla</button>
+  wrap.innerHTML = itemsFormState.map((it, idx) => {
+    const m = it.med;
+    const fuera = m && fueraDeRango(m, it.valor);
+    return `
+    <div class="checklist-punto${it.resultado === null ? ' sin-resp' : ''}${it.resultado === 'falla' ? ' res-falla' : ''}" id="cf-punto-${idx}">
+      <div class="checklist-punto-label">${idx + 1}. ${fbEsc(it.punto)}</div>
+      ${m ? `<div class="med-row">
+          <input type="number" inputmode="decimal" step="any" placeholder="Lectura" value="${fbEsc(it.valor)}" onchange="setItemValor(${idx}, this.value)"/>
+          <span class="med-rango">${fbEsc(rangoTxt(m))}</span>
+        </div>
+        ${fuera ? `<div class="med-fuera">Fuera del rango permitido</div>` : ''}` : ''}
+      <div class="res-grid">
+        ${Object.keys(RESULTADOS).map(k => `<button type="button" class="toggle-btn${it.resultado === k ? ' ' + RESULTADOS[k].cls : ''}" onclick="setItemResultado(${idx},'${k}')">${RESULTADOS[k].ico} ${RESULTADOS[k].txt}</button>`).join('')}
       </div>
       ${it.resultado === 'falla' ? `
         <div class="row" style="margin-top:8px;">
@@ -662,13 +767,83 @@ function renderPuntosForm() {
             </select>
           </div>
         </div>
-        <textarea placeholder="Describe la falla (opcional)..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${fbEsc(it.nota || '')}</textarea>` : ''}
-    </div>
-  `).join('');
+        <textarea placeholder="Describe la falla..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${fbEsc(it.nota || '')}</textarea>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
+          ${it.fotoData ? `<img class="foto-mini" src="${it.fotoData}" alt="foto"/><button type="button" class="btn btn-secondary btn-sm" onclick="quitarFotoItem(${idx})">🗑 Quitar foto</button>`
+            : `<button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cf-foto-${idx}').click()">📷 Agregar foto</button><span class="item-sub">Opcional, ayuda a quien repare</span>`}
+          <input type="file" accept="image/*" capture="environment" id="cf-foto-${idx}" style="display:none" onchange="tomarFotoItem(${idx}, this)"/>
+        </div>` : ''}
+      ${it.resultado === 'ni' ? `
+        <input type="text" placeholder="¿Por qué no se inspeccionó? (obligatorio)" value="${fbEsc(it.motivo || '')}" oninput="itemsFormState[${idx}].motivo=this.value" style="margin-top:8px;"/>` : ''}
+    </div>`;
+  }).join('');
+  actualizarProgresoForm();
+}
+
+function actualizarProgresoForm() {
+  const n = itemsFormState.length, r = itemsFormState.filter(i => i.resultado !== null).length;
+  const el = document.getElementById('cf-progreso-txt');
+  if (el) el.textContent = `${r} de ${n} puntos respondidos`;
+  const b = document.getElementById('cf-todo-ok');
+  if (b) b.style.display = r < n ? '' : 'none';
+}
+
+// Marca "Conforme" los puntos que faltan. Los de medición sin lectura se
+// dejan sin marcar: esos hay que medirlos.
+function marcarRestoConforme() {
+  let saltados = 0;
+  itemsFormState.forEach(it => {
+    if (it.resultado !== null) return;
+    if (it.med && !numOk(it.valor)) { saltados++; return; }
+    it.resultado = (it.med && fueraDeRango(it.med, it.valor)) ? 'falla' : 'ok';
+  });
+  renderPuntosForm();
+  if (saltados) showToast(`Faltan ${saltados} lectura(s) por anotar`, 'warn');
+}
+
+function setItemValor(idx, v) {
+  const it = itemsFormState[idx];
+  it.valor = v;
+  // La lectura decide sola Conforme / No conforme (si no se marcó No aplica / No inspeccionado).
+  if (numOk(v) && it.resultado !== 'na' && it.resultado !== 'ni') it.resultado = fueraDeRango(it.med, v) ? 'falla' : 'ok';
+  renderPuntosForm();
+}
+
+function quitarFotoItem(idx) { itemsFormState[idx].fotoData = ''; renderPuntosForm(); }
+
+// Foto comprimida (≈40-120 KB) para guardarla gratis en Firestore, igual
+// que las fotos de repuestos de Inventario.
+function tomarFotoItem(idx, input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      let lado = 1024, data = '';
+      for (let intento = 0; intento < 4; intento++) {
+        const k = Math.min(1, lado / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        data = c.toDataURL('image/jpeg', intento < 2 ? 0.6 : 0.45);
+        if (data.length < 200000) break;
+        lado = Math.round(lado * 0.75);
+      }
+      if (data.length >= 290000) { showToast('La foto es muy pesada, intenta otra', 'warn'); return; }
+      itemsFormState[idx].fotoData = data;
+      renderPuntosForm();
+    };
+    img.onerror = () => showToast('No se pudo leer la foto', 'warn');
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
 }
 
 function setItemResultado(idx, val) {
-  itemsFormState[idx].resultado = val;
+  const it = itemsFormState[idx];
+  it.resultado = it.resultado === val ? null : val; // tocar otra vez quita la respuesta
   renderPuntosForm();
 }
 
@@ -749,6 +924,27 @@ async function submitChecklist() {
     if (!validarLecturaHorometro(equipoSeleccionado, lecturaHorometro)) return;
   }
 
+  // (14 oct 2026) Todos los puntos deben tener respuesta.
+  const sinResp = itemsFormState.findIndex(i => i.resultado === null);
+  if (sinResp >= 0) {
+    const n = itemsFormState.filter(i => i.resultado === null).length;
+    showToast(`Faltan ${n} punto(s) por responder`, 'warn');
+    const el = document.getElementById('cf-punto-' + sinResp); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const sinLectura = itemsFormState.findIndex(i => i.med && (i.resultado === 'ok' || i.resultado === 'falla') && !numOk(i.valor));
+  if (sinLectura >= 0) {
+    showToast('Anota la lectura de: ' + itemsFormState[sinLectura].punto, 'warn');
+    const el = document.getElementById('cf-punto-' + sinLectura); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const sinMotivo = itemsFormState.findIndex(i => i.resultado === 'ni' && !(i.motivo || '').trim());
+  if (sinMotivo >= 0) {
+    showToast('Escribe por qué no se inspeccionó: ' + itemsFormState[sinMotivo].punto, 'warn');
+    const el = document.getElementById('cf-punto-' + sinMotivo); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
   _guardandoChecklist = true;
   const btnGuardar = document.getElementById('cf-submit-btn');
   if (btnGuardar) btnGuardar.disabled = true;
@@ -757,7 +953,16 @@ async function submitChecklist() {
   const equipo = equipoSeleccionado;
   const items = itemsFormState.map(it => ({ ...it }));
   const hoy = todayStr();
-  const fallas = items.filter(it => it.resultado === 'falla');
+  // (14 oct 2026) Si ese punto del equipo ya tiene una OT abierta, no se
+  // crea otra: el checklist queda ligado a la que ya existe.
+  const abiertas = (currentOts || []).filter(o => o.equipoId === equipo.id);
+  items.forEach(it => {
+    if (it.resultado !== 'falla') return;
+    const ya = abiertas.find(o => o.puntoChecklist === it.punto || (o.descripcionFalla || '').startsWith(it.punto));
+    if (ya) it.otExistente = ya.folio || ya.id;
+  });
+  const fallas = items.filter(it => it.resultado === 'falla' && !it.otExistente);
+  const repetidas = items.filter(it => it.otExistente).length;
   const creador = nombreUsuarioActual();
   const nombreEquipo = equipo.nombre || '(sin nombre)';
 
@@ -786,14 +991,37 @@ async function submitChecklist() {
     // 2) Un solo batch con todo.
     const batch = db.batch();
     const checklistRef = db.collection('checklists').doc();
+    const uid = (window.currentUser && window.currentUser.uid) || '';
+    // Fotos: cada una como documento aparte (gratis), el punto guarda "foto:<id>".
+    items.forEach(it => {
+      if (it.resultado === 'falla' && it.fotoData) {
+        const fref = db.collection('fotos_repuestos').doc();
+        batch.set(fref, { data: it.fotoData, equipoId: equipo.id, creadoPor: creador, creadoPorUid: uid, creadoEn: fbTimestamp() });
+        it.foto = 'foto:' + fref.id;
+      }
+    });
+    fallas.forEach((f, i) => { f.otFolio = folios[i]; });
+    // Lo que se guarda de cada punto (sin campos vacíos ni la foto en sí).
+    const itemsGuardar = items.map(it => {
+      const o = { punto: it.punto, resultado: it.resultado };
+      if (it.med) { o.valor = numOk(it.valor) ? Number(it.valor) : null; if (it.med.unidad) o.unidad = it.med.unidad; if (it.med.min !== null) o.min = it.med.min; if (it.med.max !== null) o.max = it.med.max; }
+      if (it.resultado === 'falla') { o.nota = it.nota || ''; o.causa = it.causa || ''; o.prioridad = it.prioridad || 'media'; }
+      if (it.resultado === 'ni') o.motivo = (it.motivo || '').trim().slice(0, 300);
+      if (it.foto) o.foto = it.foto;
+      if (it.otFolio) o.otFolio = it.otFolio;
+      if (it.otExistente) o.otExistente = it.otExistente;
+      return o;
+    });
+    const cuenta = k => items.filter(i => i.resultado === k).length;
     batch.set(checklistRef, {
       equipoId: equipo.id,
       equipoNombre: equipo.nombre || '',
       equipoLocalidad: equipo.localidad || '',
       fecha: hoy,
       tecnicos: tecnicos,
-      items: items,
-      tieneFallas: fallas.length > 0,
+      items: itemsGuardar,
+      resumen: { conforme: cuenta('ok'), noConforme: cuenta('falla'), noAplica: cuenta('na'), noInspeccionado: cuenta('ni') },
+      tieneFallas: cuenta('falla') > 0,
       creadoPor: creador,
       createdAt: fbTimestamp(),
     });
@@ -822,7 +1050,9 @@ async function submitChecklist() {
         equipoId: equipo.id,
         equipoNombre: equipo.nombre || '',
         equipoLocalidad: equipo.localidad || '',
-        descripcionFalla: f.punto + (f.nota ? ' — ' + f.nota : ''),
+        descripcionFalla: f.punto + (f.med && numOk(f.valor) ? ` (lectura ${f.valor}${f.med.unidad ? ' ' + f.med.unidad : ''}, rango ${rangoTxt(f.med)})` : '') + (f.nota ? ' — ' + f.nota : ''),
+        puntoChecklist: f.punto,
+        ...(f.foto ? { foto: f.foto } : {}),
         causaFalla: f.causa || '',
         prioridad: f.prioridad || 'media',
         checklistId: checklistRef.id,
@@ -836,9 +1066,10 @@ async function submitChecklist() {
 
     // 3) Se manda sin esperar al servidor.
     let subido = false, avisoPendiente = false;
-    const msgBase = fallas.length
+    const msgBase = (fallas.length
       ? `Checklist guardado. Se generaron ${fallas.length} OT(s) pendiente(s).`
-      : 'Checklist guardado sin fallas ✅';
+      : (repetidas ? 'Checklist guardado.' : 'Checklist guardado sin fallas ✅'))
+      + (repetidas ? ` ${repetidas} falla(s) ya tenían OT abierta (no se repitió).` : '');
     refrescarEquiposLocal();
     batch.commit().then(() => {
       subido = true;
@@ -891,15 +1122,49 @@ function renderHistorial() {
     wrap.innerHTML = `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
     return;
   }
-  wrap.innerHTML = currentChecklists.map(c => `
-    <div class="item-row" style="cursor:default;">
+  wrap.innerHTML = currentChecklists.map(c => {
+    const items = Array.isArray(c.items) ? c.items : [];
+    const cnt = k => items.filter(i => i.resultado === k).length;
+    const det = items.map(i => {
+      const r = RESULTADOS[i.resultado] || RESULTADOS.ok;
+      const med = numOk(i.valor) ? ` · <b>${fbEsc(i.valor)}${i.unidad ? ' ' + fbEsc(i.unidad) : ''}</b>` + ((i.min !== undefined || i.max !== undefined) ? ` (${fbEsc(rangoTxt({ unidad: i.unidad || '', min: numOk(i.min) ? i.min : null, max: numOk(i.max) ? i.max : null }))})` : '') : '';
+      const extra = [
+        i.causa ? '[' + fbEsc(i.causa) + ']' : '',
+        i.nota ? fbEsc(i.nota) : '',
+        i.motivo ? 'Motivo: ' + fbEsc(i.motivo) : '',
+        i.otFolio ? '🧾 ' + fbEsc(i.otFolio) : '',
+        i.otExistente ? '🧾 ya tenía ' + fbEsc(i.otExistente) : '',
+      ].filter(Boolean).join(' · ');
+      return `<div class="hist-item">${r.ico} ${fbEsc(i.punto || '')}${med}${extra ? `<div class="item-sub">${extra}</div>` : ''}${i.foto ? `<div><button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(i.foto)}', this)">📷 Ver foto</button></div>` : ''}</div>`;
+    }).join('');
+    return `
+    <div class="item-row" onclick="this.classList.toggle('abierto')">
       <div class="item-header">
         <div class="item-title">${fbEsc(c.equipoNombre || '(sin nombre)')}</div>
         <span class="tag ${c.tieneFallas ? 'tag-falla' : 'tag-ok'}">${c.tieneFallas ? 'Con fallas' : 'OK'}</span>
       </div>
       <div class="item-sub">${fbEsc(c.fecha || '')} · ${fbEsc((c.tecnicos || []).join(', '))}</div>
-    </div>
-  `).join('');
+      <div class="item-sub">✅ ${cnt('ok')} · ⚠️ ${cnt('falla')}${cnt('na') ? ' · ➖ ' + cnt('na') : ''}${cnt('ni') ? ' · ⏸ ' + cnt('ni') : ''} · toca para ver el detalle</div>
+      <div class="hist-det">${det || '<div class="item-sub">Sin detalle.</div>'}</div>
+    </div>`;
+  }).join('');
+}
+
+// Foto guardada en /fotos_repuestos (se lee solo cuando alguien la pide).
+const _fotosChecklist = {};
+function verFotoChecklist(ref, btn) {
+  const id = String(ref || '').replace(/^foto:/, '');
+  if (!/^[A-Za-z0-9_-]{6,40}$/.test(id)) return;
+  const pinta = d => {
+    if (!d || !/^data:image\/(jpeg|png);base64,/.test(d)) { btn.textContent = 'Foto no disponible'; return; }
+    const img = document.createElement('img');
+    img.src = d; img.alt = 'foto'; img.style.cssText = 'max-width:100%;border-radius:8px;margin-top:6px;display:block;';
+    btn.replaceWith(img);
+  };
+  if (_fotosChecklist[id]) return pinta(_fotosChecklist[id]);
+  btn.textContent = 'Cargando…'; btn.disabled = true;
+  db.collection('fotos_repuestos').doc(id).get().then(s => { const d = s.exists ? s.data().data : ''; _fotosChecklist[id] = d; pinta(d); })
+    .catch(() => { btn.textContent = 'No se pudo cargar la foto'; });
 }
 
 // ══════ OTs PENDIENTES / PLANIFICADAS ══════
@@ -1015,7 +1280,7 @@ function renderOts() {
             <span class="tag ${tag.clase}">${tag.texto}</span>
           </div>
         </div>
-        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>
+        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>${o.foto ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(o.foto)}', this)">📷 Ver foto</button>` : ''}
         ${acciones}
         ${o.folio ? `
         <div style="margin-top:8px;">
@@ -1202,7 +1467,7 @@ function loadChecklistPuntos() {
     const data = snap.exists ? snap.data() : null;
     checklistPuntosActuales = (data && Array.isArray(data.puntos) && data.puntos.length) ? data.puntos : CHECKLIST_PUNTOS_FALLBACK.slice();
     checklistPuntosActualizadoEn = (data && data.actualizadoEn) ? data.actualizadoEn : null;
-    if (puntosEditState === null) puntosEditState = checklistPuntosActuales.slice(); // solo la primera vez, para no pisar una edición en curso
+    if (puntosEditState === null) puntosEditState = checklistPuntosActuales.map(puntoAEdicion); // solo la primera vez, para no pisar una edición en curso
     renderConfigPuntos();
   }, (err) => console.warn('Error leyendo config/checklistPuntos:', err.message));
 }
@@ -1279,22 +1544,13 @@ function renderConfigPuntos() {
 
   if (!puedeEditarPuntos) {
     info.innerHTML = `<div class="info-box">Solo el Administrador puede cambiar los puntos del checklist. Estos son los que se usan hoy:</div>`;
-    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${fbEsc(p)}</div>`).join('')}</div>`;
+    wrap.innerHTML = `<div class="item-row" style="cursor:default;">${(checklistPuntosActuales || []).map(p => `<div class="item-sub" style="margin:4px 0;">• ${fbEsc(puntoResumen(p))}</div>`).join('')}</div>`;
     return;
   }
 
   info.innerHTML = `<div class="info-box">Escribe, agrega o borra puntos, y toca "Guardar lista" al final. Los checklists ya guardados no cambian — esto solo afecta a los que se llenen de ahora en adelante.</div>`;
   const lista = puntosEditState || [];
-  wrap.innerHTML = lista.map((p, idx) => `
-    <div class="row" style="margin-bottom:8px;">
-      <div class="field" style="margin-bottom:0;">
-        <input type="text" id="punto-edit-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
-      </div>
-      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
-        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEdit(${idx})">🗑</button>
-      </div>
-    </div>
-  `).join('') +
+  wrap.innerHTML = htmlEditorPuntos(lista, 'punto-edit', 'eliminarPuntoEdit', 'medPuntoEdit') +
     `<button class="btn btn-secondary btn-sm" style="margin-bottom:10px;" onclick="agregarPuntoEdit()">➕ Agregar punto</button>` +
     `<button class="btn btn-primary" onclick="guardarPuntosChecklist()">💾 Guardar lista</button>`;
 }
@@ -1303,7 +1559,12 @@ function agregarPuntoEdit() {
   // Guarda primero lo que ya se había escrito en los campos visibles, para
   // no perderlo al agregar una fila nueva y volver a pintar la lista.
   sincronizarPuntosEditDesdeInputs();
-  puntosEditState.push('');
+  puntosEditState.push(puntoAEdicion(''));
+  renderConfigPuntos();
+}
+function medPuntoEdit(idx) {
+  sincronizarPuntosEditDesdeInputs();
+  puntosEditState[idx].med = !puntosEditState[idx].med;
   renderConfigPuntos();
 }
 
@@ -1315,20 +1576,9 @@ function eliminarPuntoEdit(idx) {
 
 function sincronizarPuntosEditDesdeInputs() {
   if (!puntosEditState) return;
-  puntosEditState = puntosEditState.map((p, idx) => {
-    const el = document.getElementById('punto-edit-' + idx);
-    return el ? el.value : p;
-  });
+  puntosEditState = leerEditorPuntos(puntosEditState, 'punto-edit');
 }
 
-// (29 sep 2026) Los puntos de checklist (esta lista general, y la de cada
-// equipo en guardarPuntosEquipo() más abajo) se guardan reemplazando el
-// arreglo completo -- si dos personas los editan casi al mismo tiempo, el
-// segundo guardado puede sobrescribir sin avisar el cambio del primero.
-// Esto no evita esa sobrescritura de raíz (se edita poco, así que el
-// riesgo real es bajo), pero al menos avisa cuando pasó en vez de que
-// nadie se entere -- nunca bloquea ni retrasa el guardado, es una
-// verificación aparte, en paralelo, que se salta sola si no hay conexión.
 async function warnIfDocChangedSinceLoad(ref, localTimestamp, mensaje){
   if (!navigator.onLine || !localTimestamp || typeof localTimestamp.toMillis !== 'function') return;
   try {
@@ -1343,10 +1593,10 @@ async function warnIfDocChangedSinceLoad(ref, localTimestamp, mensaje){
 
 async function guardarPuntosChecklist() {
   sincronizarPuntosEditDesdeInputs();
-  const limpios = puntosEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  const limpios = puntosEditState.map(edicionAPunto).filter(Boolean);
   if (!limpios.length) { showToast('Agrega al menos un punto', 'warn'); return; }
-  const antes = (checklistPuntosActuales || []).join(' | ');
-  const despues = limpios.join(' | ');
+  const antes = (checklistPuntosActuales || []).map(puntoResumen).join(' | ');
+  const despues = limpios.map(puntoResumen).join(' | ');
   const localActualizadoEn = checklistPuntosActualizadoEn; // snapshot ANTES de este guardado
   try {
     await db.collection('config').doc('checklistPuntos').set({ puntos: limpios, actualizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '', actualizadoEn: fbTimestamp() });
@@ -1356,7 +1606,7 @@ async function guardarPuntosChecklist() {
       logAuditoria('puntos_checklist_general', null, null,
         [{ campo: 'Lista general de puntos', anterior: antes || '(vacía)', nuevo: despues }]);
     }
-    puntosEditState = limpios.slice();
+    puntosEditState = limpios.map(puntoAEdicion);
     showToast('Lista de puntos guardada ✅');
     warnIfDocChangedSinceLoad(db.collection('config').doc('checklistPuntos'), localActualizadoEn,
       '⚠️ Otra persona había cambiado la lista general de puntos justo antes de tu guardado — revisa que quedó como querías.');
@@ -1444,7 +1694,7 @@ function abrirModalPuntosEquipo(equipoId) {
   const e = currentEquipos.find(x => x.id === equipoId);
   if (!e) return;
   puntosEquipoEditId = equipoId;
-  puntosEquipoEditState = (Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos.slice() : checklistPuntosActuales.slice();
+  puntosEquipoEditState = puntosEfectivos(e).map(puntoAEdicion);
   document.getElementById('pe-equipo-nombre').textContent = e.nombre || '(sin nombre)';
   renderModalPuntosEquipo();
   openModalGeneric('modalPuntosEquipo');
@@ -1453,22 +1703,19 @@ function abrirModalPuntosEquipo(equipoId) {
 function renderModalPuntosEquipo() {
   const wrap = document.getElementById('pe-lista');
   const lista = puntosEquipoEditState || [];
-  wrap.innerHTML = lista.map((p, idx) => `
-    <div class="row" style="margin-bottom:8px;">
-      <div class="field" style="margin-bottom:0;">
-        <input type="text" id="pe-punto-${idx}" value="${fbEsc(p || '')}" placeholder="Punto a revisar..."/>
-      </div>
-      <div class="field" style="margin-bottom:0;flex:0 0 auto;">
-        <button class="btn btn-secondary btn-sm" onclick="eliminarPuntoEquipoEdit(${idx})">🗑</button>
-      </div>
-    </div>
-  `).join('') +
-    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()">➕ Agregar punto</button>`;
+  wrap.innerHTML = htmlEditorPuntos(lista, 'pe-punto', 'eliminarPuntoEquipoEdit', 'medPuntoEquipoEdit') +
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()">➕ Agregar punto</button>
+     <div class="item-sub">📏 = punto con medición (ej. temperatura): se escribe la lectura y, si sale del rango, queda "No conforme" solo.</div>`;
 }
 
 function agregarPuntoEquipoEdit() {
   sincronizarPuntosEquipoEditDesdeInputs();
-  puntosEquipoEditState.push('');
+  puntosEquipoEditState.push(puntoAEdicion(''));
+  renderModalPuntosEquipo();
+}
+function medPuntoEquipoEdit(idx) {
+  sincronizarPuntosEquipoEditDesdeInputs();
+  puntosEquipoEditState[idx].med = !puntosEquipoEditState[idx].med;
   renderModalPuntosEquipo();
 }
 
@@ -1480,20 +1727,17 @@ function eliminarPuntoEquipoEdit(idx) {
 
 function sincronizarPuntosEquipoEditDesdeInputs() {
   if (!puntosEquipoEditState) return;
-  puntosEquipoEditState = puntosEquipoEditState.map((p, idx) => {
-    const el = document.getElementById('pe-punto-' + idx);
-    return el ? el.value : p;
-  });
+  puntosEquipoEditState = leerEditorPuntos(puntosEquipoEditState, 'pe-punto');
 }
 
 async function guardarPuntosEquipo() {
   if (!puntosEquipoEditId) return;
   sincronizarPuntosEquipoEditDesdeInputs();
-  const limpios = puntosEquipoEditState.map(p => (p || '').trim()).filter(p => p.length > 0);
+  const limpios = puntosEquipoEditState.map(edicionAPunto).filter(Boolean);
   if (!limpios.length) { showToast('Agrega al menos un punto, o usa "Usar la lista general"', 'warn'); return; }
   const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
-  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : '(usaba la lista general)';
-  const despues = limpios.join(' | ');
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.map(puntoResumen).join(' | ') : '(usaba la lista general)';
+  const despues = limpios.map(puntoResumen).join(' | ');
   const localUpdatedAt = equipoActual && equipoActual.updatedAt; // snapshot ANTES de este guardado
   try {
     await guardarListaEquipoCompartida(puntosEquipoEditId, limpios);
@@ -1517,7 +1761,7 @@ async function guardarPuntosEquipo() {
 async function usarListaGeneralParaEquipo() {
   if (!puntosEquipoEditId) return;
   const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
-  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : null;
+  const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.map(puntoResumen).join(' | ') : null;
   try {
     await guardarListaEquipoCompartida(puntosEquipoEditId, []);
     db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() }).catch(() => {});
@@ -1545,7 +1789,11 @@ function editarPuntosDesdeFormulario() {
 function refrescarFormChecklistSiEsElMismoEquipo(equipoId, nuevaLista) {
   if (!equipoSeleccionado || equipoSeleccionado.id !== equipoId) return;
   const anteriorPorTexto = new Map(itemsFormState.map(it => [it.punto, it]));
-  itemsFormState = nuevaLista.map(p => anteriorPorTexto.get(p) || { punto: p, resultado: 'ok', nota: '' });
+  itemsFormState = nuevaLista.map(x => {
+    const viejo = anteriorPorTexto.get(puntoTexto(x));
+    if (!viejo) return nuevoItemForm(x);
+    return { ...viejo, med: puntoMed(x) };
+  });
   renderPuntosForm();
 }
 
@@ -1918,19 +2166,32 @@ function revisarBulkListas() {
   });
   const listas = {}, orden = [], noEncontrados = new Set(), recortados = new Set();
   let filasSinPunto = 0;
+  // (14 oct 2026) Columnas opcionales de medición: Unidad · Mínimo · Máximo.
+  let iU = -1, iMin = -1, iMax = -1;
   lineas.forEach((l, idx) => {
     const cols = partirFilaListas(l);
     const nombre = cols[0] || '';
-    if (idx === 0 && /^(equipo|nombre|m[aá]quina)/i.test(nombre)) return; // encabezado
+    if (idx === 0 && /^(equipo|nombre|m[aá]quina)/i.test(nombre)) { // encabezado
+      cols.forEach((c, i) => { const k = fbEquipoKey(c); if (/^unidad/.test(k)) iU = i; else if (/^(min|minimo)/.test(k)) iMin = i; else if (/^(max|maximo)/.test(k)) iMax = i; });
+      return;
+    }
     if (!nombre) { filasSinPunto++; return; }
     const e = porClave.get(fbEquipoKey(nombre));
     if (!e) { noEncontrados.add(nombre); return; }
-    const puntos = cols.slice(1).filter(Boolean);
+    let puntos;
+    const conMed = (iU > 0 || iMin > 0 || iMax > 0) || (iU < 0 && cols.length >= 4 && cols.length <= 5 && (numOk(cols[3]) || numOk(cols[4])) && !numOk(cols[2]));
+    if (conMed) {
+      const u = iU > 0 ? iU : 2, mi = iMin > 0 ? iMin : 3, ma = iMax > 0 ? iMax : 4;
+      puntos = cols[1] ? [edicionAPunto({ p: cols[1], med: true, unidad: cols[u] || '', min: cols[mi], max: cols[ma] })] : [];
+    } else {
+      puntos = cols.slice(1).filter(Boolean);
+    }
+    puntos = puntos.filter(Boolean);
     if (!puntos.length) { filasSinPunto++; return; }
     if (!listas[e.id]) { listas[e.id] = []; orden.push(e); }
     puntos.forEach(p => {
-      if (p.length > BULK_MAX_LARGO) { p = p.slice(0, BULK_MAX_LARGO); recortados.add(e.nombre); }
-      if (!listas[e.id].includes(p) && listas[e.id].length < BULK_MAX_PUNTOS) listas[e.id].push(p);
+      if (typeof p === 'string' && p.length > BULK_MAX_LARGO) { p = p.slice(0, BULK_MAX_LARGO); recortados.add(e.nombre); }
+      if (!listas[e.id].some(x => puntoTexto(x) === puntoTexto(p)) && listas[e.id].length < BULK_MAX_PUNTOS) listas[e.id].push(p);
     });
   });
   let html = '';
@@ -1941,7 +2202,7 @@ function revisarBulkListas() {
       const pts = listas[e.id];
       return `<div class="item-row" style="cursor:default;padding:8px 10px;margin-bottom:6px;">
         <div class="item-title" style="font-size:14px;margin-bottom:2px;">${fbEsc(e.nombre)} · ${pts.length} punto(s)${reemplaza ? ' <span class="tag tag-planificada">reemplaza su lista</span>' : ''}</div>
-        <div class="item-sub">${pts.slice(0, 4).map(fbEsc).join(' · ')}${pts.length > 4 ? ' · …' : ''}</div>
+        <div class="item-sub">${pts.slice(0, 4).map(x => fbEsc(puntoResumen(x))).join(' · ')}${pts.length > 4 ? ' · …' : ''}</div>
       </div>`;
     }).join('');
   }
@@ -1974,8 +2235,8 @@ function guardarBulkListas() {
 function descargarPlantillaListas() {
   const ejemplo = (currentEquipos || []).slice(0, 2).map(e => e.nombre).filter(Boolean);
   const eq = ejemplo.length ? ejemplo : ['COMPRESOR 1', 'WEAVING 5'];
-  const filas = [['Equipo', 'Punto'], [eq[0], 'Nivel de aceite'], [eq[0], 'Fugas de aire'], [eq[0], 'Ruido o vibración anormal']];
-  if (eq[1]) filas.push([eq[1], 'Tensión de hilo'], [eq[1], 'Estado de guardas de seguridad']);
+  const filas = [['Equipo', 'Punto', 'Unidad', 'Mínimo', 'Máximo'], [eq[0], 'Nivel de aceite', '', '', ''], [eq[0], 'Fugas de aire', '', '', ''], [eq[0], 'Temperatura del motor', '°C', '20', '80'], [eq[0], 'Presión de trabajo', 'bar', '6', '8']];
+  if (eq[1]) filas.push([eq[1], 'Tensión de hilo', '', '', ''], [eq[1], 'Estado de guardas de seguridad', '', '', '']);
   const csv = '﻿' + filas.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

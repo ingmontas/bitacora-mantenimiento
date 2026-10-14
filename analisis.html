@@ -167,7 +167,15 @@ button.secondary{background:transparent;border:1px solid var(--line);color:var(-
 button.small{padding:6px 12px;font-size:11.5px;}
 button:hover{filter:brightness(1.08);}
 footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:'IBM Plex Mono',monospace;}
-@media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
+/* (14 oct 2026) indicadores de gestión (estilo SAP PM): cumplimiento preventivo, órdenes vencidas, reincidencia */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;}
+.gl-item{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;}
+.gl-item:last-child{border-bottom:none;}
+.gl-item .gl-name{font-weight:600;overflow-wrap:anywhere;}
+.gl-item .gl-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;overflow-wrap:anywhere;}
+.gl-item .gl-val{font-family:'IBM Plex Mono',monospace;font-size:11.5px;white-space:nowrap;text-align:right;color:#ff8a8a;}
+.gl-item .gl-val.amber{color:var(--amber);}
+@media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even,.grid3{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
 </style>
 </head>
 <body>
@@ -212,6 +220,26 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   <!-- ═════════ RESUMEN ═════════ -->
   <section class="tabpanel active" id="tab-resumen">
     <div class="kpis" id="kpiRow"></div>
+    <!-- (14 oct 2026) Indicadores de gestión (inspirados en SAP PM). Clic en un
+         indicador para ir a su detalle. Ver renderGestion() para las definiciones. -->
+    <div class="kpis" id="kpiGestion"></div>
+    <div class="grid3" id="gestionDetalle">
+      <div class="card" id="gdPrev">
+        <h2>Checklists vencidos</h2>
+        <div class="cardsub" id="gdPrevSub">Equipos con frecuencia de checklist cuya próxima fecha (o su horómetro) ya pasó.</div>
+        <div id="gestPrevList"></div>
+      </div>
+      <div class="card" id="gdVenc">
+        <h2>Órdenes vencidas</h2>
+        <div class="cardsub">OTs abiertas con fecha planificada pasada, o pendientes sin planificar hace más de 7 días.</div>
+        <div id="gestVencList"></div>
+      </div>
+      <div class="card" id="gdReinc">
+        <h2>Fallas que se repiten</h2>
+        <div class="cardsub">Mismo equipo y misma causa en correctivos separados por 90 días o menos.</div>
+        <div id="gestReincList"></div>
+      </div>
+    </div>
     <div class="grid2">
       <div class="card">
         <h2>Prioridades: equipos en riesgo</h2>
@@ -740,7 +768,217 @@ function render(){
   renderTecnicos(scopeRows);
   renderKaizen(scopeRows);
   renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, areaSorted, weeksSorted, weekCounts});
+  renderGestion(); // (14 oct 2026) indicadores de gestión
   if (ficha) renderFicha();
+}
+
+/* ══════ INDICADORES DE GESTIÓN (14 oct 2026 — inspirados en SAP PM) ══════
+   1) Cumplimiento preventivo (%):
+      a) valor principal = "equipos al día": equipos con frecuencia de checklist
+         (por días y/o por horómetro) que NO están vencidos ÷ equipos con
+         frecuencia. Vencido por días = su próxima fecha ya pasó (antes de hoy;
+         vencer hoy todavía cuenta al día) o nunca se le hizo checklist. Vencido
+         por horas = horas desde el último servicio ≥ frecuencia en horas.
+         Es una foto de HOY: no aplica el período. Sí aplica el filtro de área
+         (localidad del equipo).
+      b) pie del indicador = checklists hechos ÷ programados en la ventana de
+         checklists (30 días; 90 si el período elegido es de 90 días o más).
+         Programados por equipo = piso(días ventana ÷ frecuencia días); solo
+         entran los equipos con frecuencia ≤ días de la ventana (los demás no
+         tienen ni uno programado en ella). Hechos = días distintos con
+         checklist, topado en los programados (hacer de más no compensa a otro
+         equipo atrasado). Así nunca pasa de 100 %.
+      Lecturas: el catálogo de equipos ya se cargaba (caché de 12 h) y la
+      ventana de /checklists se lee UNA vez con get() acotado por fecha (solo
+      equipoId/fecha se guardan en memoria). Los checklists de esa ventana
+      también corrigen la próxima fecha si el catálogo en caché está atrasado.
+   2) Órdenes vencidas (N): OTs abiertas (estado pendiente, planificada,
+      en_revision, rechazada, validada o en_atencion) con fechaPlanificada
+      anterior a hoy, o pendientes SIN planificar creadas hace más de 7 días.
+      Se leen con un listener acotado where('estado','in',[…]) — solo las OTs
+      abiertas, que no entran en el listener por FECHA (no tienen FECHA).
+      Aplica los filtros de área y técnico (asignadoA); no el período.
+   3) Reincidencia de fallas (%): correctivos del alcance filtrado (período,
+      área, técnico, tipo, semana, causa) cuyo MISMO equipo tuvo otro
+      correctivo con la MISMA causa (CAUSA_FALLA / causaFalla) entre 1 y 90
+      días antes (se busca en todo lo cargado, aunque caiga fuera del período)
+      ÷ total de correctivos del alcance. Los correctivos sin causa cuentan en
+      el total pero no pueden ser reincidentes (se indica cuántos son).
+   No se muestran costos. */
+const ESTADOS_ABIERTOS_AN = ['pendiente','planificada','en_revision','rechazada','validada','en_atencion'];
+const ESTADO_LBL_AN = {pendiente:'pendiente', planificada:'planificada', en_revision:'en revisión', rechazada:'rechazada', validada:'validada', en_atencion:'en atención'};
+const DIAS_SIN_PLAN_AN = 7, DIAS_REINC_AN = 90, CK_VENTANA_MAX_AN = 90;
+let _equiposDocs = null;                // docs completos del catálogo (null = aún no llega)
+let _equiposDocsErr = false;
+let _otsAbiertasAn = null, _otsAbiertasErr = '';
+const _ckAn = { desde:'', docs:[], cargando:false, err:'' }; // ventana de /checklists ya leída
+function ventanaChecklistDias(){
+  // 30 días por defecto (también con "últimos 13 meses"/"todo") para gastar pocas
+  // lecturas; 90 como máximo cuando se elige un período de 90 días o más.
+  return ['90','180','365'].includes(F.periodo) ? CK_VENTANA_MAX_AN : 30;
+}
+function desdeDias(dias){ const d = today0(); d.setDate(d.getDate()-(dias-1)); return fbFechaLocal(d); }
+function cargarChecklistsAn(dias){
+  const desde = desdeDias(dias);
+  if (_ckAn.cargando || _ckAn.err || (_ckAn.desde && _ckAn.desde <= desde)) return;
+  if (typeof db === 'undefined') return;
+  _ckAn.cargando = true;
+  // solo el tramo que falta: si ya se leyeron 30 días y se piden 90, se leen los 60 anteriores
+  let q = db.collection('checklists').where('fecha', '>=', desde);
+  if (_ckAn.desde) q = q.where('fecha', '<', _ckAn.desde);
+  q.get().then(snap=>{
+    snap.docs.forEach(d=>{ const c = d.data()||{}; if (c.equipoId && c.fecha) _ckAn.docs.push({equipoId:c.equipoId, fecha:String(c.fecha)}); });
+    _ckAn.desde = desde;
+  }).catch(err=>{
+    console.warn('No se pudieron leer los checklists para el cumplimiento preventivo:', err);
+    _ckAn.err = (err && err.message) || 'error';
+  }).finally(()=>{ _ckAn.cargando = false; renderGestion(); });
+}
+function suscribirOtsAbiertasAn(){
+  db.collection('ots').where('estado', 'in', ESTADOS_ABIERTOS_AN).onSnapshot(snap=>{
+    _otsAbiertasAn = snap.docs.map(d=>({id:d.id, ...d.data()})); _otsAbiertasErr = '';
+    renderGestion();
+  }, err=>{
+    console.warn('No se pudieron leer las OTs abiertas:', err);
+    _otsAbiertasErr = (err && err.message) || 'error'; renderGestion();
+  });
+}
+function fechaCreacionAn(o){
+  const c = o.createdAt;
+  let d = null;
+  if (c && typeof c.toDate === 'function') { try { d = c.toDate(); } catch(e) {} }
+  else if (c && typeof c.seconds === 'number') d = new Date(c.seconds*1000);
+  if (!d) d = parseFecha(o.fechaReporte||'');
+  if (!d || isNaN(d)) return null;
+  d = new Date(d); d.setHours(0,0,0,0); return d;
+}
+const glMas = (n, shown) => n>shown ? `<div class="prio-foot">y ${n-shown} más</div>` : '';
+const pctTxt = p => p==null ? '—' : (Math.round(p*10)/10).toLocaleString('es-DO')+'%';
+
+function renderGestion(){
+  const box = $('kpiGestion'); if (!box) return;
+  const ref = today0();
+  const enArea = a => !F.area || (a||'Sin área') === F.area;
+  const MAXL = 8;
+
+  /* ---- 1) cumplimiento preventivo ---- */
+  const diasCk = ventanaChecklistDias();
+  if (_equiposDocs) cargarChecklistsAn(diasCk);
+  const desdeCk = desdeDias(diasCk);
+  const ckOk = !!_ckAn.desde && _ckAn.desde <= desdeCk && !_ckAn.err;
+  const ckVent = ckOk ? _ckAn.docs.filter(c=>c.fecha >= desdeCk && c.fecha <= fbFechaLocal(ref)) : [];
+  const ultCk = {}, diasCkEq = {};
+  (ckOk ? _ckAn.docs : []).forEach(c=>{ if (!ultCk[c.equipoId] || c.fecha > ultCk[c.equipoId]) ultCk[c.equipoId] = c.fecha; });
+  ckVent.forEach(c=>{ (diasCkEq[c.equipoId] = diasCkEq[c.equipoId] || new Set()).add(c.fecha); });
+  let prevVal = '—', prevCls = '', prevFoot = 'cargando equipos…', vencPrev = [], nFrec = 0;
+  let progTot = 0, hechosTot = 0;
+  if (_equiposDocs){
+    const conFrec = _equiposDocs.filter(e=>(Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) && enArea(e.localidad));
+    nFrec = conFrec.length;
+    conFrec.forEach(e=>{
+      const f = Number(e.checklistFrecuenciaDias)||0, fh = Number(e.checklistFrecuenciaHoras)||0;
+      const ultDoc = String(e.checklistUltimaFecha||''), ultNueva = ultCk[e.id] && ultCk[e.id] > ultDoc ? ultCk[e.id] : '';
+      let vencido = false, diasV = null, nunca = false, horasTxt = '';
+      if (f>0){
+        let prox = String(e.checklistProximaFecha||'');
+        // un checklist más nuevo que el catálogo en caché, o equipo sin próxima fecha: se calcula
+        const base = ultNueva || (!prox ? ultDoc : '');
+        const bD = parseFecha(base);
+        if (bD){ const p = new Date(bD); p.setDate(p.getDate()+f); prox = fbFechaLocal(p); }
+        const pD = parseFecha(prox);
+        if (!pD){ vencido = true; nunca = true; }
+        else if (pD < ref){ vencido = true; diasV = daysBetween(pD, ref); }
+        if (f <= diasCk && ckOk){
+          const prog = Math.floor(diasCk / f), hechos = (diasCkEq[e.id] ? diasCkEq[e.id].size : 0);
+          progTot += prog; hechosTot += Math.min(hechos, prog);
+        }
+      }
+      // con un checklist más nuevo que el catálogo el horómetro ya se reinició
+      if (fh>0 && !ultNueva){
+        const h = (Number(e.horometroActual)||0) - (Number(e.horometroUltimoService)||0);
+        if (h >= fh){ vencido = true; horasTxt = h.toLocaleString('es-DO')+'/'+fh.toLocaleString('es-DO')+' h'; }
+      }
+      if (vencido) vencPrev.push({nombre:e.nombre||'Equipo sin nombre', area:e.localidad||'Sin área', diasV, nunca, horasTxt});
+    });
+    const pAlDia = nFrec ? (nFrec - vencPrev.length)/nFrec*100 : null;
+    prevVal = pctTxt(pAlDia);
+    prevCls = pAlDia==null ? '' : pAlDia>=90 ? 'accent-teal' : pAlDia>=75 ? 'accent-amber' : 'accent-red';
+    const pVent = progTot ? hechosTot/progTot*100 : null;
+    const ventTxt = _ckAn.err ? 'checklists: no se pudieron leer' : !ckOk ? 'checklists: cargando…'
+      : progTot ? `checklists ${diasCk} d: ${hechosTot}/${progTot} (${pctTxt(pVent)})` : `sin checklists programados en ${diasCk} d`;
+    prevFoot = _equiposDocsErr ? 'no se pudo leer el catálogo de equipos' : nFrec ? `${nFrec - vencPrev.length} de ${nFrec} equipos al día · ${ventTxt}` : 'ningún equipo tiene frecuencia de checklist';
+  }
+  vencPrev.sort((a,b)=>(b.nunca-a.nunca) || ((b.diasV??-1)-(a.diasV??-1)) || a.nombre.localeCompare(b.nombre));
+  $('gestPrevList').innerHTML = !_equiposDocs ? '<div class="empty">Cargando equipos…</div>'
+    : _equiposDocsErr ? '<div class="empty">No se pudo leer el catálogo de equipos.</div>'
+    : !nFrec ? '<div class="empty">Ningún equipo'+(F.area?' del área':'')+' tiene frecuencia de checklist configurada.</div>'
+    : !vencPrev.length ? '<div class="empty">✅ Todos los equipos con frecuencia tienen su checklist al día.</div>'
+    : vencPrev.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.nombre)}</div><div class="gl-meta">${esc(v.area)}${v.horasTxt?' · ⏱ '+esc(v.horasTxt):''}</div></div>
+        <div class="gl-val">${v.nunca?'sin checklist':v.diasV!=null?v.diasV+' d vencido':'por horómetro'}</div></div>`).join('') + glMas(vencPrev.length, MAXL);
+  $('gdPrevSub').textContent = 'Equipos con frecuencia de checklist cuya próxima fecha (o su horómetro) ya pasó'
+    + (F.area ? ' · área '+F.area : '') + '. Cumplimiento de la ventana: últimos '+diasCk+' días.';
+
+  /* ---- 2) órdenes vencidas ---- */
+  const vencOts = [];
+  (_otsAbiertasAn||[]).forEach(o=>{
+    if (!ESTADOS_ABIERTOS_AN.includes(o.estado)) return;
+    const eqDoc = o.equipoId && _equiposDocs ? _equiposDocs.find(e=>e.id===o.equipoId) : null;
+    const area = o.equipoLocalidad || (eqDoc && eqDoc.localidad) || 'Sin área';
+    if (!enArea(area)) return;
+    if (F.tecnico && !splitTecnicos(o.asignadoA||'').includes(F.tecnico)) return;
+    const pD = parseFecha(String(o.fechaPlanificada||''));
+    let dias = null, motivo = '';
+    if (pD){ if (pD < ref){ dias = daysBetween(pD, ref); motivo = 'plan '+fmtDate(pD); } }
+    else if (o.estado === 'pendiente'){
+      const c = fechaCreacionAn(o);
+      if (c){ const edad = daysBetween(c, ref); if (edad > DIAS_SIN_PLAN_AN){ dias = edad - DIAS_SIN_PLAN_AN; motivo = 'sin planificar hace '+edad+' d'; } }
+    }
+    if (dias == null) return;
+    vencOts.push({folio:o.folio||o.Title||o.id, equipo:o.equipoNombre||o.EQUIPO||(eqDoc&&eqDoc.nombre)||'Equipo sin nombre', area,
+      asignado:o.asignadoA||'', estado:ESTADO_LBL_AN[o.estado]||o.estado, dias, motivo});
+  });
+  vencOts.sort((a,b)=>b.dias-a.dias || String(a.folio).localeCompare(String(b.folio)));
+  const nV = vencOts.length;
+  $('gestVencList').innerHTML = _otsAbiertasErr ? '<div class="empty">No se pudieron leer las OTs abiertas.</div>'
+    : _otsAbiertasAn == null ? '<div class="empty">Cargando OTs abiertas…</div>'
+    : !nV ? '<div class="empty">✅ Ninguna OT abierta está vencida.</div>'
+    : vencOts.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.folio)} · ${esc(v.equipo)}</div>
+        <div class="gl-meta">${esc(v.area)} · ${esc(v.estado)} · ${esc(v.motivo)} · 👤 ${esc(v.asignado||'sin asignar')}</div></div>
+        <div class="gl-val">${v.dias} d vencida</div></div>`).join('') + glMas(nV, MAXL);
+
+  /* ---- 3) reincidencia de fallas ---- */
+  const rowsAll = window._rowsAll || [], scopeRows = window._scopeRows || [];
+  const causaKey = r => String(r.causa||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const fechasPar = {}; // equipo|causa → días (ms) con correctivo en todo lo cargado
+  rowsAll.filter(isCorr).forEach(r=>{ const c = causaKey(r), d = parseFecha(r.fecha); if (!c || !d) return;
+    (fechasPar[eqKey(r)+'|'+c] = fechasPar[eqKey(r)+'|'+c] || []).push(d.getTime()); });
+  const corrScope = scopeRows.filter(isCorr);
+  let nReinc = 0, sinCausa = 0;
+  const pares = {};
+  corrScope.forEach(r=>{
+    const c = causaKey(r), d = parseFecha(r.fecha);
+    if (!c || !d){ sinCausa++; return; }
+    const k = eqKey(r)+'|'+c, t = d.getTime();
+    const rep = (fechasPar[k]||[]).some(x=>{ const dd = daysBetween(new Date(x), d); return dd>=1 && dd<=DIAS_REINC_AN; });
+    const p = pares[k] = pares[k] || {key:eqKey(r), causa:String(r.causa).trim(), total:0, reinc:0, last:0};
+    p.total++; if (t > p.last) p.last = t;
+    if (rep){ nReinc++; p.reinc++; }
+  });
+  const pReinc = corrScope.length ? nReinc/corrScope.length*100 : null;
+  const paresTop = Object.values(pares).filter(p=>p.reinc>0).sort((a,b)=>b.reinc-a.reinc||b.total-a.total||b.last-a.last);
+  $('gestReincList').innerHTML = !corrScope.length ? '<div class="empty">Sin correctivos en el alcance filtrado.</div>'
+    : !paresTop.length ? '<div class="empty">✅ Ningún equipo repitió la misma causa de falla en 90 días.</div>'
+    : paresTop.slice(0,MAXL).map(p=>`<div class="gl-item"><div><div class="gl-name">${esc(eqLabelOf(p.key))}</div>
+        <div class="gl-meta">${esc(eqArea(p.key))} · causa: ${esc(p.causa)} · última ${fmtDate(new Date(p.last))}</div></div>
+        <div class="gl-val amber">${p.total} correctivos<br>${p.reinc} repetido${p.reinc===1?'':'s'}</div></div>`).join('') + glMas(paresTop.length, MAXL);
+
+  /* ---- tarjetas ---- */
+  const vCls = _otsAbiertasAn == null ? '' : nV===0 ? 'accent-teal' : nV<=5 ? 'accent-amber' : 'accent-red';
+  const rCls = pReinc==null ? '' : pReinc<=10 ? 'accent-teal' : pReinc<=25 ? 'accent-amber' : 'accent-red';
+  box.innerHTML = `
+    <div class="kpi clickable ${prevCls}" data-gscroll="gdPrev" title="Equipos al día = equipos con frecuencia de checklist (días u horas) que no están vencidos ÷ equipos con frecuencia. Vencido = la próxima fecha ya pasó (o nunca se hizo checklist), o las horas desde el último servicio llegaron a la frecuencia en horas. Es la situación de HOY: no aplica el período; sí el área. El pie compara checklists hechos ÷ programados (días de la ventana ÷ frecuencia) en los últimos ${diasCk} días."><div class="lbl">Cumplimiento preventivo</div><div class="val">${prevVal}</div><div class="foot">${esc(prevFoot)}</div></div>
+    <div class="kpi clickable ${vCls}" data-gscroll="gdVenc" title="OTs abiertas (no completadas ni anuladas) con fecha planificada anterior a hoy, o pendientes sin planificar creadas hace más de ${DIAS_SIN_PLAN_AN} días. Situación de HOY: aplica área y técnico asignado; no el período."><div class="lbl">Órdenes vencidas</div><div class="val">${_otsAbiertasErr?'—':_otsAbiertasAn==null?'…':nV}</div><div class="foot">${_otsAbiertasErr?'no se pudieron leer las OTs abiertas':_otsAbiertasAn==null?'cargando OTs abiertas…':`de ${(_otsAbiertasAn||[]).length} OT(s) abiertas en total`}</div></div>
+    <div class="kpi clickable ${rCls}" data-gscroll="gdReinc" title="Correctivos del alcance filtrado cuyo mismo equipo tuvo otro correctivo con la misma causa de falla entre 1 y ${DIAS_REINC_AN} días antes ÷ total de correctivos del alcance. Los correctivos sin causa registrada cuentan en el total pero no pueden ser reincidentes."><div class="lbl">Reincidencia de fallas</div><div class="val">${pctTxt(pReinc)}</div><div class="foot">${corrScope.length?`${nReinc} de ${corrScope.length} correctivos${sinCausa?` · ${sinCausa} sin causa`:''}`:'sin correctivos en el alcance'}</div></div>`;
 }
 
 /* ---------- prioridades ---------- */
@@ -1130,6 +1368,8 @@ function switchTab(id){
 $('tabs').addEventListener('click', e=>{ const b=e.target.closest('.tab'); if (b) switchTab(b.dataset.tab); });
 document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]'); if (g){ switchTab(g.dataset.goto); window.scrollTo({top:0}); }
+  // (14 oct 2026) indicadores de gestión: clic → baja a su detalle
+  const gs = e.target.closest('[data-gscroll]'); if (gs){ const t = $(gs.dataset.gscroll); if (t) t.scrollIntoView({behavior:'smooth', block:'start'}); }
 });
 $('fPeriodo').addEventListener('change', e=>{
   // (5 oct 2026) "Todo el historial" con solo 13 meses cargados: pide cargar el resto.
@@ -1374,9 +1614,15 @@ window.fbReady.then(()=>{
     const cat = {}, porNombre = {};
     s.docs.forEach(d=>{ const n = (d.data()||{}).nombre; if (n){ cat[d.id] = n; const k = fbEquipoKey(n); if (k && !porNombre[k]) porNombre[k] = d.id; } });
     _equiposCat = cat; _equiposPorNombre = porNombre;
-    if (allRows.length) render();
-  }).catch(err=>console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err));
+    // (14 oct 2026) docs completos para el cumplimiento preventivo (frecuencias y próximas fechas)
+    _equiposDocs = s.docs.map(d=>({id:d.id, ...(d.data()||{})}));
+    if (allRows.length) render(); else renderGestion();
+  }).catch(err=>{
+    console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err);
+    _equiposDocs = []; _equiposDocsErr = true; renderGestion();
+  });
   suscribirOtsAn();
+  suscribirOtsAbiertasAn(); // (14 oct 2026) solo OTs abiertas, para "Órdenes vencidas"
 }).catch(err=>{
   // (5 oct 2026) El aviso grande ya lo muestra firebase-init; aquí solo una línea
   // con el error real (antes decía siempre "revisa firebase-config.js").
