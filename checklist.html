@@ -215,6 +215,12 @@
       <div id="config-puntos-lista"></div>
     </div>
 
+    <div class="card" id="card-bulk-listas" style="display:none;">
+      <div class="card-title">📥 Listas por equipo — carga masiva</div>
+      <div class="card-sub">Sube desde Excel la lista de puntos propia de muchos equipos a la vez. Todos los usuarios la ven al momento.</div>
+      <button class="btn btn-primary" onclick="abrirModalBulkListas()">📥 Cargar listas por equipo</button>
+    </div>
+
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
       <div class="card-title" style="margin-bottom:0;">⚙️ Configurar Frecuencias</div>
       <button class="btn btn-secondary btn-sm" id="btn-bulk-frecuencias" style="display:none;" onclick="abrirModalBulkFrecuencias()">📋 Carga masiva</button>
@@ -241,6 +247,33 @@ BANDA TRANSPORTADORA A	15"></textarea>
       <button class="btn btn-primary" onclick="bulkImportFrecuencias()">Procesar y cargar</button>
     </div>
     <div id="bulkFrecStatus" style="font-size:12px;margin-top:10px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- MODAL: carga masiva de listas propias por equipo (14 oct 2026) -->
+<div class="modal-bg" id="modalBulkListas">
+  <div class="modal">
+    <h3>📥 Listas de checklist por equipo</h3>
+    <div class="modal-sub">Una fila por cada punto: en la primera columna el <b>nombre del equipo</b> (igual que en Inventario) y en la segunda el <b>punto a revisar</b>. Repite el nombre del equipo en tantas filas como puntos tenga. También sirve una fila por equipo con los puntos en columnas seguidas. La lista de cada equipo del archivo <b>reemplaza</b> la que tenía; los equipos que no estén en el archivo no cambian.</div>
+    <div class="row" style="gap:8px;margin-bottom:10px;">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bulkListasFile').click()">📂 Abrir Excel / CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="descargarPlantillaListas()">⬇️ Plantilla</button>
+      <input type="file" id="bulkListasFile" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="leerArchivoListas(event)">
+    </div>
+    <div class="field">
+      <label>O pega aquí desde Excel: Equipo · Punto</label>
+      <textarea id="bulkListasPaste" style="min-height:160px;font-family:monospace;font-size:12px;" oninput="bulkListasPrevia=null;document.getElementById('bulkListasPreview').innerHTML='';document.getElementById('btnGuardarListas').disabled=true;" placeholder="COMPRESOR 1	Nivel de aceite
+COMPRESOR 1	Purgar tanque
+COMPRESOR 1	Filtro de aire
+WEAVING 5	Tensión de hilo
+WEAVING 5	Estado de lanzaderas"></textarea>
+    </div>
+    <div id="bulkListasPreview" style="font-size:13px;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModalGeneric('modalBulkListas')">Cancelar</button>
+      <button class="btn btn-secondary" onclick="revisarBulkListas()">🔍 Revisar</button>
+      <button class="btn btn-primary" id="btnGuardarListas" disabled onclick="guardarBulkListas()">💾 Guardar listas</button>
+    </div>
   </div>
 </div>
 
@@ -364,6 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadOts();
     loadChecklists();
     loadChecklistPuntos();
+    loadListasEquipos();
     updateHeaderStatus();
     if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('checklist');
   }).catch((err) => {
@@ -480,6 +514,8 @@ function loadEquipos() {
   fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
     (snap) => {
     currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    aplicarListasEquipos(); // (14 oct 2026) listas propias en vivo, ver loadListasEquipos()
+    migrarListasEquiposViejas();
     renderHoy();
     renderConfig();
     renderHorometro();
@@ -1171,6 +1207,70 @@ function loadChecklistPuntos() {
   }, (err) => console.warn('Error leyendo config/checklistPuntos:', err.message));
 }
 
+// ══════ LISTA PROPIA DE CADA EQUIPO, EN VIVO PARA TODOS (14 oct 2026) ══════
+// Antes la lista propia se guardaba solo dentro de /equipos/{id}; como la
+// lista de equipos se guarda en el celular hasta 12 h (para ahorrar lecturas
+// del plan gratis), los demás usuarios no veían la lista nueva. Ahora todas
+// las listas propias viven en UN documento /config/checklistsEquipos
+// ({ listas: { idEquipo: [puntos] } }) escuchado en vivo: 1 lectura al abrir
+// y 1 por cada cambio, sin importar cuántos equipos haya.
+// Una lista vacía [] significa "este equipo usa la lista general".
+let listasEquipos = null;          // mapa idEquipo → [puntos] desde Firestore
+let listasEquiposMigradas = false;
+const LISTAS_EQUIPOS_REF = () => db.collection('config').doc('checklistsEquipos');
+
+function loadListasEquipos() {
+  LISTAS_EQUIPOS_REF().onSnapshot((snap) => {
+    const data = snap.exists ? snap.data() : null;
+    listasEquipos = (data && data.listas && typeof data.listas === 'object') ? data.listas : {};
+    aplicarListasEquipos();
+    migrarListasEquiposViejas();
+    renderHoy();
+    renderConfig();
+    if (equipoSeleccionado && !document.getElementById('modalPuntosEquipo').classList.contains('open')) {
+      refrescarFormChecklistSiEsElMismoEquipo(equipoSeleccionado.id, puntosEfectivos(equipoSeleccionado));
+    }
+  }, (err) => console.warn('Error leyendo config/checklistsEquipos:', err.message));
+}
+
+// Pone en cada equipo la lista que dice /config/checklistsEquipos; si ese
+// equipo no aparece ahí, se queda con la que tenía guardada en /equipos.
+function aplicarListasEquipos() {
+  currentEquipos.forEach(e => {
+    if (!Object.prototype.hasOwnProperty.call(e, '_puntosOrig')) e._puntosOrig = e.checklistPuntos;
+    if (listasEquipos && Object.prototype.hasOwnProperty.call(listasEquipos, e.id)) {
+      const l = listasEquipos[e.id];
+      e.checklistPuntos = (Array.isArray(l) && l.length) ? l : undefined;
+    } else {
+      e.checklistPuntos = e._puntosOrig;
+    }
+  });
+}
+
+function puntosEfectivos(e) {
+  return (e && Array.isArray(e.checklistPuntos) && e.checklistPuntos.length) ? e.checklistPuntos : checklistPuntosActuales;
+}
+
+// Una sola vez, en el celular del Administrador: copia al documento nuevo
+// las listas propias que ya existían dentro de /equipos, para que todos
+// las vean también.
+function migrarListasEquiposViejas() {
+  if (listasEquiposMigradas || listasEquipos === null || !currentEquipos.length) return;
+  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) return;
+  listasEquiposMigradas = true;
+  const faltan = {};
+  currentEquipos.forEach(e => {
+    if (!Object.prototype.hasOwnProperty.call(listasEquipos, e.id) && Array.isArray(e._puntosOrig) && e._puntosOrig.length) faltan[e.id] = e._puntosOrig;
+  });
+  if (!Object.keys(faltan).length) return;
+  LISTAS_EQUIPOS_REF().set({ listas: faltan, actualizadoEn: fbTimestamp(), actualizadoPor: nombreUsuarioActual() }, { merge: true })
+    .catch(err => console.warn('No se pudieron copiar las listas propias:', err.message));
+}
+
+function guardarListaEquipoCompartida(equipoId, lista) {
+  return LISTAS_EQUIPOS_REF().set({ listas: { [equipoId]: lista }, actualizadoEn: fbTimestamp(), actualizadoPor: nombreUsuarioActual() }, { merge: true });
+}
+
 function renderConfigPuntos() {
   const puedeEditarPuntos = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
   const info = document.getElementById('config-puntos-info');
@@ -1396,7 +1496,10 @@ async function guardarPuntosEquipo() {
   const despues = limpios.join(' | ');
   const localUpdatedAt = equipoActual && equipoActual.updatedAt; // snapshot ANTES de este guardado
   try {
-    await db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true });
+    await guardarListaEquipoCompartida(puntosEquipoEditId, limpios);
+    // También dentro del equipo, para celulares que aún tengan la versión anterior.
+    db.collection('equipos').doc(puntosEquipoEditId).set({ checklistPuntos: limpios }, { merge: true }).catch(() => {});
+    if (listasEquipos) { listasEquipos[puntosEquipoEditId] = limpios; aplicarListasEquipos(); renderConfig(); }
     if (antes !== despues) {
       logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
         [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: despues }]);
@@ -1416,7 +1519,9 @@ async function usarListaGeneralParaEquipo() {
   const equipoActual = currentEquipos.find(x => x.id === puntosEquipoEditId);
   const antes = (equipoActual && Array.isArray(equipoActual.checklistPuntos)) ? equipoActual.checklistPuntos.join(' | ') : null;
   try {
-    await db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() });
+    await guardarListaEquipoCompartida(puntosEquipoEditId, []);
+    db.collection('equipos').doc(puntosEquipoEditId).update({ checklistPuntos: firebase.firestore.FieldValue.delete() }).catch(() => {});
+    if (listasEquipos) { listasEquipos[puntosEquipoEditId] = []; aplicarListasEquipos(); renderConfig(); }
     if (antes){
       logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
         [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: '(vuelve a usar la lista general)' }]);
@@ -1451,6 +1556,8 @@ function renderConfig() {
   const wrap = document.getElementById('config-lista');
   const btnBulk = document.getElementById('btn-bulk-frecuencias');
   if (btnBulk) btnBulk.style.display = puedeConfigurar ? '' : 'none';
+  const cardBulkListas = document.getElementById('card-bulk-listas');
+  if (cardBulkListas) cardBulkListas.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR')) ? '' : 'none';
 
   if (!puedeConfigurar) {
     info.innerHTML = `<div class="info-box">Solo Administrador o Encargado de Mantenimiento pueden cambiar las frecuencias de checklist.</div>`;
@@ -1745,6 +1852,136 @@ async function bulkImportFrecuencias() {
   } catch (e) {
     showToast(mensajeErrorPermiso(e, 'configurar'), 'error');
   }
+}
+
+// ══════ CARGA MASIVA DE LISTAS POR EQUIPO (14 oct 2026) ══════
+// Pegar desde Excel o abrir un .xlsx/.csv. Formatos aceptados:
+//   a) una fila por punto:      EQUIPO | PUNTO
+//   b) una fila por equipo:     EQUIPO | PUNTO 1 | PUNTO 2 | ...
+// Se guarda todo en /config/checklistsEquipos con UNA sola escritura.
+let bulkListasPrevia = null; // { listas: {id: [puntos]}, ... } lista para guardar
+const BULK_MAX_PUNTOS = 80, BULK_MAX_LARGO = 200;
+
+function abrirModalBulkListas() {
+  document.getElementById('bulkListasPaste').value = '';
+  document.getElementById('bulkListasPreview').innerHTML = '';
+  document.getElementById('btnGuardarListas').disabled = true;
+  bulkListasPrevia = null;
+  openModalGeneric('modalBulkListas');
+}
+
+async function leerArchivoListas(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  try {
+    let texto;
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      if (!window.XLSX) await new Promise((ok, mal) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = ok; sc.onerror = () => mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.')); document.head.appendChild(sc); });
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      texto = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], { FS: '\t', blankrows: false });
+    } else {
+      texto = await f.text();
+    }
+    document.getElementById('bulkListasPaste').value = texto;
+    revisarBulkListas();
+  } catch (e) {
+    showToast('No se pudo leer el archivo: ' + e.message, 'error');
+  }
+}
+
+function partirFilaListas(linea) {
+  let sep = '\t';
+  if (!linea.includes('\t')) sep = linea.includes(';') ? ';' : ',';
+  // Respeta comillas de CSV ("Revisar, limpiar")
+  const cols = []; let cur = '', q = false;
+  for (let i = 0; i < linea.length; i++) {
+    const ch = linea[i];
+    if (ch === '"') { if (q && linea[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+    else if (ch === sep && !q) { cols.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cols.push(cur);
+  return cols.map(c => c.replace(/\s+/g, ' ').trim());
+}
+
+function revisarBulkListas() {
+  const prev = document.getElementById('bulkListasPreview');
+  const btn = document.getElementById('btnGuardarListas');
+  btn.disabled = true; bulkListasPrevia = null;
+  const lineas = document.getElementById('bulkListasPaste').value.split(/\r?\n/).filter(l => l.trim());
+  if (!lineas.length) { prev.innerHTML = '<div class="info-box">Pega las filas o abre un archivo.</div>'; return; }
+  const porClave = new Map();
+  (currentEquipos || []).forEach(e => {
+    if (e.nombre) porClave.set(fbEquipoKey(e.nombre), e);
+    if (e.codigo) porClave.set(fbEquipoKey(e.codigo), e);
+  });
+  const listas = {}, orden = [], noEncontrados = new Set(), recortados = new Set();
+  let filasSinPunto = 0;
+  lineas.forEach((l, idx) => {
+    const cols = partirFilaListas(l);
+    const nombre = cols[0] || '';
+    if (idx === 0 && /^(equipo|nombre|m[aá]quina)/i.test(nombre)) return; // encabezado
+    if (!nombre) { filasSinPunto++; return; }
+    const e = porClave.get(fbEquipoKey(nombre));
+    if (!e) { noEncontrados.add(nombre); return; }
+    const puntos = cols.slice(1).filter(Boolean);
+    if (!puntos.length) { filasSinPunto++; return; }
+    if (!listas[e.id]) { listas[e.id] = []; orden.push(e); }
+    puntos.forEach(p => {
+      if (p.length > BULK_MAX_LARGO) { p = p.slice(0, BULK_MAX_LARGO); recortados.add(e.nombre); }
+      if (!listas[e.id].includes(p) && listas[e.id].length < BULK_MAX_PUNTOS) listas[e.id].push(p);
+    });
+  });
+  let html = '';
+  if (orden.length) {
+    html += `<div style="font-weight:700;margin-bottom:6px;">✅ ${orden.length} equipo(s) listos para guardar</div>`;
+    html += orden.map(e => {
+      const reemplaza = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length;
+      const pts = listas[e.id];
+      return `<div class="item-row" style="cursor:default;padding:8px 10px;margin-bottom:6px;">
+        <div class="item-title" style="font-size:14px;margin-bottom:2px;">${fbEsc(e.nombre)} · ${pts.length} punto(s)${reemplaza ? ' <span class="tag tag-planificada">reemplaza su lista</span>' : ''}</div>
+        <div class="item-sub">${pts.slice(0, 4).map(fbEsc).join(' · ')}${pts.length > 4 ? ' · …' : ''}</div>
+      </div>`;
+    }).join('');
+  }
+  if (noEncontrados.size) html += `<div class="info-box" style="margin-top:6px;">⚠️ No encontrados en Inventario (no se cargan): ${fbEsc([...noEncontrados].join(', '))}</div>`;
+  if (filasSinPunto) html += `<div class="item-sub" style="margin-top:6px;">${filasSinPunto} fila(s) sin punto se ignoraron.</div>`;
+  if (recortados.size) html += `<div class="item-sub" style="margin-top:6px;">Algunos puntos muy largos se recortaron a ${BULK_MAX_LARGO} letras.</div>`;
+  if (!orden.length) html += '<div class="info-box" style="margin-top:6px;">Ningún equipo coincidió. Revisa que el nombre sea igual al de Inventario.</div>';
+  prev.innerHTML = html;
+  if (orden.length) { bulkListasPrevia = { listas, n: orden.length }; btn.disabled = false; }
+}
+
+function guardarBulkListas() {
+  if (!bulkListasPrevia) return;
+  const { listas, n } = bulkListasPrevia;
+  // Un documento de Firestore admite ~1 MB: se revisa antes de guardar.
+  const total = JSON.stringify(Object.assign({}, listasEquipos || {}, listas)).length;
+  if (total > 900000) { showToast('Son demasiados puntos para guardar juntos. Divide el archivo o acorta los textos.', 'error'); return; }
+  const promesa = LISTAS_EQUIPOS_REF().set({ listas, actualizadoEn: fbTimestamp(), actualizadoPor: nombreUsuarioActual() }, { merge: true });
+  if (listasEquipos) { Object.assign(listasEquipos, listas); aplicarListasEquipos(); renderConfig(); renderHoy(); }
+  logAuditoria('puntos_checklist_equipo', null, 'Carga masiva',
+    [{ campo: 'Listas propias (carga masiva)', anterior: '', nuevo: n + ' equipo(s): ' + Object.keys(listas).map(id => { const e = currentEquipos.find(x => x.id === id); return e ? e.nombre : id; }).join(', ').slice(0, 900) }]);
+  const sinSenal = !navigator.onLine;
+  promesa.then(() => { if (sinSenal) showToast(`☁️ Listas de ${n} equipo(s) subidas al servidor ✅`); })
+    .catch(e => showToast('❌ No se guardaron las listas. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
+  showToast(sinSenal ? `📵 Listas de ${n} equipo(s) guardadas; se subirán cuando haya señal.` : `✅ Listas de ${n} equipo(s) guardadas. Todos las ven ya.`, sinSenal ? 'warn' : undefined);
+  bulkListasPrevia = null;
+  closeModalGeneric('modalBulkListas');
+}
+
+function descargarPlantillaListas() {
+  const ejemplo = (currentEquipos || []).slice(0, 2).map(e => e.nombre).filter(Boolean);
+  const eq = ejemplo.length ? ejemplo : ['COMPRESOR 1', 'WEAVING 5'];
+  const filas = [['Equipo', 'Punto'], [eq[0], 'Nivel de aceite'], [eq[0], 'Fugas de aire'], [eq[0], 'Ruido o vibración anormal']];
+  if (eq[1]) filas.push([eq[1], 'Tensión de hilo'], [eq[1], 'Estado de guardas de seguridad']);
+  const csv = '﻿' + filas.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'plantilla-listas-checklist.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 </script>
 </body>
