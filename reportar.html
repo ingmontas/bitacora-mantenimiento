@@ -109,6 +109,18 @@
     .seg-dia { display: flex; gap: 6px; margin-bottom: 10px; }
     .seg-dia button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 600; font-size: 12.5px; cursor: pointer; }
     .seg-dia button.on { border-color: var(--accent); color: var(--accent); background: #F59E0B18; }
+    /* (20 oct 2026) Falla (se atiende ya) o Proyecto / mejora (se planifica) */
+    .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tipo-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 11px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; text-align: left; cursor: pointer; min-height: 88px; }
+    .tipo-btn b { font-size: 14px; line-height: 1.25; }
+    .tipo-btn span { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+    .tipo-btn.sel-falla { border-color: var(--red); background: #EF444418; }
+    .tipo-btn.sel-proyecto { border-color: #A78BFA; background: #A78BFA18; }
+    #rf-tipo-field.falta .tipo-btn { border-color: var(--orange); }
+    .rep-row.proyecto { border-left-color: #A78BFA; }
+    .rep-estado.proyecto { color: #C4B5FD; }
+    .tag-tipo-falla { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444444; }
+    .tag-tipo-proyecto { background: #A78BFA22; color: #C4B5FD; border: 1px solid #A78BFA44; }
   </style>
 </head>
 <body>
@@ -128,8 +140,8 @@
   <!-- SCREEN: ELEGIR EQUIPO -->
   <div class="screen active" id="screen-elegir">
     <div class="card">
-      <div class="card-title">🚨 Reportar una parada o falla</div>
-      <div class="card-sub">Elige el equipo. Los técnicos reciben el aviso en su celular al momento.</div>
+      <div class="card-title">🚨 Reportar falla o proyecto</div>
+      <div class="card-sub">Elige el equipo. Una falla les llega a los técnicos al momento; un proyecto o mejora lo planifica el Encargado.</div>
       <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="verEstado()">📋 Ver estado de los reportes <span id="estado-badge"></span></button>
       <input type="text" id="buscar-equipo" placeholder="Buscar equipo..." oninput="renderListaEquipos()" style="margin-bottom:10px;"/>
       <div id="lista-equipos"><div class="empty" style="padding:20px 10px;"><p>⏳ Cargando equipos…</p></div></div>
@@ -146,23 +158,31 @@
         </div>
         <button class="btn btn-secondary btn-sm" onclick="cerrarForm()">✕ Cambiar</button>
       </div>
-      <div class="field" style="margin-top:14px;">
+      <!-- (20 oct 2026) Elección obligatoria: falla (aviso inmediato) o proyecto (se planifica). -->
+      <div class="field" id="rf-tipo-field" style="margin-top:14px;">
+        <label>¿Qué quieres reportar? *</label>
+        <div class="tipo-grid" id="rf-tipo-grid">
+          <button type="button" class="tipo-btn" data-t="falla" onclick="setTipoReporte('falla')"><b>⚠️ Falla en la máquina</b><span>Se atiende ya: avisa a los técnicos</span></button>
+          <button type="button" class="tipo-btn" data-t="proyecto" onclick="setTipoReporte('proyecto')"><b>📐 Proyecto / mejora</b><span>Se planifica: el Encargado le pone técnico y fecha</span></button>
+        </div>
+      </div>
+      <div class="field" id="rf-parada-field">
         <label>¿La máquina está parada?</label>
         <div class="toggle-row" id="rf-parada-grid">
           <button type="button" class="toggle-btn sel-si" data-v="si" onclick="setParada('si')">⛔ Sí, está parada</button>
           <button type="button" class="toggle-btn" data-v="no" onclick="setParada('no')">⚠️ No, sigue trabajando</button>
         </div>
       </div>
-      <div class="field">
+      <div class="field" id="rf-hora-field">
         <label id="rf-hora-label">¿Desde qué hora está parada?</label>
         <input type="time" id="rf-hora"/>
       </div>
       <div class="field">
-        <label>¿Qué le pasa al equipo?</label>
+        <label id="rf-desc-label">¿Qué le pasa al equipo?</label>
         <textarea id="rf-descripcion" maxlength="900" placeholder="Describe la falla: qué se ve, se oye o se siente raro..."></textarea>
       </div>
       <div class="field">
-        <label>¿Qué tan urgente es?</label>
+        <label id="rf-prio-label">¿Qué tan urgente es?</label>
         <div class="toggle-row" id="rf-prioridad-grid">
           <button type="button" class="toggle-btn" data-pr="alta" onclick="setPrioridad('alta')">🔴 Alta</button>
           <button type="button" class="toggle-btn sel-media" data-pr="media" onclick="setPrioridad('media')">🟡 Media</button>
@@ -182,7 +202,7 @@
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div><div class="card-title">📋 Estado de los reportes</div>
-        <div class="card-sub" style="margin-bottom:10px;">Se actualiza solo. Rojo: esperando técnico · Amarillo: en atención · Verde: resuelto.</div></div>
+        <div class="card-sub" style="margin-bottom:10px;">Se actualiza solo. Rojo: esperando técnico · Amarillo: en atención · Verde: resuelto · Morado: proyecto.</div></div>
         <button class="btn btn-secondary btn-sm" onclick="nuevoReporte()">← Volver</button>
       </div>
       <div class="seg-dia" id="seg-dia">
@@ -199,12 +219,12 @@
     <div class="card">
       <div class="exito-wrap">
         <span class="emoji">✅</span>
-        <h2>Reporte enviado</h2>
-        <p>Los técnicos ya recibieron el aviso. Puedes seguir el estado aquí.</p>
+        <h2 id="exito-titulo">Reporte enviado</h2>
+        <p id="exito-texto">Los técnicos ya recibieron el aviso. Puedes seguir el estado aquí.</p>
         <div class="folio" id="exito-folio">—</div>
         <p id="exito-equipo" style="margin-bottom:20px;">—</p>
         <button class="btn btn-primary" onclick="verEstado()" style="margin-bottom:8px;">📋 Ver estado del reporte</button>
-        <button class="btn btn-secondary" onclick="nuevoReporte()">➕ Reportar otra falla</button>
+        <button class="btn btn-secondary" onclick="nuevoReporte()">➕ Hacer otro reporte</button>
       </div>
     </div>
   </div>
@@ -354,6 +374,7 @@ function abrirForm(equipoId) {
   document.getElementById('rf-nombre').value = (window.currentUserRole && window.currentUserRole.nombre) || '';
   setPrioridad('media');
   setParada('si');
+  setTipoReporte(null); // (20 oct 2026) sin elegir: el operador tiene que decidir
   document.getElementById('rf-hora').value = horaAhora();
   goToScreen('screen-form');
 }
@@ -383,15 +404,45 @@ function setParada(v) {
   });
   document.getElementById('rf-hora-label').textContent = v === 'si' ? '¿Desde qué hora está parada?' : '¿Desde qué hora se nota la falla?';
 }
+// ══════ Falla o Proyecto (20 oct 2026) ══════
+// Falla = el flujo de siempre (aviso inmediato a los técnicos en Bitácora).
+// Proyecto / mejora = mismo documento con tipoReporte 'proyecto': no suena
+// como aviso; el Encargado lo planifica (técnico + fecha) en Checklist →
+// "OTs por planificar" y el técnico lo reporta en la Bitácora al terminar.
+let tipoReporteSel = null; // 'falla' | 'proyecto' | null (sin elegir)
+function setTipoReporte(t) {
+  tipoReporteSel = t;
+  document.querySelectorAll('#rf-tipo-grid .tipo-btn').forEach(b => {
+    b.classList.remove('sel-falla', 'sel-proyecto');
+    if (b.dataset.t === t) b.classList.add('sel-' + t);
+  });
+  document.getElementById('rf-tipo-field').classList.remove('falta');
+  const proy = t === 'proyecto';
+  // Un proyecto no es una parada: se ocultan "¿está parada?" y la hora.
+  document.getElementById('rf-parada-field').style.display = proy ? 'none' : '';
+  document.getElementById('rf-hora-field').style.display = proy ? 'none' : '';
+  document.getElementById('rf-desc-label').textContent = proy ? 'Describe el proyecto o mejora' : '¿Qué le pasa al equipo?';
+  document.getElementById('rf-descripcion').placeholder = proy ? 'Qué se quiere hacer o mejorar, y para qué...' : 'Describe la falla: qué se ve, se oye o se siente raro...';
+  document.getElementById('rf-prio-label').textContent = proy ? '¿Qué tan importante es?' : '¿Qué tan urgente es?';
+  document.getElementById('rf-submit-btn').textContent = proy ? '📐 Enviar proyecto' : '🚨 Enviar reporte';
+}
+const esProyectoR = r => r && r.tipoReporte === 'proyecto';
 const horaAhora = () => new Date().toTimeString().slice(0, 5);
 const fechaHoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const escR = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function enviarReporte() {
   if (!equipoSeleccionado) return;
+  if (!tipoReporteSel) {
+    document.getElementById('rf-tipo-field').classList.add('falta');
+    showToast('Elige si es una falla o un proyecto', 'warn');
+    return;
+  }
+  const esProy = tipoReporteSel === 'proyecto';
   const descripcion = (document.getElementById('rf-descripcion').value || '').trim();
-  if (!descripcion) { showToast('Describe qué le pasa al equipo', 'warn'); return; }
-  let horaParada = document.getElementById('rf-hora').value || horaAhora();
+  if (!descripcion) { showToast(esProy ? 'Describe el proyecto o mejora' : 'Describe qué le pasa al equipo', 'warn'); return; }
+  // Un proyecto no trae hora de parada: se guarda la hora del reporte.
+  let horaParada = esProy ? horaAhora() : (document.getElementById('rf-hora').value || horaAhora());
   // (5 oct 2026) Una hora "mayor" que la actual es de anoche: una parada de
   // las 23:30 reportada a las 00:15 queda con la fecha de ayer (antes se
   // cambiaba a la hora actual y el tiempo de paro salía más corto).
@@ -401,10 +452,11 @@ async function enviarReporte() {
 
   // (5 oct 2026) Si ya hay un reporte abierto de esta máquina, se avisa antes
   // de mandar otro (cada duplicado cerrado contaba como otra falla).
-  const abierto = reportes.find(r => r.equipoId === equipoSeleccionado.id && ['pendiente', 'en_atencion'].includes(r.estado));
+  // (20 oct 2026) Solo se compara con reportes del mismo tipo (falla con falla).
+  const abierto = esProy ? null : reportes.find(r => !esProyectoR(r) && r.equipoId === equipoSeleccionado.id && ['pendiente', 'en_atencion'].includes(r.estado));
   if (abierto && !confirm(`Ya hay un reporte abierto de ${equipoSeleccionado.nombre || 'esta máquina'} (${abierto.folio || ''}, ${abierto.estado === 'en_atencion' ? 'en atención' : 'esperando técnico'}).\n\n¿Enviar otro reporte de todas formas?`)) return;
 
-  setLoading(true, 'Enviando reporte...');
+  setLoading(true, esProy ? 'Enviando proyecto...' : 'Enviando reporte...');
   try {
     const folio = await fbFolioNuevo();
     // (5 oct 2026) No se espera al servidor: sin señal la promesa no termina
@@ -413,6 +465,7 @@ async function enviarReporte() {
     db.collection('ots').doc().set({
       origen: 'operador',
       estado: 'pendiente',
+      tipoReporte: esProy ? 'proyecto' : 'falla', // (20 oct 2026)
       folio: folio,
       equipoId: equipoSeleccionado.id,
       equipoNombre: equipoSeleccionado.nombre || '',
@@ -424,7 +477,7 @@ async function enviarReporte() {
       fechaPlanificada: null,
       creadoPor: nombreReporta || (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
       creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
-      maquinaParada: paradaSeleccionada === 'si',
+      maquinaParada: !esProy && paradaSeleccionada === 'si',
       fechaReporte: fechaReporte,
       horaParada: horaParada,
       createdAt: fbTimestamp(),
@@ -432,6 +485,10 @@ async function enviarReporte() {
 
     setLoading(false);
     if (!navigator.onLine) showToast('📵 Sin señal: el reporte se enviará solo al volver la conexión', 'warn');
+    document.getElementById('exito-titulo').textContent = esProy ? 'Proyecto enviado' : 'Reporte enviado';
+    document.getElementById('exito-texto').textContent = esProy
+      ? 'El Encargado lo va a planificar (técnico y fecha). Puedes seguir el estado aquí.'
+      : 'Los técnicos ya recibieron el aviso. Puedes seguir el estado aquí.';
     document.getElementById('exito-folio').textContent = folio;
     document.getElementById('exito-equipo').textContent = equipoSeleccionado.nombre || '';
     goToScreen('screen-exito');
@@ -488,9 +545,18 @@ function escucharReportes() {
   estadoEscuchando = true;
   // (5 oct 2026) También los reportes hechos con el QR de la máquina (origen 'qr').
   ['pendiente', 'en_atencion'].forEach(est => escucharParte('estado:' + est, qReportes().where('estado', '==', est)));
+  // (20 oct 2026) Proyectos en curso (planificados, en revisión…), aunque se
+  // hayan reportado hace semanas. Una consulta por estado, como las de arriba:
+  // el SDK no deja dos 'in' juntos y la regla del Operador exige fijar el
+  // origen. Solo igualdades: sin índice compuesto, y solo proyectos abiertos.
+  ESTADOS_PROY_CURSO.forEach(est => escucharParte('proy:' + est, qReportes().where('tipoReporte', '==', 'proyecto').where('estado', '==', est)));
   sincronizarDiasReportes();
   setInterval(() => { sincronizarDiasReportes(); renderEstado(); }, 60000); // refresca los "hace X min" y el cambio de día
 }
+const ESTADOS_PROY_CURSO = ['planificada', 'en_revision', 'rechazada', 'validada'];
+// Un reporte sigue "abierto" mientras no esté terminado (los proyectos pasan por más pasos).
+const reporteAbierto = r => ['pendiente', 'en_atencion'].includes(r.estado) || (esProyectoR(r) && ESTADOS_PROY_CURSO.includes(r.estado));
+const ddmmR = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] : (f || ''); };
 function verEstado() { goToScreen('screen-estado'); renderEstado(); }
 function setDiasEstado(d) {
   diasEstado = d;
@@ -505,7 +571,7 @@ function minDesde(fecha, hora) {
 }
 const fmtMinR = m => m == null ? '' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
 function renderEstado() {
-  const abiertos = reportes.filter(r => ['pendiente', 'en_atencion'].includes(r.estado)).length;
+  const abiertos = reportes.filter(reporteAbierto).length;
   const badge = document.getElementById('estado-badge');
   if (badge) badge.textContent = abiertos ? `(${abiertos} abierto${abiertos === 1 ? '' : 's'})` : '';
   const wrap = document.getElementById('estado-lista');
@@ -514,20 +580,29 @@ function renderEstado() {
   const lim = desde.getFullYear() + '-' + String(desde.getMonth() + 1).padStart(2, '0') + '-' + String(desde.getDate()).padStart(2, '0');
   const fechaDe = r => r.fechaReporte || r.FECHA || (r.createdAt && r.createdAt.toDate ? (d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(r.createdAt.toDate()) : '');
   const orden = { pendiente: 0, en_atencion: 1 };
-  const lista = reportes.filter(r => ['pendiente', 'en_atencion'].includes(r.estado) || fechaDe(r) >= lim)
+  const lista = reportes.filter(r => reporteAbierto(r) || fechaDe(r) >= lim)
     .sort((a, b) => (orden[a.estado] ?? 2) - (orden[b.estado] ?? 2) || (fechaDe(b) + (b.horaParada || '')).localeCompare(fechaDe(a) + (a.horaParada || '')));
   if (!lista.length) { wrap.innerHTML = '<div class="empty"><span class="emoji">✅</span><p>No hay reportes en este período.</p></div>'; return; }
   wrap.innerHTML = lista.map(r => {
     const espera = minDesde(fechaDe(r), r.horaParada);
     let estado;
-    if (r.estado === 'pendiente') estado = `⏳ Esperando técnico${espera != null ? ' · ' + fmtMinR(espera) : ''}`;
+    const proy = esProyectoR(r);
+    // (20 oct 2026) Estados de un proyecto: por planificar → planificado → en proceso → terminado.
+    if (proy) {
+      if (r.estado === 'pendiente') estado = '📐 Pendiente de planificar';
+      else if (r.estado === 'planificada') estado = `📅 Planificado para el ${escR(ddmmR(r.fechaPlanificada))}${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
+      else if (ESTADOS_PROY_CURSO.includes(r.estado)) estado = `🔧 En proceso${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
+      else if (r.estado === 'completada') estado = `✅ Terminado${r.fechaCompletada ? ' el ' + escR(ddmmR(r.fechaCompletada)) : ''}`;
+      else estado = '📌 ' + escR(r.estado || '—');
+    } else if (r.estado === 'pendiente') estado = `⏳ Esperando técnico${espera != null ? ' · ' + fmtMinR(espera) : ''}`;
     else if (r.estado === 'en_atencion') estado = `🔧 En atención por ${escR(r.asignadoA || 'un técnico')}${r.horaLlegada ? ' · llegó ' + escR(r.horaLlegada) : ''}`;
     else if (r.estado === 'completada') estado = `✅ Resuelto${r.H_FINAL ? ' a las ' + escR(r.H_FINAL) : ''}${r.TECNICOS ? ' por ' + escR(r.TECNICOS) : ''}`;
     else estado = '📌 ' + escR(r.estado || '—');
-    const cls = ['pendiente', 'en_atencion', 'completada'].includes(r.estado) ? r.estado : '';
+    const cls = proy ? (r.estado === 'completada' ? 'completada' : 'proyecto') : ['pendiente', 'en_atencion', 'completada'].includes(r.estado) ? r.estado : '';
+    const tipoTag = proy ? '<span class="tag tag-tipo-proyecto">📐 Proyecto</span>' : '<span class="tag tag-tipo-falla">⚠️ Falla</span>';
     return `<div class="rep-row ${cls}">
-      <div class="item-header"><div class="item-title">${escR(r.equipoNombre || r.EQUIPO || '—')}</div><span class="tag tag-prioridad-${escR(r.prioridad || 'media')}">${escR(r.folio || '')}</span></div>
-      <div class="item-sub">${r.equipoLocalidad ? '📍 ' + escR(r.equipoLocalidad) + ' · ' : ''}${r.maquinaParada ? '⛔ Parada' : '⚠️ Trabajando'}${r.horaParada ? ' desde ' + escR(r.horaParada) : ''} · reportó ${escR(r.creadoPor || '—')}</div>
+      <div class="item-header"><div class="item-title">${escR(r.equipoNombre || r.EQUIPO || '—')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${tipoTag}<span class="tag tag-prioridad-${escR(r.prioridad || 'media')}">${escR(r.folio || '')}</span></div></div>
+      <div class="item-sub">${r.equipoLocalidad ? '📍 ' + escR(r.equipoLocalidad) + ' · ' : ''}${proy ? 'reportado el ' + escR(ddmmR(fechaDe(r))) : (r.maquinaParada ? '⛔ Parada' : '⚠️ Trabajando') + (r.horaParada ? ' desde ' + escR(r.horaParada) : '')} · reportó ${escR(r.creadoPor || '—')}</div>
       <div class="item-sub" style="color:var(--text);margin-top:4px;">${escR(r.descripcionFalla || r.DESCRIPCION_FALLA || '')}</div>
       <div class="rep-estado ${cls}">${estado}</div>
       ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div class="rep-sol">✓ ${escR(r.DESCRIPCION_SOLUCION)}</div>` : ''}

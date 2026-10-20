@@ -78,6 +78,12 @@
     .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
     .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
     .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    /* (20 oct 2026) De dónde viene la OT: checklist (predictivo) o proyecto de producción */
+    .tag-origen-check { background: #0891B222; color: #67D4EA; border: 1px solid #0891B244; }
+    .tag-origen-proy { background: #A78BFA22; color: #C4B5FD; border: 1px solid #A78BFA44; }
+    .ot-bita { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: #0891B214; border: 1px solid #0891B240; font-size: 12px; line-height: 1.5; }
+    .ot-bita b { color: #67D4EA; }
+    .ot-aviso-cierre { margin-top: 8px; padding: 9px 10px; border-radius: 8px; background: #F59E0B14; border: 1px solid #F59E0B66; font-size: 12.5px; line-height: 1.5; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
     .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
@@ -209,7 +215,7 @@
   <!-- SCREEN: OTs PENDIENTES -->
   <div class="screen" id="screen-ots">
     <div class="card-title" style="margin-bottom:4px">🛠 OTs por Planificar</div>
-    <div class="card-sub" style="margin-bottom:12px">Generadas automáticamente cuando un checklist marca "Falla"</div>
+    <div class="card-sub" style="margin-bottom:12px">Fallas detectadas en un checklist (predictivo) y proyectos / mejoras que reporta producción. El técnico las registra en la Bitácora al terminar.</div>
     <div id="ots-lista"></div>
   </div>
 
@@ -475,7 +481,7 @@ let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia s
 let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se edita
 
 let currentEquipos = [];      // desde /equipos (onSnapshot)
-let currentOts = [];          // desde /ots origen checklist y estado en curso (onSnapshot)
+let currentOts = [];          // desde /ots: origen checklist + proyectos, estado en curso (onSnapshot)
 let currentChecklists = [];   // desde /checklists (onSnapshot, últimos 30)
 let equipoSeleccionado = null; // {id, nombre, localidad}
 let itemsFormState = [];       // [{punto, resultado:'ok'|'falla', nota}] mientras se llena el formulario
@@ -955,7 +961,7 @@ async function submitChecklist() {
   const hoy = todayStr();
   // (14 oct 2026) Si ese punto del equipo ya tiene una OT abierta, no se
   // crea otra: el checklist queda ligado a la que ya existe.
-  const abiertas = (currentOts || []).filter(o => o.equipoId === equipo.id);
+  const abiertas = (currentOts || []).filter(o => o.equipoId === equipo.id && o.origen === 'checklist'); // (20 oct 2026) no los proyectos
   items.forEach(it => {
     if (it.resultado !== 'falla') return;
     const ya = abiertas.find(o => o.puntoChecklist === it.punto || (o.descripcionFalla || '').startsWith(it.punto));
@@ -1191,22 +1197,52 @@ function loadOts() {
   // checklist de todos los años (también las completadas, que no se muestran).
   // Ahora solo las que están en curso. '==' + 'in' son filtros de igualdad:
   // no hace falta índice compuesto.
-  db.collection('ots').where('origen', '==', 'checklist')
-    .where('estado', 'in', ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada']).onSnapshot((snap) => {
+  //
+  // (20 oct 2026) Segundo listener, igual de acotado: los proyectos / mejoras
+  // que reporta producción (tipoReporte 'proyecto', origen operador o QR) en
+  // los mismos estados. También son solo igualdades ('==' + 'in'): sin índice
+  // compuesto. Los dos se unen por id.
+  const ESTADOS = ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'];
+  const partes = { checklist: [], proyecto: [] };
+  const unir = () => {
     // Orden: primero por prioridad (alta arriba de todo), y dentro de cada
     // prioridad, la más reciente primero — así una guarda de seguridad rota
     // no se pierde debajo de diez limpiezas pendientes.
     const rangoPrioridad = { alta: 0, media: 1, baja: 2 };
-    currentOts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .filter(o => ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'].includes(o.estado))
+    const porId = new Map();
+    partes.checklist.concat(partes.proyecto).forEach(o => porId.set(o.id, o));
+    currentOts = [...porId.values()]
+      .filter(o => ESTADOS.includes(o.estado))
       .sort((a, b) => {
         const rp = (rangoPrioridad[a.prioridad] ?? 1) - (rangoPrioridad[b.prioridad] ?? 1);
         if (rp !== 0) return rp;
         return (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0);
       });
     renderOts();
+  };
+  db.collection('ots').where('origen', '==', 'checklist').where('estado', 'in', ESTADOS).onSnapshot((snap) => {
+    partes.checklist = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    unir();
   }, (err) => console.warn('Error leyendo OTs:', err.message));
+  db.collection('ots').where('tipoReporte', '==', 'proyecto').where('estado', 'in', ESTADOS).onSnapshot((snap) => {
+    partes.proyecto = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    unir();
+  }, (err) => console.warn('Error leyendo proyectos:', err.message));
 }
+// (20 oct 2026) Proyecto / mejora de producción vs. falla de checklist (predictivo).
+const esProyectoOt = o => !!o && o.tipoReporte === 'proyecto';
+const fmtDdMm = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] : (f || ''); };
+// Resumen de lo que el técnico reportó en la Bitácora (para la revisión). Sin costos.
+function resumenBitacoraOt(o) {
+  if (!o.reportadoEnBitacora) return '';
+  const reps = (Array.isArray(o.REPUESTOS) ? o.REPUESTOS : []).filter(i => i && i.descripcion).map(i => fbEsc(i.cantidad) + ' × ' + fbEsc(i.descripcion));
+  return `<div class="ot-bita">📋 <b>Reportado en Bitácora</b>${o.FECHA ? ' el ' + fbEsc(fmtDdMm(o.FECHA)) : ''}${o.TECNICOS ? ' · ' + fbEsc(o.TECNICOS) : ''}
+    ${o.DESCRIPCION_SOLUCION ? `<div>✓ ${fbEsc(o.DESCRIPCION_SOLUCION)}</div>` : ''}
+    <div style="color:var(--muted);">${o.REPUESTOS_USADOS === 'si' ? 'Repuestos: ' + (reps.join(', ') || '—') : 'Sin repuestos'}${o.H_TECNICO && o.H_FINAL ? ' · ' + fbEsc(o.H_TECNICO) + '–' + fbEsc(o.H_FINAL) : ''}</div></div>`;
+}
+// (20 oct 2026) "Cerrar directo" de una OT que nadie reportó en la Bitácora:
+// se permite, pero primero se avisa aquí mismo (sin ventana del navegador).
+const _avisoCierreSinBitacora = new Set();
 
 const OT_ESTADO_TAG = {
   pendiente:   { clase: 'tag-pendiente',   texto: 'Pendiente' },
@@ -1247,11 +1283,15 @@ function renderOts() {
       if (o.estado === 'rechazada' && o.notaRevision) {
         acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
       }
+      if (o.estado === 'rechazada') acciones += resumenBitacoraOt(o);
+      // (20 oct 2026) Todo trabajo realizado se reporta en la Bitácora: el
+      // botón abre el formulario de la Bitácora en modo "registrar esta OT"
+      // (mismo documento; al guardar pasa a revisión). Antes era "Marcar realizada".
       if (puedeMarcarHecho) {
-        acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="marcarOtRealizada('${o.id}')">${o.estado === 'rechazada' ? '🔁 Marcar corregido, enviar a revisión' : '✅ Marcar trabajo realizado'}</button>`;
+        acciones += `<a class="btn btn-secondary btn-sm" style="margin-top:8px;display:inline-block;text-decoration:none;" href="bitacora.html#ot=${encodeURIComponent(o.id)}">${o.estado === 'rechazada' ? '📋 Corregir en Bitácora' : '📋 Registrar en Bitácora'}</a>`;
       }
     } else if (o.estado === 'en_revision') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Trabajo realizado, en espera de revisión</div>`;
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Trabajo realizado, en espera de revisión</div>` + resumenBitacoraOt(o);
       if (puedeRevisar) {
         acciones += `
           <div class="field" style="margin-top:8px;margin-bottom:6px;">
@@ -1264,7 +1304,7 @@ function renderOts() {
           </div>`;
       }
     } else if (o.estado === 'validada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Validado por ${fbEsc(o.revisadoPor || '—')}</div>`;
+      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Validado por ${fbEsc(o.revisadoPor || '—')}</div>` + resumenBitacoraOt(o);
       if (esAdminCierre) {
         acciones += `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="cerrarOtFinal('${o.id}')">🔒 Cerrar OT</button>`;
       }
@@ -1272,19 +1312,26 @@ function renderOts() {
 
     // Atajo del Administrador: cerrar de una vez, sin pasar por revisión/validación.
     if (esAdminCierre && o.estado !== 'completada') {
-      acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
+      if (_avisoCierreSinBitacora.has(o.id) && !o.reportadoEnBitacora) {
+        acciones += `<div class="ot-aviso-cierre">⚠️ <b>Este trabajo no se reportó en la Bitácora.</b> Si la cierras así, queda sin solución, técnicos ni repuestos registrados, y en Incentivos cuenta como "no reportada en Bitácora".
+          <div class="row" style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="cerrarOtDirecto('${o.id}', true)">Cerrar de todas formas</button><button class="btn btn-secondary btn-sm" onclick="cancelarCierreDirecto('${o.id}')">Cancelar</button></div></div>`;
+      } else {
+        acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
+      }
     }
+    const tagOrigen = esProyectoOt(o) ? '<span class="tag tag-origen-proy">📐 Proyecto</span>' : '<span class="tag tag-origen-check">🩺 Checklist (predictivo)</span>';
 
     return `
       <div class="item-row" style="cursor:default;">
         <div class="item-header">
           <div class="item-title">${fbEsc(o.folio || o.id)} · ${fbEsc(o.equipoNombre || '')}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+            ${tagOrigen}
             ${o.prioridad ? `<span class="tag tag-prioridad-${fbEsc(o.prioridad)}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${fbEsc(o.prioridad)}</span>` : ''}
             <span class="tag ${tag.clase}">${tag.texto}</span>
           </div>
         </div>
-        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>${o.foto ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(o.foto)}', this)">📷 Ver foto</button>` : ''}
+        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>${esProyectoOt(o) && o.creadoPor ? `<div class="item-sub">Pidió: ${fbEsc(o.creadoPor)}${o.fechaReporte ? ' · ' + fbEsc(fmtDdMm(o.fechaReporte)) : ''}</div>` : ''}${o.foto ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(o.foto)}', this)">📷 Ver foto</button>` : ''}
         ${acciones}
         ${o.folio ? `
         <div style="margin-top:8px;">
@@ -1313,19 +1360,9 @@ async function planificarOt(otId) {
   }
 }
 
-async function marcarOtRealizada(otId) {
-  try {
-    await db.collection('ots').doc(otId).update({
-      estado: 'en_revision',
-      trabajoRealizadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '',
-      trabajoRealizadoEn: fbTimestamp(),
-      ...camposEdicionOt(),
-    });
-    showToast('Marcado como realizado — pasa a revisión ✅');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'realizar'), 'error');
-  }
-}
+// (20 oct 2026) Ya no hay "Marcar realizada" aquí: el técnico registra el
+// trabajo en la Bitácora (bitacora.html#ot=<id>) y ese guardado pasa la OT a
+// revisión con todos los datos (solución, técnicos, repuestos, herramientas).
 
 async function validarOt(otId) {
   const nota = (document.getElementById('ot-nota-rev-' + otId) || {}).value || '';
@@ -1391,7 +1428,19 @@ function fechaTrabajoRealizado(ot) {
   return todayStr();
 }
 
+// (20 oct 2026) Solo se llenan los campos que FALTAN: si el técnico ya
+// reportó el trabajo en la Bitácora (fecha, horas, solución, técnicos,
+// repuestos…), el cierre no los pisa. Tipo: 'Predictivo' para las OTs de
+// checklist y 'Proyecto' para los proyectos (antes las de checklist se
+// cerraban como 'Preventivo').
 function camposParaAnalisis(ot, tiempoRespuestaMin) {
+  const base = camposAnalisisBase(ot, tiempoRespuestaMin);
+  const out = {};
+  Object.keys(base).forEach(k => { const v = ot[k]; if (v === undefined || v === null || v === '') out[k] = base[k]; });
+  return out;
+}
+function camposAnalisisBase(ot, tiempoRespuestaMin) {
+  const proy = esProyectoOt(ot);
   const fecha = fechaTrabajoRealizado(ot);
   const equipo = currentEquipos.find(x => x.id === ot.equipoId);
   return {
@@ -1403,16 +1452,17 @@ function camposParaAnalisis(ot, tiempoRespuestaMin) {
     LINEA_EQUIPO: ot.equipoLocalidad || '',
     TIPO_MAQUINA: '',
     EQUIPO: ot.equipoNombre || '',
-    TIPO_MANTENIMIENTO: 'Preventivo',
+    TIPO_MANTENIMIENTO: proy ? 'Proyecto' : 'Predictivo',
     TECNICOS: ot.asignadoA || ot.trabajoRealizadoPor || '',
     DESCRIPCION_FALLA: ot.descripcionFalla || '',
-    DESCRIPCION_SOLUCION: ot.notaRevision || 'Verificado mediante checklist preventivo',
+    DESCRIPCION_SOLUCION: ot.notaRevision || (proy ? 'Proyecto cerrado por el Administrador' : 'Verificado mediante checklist (predictivo)'),
     ME: 'm',
     GENERA_OT: 'no',
     PARO_PLANTA: 'no',
     TOTAL_MIN_MAQUINA: 0,
     TOTAL_MIN_TECNICO: 0,
-    TIEMPO_RESPUESTA_MIN: tiempoRespuestaMin,
+    // Un proyecto se planifica: no tiene "tiempo de respuesta" de falla.
+    TIEMPO_RESPUESTA_MIN: proy ? null : tiempoRespuestaMin,
   };
 }
 
@@ -1426,19 +1476,24 @@ async function cerrarOtFinal(otId) {
       cerradoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
       cerradoEn: fbTimestamp(),
       fechaCompletada: todayStr(),
-      tiempoRespuestaMin,
+      tiempoRespuestaMin: esProyectoOt(o) ? null : tiempoRespuestaMin,
       ...camposParaAnalisis(o, tiempoRespuestaMin),
       ...camposEdicionOt(),
+      ...(o.reportadoEnBitacora ? {} : { cerradoSinBitacora: true }),
     }, { merge: true });
-    showToast('OT cerrada ✅ — ya cuenta como preventivo en Análisis');
+    showToast(esProyectoOt(o) ? 'Proyecto cerrado ✅' : 'OT cerrada ✅ — cuenta como predictivo en Análisis');
   } catch (e) {
     showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
   }
 }
 
-async function cerrarOtDirecto(otId) {
+function cancelarCierreDirecto(otId) { _avisoCierreSinBitacora.delete(otId); renderOts(); }
+async function cerrarOtDirecto(otId, aunSinBitacora) {
   const o = currentOts.find(x => x.id === otId);
   if (!o) return;
+  // (20 oct 2026) Sin reporte en Bitácora: primero el aviso en la tarjeta.
+  if (!o.reportadoEnBitacora && !aunSinBitacora) { _avisoCierreSinBitacora.add(otId); renderOts(); return; }
+  _avisoCierreSinBitacora.delete(otId);
   const nombreAdmin = (window.currentUserRole && window.currentUserRole.nombre) || '';
   const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
   const payload = {
@@ -1446,10 +1501,11 @@ async function cerrarOtDirecto(otId) {
     cerradoPor: nombreAdmin,
     cerradoEn: fbTimestamp(),
     fechaCompletada: todayStr(),
-    tiempoRespuestaMin,
+    tiempoRespuestaMin: esProyectoOt(o) ? null : tiempoRespuestaMin,
     ...camposParaAnalisis(o, tiempoRespuestaMin),
     ...camposEdicionOt(),
   };
+  if (!o.reportadoEnBitacora) payload.cerradoSinBitacora = true; // lo ve Incentivos
   // Si nadie la había revisado todavía, el cierre directo también cuenta como la revisión.
   if (!o.revisadoPor) {
     payload.revisadoPor = nombreAdmin;

@@ -298,7 +298,14 @@ async function leerDatosSemana(d) {
 const equipoDe = o => o.EQUIPO || o.equipoNombre || o.TIPO_MAQUINA || '—';
 const folioDe = o => o.folio || o.Title || o.id;
 const anulada = o => o.estado === 'anulada';
-const esAviso = o => ['operador', 'qr'].includes(o.origen);
+// (20 oct 2026) Un proyecto / mejora de producción no es un aviso de falla:
+// no cuenta en "Respuesta a avisos" ni en reincidencias (no afecta la
+// eficiencia del técnico ni la de la máquina). Sí cuenta en "OTs a tiempo".
+const esProyecto = o => o.tipoReporte === 'proyecto' || String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'proyecto';
+const esAviso = o => ['operador', 'qr'].includes(o.origen) && o.tipoReporte !== 'proyecto';
+// Desde el 20 oct 2026 el trabajo planificado se reporta en la Bitácora; lo
+// planificado antes de esa fecha se sigue contando como antes.
+const CORTE_BITACORA = '2026-10-20';
 function mismoEquipo(a, b) {
   if (a.equipoId && b.equipoId) return a.equipoId === b.equipoId;
   const ka = K(a.EQUIPO || a.equipoNombre), kb = K(b.EQUIPO || b.equipoNombre);
@@ -328,18 +335,26 @@ function calcular(d) {
     marca(keys, 'checklists', bien, `Checklist ${equipoDe(x)} del ${ddmm(x.fecha)}: tocaba el ${ddmm(x.vencimiento)}`, info);
   });
 
-  // 2) OTs a tiempo (planificadas para esta semana)
+  // 2) OTs a tiempo (planificadas para esta semana): OTs de checklist y
+  // proyectos. (20 oct 2026) Cuenta como hecha solo si el técnico la reportó
+  // en la Bitácora (reportadoEnBitacora) y a tiempo = reportada a más tardar
+  // el día planificado. Cerrada sin reporte = "no reportada en Bitácora".
   d.otPlan.filter(o => !anulada(o) && o.fechaPlanificada >= d.lunes && o.fechaPlanificada <= d.domingo).forEach(o => {
     const keys = tecsEn(o.asignadoA);
     if (!keys.length) return;
-    const hecha = ['en_revision', 'validada', 'completada'].includes(o.estado);
+    const nueva = o.fechaPlanificada >= CORTE_BITACORA;
+    if (nueva && !o.reportadoEnBitacora && ['en_revision', 'validada', 'completada'].includes(o.estado)) {
+      marca(keys, 'ots', false, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, no reportada en Bitácora`);
+      return;
+    }
+    const hecha = ['en_revision', 'validada', 'completada'].includes(o.estado) && (!nueva || !!o.reportadoEnBitacora);
     const fHecha = hecha ? (tsFecha(o.trabajoRealizadoEn) || o.FECHA || o.fechaCompletada || null) : null;
     if (!hecha || !fHecha) {
       if (hoy <= o.fechaPlanificada) return; // todavía está a tiempo: no cuenta aún
-      marca(keys, 'ots', false, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, todavía sin terminar`);
+      marca(keys, 'ots', false, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, ${o.estado === 'rechazada' ? 'devuelta en revisión, todavía sin terminar' : nueva ? 'no reportada en Bitácora' : 'todavía sin terminar'}`);
       return;
     }
-    marca(keys, 'ots', fHecha <= o.fechaPlanificada, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, terminada el ${ddmm(fHecha)}`);
+    marca(keys, 'ots', fHecha <= o.fechaPlanificada, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, ${nueva ? 'reportada en Bitácora' : 'terminada'} el ${ddmm(fHecha)}`);
   });
 
   // 3) Respuesta a avisos de producción / QR
@@ -359,12 +374,14 @@ function calcular(d) {
   const realizado = o => !anulada(o) && !(['operador', 'qr', 'checklist'].includes(o.origen) && o.estado !== 'completada');
   d.otFecha.filter(o => o.FECHA >= d.lunes && o.FECHA <= d.domingo && realizado(o)).forEach(o => agrega(o, tecsEn(o.TECNICOS)));
   d.otReal.filter(o => !anulada(o)).forEach(o => { const f = tsFecha(o.trabajoRealizadoEn); if (!f || f < d.lunes || f > d.domingo) return; let k = tecsEn(o.trabajoRealizadoPor); if (!k.length) k = tecsEn(o.asignadoA); agrega(o, k); });
-  const posteriores = d.otFecha.filter(o => o.FECHA && !anulada(o) && realizado(o) && String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo');
+  const posteriores = d.otFecha.filter(o => o.FECHA && !anulada(o) && realizado(o) && !esProyecto(o) && String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo');
   const dias = Math.max(0, Math.round(c.diasReincidencia));
   trabajos.forEach(({ o, keys }) => {
     const fecha = o.FECHA || tsFecha(o.trabajoRealizadoEn);
     const rech = (Number(o.vecesRechazada) || 0) || (o.revisionResultado === 'rechazada' || o.estado === 'rechazada' ? 1 : 0);
     if (rech) { marca(keys, 'calidad', false, `${folioDe(o)} ${equipoDe(o)}: rechazada en revisión${rech > 1 ? ' (' + rech + ' veces)' : ''}`); return; }
+    // (20 oct 2026) Un proyecto no es una reparación: no se le buscan reincidencias.
+    if (esProyecto(o)) { marca(keys, 'calidad', true); return; }
     const causa = K(o.CAUSA_FALLA || o.causaFalla);
     let vuelta = null;
     if (causa && fecha) {

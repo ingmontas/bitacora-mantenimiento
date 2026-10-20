@@ -61,6 +61,7 @@
     .tg button.on-r { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
     .tg button.on-a { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
     .tg button.on-g { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .tg button.on-p { border-color: #A78BFA; background: #A78BFA18; color: #C4B5FD; } /* (20 oct 2026) proyecto */
     .btn { display: block; width: 100%; padding: 14px; border-radius: 10px; border: none; background: var(--accent); color: #0F1923; font-weight: 800; font-size: 15.5px; cursor: pointer; margin-top: 16px; font-family: inherit; text-align: center; text-decoration: none; }
     .btn.sec { background: var(--border); color: var(--text); font-weight: 700; font-size: 14px; }
     .btn[disabled] { opacity: .5; }
@@ -201,7 +202,8 @@ function escucharEstado() {
   const partes = consultas.map(() => []);
   const unsubs = consultas.map((q, i) => q.onSnapshot(snap => {
     partes[i] = snap.docs.map(d => d.data());
-    ABIERTOS = [].concat(...partes).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen));
+    // (20 oct 2026) Los proyectos / mejoras no son una parada: no cuentan como "esperando técnico".
+    ABIERTOS = [].concat(...partes).filter(r => ['pendiente', 'en_atencion'].includes(r.estado) && ['operador', 'qr'].includes(r.origen) && r.tipoReporte !== 'proyecto');
     const ab = ABIERTOS;
     const enAt = ab.find(r => r.estado === 'en_atencion'), pend = ab.filter(r => r.estado === 'pendiente');
     estadoTxt = enAt ? `<div class="estado aten">🔧 <div><b>En atención</b> por ${esc(enAt.asignadoA || 'un técnico')}${enAt.horaLlegada ? ' desde las ' + esc(enAt.horaLlegada) : ''}.</div></div>`
@@ -213,24 +215,35 @@ function escucharEstado() {
 }
 
 // ── Reportar ──
-let parada = 'si', prioridad = 'media', enviando = false;
+// (20 oct 2026) tipo: 'falla' (lo de siempre: aviso inmediato) o 'proyecto'
+// (mejora que se planifica; no cuenta como falla de la máquina ni del técnico).
+let parada = 'si', prioridad = 'media', tipo = 'falla', enviando = false;
 function pintarReporte() {
   $('panel').innerHTML = `<div class="card">
     <div style="font-weight:800;font-size:16px;">🚨 Reportar parada o falla</div>
-    <label class="f">¿La máquina está parada?</label>
+    <label class="f">¿Qué es?</label>
+    <div class="tg" id="tgTipo"><button data-v="falla">⚠️ Falla en la máquina</button><button data-v="proyecto">📐 Proyecto / mejora</button></div>
+    <div id="bParada"><label class="f">¿La máquina está parada?</label>
     <div class="tg" id="tgPar"><button data-v="si">⛔ Sí, parada</button><button data-v="no">⚠️ No, sigue trabajando</button></div>
-    <label class="f" id="lblHora">¿Desde qué hora?</label><input type="time" id="rHora" value="${horaAhora()}">
-    <label class="f">¿Qué le pasa? *</label><textarea id="rDesc" maxlength="900" placeholder="Qué se ve, se oye o se siente raro…"></textarea>
+    <label class="f" id="lblHora">¿Desde qué hora?</label><input type="time" id="rHora" value="${horaAhora()}"></div>
+    <label class="f" id="lblDesc">¿Qué le pasa? *</label><textarea id="rDesc" maxlength="900" placeholder="Qué se ve, se oye o se siente raro…"></textarea>
     <label class="f">¿Qué tan urgente es?</label>
     <div class="tg" id="tgPri"><button data-v="alta">🔴 Alta</button><button data-v="media">🟡 Media</button><button data-v="baja">🟢 Baja</button></div>
     <label class="f">Tu nombre *</label><input type="text" id="rNom" maxlength="80" value="${esc(USUARIO && USUARIO.nombre || '')}" placeholder="Nombre y área o turno">
     <button class="btn" id="rOk">🚨 Enviar reporte</button>
   </div>`;
   const pintarTg = () => {
+    document.querySelectorAll('#tgTipo button').forEach(b => b.className = b.dataset.v === tipo ? (tipo === 'falla' ? 'on-r' : 'on-p') : '');
+    const proy = tipo === 'proyecto';
+    $('bParada').style.display = proy ? 'none' : '';
+    $('lblDesc').textContent = proy ? 'Describe el proyecto o mejora *' : '¿Qué le pasa? *';
+    $('rDesc').placeholder = proy ? 'Qué se quiere hacer o mejorar, y para qué…' : 'Qué se ve, se oye o se siente raro…';
+    $('rOk').textContent = proy ? '📐 Enviar proyecto' : '🚨 Enviar reporte';
     document.querySelectorAll('#tgPar button').forEach(b => b.className = b.dataset.v === parada ? (parada === 'si' ? 'on-r' : 'on-g') : '');
     document.querySelectorAll('#tgPri button').forEach(b => b.className = b.dataset.v === prioridad ? ({ alta: 'on-r', media: 'on-a', baja: 'on-g' })[prioridad] : '');
     $('lblHora').textContent = parada === 'si' ? '¿Desde qué hora está parada?' : '¿Desde qué hora se nota la falla?';
   };
+  $('tgTipo').onclick = ev => { const b = ev.target.closest('button'); if (b) { tipo = b.dataset.v; pintarTg(); } };
   $('tgPar').onclick = ev => { const b = ev.target.closest('button'); if (b) { parada = b.dataset.v; pintarTg(); } };
   $('tgPri').onclick = ev => { const b = ev.target.closest('button'); if (b) { prioridad = b.dataset.v; pintarTg(); } };
   pintarTg();
@@ -245,13 +258,14 @@ async function folioNuevo() {
 async function enviar() {
   if (enviando) return;
   const desc = $('rDesc').value.trim(), nom = $('rNom').value.trim();
-  if (!desc) return toast('Describe qué le pasa a la máquina');
+  const proy = tipo === 'proyecto';
+  if (!desc) return toast(proy ? 'Describe el proyecto o mejora' : 'Describe qué le pasa a la máquina');
   if (!nom) return toast('Escribe tu nombre');
   // (5 oct 2026) Una hora mayor que la actual es de anoche (parada de las
   // 23:30 reportada a las 00:15): se guarda con la fecha de ayer.
-  let h = $('rHora').value || horaAhora(), fechaRep = hoyStr();
+  let h = proy ? horaAhora() : ($('rHora').value || horaAhora()), fechaRep = hoyStr();
   if (h > horaAhora()) { const ay = new Date(); ay.setDate(ay.getDate() - 1); fechaRep = fbFechaLocal(ay); }
-  const abierto = ABIERTOS[0];
+  const abierto = proy ? null : ABIERTOS[0];
   if (abierto && !confirm(`Ya hay un reporte abierto de esta máquina (${abierto.folio || ''}, ${abierto.estado === 'en_atencion' ? 'en atención' : 'esperando técnico'}).\n\n¿Enviar otro de todas formas?`)) return;
   enviando = true; $('rOk').disabled = true; $('rOk').textContent = 'Enviando…';
   const folio = await folioNuevo();
@@ -261,10 +275,13 @@ async function enviar() {
     origen: (esTec() || esOp()) ? 'operador' : 'qr', estado: 'pendiente', folio,
     equipoId: ID, equipoNombre: EQ.nombre || '', equipoLocalidad: EQ.localidad || '',
     descripcionFalla: desc, prioridad, creadoPor: nom, creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
-    maquinaParada: parada === 'si', fechaReporte: fechaRep, horaParada: h,
+    maquinaParada: !proy && parada === 'si', fechaReporte: fechaRep, horaParada: h,
     checklistId: null, asignadoA: null, fechaPlanificada: null,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
+  // Una falla se guarda exactamente como antes (sin el campo = falla); solo
+  // el proyecto lleva tipoReporte.
+  if (proy) doc.tipoReporte = 'proyecto';
   try {
     // (5 oct 2026) Sin señal, set() no termina hasta reconectar: se espera
     // como máximo 8 s; después se da por enviado (Firestore lo sube solo).
@@ -274,13 +291,13 @@ async function enviar() {
     if (r === 'espera') guardado.catch(err => toast('⚠️ El reporte ' + folio + ' no se pudo guardar: ' + err.message));
     vista = 'ok';
     $('panel').innerHTML = `<div class="card"><div class="ok-box"><span class="e">✅</span><div style="font-size:19px;font-weight:800;">Reporte enviado</div>
-      <div class="folio">${esc(folio)}</div><div class="muted" style="font-size:13.5px;line-height:1.6;">Mantenimiento ya recibió el aviso de <b>${esc(EQ.nombre || '')}</b>.<br>Guarda este número por si te preguntan.</div>
+      <div class="folio">${esc(folio)}</div><div class="muted" style="font-size:13.5px;line-height:1.6;">${proy ? 'Mantenimiento lo va a planificar para' : 'Mantenimiento ya recibió el aviso de'} <b>${esc(EQ.nombre || '')}</b>.<br>Guarda este número por si te preguntan.</div>
       <button class="btn sec" id="rListo">Listo</button></div></div>`;
-    $('rListo').onclick = () => { vista = ''; pintar(); };
+    $('rListo').onclick = () => { vista = ''; tipo = 'falla'; pintar(); };
   } catch (err) {
     console.error(err);
     toast(err.code === 'permission-denied' ? 'No se pudo enviar: el sistema rechazó el reporte. Avisa a mantenimiento.' : 'No se pudo enviar: ' + err.message);
-    $('rOk').disabled = false; $('rOk').textContent = '🚨 Enviar reporte';
+    $('rOk').disabled = false; $('rOk').textContent = proy ? '📐 Enviar proyecto' : '🚨 Enviar reporte';
   }
   enviando = false;
 }

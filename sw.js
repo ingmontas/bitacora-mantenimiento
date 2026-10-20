@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v44';
+const CACHE = 'mantenimiento-v45'; // (20 oct 2026) Falla / Proyecto y OTs planificadas registradas en la Bitácora
 const ASSETS = [
   './',
   'index.html',

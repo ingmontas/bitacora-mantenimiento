@@ -38,7 +38,7 @@
       --accent: #F59E0B; --green: #10B981; --red: #EF4444;
       --blue: #818CF8; --orange: #F97316;
       --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
-      --c-corr: #EF6B6B; --c-prev: #1BAF7A; --c-proy: #5B8DEF; --c-otro: #94A3B8;
+      --c-corr: #EF6B6B; --c-prev: #1BAF7A; --c-proy: #5B8DEF; --c-otro: #94A3B8; --c-pred: #0891B2;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
@@ -65,6 +65,7 @@
     .tag-preventivo { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
     .tag-correctivo { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
     .tag-proyecto { background: #5B8DEF22; color: #9db8f5; border: 1px solid #5B8DEF44; }
+    .tag-predictivo { background: #0891B222; color: #67D4EA; border: 1px solid #0891B244; } /* (20 oct 2026) OT de checklist */
     .tag-otro { background: #94A3B822; color: var(--muted); border: 1px solid #94A3B844; }
 
     /* encabezado del equipo */
@@ -297,8 +298,11 @@ const esc = typeof fbEsc === 'function' ? fbEsc : (s => String(s ?? '').replace(
 const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 const splitTec = s => String(s || '').split(',').map(x => x.trim()).filter(x => x && x !== '—' && x !== '-');
 const tipoNorm = t => { t = (t || '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : 'Sin clasificar'; };
-const TIPO_COLOR = { 'Correctivo':'var(--c-corr)', 'Preventivo':'var(--c-prev)', 'Proyecto':'var(--c-proy)' };
-const TIPO_TAG = t => ({ 'Correctivo':'tag-correctivo', 'Preventivo':'tag-preventivo', 'Proyecto':'tag-proyecto' }[t] || 'tag-otro');
+// (20 oct 2026) 'Predictivo' = trabajo que sale de un checklist. Un tipo que no
+// esté aquí se muestra gris ('tag-otro') y nunca cuenta como correctivo.
+const TIPO_COLOR = { 'Correctivo':'var(--c-corr)', 'Preventivo':'var(--c-prev)', 'Predictivo':'var(--c-pred)', 'Proyecto':'var(--c-proy)' };
+const TIPO_TAG = t => ({ 'Correctivo':'tag-correctivo', 'Preventivo':'tag-preventivo', 'Predictivo':'tag-predictivo', 'Proyecto':'tag-proyecto' }[t] || 'tag-otro');
+const esPlanificado = t => t === 'Preventivo' || t === 'Predictivo';
 function fmtMin(m){ if (!m) return '0 min'; const h = Math.floor(m/60), mm = Math.round(m%60); return h ? `${h}h ${mm}m` : `${mm} min`; }
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
@@ -493,7 +497,8 @@ function mostrarHojaDeVida(equipoOrId) {
     .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b._createdAtMs - a._createdAtMs));
 
   // (5 oct 2026) Nunca las anuladas; se agrega 'en_atencion' (aviso que un técnico está atendiendo).
-  pendientesActual = currentOts.filter(o => !o.FECHA && !otAnulada(o) && o.equipoId === e.id && ['pendiente','en_atencion','planificada','en_revision','rechazada'].includes(o.estado));
+  // (20 oct 2026) Una OT ya reportada en la Bitácora tiene FECHA pero sigue abierta hasta que se cierra.
+  pendientesActual = currentOts.filter(o => (!o.FECHA || o.reportadoEnBitacora) && !otAnulada(o) && o.equipoId === e.id && ['pendiente','en_atencion','planificada','en_revision','rechazada'].includes(o.estado));
 
   renderTodo();
 }
@@ -525,13 +530,13 @@ function renderFacts() {
   if (!H.length) { el.innerHTML = ''; return; }
   const ultima = H[0], primera = H[H.length - 1];
   const ultCorr = H.find(r => r.tipo === 'Correctivo');
-  const ultPrev = H.find(r => r.tipo === 'Preventivo');
+  const ultPrev = H.find(r => esPlanificado(r.tipo));
   const hace = f => { const d = diasDesde(f); return d == null ? '' : d === 0 ? ' (hoy)' : d > 0 ? ` (hace ${d} d)` : ''; };
   el.innerHTML = [
     `Historial desde <b>${fmtFechaHV(primera.fecha)}</b>`,
     `Última intervención: <b>${fmtFechaHV(ultima.fecha)}</b>${hace(ultima.fecha)}`,
     ultCorr ? `Último correctivo: <b>${fmtFechaHV(ultCorr.fecha)}</b>${hace(ultCorr.fecha)}` : 'Sin correctivos registrados',
-    ultPrev ? `Último preventivo: <b>${fmtFechaHV(ultPrev.fecha)}</b>${hace(ultPrev.fecha)}` : 'Sin preventivos registrados',
+    ultPrev ? `Último ${ultPrev.tipo === 'Predictivo' ? 'predictivo' : 'preventivo'}: <b>${fmtFechaHV(ultPrev.fecha)}</b>${hace(ultPrev.fecha)}` : 'Sin preventivos registrados',
   ].map(s => `<span>${s}</span>`).join('');
 }
 
@@ -542,15 +547,16 @@ function renderKpis() {
   const conTiempo = H.filter(r => r.min > 0);
   const prom = conTiempo.length ? totalMin / conTiempo.length : 0;
   const corr = H.filter(r => r.tipo === 'Correctivo');
-  const prev = H.filter(r => r.tipo === 'Preventivo').length;
+  const prev = H.filter(r => esPlanificado(r.tipo)).length;
   const pct = n ? prev / n * 100 : 0;
+  // (20 oct 2026) Un proyecto no es falla, pero si paró la máquina ese tiempo sí cuenta como paro.
   const paro = H.reduce((s, r) => s + r.paro, 0);
   // días promedio entre fallas correctivas (días distintos, mínimo 3), mismo criterio que Análisis
   const dias = [...new Set(corr.map(r => r.fecha).filter(f => fechaD(f)))].sort();
   let mtbf = null;
   if (dias.length >= 3) mtbf = (fechaD(dias[dias.length - 1]) - fechaD(dias[0])) / 86400000 / (dias.length - 1);
   const tiles = [
-    { k: 'k0', l: 'Total de OTs', v: n, f: `${corr.length} correctivas · ${prev} preventivas` },
+    { k: 'k0', l: 'Total de OTs', v: n, f: `${corr.length} correctivas · ${prev} preventivas o predictivas` },
     { k: 'k1', l: 'Tiempo total', v: totalMin.toLocaleString('es-DO') + ' min', f: fmtMin(totalMin) + ' de trabajo' },
     { k: 'k2', l: 'Tiempo promedio', v: prom.toFixed(1) + ' min', f: `por OT con tiempo (${conTiempo.length})` },
     { k: 'k3', l: '% Preventivo', v: pct.toFixed(1) + '%', f: pct >= 50 ? 'buena proporción planificada' : 'mayormente reactivo' },
@@ -586,11 +592,13 @@ function renderMes() {
   while (y < yf || (y === yf && m <= mf)) { meses.push(y + '-' + String(m).padStart(2, '0')); m++; if (m > 12) { m = 1; y++; } }
   const multiY = new Set(meses.map(k => k.slice(0, 4))).size > 1;
   const label = k => MESES[Number(k.slice(5)) - 1] + (multiY ? ' ' + k.slice(2, 4) : '');
-  const serie = t => meses.map(k => H.filter(r => String(r.fecha || '').startsWith(k) && (t === 'Otros' ? !['Correctivo','Preventivo'].includes(r.tipo) : r.tipo === t)).length);
+  const serie = t => meses.map(k => H.filter(r => String(r.fecha || '').startsWith(k) && (t === 'Otros' ? !['Correctivo','Preventivo','Predictivo'].includes(r.tipo) : r.tipo === t)).length);
   const datasets = [
     { label: 'Correctivo', data: serie('Correctivo'), backgroundColor: '#EF6B6B' },
     { label: 'Preventivo', data: serie('Preventivo'), backgroundColor: '#1BAF7A' },
   ];
+  const pred = serie('Predictivo');
+  if (pred.some(Boolean)) datasets.push({ label: 'Predictivo', data: pred, backgroundColor: '#0891B2' });
   const otros = serie('Otros');
   if (otros.some(Boolean)) datasets.push({ label: 'Proyecto / otros', data: otros, backgroundColor: '#5B8DEF' });
   chartMes = new Chart(document.getElementById('chartMes'), {
@@ -667,7 +675,7 @@ function renderPendientes() {
   if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0">✅ No hay OTs abiertas para este equipo.</div>'; return; }
   const est = { pendiente: 'Pendiente', en_atencion: 'En atención', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
   el.innerHTML = pendientesActual.map(o => `
-    <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'qr' ? 'Reportada desde el QR' : o.origen === 'checklist' ? 'Detectada en checklist' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
+    <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.tipoReporte === 'proyecto' ? 'Proyecto / mejora de producción' : o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'qr' ? 'Reportada desde el QR' : o.origen === 'checklist' ? 'Detectada en checklist (predictivo)' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
       <span class="tag ${o.prioridad === 'alta' ? 'tag-correctivo' : 'tag-otro'}">${est[o.estado] || esc(o.estado)}</span></div>`).join('');
 }
 
@@ -896,7 +904,7 @@ async function exportarExcel() {
       }
     }
     if (tipos.length) {
-      const colorTipo = { 'Correctivo': '#' + PALETTE.red, 'Preventivo': '#' + PALETTE.aqua, 'Proyecto': '#' + PALETTE.blue };
+      const colorTipo = { 'Correctivo': '#' + PALETTE.red, 'Preventivo': '#' + PALETTE.aqua, 'Predictivo': '#0891B2', 'Proyecto': '#' + PALETTE.blue };
       const pieImg = chartToImage({
         type: 'pie',
         data: { labels: tipos, datasets: [{ data: tipos.map(t => DATA.filter(r => r.tipo === t).length), backgroundColor: tipos.map(t => colorTipo[t] || '#94A3B8') }] },

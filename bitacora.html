@@ -80,6 +80,9 @@
     .tag-preventivo { background: #DCFCE7; color: #166534; }
     .tag-correctivo { background: #FEE2E2; color: #991B1B; }
     .tag-proyecto { background: #EDE9FE; color: #5B21B6; }
+    /* (20 oct 2026) Predictivo = trabajo que sale de un checklist (cian) */
+    .tag-predictivo { background: #CFFAFE; color: #155E75; }
+    .tag-revision { background: #E0F2FE; color: #075985; }
     .tag-local { background: #FEF3C7; color: #92400E; }
     .tag-synced { background: var(--surface); color: var(--muted); }
     .tag-paro { background: #FEE2E2; color: #991B1B; }
@@ -92,6 +95,9 @@
     #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: #DC2626; }
     #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: #16A34A; }
     #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: #7C3AED; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Predictivo"] { background: #0891B2; }
+    #tipo-mto-group .toggle-btn { padding: 0 3px; font-size: 13px; } /* 4 tipos en 390 px */
+    #tipo-mto-group .toggle-btn:disabled { opacity: .35; cursor: default; }
     #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: #DC2626; }
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 18px; font-size: 14.5px; font-weight: 600; max-width: 360px; text-align: center; box-shadow: 0 6px 24px rgba(11,37,69,.25); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -105,6 +111,7 @@
     .hist-item.preventivo { border-left-color: var(--green); }
     .hist-item.correctivo { border-left-color: var(--red); }
     .hist-item.proyecto { border-left-color: var(--purple); }
+    .hist-item.predictivo { border-left-color: #0891B2; }
     .hist-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7px; gap: 8px; }
     .hist-header > div:first-child { min-width: 0; }
     .hist-title { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
@@ -181,7 +188,7 @@
     .ms-delta.bien { color: var(--green-txt); } .ms-delta.mal { color: var(--red-txt); } .ms-delta.neutro { color: var(--muted); }
     .ms-insight { background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; margin-bottom: 8px; color: var(--text2); }
     .ms-ot { background: #F7F9FC; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid var(--border); font-size: 13px; }
-    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--purple); }
+    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--purple); } .ms-ot.predictivo { border-left-color: #0891B2; }
     .ms-ot .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; margin-bottom: 3px; }
     .ms-ot .meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
     .ms-ot .sol { color: var(--green-txt); font-size: 12px; margin-top: 3px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -291,6 +298,26 @@
     .aviso-banner .f { font-family: var(--mono); font-size: 12px; color: #B91C1C; overflow-wrap: anywhere; }
     .aviso-banner .d { font-size: 14px; color: #7F1D1D; line-height: 1.45; overflow-wrap: anywhere; }
     .aviso-banner .c { align-self: flex-end; background: none; border: none; color: #B91C1C; font-family: inherit; font-weight: 700; font-size: 13.5px; min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; }
+    /* (20 oct 2026) Registrar en la Bitácora una OT planificada (checklist o proyecto) */
+    .aviso-banner.ot { background: #ECFEFF; border-color: #67E8F9; }
+    .aviso-banner.ot .k, .aviso-banner.ot .f, .aviso-banner.ot .c { color: #0E7490; }
+    .aviso-banner.ot .d { color: #164E63; }
+    .aviso-banner.ot.proy { background: #F5F3FF; border-color: #C4B5FD; }
+    .aviso-banner.ot.proy .k, .aviso-banner.ot.proy .f, .aviso-banner.ot.proy .c { color: #6D28D9; }
+    .aviso-banner.ot.proy .d { color: #4C1D95; }
+    .aviso-banner .d.rech { color: #B91C1C; font-weight: 600; }
+    .aviso-banner .d.nota { font-size: 12.5px; opacity: .85; }
+    #card-equipo.bloqueado .eq-sel, #card-equipo.bloqueado select:disabled { cursor: default; }
+    #card-equipo.bloqueado .eq-sel { border-color: var(--border); background-color: #F7F9FC; }
+    .eq-lock { font-size: 12px; color: var(--muted); }
+    .mt-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; border-left: 4px solid #0891B2; }
+    .mt-item.proyecto { border-left-color: var(--purple); }
+    .mt-item.rechazada { border-left-color: var(--red); }
+    .mt-item .t { flex: 1; min-width: 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+    .mt-item .t b { font-size: 14px; }
+    .mt-item .t .m { color: var(--muted); font-size: 12px; }
+    .mt-item .t .m.tarde { color: var(--red-txt); font-weight: 700; }
+    .mt-item .btn { flex-shrink: 0; }
     .submit-bar { position: sticky; bottom: var(--nav-h); z-index: 50; margin: 4px -12px 0; padding: 10px 12px 12px; background: var(--bg); border-top: 1px solid var(--border); }
     .btn-submit { min-height: 52px; border-radius: 12px; font-size: 16px; }
     .btn-submit.cerrar { background: var(--green); }
@@ -327,6 +354,13 @@
       <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancelar</button>
     </div>
 
+    <!-- (20 oct 2026) OTs de checklist y proyectos planificados para el técnico
+         que inició sesión: desde aquí se registran al terminarlos. -->
+    <section class="nf-card" id="mis-trabajos" style="display:none" aria-live="polite">
+      <div class="nf-row"><span class="nf-lbl">📅 Mis trabajos planificados</span><span class="nf-count" id="mis-trabajos-n"></span></div>
+      <div id="mis-trabajos-lista" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </section>
+
     <div class="nf-head">
       <div class="nf-title" id="form-title">Nueva entrada</div>
       <!-- (7 oct 2026) La fecha va compacta ("07/10 · S41"); al tocarla se abre
@@ -362,6 +396,7 @@
           <select id="f-tipo-sel" aria-label="Tipo de máquina"><option value="">— Sin elegir —</option></select></label>
       </div>
       <input type="text" id="f-tipo-maq" placeholder="Escribe el tipo de máquina…" style="display:none" aria-label="Tipo de máquina (texto libre)"/>
+      <div class="eq-lock" id="eq-lock" style="display:none">🔒 Equipo fijo: es el de la OT planificada.</div>
     </section>
 
     <!-- ── TRABAJO ── -->
@@ -369,6 +404,7 @@
       <div class="toggle-row" id="tipo-mto-group" role="group" aria-label="Tipo de mantenimiento">
         <button type="button" class="toggle-btn sel" data-val="Correctivo" onclick="selectToggle('tipo-mto-group',this)">Correctivo</button>
         <button type="button" class="toggle-btn" data-val="Preventivo" onclick="selectToggle('tipo-mto-group',this)">Preventivo</button>
+        <button type="button" class="toggle-btn" data-val="Predictivo" onclick="selectToggle('tipo-mto-group',this)">Predictivo</button>
         <button type="button" class="toggle-btn" data-val="Proyecto" onclick="selectToggle('tipo-mto-group',this)">Proyecto</button>
       </div>
       <!-- Comparación con Maximo/SAP (28 sep 2026): causa estructurada de una
@@ -717,6 +753,11 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('⚠️ Error leyendo los avisos: ' + err.message, 'error');
       });
     vigilarBorradoresAnteriores();
+    // (20 oct 2026) Trabajos planificados del técnico y apertura desde
+    // Checklist (bitacora.html#ot=<id>) en modo "registrar esta OT".
+    escucharMisTrabajos();
+    abrirOtDesdeHash();
+    window.addEventListener('hashchange', abrirOtDesdeHash);
     const box = document.getElementById('fb-status-box');
     if (box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${esc(firebaseConfig.projectId)}</strong>). Los registros se comparten en tiempo real con todos los celulares conectados a esta misma app.`;
   }).catch((err) => {
@@ -825,7 +866,9 @@ function combinarOts() {
   // producción y las fallas de checklist que siguen abiertas no son OTs
   // terminadas todavía (antes aparecían como filas vacías y sumaban al total).
   // (5 oct 2026) Tampoco las OTs anuladas (reportes duplicados), de ningún origen.
-  allRecords = docsOts.filter(r => r.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada'));
+  // (20 oct 2026) Excepción: el trabajo planificado que el técnico YA reportó
+  // en la Bitácora (en revisión o validado) sí es trabajo registrado.
+  allRecords = docsOts.filter(r => r.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(r.origen) && r.estado !== 'completada' && !otReportadaEnRevision(r)));
   procesarAvisos(_docsAvisosAbiertos);
   revisarBorradoresConfirmados();
   const activeScreen = document.querySelector('.screen.active')?.id;
@@ -834,6 +877,8 @@ function combinarOts() {
   updateHeaderStatus();
   updateEquipoDatalist();
 }
+
+const otReportadaEnRevision = r => !!r.reportadoEnBitacora && ['en_revision', 'validada'].includes(r.estado);
 
 // ══════ CAUSAS DE FALLA (catálogo fijo — comparación con Maximo/SAP, 28 sep 2026) ══════
 // Lista corta y fija (mismo criterio que se usó con los puntos de checklist:
@@ -898,7 +943,9 @@ async function loadTecnicos() {
   renderTecGrid(lista);
   if (document.getElementById('screen-stats').classList.contains('active')) renderMiSemana();
   // (7 oct 2026) En una entrada nueva queda marcado el técnico que inició sesión.
-  window.fbReady.then(() => { preseleccionarTecnicoPropio(); renderHerrUI(); }).catch(() => {});
+  // (20 oct 2026) Con la lista ya cargada se conoce el nombre de técnico del
+  // usuario: se escuchan también sus trabajos planificados con ese nombre.
+  window.fbReady.then(() => { preseleccionarTecnicoPropio(); renderHerrUI(); escucharMisTrabajos(); }).catch(() => {});
 }
 
 function renderTecGrid(lista) {
@@ -1260,7 +1307,7 @@ function updateEquipoDatalist() {
 // FORMULARIO ÚNICO (7 oct 2026) — diseño claro aprobado
 // "Nueva entrada", "Editar entrada" y "Cerrar aviso" son el mismo formulario.
 // ══════════════════════════════════════════════════════════════════════
-let _modoForm = 'nuevo'; // 'nuevo' | 'editar' | 'aviso'
+let _modoForm = 'nuevo'; // 'nuevo' | 'editar' | 'aviso' | 'ot' (20 oct 2026: OT planificada)
 
 function initFormularioUnico() {
   const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
@@ -1334,24 +1381,174 @@ function initFormularioUnico() {
 // Pone títulos, botón y avisos según el modo del formulario.
 function setModoForm(modo, aviso) {
   _modoForm = modo;
-  document.getElementById('form-title').textContent = { nuevo: 'Nueva entrada', editar: 'Editar entrada', aviso: 'Cerrar aviso' }[modo] || 'Nueva entrada';
+  document.getElementById('form-title').textContent = { nuevo: 'Nueva entrada', editar: 'Editar entrada', aviso: 'Cerrar aviso', ot: 'Registrar trabajo planificado' }[modo] || 'Nueva entrada';
   document.getElementById('form-sub').textContent = '';
   const btn = document.getElementById('submit-btn');
-  btn.textContent = modo === 'aviso' ? 'Terminé — cerrar aviso' : modo === 'editar' ? 'Guardar cambios' : 'Guardar';
-  btn.classList.toggle('cerrar', modo === 'aviso');
+  btn.textContent = modo === 'aviso' ? 'Terminé — cerrar aviso' : modo === 'ot' ? 'Terminé — enviar a revisión' : modo === 'editar' ? 'Guardar cambios' : 'Guardar';
+  btn.classList.toggle('cerrar', modo === 'aviso' || modo === 'ot');
   document.getElementById('edit-banner').style.display = modo === 'editar' ? 'flex' : 'none';
   const ab = document.getElementById('aviso-banner');
-  if (modo === 'aviso' && aviso) {
+  ab.classList.remove('ot', 'proy');
+  bloquearEquipoYTipo(modo === 'ot' ? aviso : null);
+  const mt = document.getElementById('mis-trabajos');
+  if (mt) mt.style.display = (modo === 'nuevo' && _misTrabajosLista().length) ? '' : 'none';
+  if (modo === 'ot' && aviso) {
+    // (20 oct 2026) Franja con la OT planificada: de dónde viene, qué hay que
+    // hacer, para cuándo y, si la devolvieron, qué corregir.
+    const proy = esProyectoOt(aviso);
+    ab.classList.add('ot');
+    if (proy) ab.classList.add('proy');
+    const eqN = avEquipo(aviso).nombre;
+    ab.innerHTML = `<div class="h"><span class="k">${proy ? 'Proyecto / mejora' : 'OT de checklist · predictivo'}</span><span class="f">${esc(aviso.folio || '')}</span></div>
+      <div class="d"><b>${esc(eqN || '—')}</b> — “${esc(aviso.descripcionFalla || '—')}”</div>
+      <div class="d">📅 Planificada para el ${esc(fmtDdMmB(aviso.fechaPlanificada) || '—')} · 👤 ${esc(aviso.asignadoA || '—')}${proy && aviso.creadoPor ? ' · pidió ' + esc(aviso.creadoPor) : ''}</div>
+      ${aviso.estado === 'rechazada' ? `<div class="d rech">⚠️ Devuelta${aviso.revisadoPor ? ' por ' + esc(aviso.revisadoPor) : ''}: ${esc(aviso.notaRevision || 'no concluida')}. Corrige y vuelve a enviar.</div>` : ''}
+      <div class="d nota">Al terminar: escribe la solución, los técnicos, las herramientas y si usaste repuestos. Al guardar pasa a revisión del supervisor.</div>
+      <button type="button" class="c" onclick="cancelEdit()">Cancelar</button>`;
+    ab.style.display = '';
+  } else if (modo === 'aviso' && aviso) {
     ab.innerHTML = `<div class="h"><span class="k">${aviso.origen === 'qr' ? 'Aviso por QR' : 'Aviso de producción'}</span><span class="f">${esc(aviso.folio || '')}</span></div>
       <div class="d">“${esc(aviso.descripcionFalla || '—')}” — ${esc(aviso.creadoPor || '—')}${aviso.horaParada ? ' · parada desde ' + esc(aviso.horaParada) : ''}</div>
       <button type="button" class="c" onclick="cancelEdit()">Cancelar</button>`;
     ab.style.display = '';
   } else { ab.style.display = 'none'; ab.innerHTML = ''; }
   const card = document.getElementById('card-rep');
-  card.classList.toggle('aviso', modo === 'aviso');
+  card.classList.toggle('aviso', modo === 'aviso' || modo === 'ot');
   card.classList.remove('falta');
-  document.getElementById('rep-titulo').textContent = modo === 'aviso' ? '¿Repuestos? *' : 'Repuestos';
+  document.getElementById('rep-titulo').textContent = (modo === 'aviso' || modo === 'ot') ? '¿Repuestos? *' : 'Repuestos';
 }
+
+// ══════ OTs PLANIFICADAS → BITÁCORA (20 oct 2026) ══════
+// "Todo trabajo realizado se reporta en la Bitácora": las OTs que arroja el
+// checklist (predictivo) y los proyectos / mejoras de producción, una vez
+// planificados por el Encargado, se registran aquí con el MISMO formulario.
+// Al guardar se actualiza el MISMO documento de /ots (no se crea otro) con
+// los campos de una entrada normal + estado 'en_revision',
+// trabajoRealizadoPor/En y reportadoEnBitacora. Después sigue la revisión de
+// siempre en Checklist (Supervisor valida o devuelve; Administrador cierra).
+const esProyectoOt = o => !!o && o.tipoReporte === 'proyecto';
+const tipoMantOt = o => esProyectoOt(o) ? 'Proyecto' : 'Predictivo';
+const esOtPlanificable = o => !!o && (o.origen === 'checklist' || esProyectoOt(o));
+const fmtDdMmB = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] : (f || ''); };
+const ESTADOS_REGISTRABLES = ['planificada', 'rechazada'];
+
+// En modo OT el equipo es el de la OT (no se cambia) y el tipo queda fijo.
+// Los niveles de la cascada que vienen vacíos se dejan elegir (p. ej. la planta).
+function bloquearEquipoYTipo(ot) {
+  const on = !!ot;
+  const card = document.getElementById('card-equipo');
+  card.classList.toggle('bloqueado', on);
+  document.getElementById('eq-lock').style.display = on ? '' : 'none';
+  const sel = document.getElementById('f-equipo-sel');
+  sel.disabled = on && !!sel.value;
+  document.getElementById('f-equipo').disabled = on && !!sel.value;
+  ['f-planta', 'f-linea', 'f-sublinea', 'f-tipo-sel'].forEach(id => { const el = document.getElementById(id); el.disabled = on && !!el.value; });
+  document.getElementById('f-tipo-maq').disabled = on && !!document.getElementById('f-tipo-maq').value;
+  const fijo = on ? tipoMantOt(ot) : null;
+  document.querySelectorAll('#tipo-mto-group .toggle-btn').forEach(b => { b.disabled = !!fijo && b.dataset.val !== fijo; });
+  if (fijo) selectToggleByValue('tipo-mto-group', fijo);
+}
+
+function abrirOtDesdeHash() {
+  const m = /^#ot=([A-Za-z0-9_-]{1,64})$/.exec(location.hash || '');
+  if (!m) return;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  const local = _misTrabajos.get(m[1]);
+  if (local) { abrirRegistroOt(local); return; }
+  db.collection('ots').doc(m[1]).get()
+    .then(snap => { if (!snap.exists) { showToast('⚠️ Esa OT ya no existe', 'error'); return; } abrirRegistroOt({ id: snap.id, ...snap.data() }); })
+    .catch(e => showToast('❌ No se pudo abrir la OT: ' + msgErrorFirestore(e), 'error', 8000));
+}
+
+async function abrirRegistroOt(o) {
+  if (!esOtPlanificable(o)) { showToast('⚠️ Esa OT no es de checklist ni un proyecto planificado', 'error'); return; }
+  if (!ESTADOS_REGISTRABLES.includes(o.estado)) {
+    const txt = { pendiente: 'todavía no está planificada (el Encargado le pone técnico y fecha)', en_revision: 'ya está en revisión', validada: 'ya fue validada', completada: 'ya está cerrada', anulada: 'está anulada' }[o.estado] || ('está ' + (o.estado || 'sin estado'));
+    showToast('⚠️ ' + (o.folio || 'Esta OT') + ' ' + txt, 'warn', 6000);
+    return;
+  }
+  if (window.editingRecord && window.editingRecord.id !== o.id) exitEditMode();
+  // Equipo de la OT con su planta / área / línea / tipo del inventario.
+  let eqInv = o.equipoId ? _equiposCanonicos.find(x => x.id === o.equipoId) : null;
+  if (!eqInv && o.equipoId) {
+    try { const s = await db.collection('equipos').doc(o.equipoId).get(); if (s.exists) eqInv = { id: s.id, ...s.data() }; } catch (e) { /* se usa lo que trae la OT */ }
+  }
+  const eq = avEquipo(o);
+  const tipo = tipoMantOt(o);
+  let rec;
+  if (o.reportadoEnBitacora && o.FECHA) {
+    // Devuelta por el supervisor: se abre con lo que ya había reportado.
+    rec = { ...o, TIPO_MANTENIMIENTO: tipo };
+  } else {
+    const fecha = fbHoy();
+    rec = {
+      FECHA: fecha, SEMANA: fbSemanaISO(fecha),
+      PLANTA: (eqInv && eqInv.planta) || leerPlantaGuardada() || valSel('f-planta') || (currentPlantas.length === 1 ? currentPlantas[0] : ''),
+      LINEA_EQUIPO: (eqInv && eqInv.localidad) || eq.localidad, LINEA: (eqInv && eqInv.linea) || '', TIPO_MAQUINA: (eqInv && eqInv.tipoMaquina) || '',
+      EQUIPO: (eqInv && eqInv.nombre) || eq.nombre, equipoId: o.equipoId || '',
+      DESCRIPCION_FALLA: o.descripcionFalla || '', CAUSA_FALLA: o.causaFalla || '',
+      H_INICIO: '', H_TECNICO: '', H_FINAL: avAhora(),
+      TIPO_MANTENIMIENTO: tipo, PARO_PLANTA: 'no', PRIORIDAD: o.prioridad || 'media', TECNICOS: o.asignadoA || avMiNombre(),
+    };
+  }
+  if (eqInv && !catalogoEquipos().some(x => x.id === eqInv.id)) _eqExtra.push({ id: eqInv.id, nombre: eqInv.nombre || '', localidad: eqInv.localidad || '', planta: eqInv.planta || '', linea: eqInv.linea || '', tipoMaquina: eqInv.tipoMaquina || '' });
+  window.editingRecord = o;
+  fillFormFromRecord(rec);
+  if (!(o.reportadoEnBitacora && o.FECHA)) { _repModo = null; renderRepUI(); } // hay que elegir Sin / Con repuestos
+  setModoForm('ot', o);
+  cargarEstadosSolicitudes(o.id);
+  cargarHerramientasAsignadas();
+  goTo('nuevo', document.getElementById('nav-nuevo'));
+  window.scrollTo(0, 0);
+  setTimeout(() => { const s = document.getElementById('f-solucion'); if (s) s.focus(); }, 300);
+}
+
+// ── Mis trabajos planificados ──
+// Una consulta pequeña por cada forma del nombre del técnico (asignadoA
+// guarda el nombre completo de tecnicos.json): asignadoA == nombre y estado
+// 'in' [planificada, rechazada]. Solo igualdades: sin índice compuesto, y
+// solo trae SUS trabajos abiertos (cuota gratis de Firebase).
+const _misTrabajos = new Map();          // id → OT
+const _misTrabajosPartes = new Map();    // nombre → [OT]
+const _misTrabajosUnsub = new Map();     // nombre → unsubscribe
+function _misTrabajosLista() {
+  return [..._misTrabajos.values()].filter(o => esOtPlanificable(o) && ESTADOS_REGISTRABLES.includes(o.estado))
+    .sort((a, b) => (a.estado === 'rechazada' ? 0 : 1) - (b.estado === 'rechazada' ? 0 : 1) || String(a.fechaPlanificada || '').localeCompare(String(b.fechaPlanificada || '')));
+}
+function escucharMisTrabajos() {
+  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO'))) return;
+  const u = window.currentUserRole || {};
+  const nombres = [u.tecnico, avMiNombre(), u.nombre].map(n => String(n || '').trim()).filter(n => n && n !== 'Técnico');
+  [...new Set(nombres)].slice(0, 3).forEach(n => {
+    if (_misTrabajosUnsub.has(n)) return;
+    _misTrabajosUnsub.set(n, db.collection('ots').where('asignadoA', '==', n).where('estado', 'in', ESTADOS_REGISTRABLES)
+      .onSnapshot(snap => {
+        _misTrabajosPartes.set(n, snap.docs.map(docAOt));
+        _misTrabajos.clear();
+        _misTrabajosPartes.forEach(l => l.forEach(o => _misTrabajos.set(o.id, o)));
+        renderMisTrabajos();
+      }, err => console.warn('No se pudieron leer tus trabajos planificados:', err.message)));
+  });
+}
+function renderMisTrabajos() {
+  const card = document.getElementById('mis-trabajos');
+  if (!card) return;
+  const lista = _misTrabajosLista();
+  card.style.display = (lista.length && _modoForm === 'nuevo') ? '' : 'none';
+  document.getElementById('mis-trabajos-n').textContent = lista.length ? lista.length + (lista.length === 1 ? ' pendiente' : ' pendientes') : '';
+  const hoy = fbHoy();
+  // Dentro del onclick solo va el id del documento (seguro).
+  document.getElementById('mis-trabajos-lista').innerHTML = lista.map(o => {
+    const proy = esProyectoOt(o), tarde = o.estado === 'planificada' && o.fechaPlanificada && o.fechaPlanificada < hoy;
+    return `<div class="mt-item ${proy ? 'proyecto' : ''} ${o.estado === 'rechazada' ? 'rechazada' : ''}">
+      <div class="t"><b>${esc(avEquipo(o).nombre || '—')}</b> <span class="tag tag-${proy ? 'proyecto' : 'predictivo'}">${proy ? 'Proyecto' : 'Predictivo'}</span>
+        <div>${esc(o.descripcionFalla || '')}</div>
+        <div class="m ${tarde ? 'tarde' : ''}">${esc(o.folio || '')} · ${o.estado === 'rechazada' ? '⚠️ Devuelta: ' + esc(o.notaRevision || 'corregir') : '📅 para el ' + esc(fmtDdMmB(o.fechaPlanificada)) + (tarde ? ' (atrasada)' : '')}</div></div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="abrirRegistroOtId('${esc(o.id)}')">${o.estado === 'rechazada' ? 'Corregir' : 'Registrar'}</button>
+    </div>`;
+  }).join('');
+}
+function abrirRegistroOtId(id) { const o = _misTrabajos.get(id); if (o) abrirRegistroOt(o); }
 
 // ── Equipo en cascada: Planta → Área → Línea → Tipo → Equipo ──
 // Mientras el inventario esté incompleto la coincidencia es tolerante: un
@@ -1807,6 +2004,7 @@ let _submitting = false; // evita registros duplicados por doble-tap (wifi lenta
 function msgErrorFirestore(e, contexto) {
   if (e && e.code === 'permission-denied') {
     if (contexto === 'aviso') return 'No tienes permiso para cerrar este aviso: lo está atendiendo otro técnico (o ya cambió de estado).';
+    if (contexto === 'ot') return 'Firebase no dejó registrar esta OT (ya cambió de estado o tu usuario no es técnico).';
     return 'Firebase no permitió guardar este cambio (permiso denegado).';
   }
   return (e && e.message) || String(e);
@@ -1842,7 +2040,7 @@ async function submitForm() {
   if (faltan.length) { showToast('⚠️ Completa: ' + faltan.join(', '), 'error'); return; }
   if (!fbParseFecha(fecha)) { showToast('⚠️ Falta la Fecha', 'error'); return; }
   // (7 oct 2026) Al cerrar un aviso hay que decir si se usaron repuestos.
-  if (_modoForm === 'aviso' && !_repModo) {
+  if ((_modoForm === 'aviso' || _modoForm === 'ot') && !_repModo) {
     const card = document.getElementById('card-rep');
     card.classList.add('falta');
     card.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1929,12 +2127,24 @@ async function submitForm() {
     const editing = window.editingRecord;
     // Se conserva el Title que ya tenía (los avisos traen su folio).
     record.Title = editing.Title || editing.folio || ('OT-' + Date.now());
-    const esCierreAviso = ['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada';
+    // (20 oct 2026) Registrar una OT planificada (checklist / proyecto): NO es
+    // el cierre de un aviso aunque el proyecto venga de producción.
+    const esRegistroOt = _modoForm === 'ot';
+    // Un proyecto ya registrado (en revisión) que se edita desde el Historial
+    // tampoco se cierra aquí: lo cierra el Administrador en Checklist.
+    const esCierreAviso = !esRegistroOt && ['operador', 'qr'].includes(editing.origen) && editing.estado !== 'completada'
+      && !esProyectoOt(editing) && !otReportadaEnRevision(editing);
+    if (esRegistroOt) record.TIPO_MANTENIMIENTO = tipoMantOt(editing);
     // (5 oct 2026) Copia local ANTES de mandar el cambio (ver BORRADOR_KEY).
-    borradorAgregar({ id: editing.id, modo: 'editar', record: { ...record }, nuevasSolicitudes: idsNuevasSol, editing: { id: editing.id, origen: editing.origen || '', estado: editing.estado || '', folio: editing.folio || '', Title: editing.Title || '' }, ts: Date.now() });
+    borradorAgregar({ id: editing.id, modo: 'editar', ot: esRegistroOt, record: { ...record }, nuevasSolicitudes: idsNuevasSol, editing: { id: editing.id, origen: editing.origen || '', estado: editing.estado || '', folio: editing.folio || '', Title: editing.Title || '', tipoReporte: editing.tipoReporte || '', descripcionFalla: editing.descripcionFalla || '', fechaPlanificada: editing.fechaPlanificada || '', asignadoA: editing.asignadoA || '', equipoId: editing.equipoId || '' }, ts: Date.now() });
     // Cerrar un aviso de producción: el mismo documento pasa a OT completada.
     if (esCierreAviso) {
       Object.assign(record, { estado: 'completada', cerradoEn: fbTimestamp(), cerradoPor: avMiNombre(), fechaCompletada: fbHoy() });
+    }
+    // OT planificada: el mismo documento pasa a revisión con todo lo reportado.
+    // (La regla de /ots deja al técnico pasarla a 'en_revision'.)
+    if (esRegistroOt) {
+      Object.assign(record, { estado: 'en_revision', trabajoRealizadoPor: avMiNombre(), trabajoRealizadoEn: fbTimestamp(), reportadoEnBitacora: true });
     }
     // (5 oct 2026) Quién y cuándo editó (lo pide la auditoría).
     Object.assign(record, { editadoPor: miNombreUsuario(), editadoEn: fbTimestamp() });
@@ -1948,15 +2158,16 @@ async function submitForm() {
     const batch = db.batch();
     batch.update(db.collection('ots').doc(editing.id), cambios);
     nuevasSol.forEach(s => batch.set(s.ref, docSolicitudRepuesto(s.item, record, editing.id, editing.folio || record.Title)));
-    publicarHojaTrasGuardar(record, editing);
+    // (Una OT en revisión todavía no sale en la hoja de vida pública: se publica al cerrarla.)
+    if (!esRegistroOt) publicarHojaTrasGuardar(record, editing);
     batch.commit()
       .then(() => borradorQuitar(editing.id))
       .catch((e) => {
         console.error('Error actualizando OT:', e);
-        borradorMarcarFallido(editing.id, msgErrorFirestore(e, esCierreAviso ? 'aviso' : ''));
+        borradorMarcarFallido(editing.id, msgErrorFirestore(e, esCierreAviso ? 'aviso' : esRegistroOt ? 'ot' : ''));
       });
     document.getElementById('loading').classList.remove('show');
-    showToast((navigator.onLine ? (esCierreAviso ? '✅ Aviso cerrado' : '✅ Cambios guardados') : '💾 Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
+    showToast((navigator.onLine ? (esCierreAviso ? '✅ Aviso cerrado' : esRegistroOt ? '✅ ' + (editing.folio || 'OT') + ' registrada — pasa a revisión' : '✅ Cambios guardados') : '💾 Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
     exitEditMode();
     goTo('historial', document.getElementById('nav-historial'));
     _submitting = false;
@@ -2057,14 +2268,14 @@ function borradorRecuperar(id) {
   if (Array.isArray(rec.REPUESTOS)) rec.REPUESTOS = rec.REPUESTOS.map(i => (i && nuevas.includes(i.solicitudId)) ? { ...i, solicitudId: null } : i);
   if (b.modo === 'editar') {
     // Se vuelve a editar el MISMO documento (no se crea uno nuevo).
-    const actual = allRecords.find(r => r.id === b.id) || avisos.find(r => r.id === b.id);
+    const actual = allRecords.find(r => r.id === b.id) || avisos.find(r => r.id === b.id) || _misTrabajos.get(b.id);
     window.editingRecord = actual || { ...(b.editing || {}), id: b.id };
   }
   fillFormFromRecord(rec);
   if (b.modo === 'editar') {
     const ed = window.editingRecord;
-    const esAviso = ['operador', 'qr'].includes(ed.origen) && ed.estado !== 'completada';
-    setModoForm(esAviso ? 'aviso' : 'editar', ed);
+    const esAviso = ['operador', 'qr'].includes(ed.origen) && ed.estado !== 'completada' && !esProyectoOt(ed) && !otReportadaEnRevision(ed);
+    setModoForm(b.ot ? 'ot' : esAviso ? 'aviso' : 'editar', ed); // (20 oct 2026) OT planificada
     document.getElementById('form-sub').textContent = 'Recuperado de la copia local — revisa y guarda';
     cargarEstadosSolicitudes(b.id);
   }
@@ -2218,6 +2429,7 @@ function renderHistory() {
     const esParo = r.PARO_PLANTA === 'si';
     const tags = `<span class="tag tag-${tipo}">${esc(r.TIPO_MANTENIMIENTO||'—')}</span>
       ${r._pending ? '<span class="tag tag-local">SIN SUBIR</span>' : '<span class="tag tag-synced">☁️ ✓</span>'}
+      ${otReportadaEnRevision(r) ? `<span class="tag tag-revision">${r.estado === 'validada' ? 'VALIDADA' : 'EN REVISIÓN'}</span>` : ''}
       ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}
       ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta">🔴 ALTA</span>' : ''}`;
     const sem = fbSemanaISO(r.FECHA) || r.SEMANA || '?';
@@ -2553,7 +2765,10 @@ function avEsMio(r) {
 
 // Se llama con los avisos abiertos (listener de estado pendiente/en_atencion).
 function procesarAvisos(docs) {
-  avisos = docs.filter(r => ['operador', 'qr'].includes(r.origen) && ['pendiente', 'en_atencion'].includes(r.estado)); // 'qr' = reportado desde la etiqueta QR sin usuario (equipo.html)
+  // (20 oct 2026) Los proyectos / mejoras (tipoReporte 'proyecto') NO son avisos
+  // urgentes: no suenan, no cuentan en el número rojo y no salen aquí; se
+  // planifican en Checklist → "OTs por planificar".
+  avisos = docs.filter(r => ['operador', 'qr'].includes(r.origen) && ['pendiente', 'en_atencion'].includes(r.estado) && r.tipoReporte !== 'proyecto'); // 'qr' = reportado desde la etiqueta QR sin usuario (equipo.html)
   const pendientes = avisos.filter(r => r.estado === 'pendiente');
   if (!_avisosListos) { /* todavía no llegó la lista de avisos */ }
   else if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));

@@ -520,7 +520,18 @@ const riskLabel = r => ({critico:'Crítico',alto:'Alto',medio:'Medio',bajo:'Bajo
 const isNoResuelto = sol => { sol=(sol||'').toLowerCase(); return ['no solucionado','no solucionada','no resuelto','sin solucionar','no terminado','aún no','pendiente'].some(x=>sol.includes(x)); };
 const splitTecnicos = s => s ? s.split(',').map(x=>x.trim()).filter(Boolean) : [];
 const isCorr = r => (r.tipoMant||'').toLowerCase()==='correctivo';
-const isPrev = r => (r.tipoMant||'').toLowerCase()==='preventivo';
+// (20 oct 2026) 'Predictivo' = trabajo que sale de un checklist (antes se
+// cerraba como 'Preventivo'): cuenta como trabajo planificado, nunca como
+// correctivo (no entra en MTBF). Los proyectos / mejoras de producción no
+// cuentan como falla (ni MTBF, ni respuesta, ni reincidencia), pero el
+// tiempo que la máquina estuvo parada por un proyecto SÍ suma al paro de
+// la máquina (decisión del dueño, 20 oct 2026). En la tabla de técnicos
+// no suma, para no afectar la eficiencia del técnico (paroTecnicoDe). Un tipo desconocido se
+// muestra tal cual (gris) y tampoco es correctivo.
+const isPrev = r => ['preventivo','predictivo'].includes((r.tipoMant||'').toLowerCase());
+const isProy = r => !!r.proyecto || (r.tipoMant||'').toLowerCase()==='proyecto';
+const paroDe = r => r.minMaquina;
+const paroTecnicoDe = r => isProy(r) ? 0 : r.minMaquina;
 
 /* ---------- estado de filtros y ficha ---------- */
 const F = { periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'' };
@@ -650,7 +661,7 @@ function render(){
   //  - "Paro por fallas" = solo correctivos; el total de todos los tipos va en el tooltip.
   //  - Disponibilidad = MTBF / (MTBF + MTTR).
   const correctivos = scopeRows.filter(isCorr), preventivos = scopeRows.filter(isPrev);
-  const totalDowntimeAll = scopeRows.reduce((s,r)=>s+r.minMaquina,0);
+  const totalDowntimeAll = scopeRows.reduce((s,r)=>s+paroDe(r),0);
   const totalDowntime = correctivos.reduce((s,r)=>s+r.minMaquina,0);
   const pctCorr = scopeRows.length ? Math.round(correctivos.length/scopeRows.length*100) : 0;
   const predKpi = computePredictive(scopeRows, ref);
@@ -667,9 +678,9 @@ function render(){
   const avgResp = prevCheck.length ? prevCheck.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/prevCheck.length : null;
 
   $('kpiRow').innerHTML = `
-    <div class="kpi"><div class="lbl">Órdenes de trabajo</div><div class="val">${scopeRows.length}</div><div class="foot">${correctivos.length} correctivas · ${preventivos.length} preventivas</div></div>
+    <div class="kpi"><div class="lbl">Órdenes de trabajo</div><div class="val">${scopeRows.length}</div><div class="foot">${correctivos.length} correctivas · ${preventivos.length} preventivas o predictivas</div></div>
     <div class="kpi ${pctCorr>=60?'accent-red':pctCorr>=35?'accent-amber':'accent-teal'}"><div class="lbl">% Correctivo</div><div class="val">${scopeRows.length?pctCorr+'%':'—'}</div><div class="foot">${!scopeRows.length?'sin OTs en el alcance':pctCorr>=60?'trabajo mayormente reactivo':pctCorr>=35?'margen para crecer el preventivo':'buena proporción planificada'}</div></div>
-    <div class="kpi accent-amber" title="Minutos de máquina parada registrados en OTs correctivas. Paro total de todos los tipos (incl. preventivos/proyectos): ${totalDowntimeAll.toLocaleString()} min."><div class="lbl">Paro por fallas</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min en correctivos · total ${totalDowntimeAll.toLocaleString()} min</div></div>
+    <div class="kpi accent-amber" title="Minutos de máquina parada registrados en OTs correctivas. Paro total de todos los tipos (incl. preventivos, predictivos y proyectos): ${totalDowntimeAll.toLocaleString()} min."><div class="lbl">Paro por fallas</div><div class="val">${(totalDowntime/60).toFixed(0)}h</div><div class="foot">${totalDowntime.toLocaleString()} min en correctivos · total ${totalDowntimeAll.toLocaleString()} min</div></div>
     <div class="kpi" title="Tiempo medio entre fallas: promedio de los intervalos (en días) entre correctivos de cada equipo con al menos 3 días distintos con falla, dentro del alcance filtrado (período, área, técnico, tipo, semana y causa)."><div class="lbl">MTBF prom. (filtrado)</div><div class="val">${mtbfAvg!=null?mtbfAvg.toFixed(1)+' d':'—'}</div><div class="foot">en ${mtbfs.length} equipo(s) con ≥3 días con falla en el alcance</div></div>
     <div class="kpi" title="Tiempo medio de reparación: minutos de máquina parada de los correctivos ÷ número de correctivos. Solo cuenta los correctivos con paro de máquina mayor que 0."><div class="lbl">MTTR (paro por correctivo)</div><div class="val">${mttrAvg!=null?fmtHM(mttrAvg):'—'}</div><div class="foot">${corrM.length} correctivo(s) con paro &gt; 0</div></div>
     <div class="kpi ${disp==null?'':disp>=95?'accent-teal':disp>=85?'accent-amber':'accent-red'}" title="Disponibilidad = MTBF ÷ (MTBF + MTTR), con ambos en minutos. Fórmula estándar de disponibilidad inherente: qué fracción del tiempo el equipo promedio está operando y no parado por fallas. Necesita MTBF y MTTR."><div class="lbl">Disponibilidad</div><div class="val">${disp!=null?disp.toFixed(1)+'%':'—'}</div><div class="foot">MTBF ÷ (MTBF + MTTR)</div></div>
@@ -711,7 +722,7 @@ function render(){
   });
 
   /* gráfica: tipo */
-  const TIPO_COLORS = {'correctivo':'#e66767','preventivo':'#199e70','proyecto':'#3987e5'};
+  const TIPO_COLORS = {'correctivo':'#e66767','preventivo':'#199e70','predictivo':'#0891B2','proyecto':'#3987e5'};
   const tipoCounts = {};
   rowsExcept('tipo').forEach(r=>{ const k=r.tipoMant||'Sin clasificar'; tipoCounts[k]=(tipoCounts[k]||0)+1; });
   const tipoLabels = Object.keys(tipoCounts).sort((a,b)=>tipoCounts[b]-tipoCounts[a]);
@@ -929,7 +940,9 @@ function renderGestion(){
     const pD = parseFecha(String(o.fechaPlanificada||''));
     let dias = null, motivo = '';
     if (pD){ if (pD < ref){ dias = daysBetween(pD, ref); motivo = 'plan '+fmtDate(pD); } }
-    else if (o.estado === 'pendiente'){
+    // (20 oct 2026) Un proyecto sin planificar no está "vencido": solo cuenta
+    // por su fecha planificada, como las demás OTs planificadas.
+    else if (o.estado === 'pendiente' && o.tipoReporte !== 'proyecto'){
       const c = fechaCreacionAn(o);
       if (c){ const edad = daysBetween(c, ref); if (edad > DIAS_SIN_PLAN_AN){ dias = edad - DIAS_SIN_PLAN_AN; motivo = 'sin planificar hace '+edad+' d'; } }
     }
@@ -1038,7 +1051,7 @@ function computeAreaStats(rows, predAll){
   const groups = {};
   rows.forEach(r=>{
     const g = groups[r.area] = groups[r.area] || {ots:0, correctivos:0, equipos:new Set(), downtime:0, tec:{}};
-    g.ots++; g.downtime += r.minMaquina; g.equipos.add(eqKey(r));
+    g.ots++; g.downtime += paroDe(r); g.equipos.add(eqKey(r));
     if (isCorr(r)) g.correctivos++;
     splitTecnicos(r.tecnicos).forEach(t=>{ g.tec[t]=(g.tec[t]||0)+1; });
   });
@@ -1092,13 +1105,13 @@ function getTecnicoStats(rows){
   rows.forEach(r=>{
     splitTecnicos(r.tecnicos).forEach(t=>{
       const m = map[t] = map[t] || {ots:0, correctivos:0, mttrSum:0, mttrN:0, dt:0, areas:new Set(), noRes:0, prevCk:0, respSum:0, respN:0};
-      m.ots++; m.areas.add(r.area); m.dt += r.minMaquina;
+      m.ots++; m.areas.add(r.area); m.dt += paroTecnicoDe(r);
       if (isCorr(r)){
         m.correctivos++;
         if (r.minTecnico>0){ m.mttrSum+=r.minTecnico; m.mttrN++; }
         if (isNoResuelto(r.solucion)) m.noRes++;
       }
-      if (isPrev(r) && r.tiempoRespuestaMin!=null){ m.prevCk++; m.respSum+=r.tiempoRespuestaMin; m.respN++; }
+      if (isPrev(r) && !isProy(r) && r.tiempoRespuestaMin!=null){ m.prevCk++; m.respSum+=r.tiempoRespuestaMin; m.respN++; }
     });
   });
   const list = Object.entries(map).map(([tecnico,m])=>({
@@ -1216,7 +1229,7 @@ function renderFicha(){
 }
 function renderHistoryAndReco(mode, hist, predictive, val, allFull){
   const sorted = [...hist].sort((a,b)=>(parseFecha(b.fecha)||0)-(parseFecha(a.fecha)||0)); // más reciente primero
-  const totalParo = hist.reduce((s,r)=>s+r.minMaquina,0);
+  const totalParo = hist.reduce((s,r)=>s+paroDe(r),0);
   const corrH = hist.filter(isCorr);
   const corrT = corrH.filter(r=>r.minTecnico>0); // mismo criterio que la tabla de técnicos
   const tecProm = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
@@ -1243,7 +1256,7 @@ function renderHistoryAndReco(mode, hist, predictive, val, allFull){
     hist.forEach(r=>{
       const key = eqKey(r);
       const g = eqMap[key] = eqMap[key] || {key, area:eqArea(key), equipo:eqLabelOf(key), ots:0, correctivos:0, downtime:0, last:null};
-      g.ots++; g.downtime += r.minMaquina; if (isCorr(r)) g.correctivos++;
+      g.ots++; g.downtime += paroDe(r); if (isCorr(r)) g.correctivos++;
       const d = parseFecha(r.fecha); if (d && (!g.last||d>g.last)) g.last = d;
     });
     const riskOf = k => { const p = predictive.find(p=>p.key===k); return p ? p.risk : 'na'; };
@@ -1461,7 +1474,7 @@ function rowToOtRecord(r){
 }
 function otRecordToRow(doc){
   return {
-    equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'',
+    equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'', proyecto:doc.tipoReporte==='proyecto',
     ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:doc.LINEA_EQUIPO||'Sin área',
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',
     tipoMant:doc.TIPO_MANTENIMIENTO||'Sin clasificar', paroPlanta:doc.PARO_PLANTA||'', tecnicos:doc.TECNICOS||'',
