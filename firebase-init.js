@@ -42,7 +42,9 @@ const db = firebase.firestore();
 // "Cargando..." para siempre. Con esto Firestore detecta ese caso solo y
 // cambia a un modo compatible (long polling). En redes normales no cambia nada.
 try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) { console.warn('settings:', e.message); }
-const storage = firebase.storage();
+// (20 oct 2026) reportar.html y login.html no cargan el SDK de Storage: antes
+// esta línea fallaba ahí y detenía todo el arranque ("paso: ?" en Reportar).
+const storage = (typeof firebase.storage === 'function') ? firebase.storage() : null;
 
 // Persistencia offline (igual que en la versión original del proyecto).
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
@@ -317,12 +319,13 @@ function fbEquipoKey(s) {
 // ── Archivos (fotos de repuestos y manuales) ──
 // Faltaban: Inventario las llamaba y no existían, así que nunca subía nada.
 async function fbUploadDataUrl(dataUrl, path) {
+  if (!storage) throw new Error('Esta pantalla no tiene Storage cargado');
   const ref = storage.ref().child(path);
   await ref.putString(dataUrl, 'data_url');
   return ref.getDownloadURL();
 }
 function fbDeleteFile(url) {
-  if (!url || !/^https?:|^gs:/.test(url)) return Promise.resolve();
+  if (!url || !storage || !/^https?:|^gs:/.test(url)) return Promise.resolve();
   try { return storage.refFromURL(url).delete().catch(err => console.warn('No se pudo borrar el archivo:', err.code || err.message)); }
   catch (e) { return Promise.resolve(); }
 }
