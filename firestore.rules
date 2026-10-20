@@ -253,9 +253,8 @@ service cloud.firestore {
           || (de in ['pendiente', 'enviado'] && a == 'anulado' && (esEncargado() || esRRHH())));
     }
     match /herramientas_arqueos/{id} {
-      // (7 oct 2026) Los técnicos ven las herramientas activas de todos para
-      // anotar en la Bitácora cuáles se usaron en cada trabajo.
-      allow read: if esAlmacenOMas() || esTecnicoOMas() || esRRHH();
+      allow read: if esAlmacenOMas() || esSupervisorOMas() || esRRHH()
+        || (esTecnico() && resource.data.tecnico == miTecnico());
       allow create: if esAlmacenOMas() && arqueoNuevoValido();
       allow update: if cambioRRHHValido()
         || (esTecnico() && resource.data.tecnico == miTecnico() && soloCambia(['conformidad'])
