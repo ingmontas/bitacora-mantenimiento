@@ -198,6 +198,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ══════ Incentivos por cumplimiento (20 oct 2026) ══════
+    // Salarios y montos: SOLO Administrador (por eso no van en /config, que
+    // leen los técnicos). /incentivos_config/general = reglas y salarios;
+    // /incentivos_semanas/{AAAA-Wss} = semana aprobada (copia congelada).
+    match /incentivos_config/{id}  { allow read, write: if esAdmin(); }
+    match /incentivos_semanas/{id} { allow read, write: if esAdmin(); }
+
     // ══════ Herramientas por técnico (arqueos y cargos a RR.HH.) ══════
     match /herramientas/{id} {
       allow read: if esTecnicoOMas() || esAlmacenOMas() || esRRHH();

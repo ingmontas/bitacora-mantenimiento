@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Incentivos — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       INCENTIVOS POR CUMPLIMIENTO (20 oct 2026)
+       Solo Administrador. Por semana ISO (lunes a domingo) y por técnico
+       (tecnicos.json) se calcula un puntaje de 0 a 100 % con 4 criterios:
+         1. Checklists a tiempo   2. OTs a tiempo
+         3. Respuesta a avisos    4. Calidad (sin rechazos ni reincidencias)
+       Monto = base semanal × puntaje (0 si no llega al mínimo) + ajuste.
+       Base semanal = salario mensual × % de incentivo × 12 ÷ 52.
+       Colecciones (solo Admin en firestore.rules):
+         /incentivos_config/general       reglas y salarios
+         /incentivos_semanas/{AAAA-Wss}    ajustes y semana aprobada (congelada)
+       Plan gratis de Firebase: solo se consulta la semana que se ve, con
+       consultas de un solo campo (sin listeners ni colecciones completas).
+       Sin Firebase Storage.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { overflow-x: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
+    #header h1 { font-size: 17px; font-weight: 800; }
+    #header small { font-size: 11px; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 60px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
+    .wk { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .wk button { background: var(--border); color: var(--text); border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
+    .wk button[disabled] { opacity: .35; cursor: default; }
+    .wk div { text-align: center; min-width: 0; }
+    .wk b { font-size: 15px; } .wk span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+    .tot { display: flex; gap: 8px; margin-top: 12px; }
+    .tot div { flex: 1; min-width: 0; background: var(--surface); border-radius: 10px; padding: 10px 6px; text-align: center; }
+    .tot b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .tot span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .estado { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+    .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #F59E0B22; color: var(--accent); }
+    .tag.ok { background: #10B98122; color: #4ade80; } .tag.info { background: #818CF822; color: #a5b4fc; } .tag.bad { background: #EF444422; color: #ff8a8a; }
+    .nota { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+    .tec { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; min-width: 0; }
+    .tec.amb { border-color: #F59E0B66; } .tec.roj { border-color: #EF444466; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .top b { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+    .pct { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .bar { height: 6px; background: var(--border); border-radius: 4px; margin: 8px 0; overflow: hidden; }
+    .bar i { display: block; height: 100%; }
+    .crit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 10px; font-size: 12px; color: var(--muted); }
+    .crit b { color: var(--text); }
+    .det { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.55; overflow-wrap: anywhere; }
+    .det .m { color: #ff8a8a; display: block; } .det .i { color: var(--muted); display: block; }
+    .adj { font-size: 12px; color: #7fb3f5; margin-top: 6px; overflow-wrap: anywhere; }
+    .monto { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 13px; }
+    .monto span { min-width: 0; } .monto b { font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: 0; font-weight: 800; font-size: 15px; background: var(--accent); color: #0F1923; margin-top: 4px; cursor: pointer; font-family: inherit; }
+    .btn2 { width: 100%; padding: 11px; border-radius: 10px; border: 0; font-weight: 700; font-size: 14px; background: var(--border); color: var(--text); margin-top: 8px; cursor: pointer; font-family: inherit; }
+    .btn-sm { width: auto; padding: 9px 14px; font-size: 13.5px; margin-top: 0; }
+    .btn-danger { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444455; }
+    .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
+    input, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 64px; resize: vertical; }
+    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
+    .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+    .sec { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 4px; }
+    .ts { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+    .ts .g2 label.f { margin-top: 6px; }
+    .formula { background: #F59E0B14; border: 1px solid #F59E0B44; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin-top: 8px; }
+    /* modal */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 24px 10px; overflow-y: auto; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; width: 100%; max-width: 560px; min-width: 0; }
+    .modal h3 { font-size: 16px; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: #B45309; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>💰 Incentivos por cumplimiento</h1>
+  <small id="header-sub">Cargando...</small>
+</div>
+
+<div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+// ══════ AYUDAS ══════
+const esc = s => fbEsc(s);
+const $ = id => document.getElementById(id);
+const K = s => fbEquipoKey(s);
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const money = n => { n = r2(n); return 'RD$ ' + n.toLocaleString('es-DO', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
+const signo = n => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
+const pctTxt = v => v == null ? '—' : Math.round(v * 100) + '%';
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const ddmm = f => { const d = fbParseFecha(f); return d ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : '—'; };
+const ddmmaa = f => { const d = fbParseFecha(f); return d ? ddmm(f) + '/' + d.getFullYear() : '—'; };
+const sumarDias = (f, n) => { const d = fbParseFecha(f); d.setDate(d.getDate() + n); return fbFechaLocal(d); };
+const diasEntre = (a, b) => Math.round((fbParseFecha(b) - fbParseFecha(a)) / 86400000);
+const tsFecha = t => (t && typeof t.toDate === 'function') ? fbFechaLocal(t.toDate()) : null;
+const tsMs = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : null;
+const tsHora = t => { if (!t || typeof t.toDate !== 'function') return null; const d = t.toDate(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const quien = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
+
+let _toastT = null;
+function toast(msg, tipo) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3200); }
+function openModal(html) { $('modal').innerHTML = html; $('modalBg').classList.add('open'); }
+function closeModal() { $('modalBg').classList.remove('open'); }
+$('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+const fail = e => { console.error(e); toast('❌ ' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar incentivos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
+
+// Escritura sin bloquear: sin señal, Firestore la guarda en el celular y la
+// sube sola al volver; la pantalla no espera (mismo patrón que Checklist).
+function escribir(promesa, msgOk, alFallar) {
+  let listo = false, avisado = false;
+  promesa.then(() => { listo = true; if (avisado) toast('☁️ Incentivos subidos al servidor ✅'); })
+    .catch(e => { listo = true; fail(e); if (alFallar) alFallar(e); });
+  if (!navigator.onLine) { avisado = true; toast(msgOk + ' 📵 Se subirá cuando haya señal.', 'warn'); }
+  else { toast(msgOk); setTimeout(() => { if (!listo) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); } }, 3000); }
+}
+
+// ══════ SEMANA ISO ══════
+// Lunes (Date local) de la semana de una fecha.
+function lunesDe(d) { d = new Date(d.getFullYear(), d.getMonth(), d.getDate()); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
+function idSemana(lunes) { return fbAnioSemanaISO(lunes) + '-W' + String(fbSemanaISO(lunes)).padStart(2, '0'); }
+function lunesDeId(id) {
+  const m = /^(\d{4})-W(\d{1,2})$/.exec(id || ''); if (!m) return null;
+  const l1 = lunesDe(new Date(+m[1], 0, 4)); l1.setDate(l1.getDate() + (+m[2] - 1) * 7);
+  return idSemana(l1) === id ? l1 : null;
+}
+function rangoTxt(lunes) {
+  const dom = new Date(lunes); dom.setDate(dom.getDate() + 6);
+  const mesL = lunes.getMonth() !== dom.getMonth() ? ' ' + MESES[lunes.getMonth()] : '';
+  return `lun ${lunes.getDate()}${mesL} – dom ${dom.getDate()} ${MESES[dom.getMonth()]} ${dom.getFullYear()}`;
+}
+
+// ══════ REGLAS (valores por defecto) ══════
+const CRITERIOS = [
+  { k: 'checklists', icono: '✅', nombre: 'Checklists a tiempo', vacio: 'sin checklists' },
+  { k: 'ots', icono: '🧾', nombre: 'OTs a tiempo', vacio: 'sin OTs' },
+  { k: 'avisos', icono: '🚨', nombre: 'Respuesta avisos', vacio: 'sin avisos' },
+  { k: 'calidad', icono: '🛠', nombre: 'Calidad', vacio: 'sin trabajos' },
+];
+const CFG_DEF = { pesos: { checklists: 25, ots: 25, avisos: 25, calidad: 25 }, minimo: 70, pctDefault: 10, metaParadaMin: 15, metaFallaMin: 30, diasReincidencia: 15, tecnicos: {} };
+function normCfg(d) {
+  d = d || {};
+  const c = JSON.parse(JSON.stringify(CFG_DEF));
+  CRITERIOS.forEach(x => { const v = Number(d.pesos && d.pesos[x.k]); if (d.pesos && isFinite(v) && v >= 0) c.pesos[x.k] = v; });
+  ['minimo', 'pctDefault', 'metaParadaMin', 'metaFallaMin', 'diasReincidencia'].forEach(k => { const v = Number(d[k]); if (d[k] != null && isFinite(v) && v >= 0) c[k] = v; });
+  c.tecnicos = (d.tecnicos && typeof d.tecnicos === 'object') ? d.tecnicos : {};
+  return c;
+}
+
+// ══════ TÉCNICOS Y EMPAREJAMIENTO DE NOMBRES ══════
+// Las OTs guardan el nombre de distintas formas: Bitácora pone los nombres
+// completos de tecnicos.json separados por coma ("FELIX M. GIL #777, LEBRON"),
+// Checklist pone el nombre completo en asignadoA/tecnicos, y
+// trabajoRealizadoPor / cerradoPor llevan el nombre del USUARIO (puede ser
+// "Felix Gil"). Un texto es de un técnico si (sin acentos, mayúsculas ni
+// espacios) contiene su nombre o su nombre corto, o trae el mismo "#777";
+// si una parte del texto no coincide con nadie, se prueba con el primer
+// nombre cuando solo un técnico lo tiene (igual que la Bitácora).
+let TECS = [];
+const tecKey = nombre => K(nombre).replace(/[^a-z0-9]/g, '_');
+function prepararTecnicos(lista) {
+  TECS = (lista || []).filter(t => t && t.nombre).map(t => {
+    const num = ((String(t.nombre) + ' ' + String(t.corto || '')).match(/#\s*(\d+)/) || [])[1] || '';
+    return { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key: tecKey(t.nombre), kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]) };
+  });
+}
+function _coincideDirecto(t, k, nums) {
+  if (t.kN && (k === t.kN || (t.kN.length >= 4 && k.includes(t.kN)))) return true;
+  if (t.kC && (k === t.kC || (t.kC.length >= 4 && k.includes(t.kC)))) return true;
+  return !!(t.num && nums.includes(t.num));
+}
+// Devuelve las claves (tecKey) de los técnicos nombrados en el texto.
+function tecsEn(texto) {
+  if (texto == null || texto === '') return [];
+  if (Array.isArray(texto)) return [...new Set(texto.flatMap(tecsEn))];
+  const s = String(texto), out = new Set();
+  s.split(/[,;\/&+]|\s+y\s+/i).map(x => x.trim()).filter(Boolean).forEach(seg => {
+    const k = K(seg), nums = [...seg.matchAll(/#\s*(\d+)/g)].map(m => m[1]);
+    const hits = TECS.filter(t => _coincideDirecto(t, k, nums));
+    if (hits.length) { hits.forEach(t => out.add(t.key)); return; }
+    const pri = K(seg.split(/\s+/)[0]);
+    const cands = TECS.filter(t => t.primero && t.primero === pri);
+    if (cands.length === 1) out.add(cands[0].key);
+  });
+  return [...out];
+}
+
+// ══════ ESTADO ══════
+let CFG = normCfg(null), SEM = null, LUNES = null, DATOS = null, cargando = false;
+const _cacheSemana = new Map(); // id → datos leídos de esa semana (en memoria mientras la página está abierta)
+
+window.fbReady.then(async () => {
+  const u = window.currentUserRole || {};
+  $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('incentivos');
+  if (!userHasRole('ADMINISTRADOR')) {
+    $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Los incentivos incluyen salarios y montos de cada técnico.</div>';
+    return;
+  }
+  try { const r = await fetch('tecnicos.json'); if (r.ok) prepararTecnicos(await r.json()); } catch (e) { console.warn('tecnicos.json:', e.message); }
+  try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); }
+  catch (e) { console.warn('incentivos_config:', e.message); toast('⚠️ No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
+  const pedida = lunesDeId(decodeURIComponent((location.hash || '').slice(1)));
+  const hoyL = lunesDe(new Date());
+  // Por defecto la semana pasada (la última que ya terminó).
+  const def = new Date(hoyL); def.setDate(def.getDate() - 7);
+  irASemana(pedida && pedida <= hoyL ? pedida : def);
+}).catch(e => { try { console.error(e); } catch (_) {} });
+
+function irASemana(lunes) {
+  LUNES = lunes; SEM = idSemana(lunes);
+  try { history.replaceState(null, '', '#' + SEM); } catch (e) {}
+  cargarSemana(false);
+}
+function cambiarSemana(delta) {
+  if (cargando) return;
+  const l = new Date(LUNES); l.setDate(l.getDate() + delta * 7);
+  if (l > lunesDe(new Date())) return;
+  irASemana(l);
+}
+
+// ══════ LECTURA DE UNA SEMANA (pocas lecturas) ══════
+// 1 documento /incentivos_semanas/{id}. Si la semana está aprobada se muestra
+// su copia y NO se lee nada más. Si no, 5 consultas de un solo campo:
+//   checklists.fecha en la semana              (criterio 1)
+//   ots.fechaPlanificada en la semana          (criterio 2)
+//   ots.fechaReporte en la semana              (criterio 3)
+//   ots.FECHA de lunes a domingo + días de reincidencia (criterio 4)
+//   ots.trabajoRealizadoEn en la semana        (criterio 4, OTs de checklist)
+async function cargarSemana(fresco) {
+  const id = SEM, lunes = fbFechaLocal(LUNES), domingo = sumarDias(lunes, 6);
+  if (!fresco && _cacheSemana.has(id)) { DATOS = _cacheSemana.get(id); render(); return; }
+  cargando = true;
+  $('view').innerHTML = cabeceraHtml(null) + '<div class="card empty">Calculando la semana...</div>';
+  bindCabecera();
+  try {
+    const sd = await db.collection('incentivos_semanas').doc(id).get();
+    const semDoc = sd.exists ? sd.data() : null;
+    const datos = { id, lunes, domingo, semDoc, ck: [], otPlan: [], otRep: [], otFecha: [], otReal: [] };
+    if (!semDoc || semDoc.estado !== 'aprobada') await leerDatosSemana(datos);
+    if (SEM !== id) return; // cambió de semana mientras leía
+    _cacheSemana.set(id, datos);
+    DATOS = datos;
+    render();
+  } catch (e) {
+    console.error(e);
+    if (SEM === id) {
+      $('view').innerHTML = cabeceraHtml(null) + `<div class="card empty">⚠️ No se pudieron leer los datos de la semana (${esc(e.code || e.message)}).<br><button class="btn2 btn-sm" id="bRe">🔄 Reintentar</button></div>`;
+      bindCabecera(); $('bRe').onclick = () => cargarSemana(true);
+    }
+  } finally { cargando = false; }
+}
+async function leerDatosSemana(d) {
+  const ots = db.collection('ots');
+  const hasta = sumarDias(d.domingo, Math.max(0, Math.round(CFG.diasReincidencia)));
+  const T = firebase.firestore.Timestamp;
+  const desdeTs = T.fromDate(fbParseFecha(d.lunes)), hastaTs = T.fromDate(fbParseFecha(sumarDias(d.domingo, 1)));
+  const docs = s => s.docs.map(x => ({ id: x.id, ...x.data() }));
+  const [ck, plan, rep, fec, real] = await Promise.all([
+    db.collection('checklists').where('fecha', '>=', d.lunes).where('fecha', '<=', d.domingo).get(),
+    ots.where('fechaPlanificada', '>=', d.lunes).where('fechaPlanificada', '<=', d.domingo).get(),
+    ots.where('fechaReporte', '>=', d.lunes).where('fechaReporte', '<=', d.domingo).get(),
+    ots.where('FECHA', '>=', d.lunes).where('FECHA', '<=', hasta).get(),
+    ots.where('trabajoRealizadoEn', '>=', desdeTs).where('trabajoRealizadoEn', '<', hastaTs).get(),
+  ]);
+  d.ck = docs(ck); d.otPlan = docs(plan); d.otRep = docs(rep); d.otFecha = docs(fec); d.otReal = docs(real);
+  d.lecturas = d.ck.length + d.otPlan.length + d.otRep.length + d.otFecha.length + d.otReal.length;
+}
+
+// ══════ CÁLCULO ══════
+const equipoDe = o => o.EQUIPO || o.equipoNombre || o.TIPO_MAQUINA || '—';
+const folioDe = o => o.folio || o.Title || o.id;
+const anulada = o => o.estado === 'anulada';
+const esAviso = o => ['operador', 'qr'].includes(o.origen);
+function mismoEquipo(a, b) {
+  if (a.equipoId && b.equipoId) return a.equipoId === b.equipoId;
+  const ka = K(a.EQUIPO || a.equipoNombre), kb = K(b.EQUIPO || b.equipoNombre);
+  return !!ka && ka === kb;
+}
+// Minutos de respuesta de un aviso (null si no se puede saber).
+function minutosRespuesta(o) {
+  const at = tsMs(o.atendidoEn), cr = tsMs(o.createdAt);
+  if (at != null && cr != null) return Math.max(0, Math.round((at - cr) / 60000));
+  const llegada = o.horaLlegada || o.H_TECNICO;
+  const inicio = o.horaParada || tsHora(o.createdAt) || o.H_INICIO;
+  if (fbHoraAMin(llegada) != null && fbHoraAMin(inicio) != null) return fbMinutosEntre(inicio, llegada);
+  return null;
+}
+function calcular(d) {
+  const c = CFG, hoy = fbHoy();
+  const R = {}; TECS.forEach(t => { R[t.key] = { checklists: { ok: 0, n: 0 }, ots: { ok: 0, n: 0 }, avisos: { ok: 0, n: 0 }, calidad: { ok: 0, n: 0 }, bajo: [], info: [] }; });
+  const marca = (keys, crit, bien, txtMal, txtInfo) => keys.forEach(k => { const r = R[k]; if (!r) return; r[crit].n++; if (bien) r[crit].ok++; else r.bajo.push(txtMal); if (txtInfo) r.info.push(txtInfo); });
+
+  // 1) Checklists a tiempo
+  d.ck.filter(x => x.fecha >= d.lunes && x.fecha <= d.domingo).forEach(x => {
+    const keys = tecsEn([].concat(x.tecnicos || [], x.tecnico || []));
+    let bien, info = null;
+    if (typeof x.aTiempo === 'boolean') bien = x.aTiempo;
+    else if (x.vencimiento) bien = x.fecha <= x.vencimiento;
+    else { bien = true; info = `Checklist ${equipoDe(x)} del ${ddmm(x.fecha)} (sin fecha de vencimiento): contado a tiempo`; }
+    marca(keys, 'checklists', bien, `Checklist ${equipoDe(x)} del ${ddmm(x.fecha)}: tocaba el ${ddmm(x.vencimiento)}`, info);
+  });
+
+  // 2) OTs a tiempo (planificadas para esta semana)
+  d.otPlan.filter(o => !anulada(o) && o.fechaPlanificada >= d.lunes && o.fechaPlanificada <= d.domingo).forEach(o => {
+    const keys = tecsEn(o.asignadoA);
+    if (!keys.length) return;
+    const hecha = ['en_revision', 'validada', 'completada'].includes(o.estado);
+    const fHecha = hecha ? (tsFecha(o.trabajoRealizadoEn) || o.FECHA || o.fechaCompletada || null) : null;
+    if (!hecha || !fHecha) {
+      if (hoy <= o.fechaPlanificada) return; // todavía está a tiempo: no cuenta aún
+      marca(keys, 'ots', false, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, todavía sin terminar`);
+      return;
+    }
+    marca(keys, 'ots', fHecha <= o.fechaPlanificada, `${folioDe(o)} ${equipoDe(o)}: planificada el ${ddmm(o.fechaPlanificada)}, terminada el ${ddmm(fHecha)}`);
+  });
+
+  // 3) Respuesta a avisos de producción / QR
+  d.otRep.filter(o => esAviso(o) && !anulada(o) && o.fechaReporte >= d.lunes && o.fechaReporte <= d.domingo).forEach(o => {
+    let keys = tecsEn(o.asignadoA);
+    if (!keys.length && o.estado === 'completada') keys = tecsEn(o.TECNICOS);
+    if (!keys.length) return; // nadie lo tomó: no cuenta para nadie
+    const min = minutosRespuesta(o);
+    if (min == null) return;
+    const meta = o.maquinaParada ? c.metaParadaMin : c.metaFallaMin;
+    marca(keys, 'avisos', min <= meta, `Aviso ${folioDe(o)} ${equipoDe(o)}: llegó en ${min} min (meta ${meta} min, ${o.maquinaParada ? 'máquina parada' : 'falla'})`);
+  });
+
+  // 4) Calidad: rechazos en revisión y reincidencias
+  const trabajos = new Map(); // id → { o, keys }
+  const agrega = (o, keys) => { if (!keys.length) return; const t = trabajos.get(o.id); if (t) keys.forEach(k => { if (!t.keys.includes(k)) t.keys.push(k); }); else trabajos.set(o.id, { o, keys: keys.slice() }); };
+  const realizado = o => !anulada(o) && !(['operador', 'qr', 'checklist'].includes(o.origen) && o.estado !== 'completada');
+  d.otFecha.filter(o => o.FECHA >= d.lunes && o.FECHA <= d.domingo && realizado(o)).forEach(o => agrega(o, tecsEn(o.TECNICOS)));
+  d.otReal.filter(o => !anulada(o)).forEach(o => { const f = tsFecha(o.trabajoRealizadoEn); if (!f || f < d.lunes || f > d.domingo) return; let k = tecsEn(o.trabajoRealizadoPor); if (!k.length) k = tecsEn(o.asignadoA); agrega(o, k); });
+  const posteriores = d.otFecha.filter(o => o.FECHA && !anulada(o) && realizado(o) && String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo');
+  const dias = Math.max(0, Math.round(c.diasReincidencia));
+  trabajos.forEach(({ o, keys }) => {
+    const fecha = o.FECHA || tsFecha(o.trabajoRealizadoEn);
+    const rech = (Number(o.vecesRechazada) || 0) || (o.revisionResultado === 'rechazada' || o.estado === 'rechazada' ? 1 : 0);
+    if (rech) { marca(keys, 'calidad', false, `${folioDe(o)} ${equipoDe(o)}: rechazada en revisión${rech > 1 ? ' (' + rech + ' veces)' : ''}`); return; }
+    const causa = K(o.CAUSA_FALLA || o.causaFalla);
+    let vuelta = null;
+    if (causa && fecha) {
+      const limite = sumarDias(fecha, dias);
+      vuelta = posteriores.filter(p => p.id !== o.id && mismoEquipo(o, p) && K(p.CAUSA_FALLA || p.causaFalla) === causa
+        && p.FECHA <= limite && (p.FECHA > fecha || (p.FECHA === fecha && fbHoraAMin(p.H_INICIO) != null && fbHoraAMin(o.H_INICIO) != null && fbHoraAMin(p.H_INICIO) > fbHoraAMin(o.H_INICIO))))
+        .sort((a, b) => a.FECHA.localeCompare(b.FECHA))[0] || null;
+    }
+    if (vuelta) {
+      const n = diasEntre(fecha, vuelta.FECHA);
+      marca(keys, 'calidad', false, `${equipoDe(o)}: volvió a fallar por "${o.CAUSA_FALLA || o.causaFalla}" ${n ? n + (n === 1 ? ' día' : ' días') + ' después de' : 'el mismo día de'} su reparación (${folioDe(o)} → ${folioDe(vuelta)})`);
+    } else marca(keys, 'calidad', true);
+  });
+
+  // Puntaje y monto por técnico
+  const filas = TECS.map(t => {
+    const r = R[t.key], cfgT = c.tecnicos[t.key] || {};
+    const criterios = {};
+    let sw = 0, sv = 0;
+    CRITERIOS.forEach(x => {
+      const v = r[x.k].n ? r[x.k].ok / r[x.k].n : null;
+      criterios[x.k] = { ok: r[x.k].ok, n: r[x.k].n, v };
+      const w = Number(c.pesos[x.k]) || 0;
+      if (v != null && w > 0) { sw += w; sv += w * v; }
+    });
+    const sinDatos = sw === 0;
+    const puntaje = sinDatos ? null : Math.round(sv / sw * 100);
+    const salario = Number(cfgT.salario) || 0;
+    const pct = (cfgT.pct != null && cfgT.pct !== '' && isFinite(Number(cfgT.pct))) ? Number(cfgT.pct) : c.pctDefault;
+    const base = r2(salario * pct / 100 * 12 / 52);
+    const cobra = !sinDatos && puntaje >= c.minimo;
+    const montoCalc = cobra ? r2(base * puntaje / 100) : 0;
+    const aj = ((d.semDoc && d.semDoc.ajustes) || {})[t.key] || {};
+    const ajuste = r2(aj.monto);
+    const monto = r2(Math.max(0, montoCalc + ajuste));
+    return { key: t.key, nombre: t.nombre, criterios, puntaje, sinDatos, cobra, base, pct, salarioOk: salario > 0, montoCalc, ajuste, motivo: aj.motivo || '', monto, bajo: r.bajo, info: r.info };
+  });
+  const conDatos = filas.filter(f => !f.sinDatos);
+  return {
+    filas,
+    promedio: conDatos.length ? Math.round(conDatos.reduce((s, f) => s + f.puntaje, 0) / conDatos.length) : null,
+    total: r2(filas.reduce((s, f) => s + f.monto, 0)),
+    calidadDefinitiva: sumarDias(d.domingo, dias),
+  };
+}
+// La semana como se muestra: congelada (aprobada) o calculada ahora.
+function semanaVista() {
+  const sd = DATOS.semDoc;
+  if (sd && sd.estado === 'aprobada' && Array.isArray(sd.tecnicos)) {
+    const filas = sd.tecnicos.map(f => ({ ...f, bajo: f.bajo || [], info: f.info || [], criterios: f.criterios || {} }));
+    const cd = filas.filter(f => !f.sinDatos);
+    return { congelada: true, filas, promedio: sd.promedio != null ? sd.promedio : (cd.length ? Math.round(cd.reduce((s, f) => s + f.puntaje, 0) / cd.length) : null), total: sd.totalPagar != null ? sd.totalPagar : r2(filas.reduce((s, f) => s + f.monto, 0)), minimo: (sd.reglas || {}).minimo, calidadDefinitiva: sd.calidadDefinitiva };
+  }
+  return { congelada: false, minimo: CFG.minimo, ...calcular(DATOS) };
+}
+
+// ══════ PANTALLA ══════
+function cabeceraHtml(v) {
+  const hoyL = lunesDe(new Date());
+  const sigOk = LUNES && LUNES < hoyL;
+  const nSem = LUNES ? fbSemanaISO(LUNES) : '';
+  return `<div class="card" id="cabecera">
+    <div class="wk"><button id="bPrev" aria-label="Semana anterior">‹</button><div><b>Semana ${nSem}</b><span>${LUNES ? rangoTxt(LUNES) : ''}</span></div><button id="bNext" aria-label="Semana siguiente" ${sigOk ? '' : 'disabled'}>›</button></div>
+    ${v ? `<div class="tot"><div><b>${v.filas.length}</b><span>Técnicos</span></div><div><b>${v.promedio == null ? '—' : v.promedio + '%'}</b><span>Promedio</span></div><div><b id="totPagar">${money(v.total)}</b><span>A pagar</span></div></div>
+    <div class="estado">${estadoHtml(v)}</div>` : ''}
+  </div>`;
+}
+function estadoHtml(v) {
+  const sd = DATOS.semDoc || {};
+  const fechaTs = t => tsFecha(t) ? ddmmaa(tsFecha(t)) : '';
+  let h = 'Estado: ';
+  if (v.congelada) {
+    h += sd.pagada ? `<span class="tag ok">💵 Pagada${sd.pagadoEn ? ' el ' + esc(fechaTs(sd.pagadoEn)) : ''}</span> ` : '';
+    h += `<span class="tag ok">✅ Aprobada</span><div class="nota">Aprobada por ${esc(sd.aprobadoPor || '—')}${sd.aprobadoEn ? ' el ' + esc(fechaTs(sd.aprobadoEn)) : ''}. Se muestra tal como se aprobó (no se recalcula).</div>`;
+  } else {
+    h += '<span class="tag">Borrador — sin aprobar</span>';
+    if (sd.reabiertaPor) h += `<div class="nota">Reabierta por ${esc(sd.reabiertaPor)}${sd.reabiertaEn ? ' el ' + esc(fechaTs(sd.reabiertaEn)) : ''}.</div>`;
+    if (fbFechaLocal(LUNES) <= fbHoy() && fbHoy() <= DATOS.domingo) h += '<div class="nota">⏳ La semana todavía no termina: los números pueden cambiar.</div>';
+  }
+  if (v.calidadDefinitiva && v.calidadDefinitiva > fbHoy() && !v.congelada) h += `<div class="nota">🛠 Calidad definitiva el ${esc(ddmmaa(v.calidadDefinitiva))} (se revisa si la máquina vuelve a fallar por la misma causa en ${esc(CFG.diasReincidencia)} días).</div>`;
+  return h;
+}
+function bindCabecera() {
+  if ($('bPrev')) $('bPrev').onclick = () => cambiarSemana(-1);
+  if ($('bNext')) $('bNext').onclick = () => cambiarSemana(1);
+}
+const colorPct = (p, min) => p == null ? 'var(--muted)' : p >= 90 ? 'var(--green)' : p >= min ? 'var(--accent)' : 'var(--red)';
+function tarjetaHtml(f, v) {
+  const min = v.minimo != null ? v.minimo : CFG.minimo;
+  const col = colorPct(f.puntaje, min);
+  const cls = f.sinDatos ? '' : f.puntaje >= 90 ? '' : f.puntaje >= min ? ' amb' : ' roj';
+  const crit = CRITERIOS.map(x => { const c = f.criterios[x.k] || {}; return `<span>${x.icono} ${x.nombre} <b>${c.v == null ? '—' : pctTxt(c.v)}</b>${c.v == null ? ' ' + x.vacio : ''}</span>`; }).join('');
+  const MAXD = 8;
+  const bajo = f.bajo.length ? `<div class="det">Lo que bajó su puntaje:${f.bajo.slice(0, MAXD).map(t => `<span class="m">• ${esc(t)}</span>`).join('')}${f.bajo.length > MAXD ? `<span class="i">… y ${f.bajo.length - MAXD} más (ver Excel)</span>` : ''}</div>` : '';
+  const info = f.info.length ? `<div class="det">${f.info.slice(0, 4).map(t => `<span class="i">ℹ️ ${esc(t)}</span>`).join('')}${f.info.length > 4 ? `<span class="i">… y ${f.info.length - 4} más</span>` : ''}</div>` : '';
+  const adj = f.ajuste ? `<div class="adj">✏️ Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : '';
+  let pie;
+  if (f.sinDatos) pie = `<span>Sin trabajos esta semana</span><b>${money(f.monto)}</b>`;
+  else if (!f.cobra) pie = `<span>Menos de ${esc(min)}%: no cobra esta semana${f.ajuste ? ' (+ ajuste)' : ''}</span><b>${money(f.monto)}</b>`;
+  else pie = `<span>Base ${money(f.base)} × ${f.puntaje}%${f.ajuste ? ' + ajuste' : ''}</span><b>${money(f.monto)}</b>`;
+  const sinSal = f.salarioOk === false ? '<div class="nota"><span class="tag bad">Sin salario configurado</span> Ponlo en ⚙️ Reglas y salarios.</div>' : '';
+  return `<div class="tec${cls}" data-tec="${esc(f.key)}">
+    <div class="top"><b>${esc(f.nombre)}</b><span class="pct" style="color:${col}">${f.sinDatos ? '—' : f.puntaje + '%'}</span></div>
+    <div class="bar"><i style="width:${f.sinDatos ? 0 : Math.max(0, Math.min(100, f.puntaje))}%;background:${col}"></i></div>
+    <div class="crit">${crit}</div>
+    ${bajo}${info}${adj}${sinSal}
+    <div class="monto">${pie}</div>
+  </div>`;
+}
+function render() {
+  if (!DATOS || DATOS.id !== SEM) return;
+  const v = semanaVista();
+  window.__inc = { semana: SEM, vista: v }; // (para las pruebas automáticas)
+  const hoyL = lunesDe(new Date());
+  const terminada = DATOS.domingo < fbHoy();
+  const esActual = fbFechaLocal(LUNES) === fbFechaLocal(hoyL);
+  const sd = DATOS.semDoc || {};
+  let botones = '';
+  if (!v.congelada && (terminada || esActual)) botones += `<button class="btn" id="bAprobar">✅ Aprobar semana ${fbSemanaISO(LUNES)}</button>`;
+  if (v.congelada) {
+    botones += sd.pagada ? `<button class="btn2" id="bPagada">↩ Quitar marca de pagada</button>` : `<button class="btn" id="bPagada">💵 Marcar como pagada</button><button class="btn2 btn-danger" id="bReabrir">🔓 Reabrir semana</button>`;
+  }
+  botones += `<button class="btn2" id="bExcel">⬇️ Descargar Excel</button><button class="btn2" id="bReglas">⚙️ Reglas y salarios</button>`;
+  const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px">ℹ️ Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
+  $('view').innerHTML = cabeceraHtml(v)
+    + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en tecnicos.json.</div>')
+    + notaCk + botones
+    + `<div class="nota" style="text-align:center;margin-top:12px">${v.congelada ? 'Toca un técnico para ver su detalle.' : 'Toca un técnico para poner un ajuste (+/− RD$).'} Pesos: ${CRITERIOS.map(x => esc(x.nombre) + ' ' + esc((v.congelada && (sd.reglas || {}).pesos ? sd.reglas.pesos : CFG.pesos)[x.k]) + '%').join(' · ')}.</div>`;
+  bindCabecera();
+  $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => modalAjuste(el.dataset.tec, v));
+  if ($('bAprobar')) $('bAprobar').onclick = () => modalAprobar(v, esActual);
+  if ($('bReabrir')) $('bReabrir').onclick = () => modalReabrir();
+  if ($('bPagada')) $('bPagada').onclick = () => marcarPagada(!sd.pagada);
+  $('bExcel').onclick = () => descargarExcel(v);
+  $('bReglas').onclick = () => modalReglas();
+}
+
+// ══════ AJUSTE MANUAL ══════
+function semRef() { return db.collection('incentivos_semanas').doc(SEM); }
+function camposSemana() { return { semana: fbSemanaISO(LUNES), anio: fbAnioSemanaISO(LUNES), lunes: DATOS.lunes, domingo: DATOS.domingo }; }
+function modalAjuste(key, v) {
+  const f = v.filas.find(x => x.key === key); if (!f) return;
+  if (v.congelada) {
+    openModal(`<h3>${esc(f.nombre)}</h3><div class="nota">Semana aprobada: ${f.sinDatos ? 'sin trabajos' : 'puntaje ' + esc(f.puntaje) + '%'} · ${esc(money(f.monto))}. Para cambiar el ajuste, reabre la semana.</div>
+      ${f.ajuste ? `<div class="adj">✏️ Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : ''}
+      <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cerrar</button></div>`);
+    return;
+  }
+  openModal(`<h3>✏️ Ajuste — ${esc(f.nombre)}</h3>
+    <div class="nota">Se suma (o resta, con signo −) al monto calculado: ${esc(money(f.montoCalc))}. El total nunca baja de RD$ 0.</div>
+    <label class="f" for="aMonto">Ajuste (RD$)</label><input id="aMonto" type="number" inputmode="decimal" step="0.01" value="${f.ajuste || ''}" placeholder="Ej: 120 o -200"/>
+    <label class="f" for="aMotivo">Motivo (obligatorio)</label><textarea id="aMotivo" maxlength="200" placeholder="Ej: Cubrió turno de noche el sábado">${esc(f.motivo)}</textarea>
+    <div class="modal-actions">
+      ${f.ajuste ? '<button class="btn2 btn-sm btn-danger" id="aQuitar">Quitar ajuste</button>' : ''}
+      <button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-sm" id="aOk">Guardar</button>
+    </div>`);
+  const guardar = (monto, motivo) => {
+    const FV = firebase.firestore.FieldValue;
+    const aj = monto ? { monto, motivo, por: quien(), porUid: uidYo(), en: FV.serverTimestamp() } : FV.delete();
+    // copia local enseguida (no se espera al servidor)
+    DATOS.semDoc = DATOS.semDoc || { estado: 'borrador' };
+    DATOS.semDoc.ajustes = { ...(DATOS.semDoc.ajustes || {}) };
+    if (monto) DATOS.semDoc.ajustes[key] = { monto, motivo }; else delete DATOS.semDoc.ajustes[key];
+    const datosDoc = { ...camposSemana(), ajustes: { [key]: aj } };
+    if (!DATOS.semDoc.estado || DATOS.semDoc.estado !== 'aprobada') datosDoc.estado = DATOS.semDoc.estado || 'borrador';
+    DATOS.semDoc.estado = datosDoc.estado;
+    closeModal(); render();
+    escribir(semRef().set(datosDoc, { merge: true }), monto ? `✏️ Ajuste guardado para ${f.nombre}` : `Ajuste quitado a ${f.nombre}`, () => cargarSemana(true));
+  };
+  $('aOk').onclick = () => {
+    const raw = $('aMonto').value.trim();
+    const monto = r2(raw === '' ? 0 : Number(raw));
+    const motivo = $('aMotivo').value.trim().slice(0, 200);
+    if (raw !== '' && !isFinite(Number(raw))) return toast('Escribe un monto válido', 'error');
+    if (Math.abs(monto) > 1e7) return toast('El ajuste es demasiado grande', 'error');
+    if (monto && !motivo) return toast('Escribe el motivo del ajuste', 'error');
+    guardar(monto, motivo);
+  };
+  if ($('aQuitar')) $('aQuitar').onclick = () => guardar(0, '');
+}
+
+// ══════ APROBAR / REABRIR / PAGADA ══════
+function modalAprobar(v, esActual) {
+  const n = fbSemanaISO(LUNES);
+  openModal(`<h3>✅ ¿Aprobar la semana ${n}?</h3>
+    <div class="nota">${esc(rangoTxt(LUNES))} · ${v.filas.length} técnicos · total a pagar <b style="color:var(--text)">${esc(money(v.total))}</b>.</div>
+    <div class="nota">Se guarda una copia de cada técnico (criterios, puntaje, base, ajuste y monto). Después ya no se recalcula aunque cambien las OTs o las reglas; para corregir hay que reabrirla.</div>
+    ${esActual ? '<div class="formula" style="margin-top:10px">⚠️ Esta semana todavía no termina. Lo que pase de aquí al domingo no se contará.</div>' : ''}
+    ${v.calidadDefinitiva > fbHoy() ? `<div class="formula" style="margin-top:10px">🛠 La calidad todavía no es definitiva (hasta el ${esc(ddmmaa(v.calidadDefinitiva))}).</div>` : ''}
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="apOk">Sí, aprobar semana ${n}</button></div>`);
+  $('apOk').onclick = () => {
+    const tecnicos = v.filas.map(f => ({ key: f.key, nombre: f.nombre, criterios: f.criterios, puntaje: f.puntaje, sinDatos: f.sinDatos, cobra: f.cobra, base: f.base, pct: f.pct, salarioOk: f.salarioOk, montoCalc: f.montoCalc, ajuste: f.ajuste, motivo: f.motivo, monto: f.monto, bajo: f.bajo, info: f.info }));
+    const sd = DATOS.semDoc || {};
+    const doc = {
+      ...camposSemana(), estado: 'aprobada', tecnicos,
+      promedio: v.promedio, totalPagar: v.total, calidadDefinitiva: v.calidadDefinitiva,
+      reglas: { pesos: CFG.pesos, minimo: CFG.minimo, metaParadaMin: CFG.metaParadaMin, metaFallaMin: CFG.metaFallaMin, diasReincidencia: CFG.diasReincidencia },
+      aprobadoPor: quien(), aprobadoPorUid: uidYo(), aprobadoEn: fbTimestamp(),
+      pagada: false, pagadoEn: null,
+    };
+    // merge: se conservan los ajustes (con quién y cuándo) y los datos de reapertura.
+    DATOS.semDoc = { ...sd, ...doc, aprobadoEn: firebase.firestore.Timestamp.now() };
+    closeModal(); render();
+    escribir(semRef().set(doc, { merge: true }), `✅ Semana ${n} aprobada · ${money(v.total)}`, () => cargarSemana(true));
+  };
+}
+function modalReabrir() {
+  const n = fbSemanaISO(LUNES);
+  openModal(`<h3>🔓 ¿Reabrir la semana ${n}?</h3>
+    <div class="nota">La semana vuelve a borrador y se recalcula con los datos y reglas de hoy. Los ajustes se conservan. Queda registrado quién la reabrió.</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="reOk">Sí, reabrir</button></div>`);
+  $('reOk').onclick = () => {
+    const cambios = { estado: 'borrador', reabiertaPor: quien(), reabiertaPorUid: uidYo(), reabiertaEn: fbTimestamp() };
+    closeModal();
+    DATOS.semDoc = { ...(DATOS.semDoc || {}), ...cambios, reabiertaEn: firebase.firestore.Timestamp.now() };
+    $('view').innerHTML = cabeceraHtml(null) + '<div class="card empty">Recalculando la semana...</div>'; bindCabecera();
+    escribir(semRef().update(cambios), `🔓 Semana ${n} reabierta`, () => cargarSemana(true));
+    // Una semana aprobada no tenía leídas sus OTs: se leen ahora.
+    cargando = true;
+    leerDatosSemana(DATOS).then(() => { _cacheSemana.set(DATOS.id, DATOS); render(); }).catch(e => { fail(e); }).finally(() => { cargando = false; });
+  };
+}
+function marcarPagada(si) {
+  const cambios = si ? { pagada: true, pagadoEn: fbTimestamp(), pagadoPor: quien() } : { pagada: false, pagadoEn: null, pagadoPor: '' };
+  DATOS.semDoc = { ...DATOS.semDoc, ...cambios, pagadoEn: si ? firebase.firestore.Timestamp.now() : null };
+  render();
+  escribir(semRef().update(cambios), si ? '💵 Semana marcada como pagada' : 'Se quitó la marca de pagada', () => cargarSemana(true));
+}
+
+// ══════ EXCEL (CSV con ; para Excel en español) ══════
+function descargarExcel(v) {
+  const cel = x => { const s = String(x == null ? '' : x).replace(/\r?\n/g, ' '); const formula = /^[=+\-@]/.test(s) && !/^-?\d+(,\d+)?$/.test(s); return /[;"]/.test(s) || formula ? '"' + (formula ? "'" : '') + s.replace(/"/g, '""') + '"' : s; };
+  const num = n => n == null ? '' : String(r2(n)).replace('.', ',');
+  const estado = v.congelada ? ((DATOS.semDoc || {}).pagada ? 'Pagada' : 'Aprobada') : 'Borrador';
+  const filas = [['Semana', 'Desde', 'Hasta', 'Técnico', ...CRITERIOS.map(x => x.nombre + ' %'), 'Puntaje %', 'Base semanal RD$', 'Monto por puntaje RD$', 'Ajuste RD$', 'Motivo del ajuste', 'Total a pagar RD$', 'Estado', 'Lo que bajó su puntaje', 'Notas']];
+  v.filas.forEach(f => filas.push([SEM, ddmmaa(DATOS.lunes), ddmmaa(DATOS.domingo), f.nombre,
+    ...CRITERIOS.map(x => { const c = f.criterios[x.k] || {}; return c.v == null ? '—' : Math.round(c.v * 100); }),
+    f.sinDatos ? 'sin trabajos' : f.puntaje, num(f.base), num(f.montoCalc), num(f.ajuste), f.motivo, num(f.monto), estado, f.bajo.join(' | '), f.info.join(' | ')]));
+  filas.push(['', '', '', 'TOTAL', '', '', '', '', v.promedio == null ? '' : v.promedio, '', '', '', '', num(v.total), '', '', '']);
+  const csv = '﻿' + filas.map(r => r.map(cel).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'incentivos_' + SEM + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('⬇️ Excel descargado');
+}
+
+// ══════ REGLAS Y SALARIOS ══════
+function modalReglas() {
+  const c = CFG;
+  const campo = (id, label, val, extra) => `<div><label class="f" for="${id}">${label}</label><input id="${id}" type="number" inputmode="decimal" min="0" ${extra || ''} value="${esc(val)}"/></div>`;
+  openModal(`<h3>⚙️ Reglas y salarios</h3>
+    <div class="nota">Solo el Administrador ve y cambia esto. Las semanas ya aprobadas no cambian.</div>
+    <div class="sec">Pesos de los criterios (deben sumar 100)</div>
+    <div class="g2">${CRITERIOS.map(x => campo('rp-' + x.k, x.icono + ' ' + x.nombre, c.pesos[x.k], 'max="100" step="1"')).join('')}</div>
+    <div class="nota" id="rpSuma"></div>
+    <div class="sec">Metas</div>
+    <div class="g2">
+      ${campo('rMin', 'Mínimo para cobrar (%)', c.minimo, 'max="100" step="1"')}
+      ${campo('rDias', 'Días de reincidencia', c.diasReincidencia, 'max="90" step="1"')}
+      ${campo('rParada', 'Respuesta máquina parada (min)', c.metaParadaMin, 'step="1"')}
+      ${campo('rFalla', 'Respuesta falla sin parada (min)', c.metaFallaMin, 'step="1"')}
+    </div>
+    <div class="sec">Salario e incentivo por técnico</div>
+    <div class="formula"><b>Base semanal = salario mensual × % de incentivo × 12 ÷ 52</b><br>Monto = base semanal × puntaje (RD$ 0 si no llega al mínimo) + ajuste.</div>
+    ${campo('rPct', '% de incentivo por defecto', c.pctDefault, 'max="100" step="0.5"')}
+    ${TECS.map((t, i) => { const ct = c.tecnicos[t.key] || {}; return `<div class="ts"><b style="font-size:14px;overflow-wrap:anywhere">${esc(t.nombre)}</b>
+      <div class="g2">${campo('rs-' + i, 'Salario mensual RD$', ct.salario != null ? ct.salario : '', 'step="0.01"')}${campo('rq-' + i, '% incentivo', ct.pct != null ? ct.pct : '', 'max="100" step="0.5" placeholder="' + esc(c.pctDefault) + '"')}</div>
+      <div class="nota" id="rb-${i}"></div></div>`; }).join('')}
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="rOk">Guardar</button></div>`);
+  const val = id => { const s = $(id).value.trim(); return s === '' ? null : Number(s); };
+  const refrescar = () => {
+    const suma = CRITERIOS.reduce((s, x) => s + (Number($('rp-' + x.k).value) || 0), 0);
+    $('rpSuma').innerHTML = suma === 100 ? `Suma: <b style="color:var(--green)">100 ✓</b>` : `Suma: <b style="color:var(--red)">${esc(suma)}</b> (debe ser 100)`;
+    const pd = val('rPct');
+    TECS.forEach((t, i) => {
+      const s = val('rs-' + i) || 0, q = val('rq-' + i), p = q == null ? (pd || 0) : q;
+      $('rb-' + i).textContent = s ? `${money(s)} × ${p}% × 12 ÷ 52 = base semanal ${money(s * p / 100 * 12 / 52)}` : 'Sin salario: su base semanal es RD$ 0.';
+    });
+  };
+  $('modal').addEventListener('input', refrescar); refrescar();
+  $('rOk').onclick = () => {
+    const pesos = {}; let suma = 0, malo = false;
+    CRITERIOS.forEach(x => { const v = val('rp-' + x.k); if (v == null || !(v >= 0) || v > 100) malo = true; pesos[x.k] = v; suma += v || 0; });
+    if (malo || Math.abs(suma - 100) > 1e-9) return toast('Los pesos deben ser de 0 a 100 y sumar 100', 'error');
+    const minimo = val('rMin'), dias = val('rDias'), parada = val('rParada'), falla = val('rFalla'), pctDefault = val('rPct');
+    if (!(minimo >= 0 && minimo <= 100)) return toast('El mínimo para cobrar debe ser de 0 a 100 %', 'error');
+    if (!(dias >= 0 && dias <= 90 && Number.isInteger(dias))) return toast('Días de reincidencia: número entero de 0 a 90', 'error');
+    if (!(parada > 0) || !(falla > 0)) return toast('Las metas de respuesta deben ser mayores que 0 minutos', 'error');
+    if (!(pctDefault >= 0 && pctDefault <= 100)) return toast('El % de incentivo por defecto debe ser de 0 a 100', 'error');
+    const tecnicos = {};
+    for (let i = 0; i < TECS.length; i++) {
+      const s = val('rs-' + i), q = val('rq-' + i);
+      if (s != null && !(s >= 0 && s < 1e8)) return toast('Salario no válido para ' + TECS[i].nombre, 'error');
+      if (q != null && !(q >= 0 && q <= 100)) return toast('% no válido para ' + TECS[i].nombre, 'error');
+      tecnicos[TECS[i].key] = { nombre: TECS[i].nombre, salario: s == null ? 0 : r2(s), pct: q };
+    }
+    const doc = { pesos, minimo, diasReincidencia: dias, metaParadaMin: parada, metaFallaMin: falla, pctDefault, tecnicos, actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() };
+    const diasCambio = dias !== CFG.diasReincidencia;
+    CFG = normCfg(doc);
+    if (diasCambio) _cacheSemana.clear(); // cambia el rango de la consulta de reincidencias
+    closeModal();
+    escribir(db.collection('incentivos_config').doc('general').set(doc, { merge: true }), '⚙️ Reglas y salarios guardados');
+    if (diasCambio && !(DATOS.semDoc && DATOS.semDoc.estado === 'aprobada')) cargarSemana(true); else render();
+  };
+}
+</script>
+</body>
+</html>

@@ -1022,6 +1022,10 @@ async function submitChecklist() {
       items: itemsGuardar,
       resumen: { conforme: cuenta('ok'), noConforme: cuenta('falla'), noAplica: cuenta('na'), noInspeccionado: cuenta('ni') },
       tieneFallas: cuenta('falla') > 0,
+      // (20 oct 2026) Para Incentivos: la fecha en que tocaba este checklist
+      // (la "próxima" del equipo antes de guardarlo) y si se hizo a tiempo.
+      vencimiento: equipo.checklistProximaFecha || null,
+      aTiempo: (!equipo.checklistProximaFecha || hoy <= equipo.checklistProximaFecha),
       creadoPor: creador,
       createdAt: fbTimestamp(),
     });
@@ -1349,6 +1353,9 @@ async function rechazarOt(otId) {
       revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
       revisadoEn: fbTimestamp(),
       revisionResultado: 'rechazada',
+      // (20 oct 2026) Contador para Incentivos: revisionResultado se pisa con
+      // 'buena' cuando después se valida; este número queda.
+      vecesRechazada: firebase.firestore.FieldValue.increment(1),
       notaRevision: nota,
       ...camposEdicionOt(),
     });

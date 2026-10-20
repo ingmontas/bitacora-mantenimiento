@@ -78,6 +78,14 @@
         <p>Solicitudes de repuestos de los técnicos: entregar o rechazar.</p>
       </div>
     </a>
+    <!-- (20 oct 2026) Incentivos: oculto hasta saber que es Administrador. -->
+    <a class="tile" href="incentivos.html" id="tile-incentivos" style="display:none">
+      <div class="icon">💰</div>
+      <div class="info">
+        <h2>Incentivos</h2>
+        <p>Cumplimiento semanal de cada técnico y monto del incentivo (solo Administrador).</p>
+      </div>
+    </a>
     <a class="tile" href="etiquetas-qr.html">
       <div class="icon">🏷️</div>
       <div class="info">
@@ -123,6 +131,7 @@ window.fbReady.then(()=>{
   if (window.currentUserRole && window.currentUserRole.rol === 'OPERADOR') { location.replace('reportar.html'); return; }
   // Recursos Humanos solo usa la pestaña de cargos por herramientas.
   if (window.currentUserRole && window.currentUserRole.rol === 'RRHH') { location.replace('herramientas.html#rrhh'); return; }
+  if (userHasRole('ADMINISTRADOR')) document.getElementById('tile-incentivos').style.display = '';
   document.getElementById('fbStatus').innerHTML = `🟢 Conectado a Firebase (proyecto <b>${firebaseConfig.projectId}</b>)`;
 }).catch((err)=>{
   // (5 oct 2026) Muestra la causa real (antes decía siempre "revisa firebase-config.js").

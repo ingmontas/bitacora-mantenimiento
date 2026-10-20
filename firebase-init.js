@@ -152,7 +152,9 @@ function fbRenderMiniNav(active) {
       { id: 'hoja-vida',  href: 'hoja-vida.html',  label: '🗂️ Hoja de Vida' },
       { id: 'herramientas', href: 'herramientas.html', label: '🧰 Herramientas' },
       { id: 'almacen',    href: 'almacen.html',    label: '📦 Almacén' },
-    ];
+      // (20 oct 2026) Incentivos: solo lo ve el Administrador (tiene salarios).
+      { id: 'incentivos', href: 'incentivos.html', label: '💰 Incentivos', roles: ['ADMINISTRADOR'] },
+    ].filter(p => !p.roles || userHasRole(...p.roles));
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
     bar.style.cssText = 'display:flex;gap:4px;overflow-x:auto;padding:8px 14px;background:#0B131C;border-bottom:1px solid #2D3F55;font-size:11px;align-items:center;position:sticky;top:0;z-index:250;';
