@@ -240,7 +240,11 @@
     .tbox { display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; min-width: 0; height: 54px; border: 1px solid var(--border); border-radius: 10px; font-size: 10.5px; font-weight: 600; color: var(--muted2); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
     .tbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #2563EB22; }
     .tbox input { border: none; box-shadow: none !important; min-height: 0; height: 26px; padding: 0; text-align: center; font-family: var(--mono); font-size: 15px; background: transparent; width: 100%; min-width: 0; }
-    .tbox input::-webkit-calendar-picker-indicator { display: none; }
+    /* (21 oct 2026) El icono del reloj ya no se esconde: en algunos celulares
+       (y en computadora) era la única forma de abrir el reloj. */
+    .tbox input::-webkit-calendar-picker-indicator { opacity: .55; width: 14px; height: 14px; margin-left: 2px; padding: 0; cursor: pointer; }
+    .tbox .ahora { font-size: 10px; font-weight: 700; color: var(--accent); background: none; border: none; padding: 0; margin-top: 1px; cursor: pointer; letter-spacing: 0; text-transform: none; }
+    .tbox { height: auto; min-height: 54px; padding: 4px 0; }
     .dur { font-size: 13.5px; color: var(--muted); text-align: center; min-height: 18px; }
     .dur b { color: var(--text); }
     details.mas { border-top: 1px solid var(--line); padding-top: 4px; }
@@ -1317,6 +1321,21 @@ function initFormularioUnico() {
   on('f-tipo-maq', 'change', () => cascadaDesde(3));
   // En computadora el calendario no siempre se abre al tocar el campo invisible.
   on('f-fecha', 'click', e => { try { e.target.showPicker(); } catch (er) {} });
+  // (21 oct 2026) Horas: tocar el recuadro abre el reloj (antes, en algunos
+  // celulares no salía), y "Ahora" pone la hora actual de un toque.
+  ['f-hinicio', 'f-htecnico', 'f-hfinal'].forEach(id => {
+    const inp = document.getElementById(id), box = inp.closest('.tbox');
+    const abrir = () => { try { inp.showPicker(); } catch (er) { inp.focus(); } };
+    box.addEventListener('click', ev => { if (ev.target.classList.contains('ahora')) return; if (ev.target !== inp) ev.preventDefault(); abrir(); });
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ahora'; b.textContent = 'Ahora';
+    b.addEventListener('click', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const d = new Date(); inp.value = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    box.appendChild(b);
+  });
   // Técnicos
   on('tec-btn', 'click', () => toggleDropdown('tec'));
   on('tec-panel', 'change', e => {
