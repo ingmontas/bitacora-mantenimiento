@@ -216,6 +216,12 @@ service cloud.firestore {
     match /incentivos_config/{id}  { allow read, write: if esAdmin(); }
     match /incentivos_semanas/{id} { allow read, write: if esAdmin(); }
 
+    // ══════ Rentabilidad de equipos (22 oct 2026) ══════
+    // Costos de operadores, arranques, precios de máquinas nuevas y costo
+    // unitario de repuestos: SOLO Administrador (los técnicos nunca ven costos).
+    match /costos_config/{id}    { allow read, write: if esAdmin(); }
+    match /costos_repuestos/{id} { allow read, write: if esAdmin(); }
+
     // ══════ Herramientas por técnico (arqueos y cargos a RR.HH.) ══════
     match /herramientas/{id} {
       allow read: if esTecnicoOMas() || esAlmacenOMas() || esRRHH();

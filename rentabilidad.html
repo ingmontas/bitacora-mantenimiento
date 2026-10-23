@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Rentabilidad — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       RENTABILIDAD DE EQUIPOS (22 oct 2026)
+       Solo Administrador. Cuánto cuesta mantener cada máquina y si conviene
+       seguir con ella o comprar una nueva.
+       Costo de cada trabajo de la Bitácora (/ots con FECHA):
+         1. Técnico           = min técnico ÷ 60 × Σ costo hora de cada técnico
+                                (salario mensual ÷ horas al mes, de Incentivos)
+         2. Operador detenido = min máquina ÷ 60 × operadores × costo hora operador
+         3. Arranques         = 1 costo de arranque si hubo paro (min máquina > 0)
+         4. Repuestos         = Σ cantidad × costo unitario (inventario del mes)
+       Colecciones (solo Admin en firestore.rules):
+         /costos_config/general     datos por defecto, por tipo y por equipo
+         /costos_repuestos/catalogo costo unitario de repuestos (+ catalogo_2… si no cabe)
+       Plan gratis de Firebase: 1 lectura de cada configuración y solo las OTs
+       del período elegido (consulta de un solo campo, FECHA), guardadas en
+       memoria por mes mientras la página está abierta. Sin listeners.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
+      --text: #F1F5F9; --muted: #94A3B8; --soft: #C3CCD8; --border: #2D3F55;
+      --c-tec: #3987e5; --c-op: #d95926; --c-arr: #199e70; --c-rep: #c98500;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { overflow-x: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
+    #header h1 { font-size: 17px; font-weight: 800; }
+    #header small { font-size: 11px; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 60px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; min-width: 0; }
+    .ct { font-weight: 800; font-size: 14px; margin-bottom: 2px; }
+    .cs { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .tabs button { flex: 1; min-width: 0; padding: 9px 4px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .tabs button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .bar-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .bar-tools select { flex: 1 1 100%; }
+    .bar-tools button { flex: 1 1 0; min-width: 0; }
+    .bar-tools #bAct { flex: 0 0 52px; }
+    select, input, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
+    select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 90px; resize: vertical; font-size: 12.5px; }
+    .btn { padding: 11px 10px; border-radius: 10px; border: 0; font-weight: 800; font-size: 14px; background: var(--accent); color: #0F1923; cursor: pointer; font-family: inherit; }
+    .btn2 { padding: 10px 8px; border-radius: 10px; border: 0; font-weight: 700; font-size: 12.5px; background: var(--border); color: var(--text); cursor: pointer; font-family: inherit; }
+    .btn[disabled] { opacity: .4; cursor: default; }
+    .lnk { background: none; border: 0; color: #7fb3f5; font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 0; font-family: inherit; }
+    .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; min-width: 0; }
+    .kpi.w { grid-column: 1 / -1; }
+    .kpi span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 5px; }
+    .kpi b { font-size: 18px; display: block; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .kpi small { font-size: 10.5px; color: var(--soft); display: block; overflow-wrap: anywhere; }
+    .leg { display: flex; gap: 4px 10px; font-size: 11px; color: var(--soft); margin-bottom: 6px; flex-wrap: wrap; }
+    .leg span { display: flex; align-items: center; gap: 4px; }
+    i.sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+    svg.ch { display: block; width: 100%; height: auto; overflow: visible; }
+    svg [data-tip] { cursor: pointer; }
+    .chead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .eq { cursor: pointer; }
+    .eqh { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .eqh b { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+    .sem { font-size: 12px; font-weight: 800; background: var(--surface); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+    .cmp { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+    .cmp > span { width: 74px; flex: none; color: var(--soft); }
+    .cmp > svg { flex: 1; min-width: 0; height: 12px; }
+    .cmp > b { font-size: 12px; white-space: nowrap; }
+    .lbl { font-size: 11px; color: var(--muted); margin: 8px 0 4px; }
+    .pct { font-size: 11px; color: var(--soft); margin-top: 4px; line-height: 1.45; }
+    .def { font-size: 12px; line-height: 1.45; margin-top: 8px; background: var(--surface); border-radius: 8px; padding: 8px; overflow-wrap: anywhere; }
+    .nota { font-size: 11.5px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+    .aviso { background: #F59E0B14; border: 1px solid #F59E0B44; border-radius: 10px; padding: 9px 11px; font-size: 12px; line-height: 1.5; margin-bottom: 8px; overflow-wrap: anywhere; }
+    .aviso.info { background: #818CF814; border-color: #818CF844; }
+    .math { background: var(--surface); border-radius: 10px; padding: 10px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+    .math b { color: var(--text); }
+    .tw { overflow-x: auto; max-width: 100%; }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; padding: 5px 3px; border-bottom: 1px solid var(--border); }
+    td { padding: 6px 3px; border-bottom: 1px solid #26364a; color: var(--soft); vertical-align: top; overflow-wrap: anywhere; }
+    td b { color: var(--text); }
+    .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
+    #tip { position: fixed; z-index: 900; pointer-events: none; background: #0B131C; border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 6px 9px; border-radius: 8px; max-width: 240px; line-height: 1.4; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+    /* modal */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 20px 8px; overflow-y: auto; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; width: 100%; max-width: 600px; min-width: 0; }
+    .modal h3 { font-size: 16px; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
+    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 9px 0 4px; }
+    .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+    .g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 8px; }
+    .g3 label.f { font-size: 9.5px; letter-spacing: .02em; text-transform: none; }
+    .sec { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 4px; }
+    .blk { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px 10px; margin-top: 8px; }
+    .blk b { font-size: 13.5px; overflow-wrap: anywhere; }
+    .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #F59E0B22; color: var(--accent); }
+    .tag.ok { background: #10B98122; color: #4ade80; } .tag.bad { background: #EF444422; color: #ff8a8a; } .tag.info { background: #818CF822; color: #a5b4fc; }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: #B45309; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>📊 Rentabilidad de equipos</h1>
+  <small id="header-sub">Cargando...</small>
+</div>
+
+<div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="tip"></div>
+<div id="toast"></div>
+
+<script>
+// ══════ AYUDAS (22 oct 2026) ══════
+const esc = s => fbEsc(s);
+const $ = id => document.getElementById(id);
+const K = s => fbEquipoKey(s);
+// Clave segura para mapas de Firestore (solo a-z, 0-9 y _).
+// Firestore reserva los nombres de campo tipo __x__: se les antepone una letra.
+const cfgKey = s => { const k = K(s).replace(/[^a-z0-9]/g, '_'); return /^__.*__$/.test(k) ? 'k' + k : k; };
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const money = n => { n = r2(n); return 'RD$ ' + n.toLocaleString('es-DO', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
+// Monto corto para gráficas y tarjetas: 850 · 6.9k · 452k · 1.6 M
+function corto(n) {
+  n = Number(n) || 0; const a = Math.abs(n);
+  if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + ' M';
+  if (a >= 1e3) return (n / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  return String(Math.round(n));
+}
+const moneyK = n => 'RD$ ' + corto(n);
+const pctR = (a, b) => b ? Math.round(a / b * 100) : 0;
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const sumarDias = (f, n) => { const d = fbParseFecha(f); d.setDate(d.getDate() + n); return fbFechaLocal(d); };
+const diasEntre = (a, b) => Math.round((fbParseFecha(b) - fbParseFecha(a)) / 86400000);
+const mesDe = f => String(f || '').slice(0, 7);
+const mesSuma = (m, n) => { const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const finDeMes = m => fbFechaLocal(new Date(+m.slice(0, 4), +m.slice(5, 7), 0));
+const mesesEntre = (a, b) => { const out = []; for (let m = mesDe(a); m <= mesDe(b); m = mesSuma(m, 1)) out.push(m); return out; };
+const nombreMes = m => MESES_L[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
+const mesCorto = m => MESES[+m.slice(5, 7) - 1];
+const quien = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
+const sinAcentos = s => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+const numOk = v => v != null && v !== '' && isFinite(Number(v));
+
+let _toastT = null;
+function toast(msg, tipo) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3400); }
+function openModal(html) { $('modal').oninput = null; $('modal').innerHTML = html; $('modalBg').classList.add('open'); $('modalBg').scrollTop = 0; }
+function closeModal() { $('modalBg').classList.remove('open'); }
+$('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+const fail = e => { console.error(e); toast('❌ ' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar costos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
+// Escritura sin bloquear (mismo patrón que Incentivos): sin señal, Firestore
+// la guarda en el celular y la sube sola al volver.
+function escribir(promesa, msgOk) {
+  let listo = false, avisado = false;
+  promesa.then(() => { listo = true; if (avisado) toast('☁️ Costos subidos al servidor ✅'); }).catch(e => { listo = true; fail(e); });
+  if (!navigator.onLine) { avisado = true; toast(msgOk + ' 📵 Se subirá cuando haya señal.', 'warn'); }
+  else { toast(msgOk); setTimeout(() => { if (!listo) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); } }, 3000); }
+}
+
+// ══════ COMPONENTES DEL COSTO ══════
+const COMP = [
+  { k: 'tec', n: 'Técnico', c: '#3987e5' },
+  { k: 'op', n: 'Operador detenido', c: '#d95926' },
+  { k: 'arr', n: 'Arranques', c: '#199e70' },
+  { k: 'rep', n: 'Repuestos', c: '#c98500' },
+];
+const cero = () => ({ tec: 0, op: 0, arr: 0, rep: 0 });
+const sumaC = c => c.tec + c.op + c.arr + c.rep;
+const acum = (a, b) => { COMP.forEach(x => { a[x.k] += b[x.k]; }); return a; };
+const legendHtml = () => `<div class="leg">${COMP.map(x => `<span><i class="sw" style="background:${x.c}"></i>${x.n}</span>`).join('')}</div>`;
+
+// ══════ DATOS DE COSTOS (/costos_config/general) ══════
+// Se resuelve campo por campo: equipo > tipo de máquina > valores generales.
+const DEF = { horasMesTecnico: 190.67, costoHoraTecnicoDefault: 0, operadores: 1, costoHoraOperador: 0, costoArranque: 0, mantNuevaPct: 5, vidaUtilAnios: 10 };
+const CAMPOS_EQ = [
+  { k: 'operadores', l: 'Operadores', max: 100 },
+  { k: 'costoHoraOperador', l: 'Costo hora operador', max: 1e7 },
+  { k: 'costoArranque', l: 'Costo de arranque', max: 1e9 },
+  { k: 'precioNuevo', l: 'Precio máquina nueva', max: 1e11 },
+  { k: 'vidaUtilAnios', l: 'Vida útil (años)', max: 100, min: 0.0001 },
+  { k: 'mantNuevaPct', l: '% mant. nueva', max: 100 },
+];
+const CAMPOS_DEF = [
+  { k: 'horasMesTecnico', l: 'Horas al mes del técnico', max: 744, min: 1 },
+  { k: 'costoHoraTecnicoDefault', l: 'Costo hora técnico sin salario', max: 1e7 },
+  { k: 'operadores', l: 'Operadores por máquina', max: 100 },
+  { k: 'costoHoraOperador', l: 'Costo hora operador', max: 1e7 },
+  { k: 'costoArranque', l: 'Costo de arranque', max: 1e9 },
+  { k: 'mantNuevaPct', l: '% mantenimiento de una nueva', max: 100 },
+  { k: 'vidaUtilAnios', l: 'Vida útil (años)', max: 100, min: 0.0001 },
+];
+function limpiaBloque(o) {
+  const out = {};
+  if (o && typeof o === 'object') {
+    if (o.nombre) out.nombre = String(o.nombre).slice(0, 120);
+    CAMPOS_EQ.forEach(c => { if (numOk(o[c.k])) out[c.k] = Number(o[c.k]); });
+  }
+  return out;
+}
+function normCfg(d) {
+  d = d || {};
+  const c = { defaults: { ...DEF }, porTipo: {}, porEquipo: {} };
+  const dd = d.defaults || {};
+  Object.keys(DEF).forEach(k => { if (numOk(dd[k]) && Number(dd[k]) >= 0) c.defaults[k] = Number(dd[k]); });
+  if (!(c.defaults.horasMesTecnico > 0)) c.defaults.horasMesTecnico = DEF.horasMesTecnico;
+  ['porTipo', 'porEquipo'].forEach(s => { const src = d[s] || {}; Object.keys(src).forEach(k => { const b = limpiaBloque(src[k]); if (Object.keys(b).length) c[s][k] = b; }); });
+  return c;
+}
+let CFG = normCfg(null), CFG_META = null;
+
+// Datos de un equipo: de dónde sale cada valor (equipo, tipo o general).
+function datosEquipo(g) {
+  const be = (g.id && CFG.porEquipo[g.id]) || CFG.porEquipo[cfgKey(g.nombre)] || null;
+  const bt = g.tipo ? CFG.porTipo[cfgKey(g.tipo)] || null : null;
+  const d = { fuente: {} };
+  CAMPOS_EQ.forEach(c => {
+    if (be && numOk(be[c.k])) { d[c.k] = Number(be[c.k]); d.fuente[c.k] = 'equipo'; }
+    else if (bt && numOk(bt[c.k])) { d[c.k] = Number(bt[c.k]); d.fuente[c.k] = 'tipo'; }
+    else if (c.k in CFG.defaults) { d[c.k] = CFG.defaults[c.k]; d.fuente[c.k] = 'general'; }
+    else { d[c.k] = null; d.fuente[c.k] = '—'; }
+  });
+  return d;
+}
+
+// ══════ TÉCNICOS Y SALARIOS (/incentivos_config/general) ══════
+// Mismo emparejamiento de nombres que Incentivos (tecnicos.json): el texto de
+// TECNICOS ("FELIX M. GIL #777, LEBRON") se parte por comas y cada parte se
+// compara sin acentos/espacios con el nombre, el nombre corto o el "#777";
+// si no coincide, por el primer nombre cuando solo un técnico lo tiene.
+let TECS = [], SALARIOS = {};
+const tecKey = nombre => K(nombre).replace(/[^a-z0-9]/g, '_');
+function prepararTecnicos(lista) {
+  TECS = (lista || []).filter(t => t && t.nombre).map(t => {
+    const num = ((String(t.nombre) + ' ' + String(t.corto || '')).match(/#\s*(\d+)/) || [])[1] || '';
+    return { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key: tecKey(t.nombre), kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]) };
+  });
+}
+function _coincideDirecto(t, k, nums) {
+  if (t.kN && (k === t.kN || (t.kN.length >= 4 && k.includes(t.kN)))) return true;
+  if (t.kC && (k === t.kC || (t.kC.length >= 4 && k.includes(t.kC)))) return true;
+  return !!(t.num && nums.includes(t.num));
+}
+// Técnicos de una OT: [{ key, nombre, hora, conSalario }] (uno por persona).
+function tecnicosDeOt(texto) {
+  const out = new Map();
+  String(texto || '').split(/[,;\/&+]|\s+y\s+/i).map(x => x.trim()).filter(Boolean).forEach(seg => {
+    const k = K(seg), nums = [...seg.matchAll(/#\s*(\d+)/g)].map(m => m[1]);
+    let hits = TECS.filter(t => _coincideDirecto(t, k, nums));
+    if (!hits.length) { const pri = K(seg.split(/\s+/)[0]); const c = TECS.filter(t => t.primero && t.primero === pri); if (c.length === 1) hits = c; }
+    if (hits.length) hits.forEach(t => { if (!out.has(t.key)) out.set(t.key, { key: t.key, nombre: t.nombre }); });
+    else if (!out.has('?' + k)) out.set('?' + k, { key: null, nombre: seg });
+  });
+  return [...out.values()].map(t => {
+    const s = t.key ? Number((SALARIOS[t.key] || {}).salario) || 0 : 0;
+    return { ...t, conSalario: s > 0, hora: s > 0 ? s / CFG.defaults.horasMesTecnico : CFG.defaults.costoHoraTecnicoDefault };
+  });
+}
+
+// ══════ COSTO DE REPUESTOS (/costos_repuestos) ══════
+let REP = { porCodigo: new Map(), porDesc: new Map(), n: 0, partes: [], actualizadoEn: null, fuente: '', actualizadoPor: '' };
+function prepararRepuestos(docs) {
+  const porCodigo = new Map(), porDesc = new Map(); let n = 0, act = null, fuente = '', por = '';
+  docs.forEach(d => {
+    const x = d.data() || {};
+    if (x.actualizadoEn && (!act || (x.actualizadoEn.toMillis && x.actualizadoEn.toMillis() > act.toMillis()))) { act = x.actualizadoEn; fuente = x.fuente || ''; por = x.actualizadoPor || ''; }
+    Object.values(x.items || {}).forEach(it => {
+      if (!it || !numOk(it.costo)) return; n++;
+      if (it.codigo && !porCodigo.has(K(it.codigo))) porCodigo.set(K(it.codigo), it);
+      if (it.descripcion && !porDesc.has(K(it.descripcion))) porDesc.set(K(it.descripcion), it);
+    });
+  });
+  REP = { porCodigo, porDesc, n, partes: docs.map(d => d.id), actualizadoEn: act, fuente, actualizadoPor: por };
+}
+// Costo unitario de un repuesto de la OT: por código y si no, por descripción.
+function costoUnitario(i) {
+  const it = (i.codigo && REP.porCodigo.get(K(i.codigo))) || (i.descripcion && REP.porDesc.get(K(i.descripcion))) || null;
+  return it ? Number(it.costo) : null;
+}
+
+// ══════ EQUIPOS (catálogo con caché de 12 h) ══════
+let EQ_BY_ID = {}, EQ_BY_NAME = {}, TIPOS = new Map(); // TIPOS: cfgKey → nombre
+function prepararEquipos(snap) {
+  EQ_BY_ID = {}; EQ_BY_NAME = {}; TIPOS = new Map();
+  snap.docs.forEach(d => {
+    const x = d.data() || {}; if (!x.nombre) return;
+    EQ_BY_ID[d.id] = { id: d.id, nombre: String(x.nombre), tipo: String(x.tipoMaquina || '').trim() };
+    const k = K(x.nombre); if (k && !EQ_BY_NAME[k]) EQ_BY_NAME[k] = d.id;
+    const t = String(x.tipoMaquina || '').trim(); if (t && !TIPOS.has(cfgKey(t))) TIPOS.set(cfgKey(t), t);
+  });
+}
+// Mismo agrupamiento que Análisis: por equipoId; si no, por el nombre
+// (EQUIPO o TIPO_MAQUINA) unido al equipo del catálogo con ese nombre.
+function grupoDe(o) {
+  let id = o.equipoId && EQ_BY_ID[o.equipoId] ? o.equipoId : null;
+  if (!id && !o.equipoId) { const k = K(o.EQUIPO || o.TIPO_MAQUINA); if (k && EQ_BY_NAME[k]) id = EQ_BY_NAME[k]; }
+  if (id) { const e = EQ_BY_ID[id]; return { key: 'id:' + id, id, nombre: e.nombre, tipo: e.tipo || String(o.TIPO_MAQUINA || '').trim() }; }
+  if (o.equipoId) return { key: 'id:' + o.equipoId, id: o.equipoId, nombre: String(o.EQUIPO || o.equipoNombre || o.TIPO_MAQUINA || 'Equipo sin nombre'), tipo: String(o.TIPO_MAQUINA || '').trim() };
+  const nombre = String(o.EQUIPO || o.TIPO_MAQUINA || 'Equipo sin nombre');
+  return { key: 'n:' + (K(nombre) || '?'), id: null, nombre, tipo: String(o.TIPO_MAQUINA || '').trim() };
+}
+
+// ══════ OTs: qué cuenta (igual que Análisis) ══════
+const hecha = o => o.estado !== 'anulada' && !(['operador', 'checklist', 'qr'].includes(o.origen) && o.estado !== 'completada');
+const esProyecto = o => o.tipoReporte === 'proyecto' || String(o.TIPO_MANTENIMIENTO || o.TIPO || '').toLowerCase() === 'proyecto';
+const esCorrectivo = o => String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo';
+const folioDe = o => o.folio || o.Title || o.id;
+// Quita duplicados por número de OT (Title), como Análisis.
+function depurar(docs) {
+  const vistos = new Set();
+  return docs.filter(o => o.FECHA && hecha(o)).sort((a, b) => a.id.localeCompare(b.id)).filter(o => {
+    const k = String(o.Title || '').trim(); if (!k) return true;
+    if (vistos.has(k)) return false; vistos.add(k); return true;
+  });
+}
+
+// Costo de una OT (los 4 componentes). Devuelve también lo que faltó.
+function costoOt(o, d) {
+  const minTec = Math.max(0, Number(o.TOTAL_MIN_TECNICO) || 0), minMaq = Math.max(0, Number(o.TOTAL_MIN_MAQUINA) || 0);
+  let tecs = tecnicosDeOt(o.TECNICOS);
+  const sinTecnicos = !tecs.length && minTec > 0;
+  // Sin técnicos escritos pero con minutos: se cuenta una persona al costo por defecto.
+  if (sinTecnicos) tecs = [{ key: null, nombre: '(sin técnico)', conSalario: false, hora: CFG.defaults.costoHoraTecnicoDefault }];
+  const c = cero();
+  c.tec = minTec / 60 * tecs.reduce((s, t) => s + t.hora, 0);
+  c.op = minMaq / 60 * (Number(d.operadores) || 0) * (Number(d.costoHoraOperador) || 0);
+  c.arr = minMaq > 0 ? (Number(d.costoArranque) || 0) : 0;
+  let sinCosto = 0, piezas = 0; const reps = [];
+  (Array.isArray(o.REPUESTOS) ? o.REPUESTOS : []).forEach(i => {
+    if (!i || !(i.descripcion || i.codigo)) return;
+    const q = Math.max(0, Number(i.cantidad) || 0), cu = costoUnitario(i);
+    piezas += q;
+    if (cu == null) sinCosto++; else c.rep += q * cu;
+    reps.push({ codigo: String(i.codigo || ''), descripcion: String(i.descripcion || ''), cantidad: q, costo: cu == null ? null : q * cu });
+  });
+  return { c, total: sumaC(c), minTec, minMaq, tecs, sinTecnicos, sinCosto, piezas, reps };
+}
+
+// ══════ LECTURA DE OTs POR MES (en memoria) ══════
+// Cada mes leído se guarda mientras la página está abierta: cambiar de
+// pestaña o de período no vuelve a leer lo que ya está. "Actualizar" lo borra.
+const MES_DOCS = new Map(); // 'YYYY-MM' → [ots]
+let LECTURAS = 0;
+async function asegurarRango(desde, hasta) {
+  const faltan = mesesEntre(desde, hasta).filter(m => !MES_DOCS.has(m));
+  if (!faltan.length) return;
+  const d0 = faltan[0] + '-01', d1 = finDeMes(faltan[faltan.length - 1]);
+  const snap = await db.collection('ots').where('FECHA', '>=', d0).where('FECHA', '<=', d1).get();
+  LECTURAS += snap.size;
+  mesesEntre(d0, d1).forEach(m => MES_DOCS.set(m, []));
+  snap.docs.forEach(x => { const o = { id: x.id, ...x.data() }; const m = mesDe(o.FECHA); if (MES_DOCS.has(m)) MES_DOCS.get(m).push(o); });
+}
+const otsEntre = (desde, hasta) => depurar(mesesEntre(desde, hasta).flatMap(m => MES_DOCS.get(m) || []).filter(o => o.FECHA >= desde && o.FECHA <= hasta));
+
+// ══════ PERÍODO ══════
+// 'anio:AAAA' (año calendario; el actual va hasta hoy y se proyecta a 12
+// meses) o 'u12' (últimos 12 meses hasta hoy).
+function periodoDe(id) {
+  const hoy = fbHoy(), anioHoy = +hoy.slice(0, 4);
+  if (id === 'u12') {
+    const desde = sumarDias(fbFechaLocal(new Date(anioHoy - 1, +hoy.slice(5, 7) - 1, +hoy.slice(8, 10))), 1);
+    return { id, desde, hasta: hoy, factor: 1, parcial: false, label: 'Últimos 12 meses', corto: 'últimos 12 meses' };
+  }
+  let anio = +String(id || '').split(':')[1] || anioHoy;
+  if (anio > anioHoy) anio = anioHoy;
+  const desde = anio + '-01-01', fin = anio + '-12-31';
+  const hasta = fin < hoy ? fin : hoy;
+  const dias = diasEntre(desde, hasta) + 1, diasAnio = diasEntre(desde, fin) + 1;
+  const factor = diasAnio / dias;
+  const parcial = factor > 1.0001;
+  const rango = parcial ? ` (${MESES[0]}–${MESES[+hasta.slice(5, 7) - 1]})` : '';
+  return { id: 'anio:' + anio, desde, hasta, factor, parcial, dias, diasAnio, label: 'Año ' + anio + rango, corto: 'año ' + anio + rango };
+}
+function opcionesPeriodo() {
+  const a = +fbHoy().slice(0, 4);
+  return [periodoDe('anio:' + a), periodoDe('u12'), ...[1, 2, 3, 4].map(i => periodoDe('anio:' + (a - i)))];
+}
+
+// ══════ CÁLCULO DE UN PERÍODO ══════
+// Agrupa por equipo, calcula los 4 componentes y el semáforo.
+// Tendencia: últimos 3 meses (terminando en el último mes del período)
+// contra los 3 anteriores; se leen esos meses aunque queden antes del período.
+function calcularPeriodo(per) {
+  const ots = otsEntre(per.desde, per.hasta);
+  const finM = mesDe(per.hasta);
+  const ult3 = [mesSuma(finM, -2), mesSuma(finM, -1), finM], prev3 = [mesSuma(finM, -5), mesSuma(finM, -4), mesSuma(finM, -3)];
+  const otsTend = otsEntre(prev3[0] + '-01', per.hasta);
+  const meses = mesesEntre(per.desde, per.hasta);
+  const porMes = {}; meses.forEach(m => { porMes[m] = cero(); });
+  const grupos = new Map(); const total = cero();
+  let paradas = 0, sinCostoRep = 0, sinTecnicos = 0; const faltanSal = new Map();
+  const grupo = o => { const g = grupoDe(o); if (!grupos.has(g.key)) grupos.set(g.key, { ...g, d: datosEquipo(g), c: cero(), porMes: {}, ots: [], paradas: 0, minParo: 0, ult3: 0, prev3: 0 }); return grupos.get(g.key); };
+  ots.forEach(o => {
+    const G = grupo(o), r = costoOt(o, G.d), m = mesDe(o.FECHA);
+    acum(G.c, r.c); acum(total, r.c); if (porMes[m]) acum(porMes[m], r.c);
+    G.porMes[m] = acum(G.porMes[m] || cero(), r.c);
+    G.ots.push({ o, ...r, proyecto: esProyecto(o) });
+    if (r.minMaq > 0) { G.paradas++; paradas++; G.minParo += r.minMaq; }
+    sinCostoRep += r.sinCosto; if (r.sinTecnicos) sinTecnicos++;
+    r.tecs.forEach(t => { if (!t.conSalario && t.nombre !== '(sin técnico)') faltanSal.set(t.key || ('?' + K(t.nombre)), t.nombre); });
+  });
+  // Tendencia por equipo (con los meses previos al período si hace falta).
+  otsTend.forEach(o => {
+    const m = mesDe(o.FECHA), en3 = ult3.includes(m), enP = prev3.includes(m);
+    if (!en3 && !enP) return;
+    const g = grupoDe(o); const G = grupos.get(g.key); if (!G) return; // solo equipos con OTs en el período
+    const t = costoOt(o, G.d).total;
+    if (en3) G.ult3 += t; else G.prev3 += t;
+  });
+  const lista = [...grupos.values()].map(G => evaluar(G, per));
+  const rank = { rojo: 0, amarillo: 1, gris: 2, verde: 3 };
+  lista.sort((a, b) => rank[a.estado] - rank[b.estado] || b.mantener - a.mantener || a.nombre.localeCompare(b.nombre));
+  return { per, ots, porMes, meses, total, totalN: sumaC(total), paradas, equipos: lista, sinCostoRep, sinTecnicos, faltanSal: [...faltanSal.values()], ult3, prev3 };
+}
+const SEM = {
+  rojo: { i: '🔴', t: 'Evaluar reemplazo', c: '#d03b3b' },
+  amarillo: { i: '🟡', t: 'Vigilar', c: '#fab219' },
+  verde: { i: '🟢', t: 'Rentable', c: '#0ca30c' },
+  gris: { i: '⚪', t: 'Faltan datos de la máquina nueva', c: '#6b6a64' },
+};
+function evaluar(G, per) {
+  const real = sumaC(G.c), d = G.d;
+  const mantener = real * per.factor;
+  const precio = Number(d.precioNuevo) || 0, vida = Number(d.vidaUtilAnios) || 0;
+  const nueva = precio > 0 && vida > 0 ? precio / vida + precio * (Number(d.mantNuevaPct) || 0) / 100 : null;
+  const tendencia = G.prev3 > 0 && G.ult3 > 1.25 * G.prev3;
+  let estado, motivo;
+  if (nueva == null) { estado = 'gris'; motivo = 'Falta el precio de la máquina nueva'; }
+  else if (mantener >= nueva) { estado = 'rojo'; motivo = 'Mantenerla cuesta igual o más que una nueva'; }
+  else if (mantener >= 0.7 * nueva) { estado = 'amarillo'; motivo = 'Mantenerla cuesta 70 % o más de una nueva'; }
+  else if (tendencia) { estado = 'amarillo'; motivo = 'El costo de los últimos 3 meses subió más de 25 %'; }
+  else { estado = 'verde'; motivo = 'Mantenerla cuesta mucho menos que una nueva'; }
+  const out = { ...G, real, mantener, nueva, tendencia, estado, motivo };
+  out.deficit = deficit(out);
+  return out;
+}
+// 💡 Déficit: el componente que más pesa, la causa de falla más cara entre
+// los correctivos (sin proyectos) y repuestos que se repiten 3 veces o más.
+function deficit(E) {
+  const tot = E.real; if (!(tot > 0)) return 'Sin costos en el período.';
+  const partes = [];
+  const sh = k => E.c[k] / tot;
+  const paro = sh('op') + sh('arr');
+  const fallas = E.ots.filter(x => !x.proyecto && esCorrectivo(x.o));
+  let porParo = false;
+  if (paro >= sh('tec') && paro >= sh('rep')) { partes.push(`${Math.round(paro * 100)} % del costo son arranques y operador detenido`); porParo = true; }
+  else if (sh('rep') >= sh('tec')) partes.push(`${Math.round(sh('rep') * 100)} % del costo son repuestos`);
+  else partes.push(`${Math.round(sh('tec') * 100)} % del costo es mano de obra del técnico`);
+  const causas = new Map();
+  fallas.forEach(x => {
+    const txt = String(x.o.CAUSA_FALLA || x.o.causaFalla || '').trim(); if (!txt) return;
+    const k = K(txt), c = causas.get(k) || { txt, costo: 0, n: 0, paradas: 0 };
+    c.costo += x.total; c.n++; if (x.minMaq > 0) c.paradas++; causas.set(k, c);
+  });
+  const top = [...causas.values()].sort((a, b) => b.costo - a.costo || b.n - a.n)[0];
+  let txt = partes[0];
+  if (top) txt += porParo && top.paradas ? `: ${top.paradas} ${top.paradas === 1 ? 'parada' : 'paradas'} por «${top.txt}»` : `: ${top.n} ${top.n === 1 ? 'falla' : 'fallas'} por «${top.txt}»`;
+  const reps = new Map();
+  E.ots.filter(x => !x.proyecto).forEach(x => x.reps.forEach(r => { if (!r.codigo) return; const k = K(r.codigo), v = reps.get(k) || { r, n: 0 }; v.n++; reps.set(k, v); }));
+  const rep = [...reps.values()].filter(v => v.n >= 3).sort((a, b) => b.n - a.n).slice(0, 2);
+  if (rep.length) txt += '. Repuestos repetidos: ' + rep.map(v => `«${v.r.descripcion || v.r.codigo}» ${v.n} veces`).join(', ');
+  if (E.tendencia) txt += `. El costo de los últimos 3 meses subió ${Math.round((E.ult3 / E.prev3 - 1) * 100)} %`;
+  return txt + '.';
+}
+
+// ══════ GRÁFICAS (SVG simple, con tooltip y vista de tabla) ══════
+const W = 340;
+function escala(max) { if (!(max > 0)) return 1000; const p = Math.pow(10, Math.floor(Math.log10(max))); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= max) return m * p; return 10 * p; }
+// cols: [{ label, tip, c:{tec,op,arr,rep} }]
+function svgBarras(cols, opts) {
+  opts = opts || {};
+  const H = 200, top = 14, bot = 22, left = 34, right = 4;
+  const ch = H - top - bot, max = escala(Math.max(0, ...cols.map(x => sumaC(x.c))));
+  let s = `<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria || 'Costo por mes')}">`;
+  for (let i = 0; i <= 4; i++) { const y = top + ch - ch * i / 4; s += `<line x1="${left}" x2="${W - right}" y1="${y}" y2="${y}" stroke="#2D3F55"/><text x="${left - 5}" y="${y + 3.5}" fill="#94A3B8" font-size="10" text-anchor="end">${esc(corto(max * i / 4))}</text>`; }
+  const slot = (W - left - right) / Math.max(1, cols.length), bw = Math.min(34, slot * 0.72);
+  cols.forEach((col, i) => {
+    const x = left + slot * i + (slot - bw) / 2; let y = top + ch;
+    COMP.forEach(cp => {
+      const v = col.c[cp.k]; if (!(v > 0)) return;
+      const h = Math.max(1, v / max * ch); y -= h;
+      s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" rx="2" fill="${cp.c}" data-tip="${esc(col.tip + ' · ' + cp.n + ': ' + money(v))}"/>`;
+    });
+    const t = sumaC(col.c);
+    if (t > 0 && cols.length <= 7) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" fill="#C3CCD8" font-size="10" text-anchor="middle">${esc(corto(t))}</text>`;
+    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 7}" fill="#C3CCD8" font-size="${cols.length > 7 ? 10 : 11}" text-anchor="middle">${esc(col.label)}</text>`;
+  });
+  return s + '</svg>';
+}
+function tablaComp(cols, cab) {
+  return `<div class="tw"><table><tr><th>${esc(cab)}</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0])}</th>`).join('')}<th class="r">Total</th></tr>`
+    + cols.map(c => `<tr><td><b>${esc(c.tip || c.label)}</b></td>${COMP.map(x => `<td class="r">${esc(corto(c.c[x.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(sumaC(c.c)))}</b></td></tr>`).join('')
+    + `</table></div>`;
+}
+let _chartN = 0;
+// Tarjeta con gráfica + botón "Ver tabla" que cambia a la tabla de los mismos datos.
+function cardGrafica(titulo, sub, svg, tabla) {
+  const id = 'ch' + (++_chartN);
+  return `<div class="card"><div class="chead"><div><div class="ct">${esc(titulo)}</div><div class="cs">${esc(sub)}</div></div><button class="lnk" data-tabla="${id}">Ver tabla</button></div>
+    ${legendHtml()}<div id="${id}-g">${svg}</div><div id="${id}-t" style="display:none">${tabla}</div></div>`;
+}
+function barraMezcla(c, aria) {
+  const t = sumaC(c); if (!(t > 0)) return '';
+  let x = 0, s = `<svg class="ch" viewBox="0 0 ${W} 16" role="img" aria-label="${esc(aria)}">`;
+  COMP.forEach(cp => { const v = c[cp.k]; if (!(v > 0)) return; const w = v / t * W; s += `<rect x="${x.toFixed(1)}" y="0" width="${Math.max(0.5, w - 2).toFixed(1)}" height="16" rx="3" fill="${cp.c}" data-tip="${esc(cp.n + ': ' + money(v) + ' (' + pctR(v, t) + ' %)')}"/>`; x += w; });
+  return s + '</svg>';
+}
+const pctLinea = c => { const t = sumaC(c); return COMP.map(x => `${x.n} ${pctR(c[x.k], t)} %`).join(' · '); };
+function svgCmp(v, max, color, tip) { const w = max > 0 ? Math.max(1, v / max * 200) : 0; return `<svg viewBox="0 0 200 12" preserveAspectRatio="none"><rect x="0" y="0" width="${w.toFixed(1)}" height="12" rx="3" fill="${color}" data-tip="${esc(tip)}"/></svg>`; }
+
+// Tooltip: con mouse al pasar; con el dedo al tocar.
+(function () {
+  const tip = $('tip'); let porToque = false;
+  const mostrar = (el, x, y) => { tip.textContent = el.getAttribute('data-tip'); tip.style.display = 'block'; const r = tip.getBoundingClientRect(); tip.style.left = Math.max(6, Math.min(window.innerWidth - r.width - 6, x - r.width / 2)) + 'px'; tip.style.top = Math.max(6, y - r.height - 12) + 'px'; };
+  document.addEventListener('pointermove', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el && e.pointerType === 'mouse') { porToque = false; mostrar(el, e.clientX, e.clientY); } else if (e.pointerType === 'mouse') tip.style.display = 'none'; });
+  document.addEventListener('click', e => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) { porToque = true; mostrar(el, e.clientX, e.clientY); e.stopPropagation(); return; }
+    tip.style.display = 'none';
+    const b = e.target.closest && e.target.closest('[data-tabla]');
+    if (b) { const g = $(b.dataset.tabla + '-g'), t = $(b.dataset.tabla + '-t'); const ver = t.style.display === 'none'; t.style.display = ver ? '' : 'none'; g.style.display = ver ? 'none' : ''; b.textContent = ver ? 'Ver gráfica' : 'Ver tabla'; }
+  }, true);
+  // Al desplazar se quita el que se abrió con el dedo (el del mouse se quita al salir de la barra).
+  window.addEventListener('scroll', () => { if (porToque) tip.style.display = 'none'; }, { passive: true });
+})();
+
+// ══════ ESTADO DE LA PANTALLA ══════
+const UI = { tab: 'anio', per: null, mes: null, eq: null, verTodos: false };
+let RES = null; // resultado del último cálculo (para pruebas: window.__rent)
+
+window.fbReady.then(async () => {
+  const u = window.currentUserRole || {};
+  $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('rentabilidad');
+  if (!userHasRole('ADMINISTRADOR')) {
+    // Sin lecturas de costos, salarios ni OTs para otros roles.
+    $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Incluye costos, salarios y precios de máquinas.</div>';
+    return;
+  }
+  const h = (location.hash || '').slice(1).split('/');
+  if (['mes', 'anio', 'equipo'].includes(h[0])) UI.tab = h[0];
+  UI.per = periodoDe('anio:' + fbHoy().slice(0, 4)).id;
+  UI.mes = mesDe(fbHoy());
+  await cargarBase();
+  pintar();
+}).catch(e => { try { console.error(e); } catch (_) {} });
+
+// Configuración: tecnicos.json + 3 lecturas (costos, salarios, repuestos) + catálogo de equipos (caché).
+async function cargarBase() {
+  try { const r = await fetch('tecnicos.json'); if (r.ok) prepararTecnicos(await r.json()); } catch (e) { console.warn('tecnicos.json:', e.message); }
+  const [c, inc, rep, eqs] = await Promise.all([
+    db.collection('costos_config').doc('general').get().catch(e => ({ err: e })),
+    db.collection('incentivos_config').doc('general').get().catch(e => ({ err: e })),
+    db.collection('costos_repuestos').get().catch(e => ({ err: e })),
+    fbEquiposCatalogo(false).catch(e => ({ err: e })),
+  ]);
+  if (c.err) { console.warn('costos_config:', c.err.message); toast('⚠️ No se pudieron leer los datos de costos: se usan los de por defecto', 'warn'); }
+  else { CFG = normCfg(c.exists ? c.data() : null); CFG_META = c.exists ? c.data() : null; }
+  if (inc.err) console.warn('incentivos_config:', inc.err.message);
+  else SALARIOS = ((inc.exists ? inc.data() : {}) || {}).tecnicos || {};
+  if (rep.err) console.warn('costos_repuestos:', rep.err.message); else prepararRepuestos(rep.docs);
+  if (eqs.err) console.warn('equipos:', eqs.err.message); else prepararEquipos(eqs);
+  LECTURAS += 2 + (rep.docs ? rep.docs.length : 0);
+}
+
+function cabecera() {
+  const per = periodoDe(UI.per);
+  const tabs = [['mes', 'Mes'], ['anio', 'Año'], ['equipo', 'Por equipo']];
+  let sel;
+  if (UI.tab === 'mes') {
+    const hoyM = mesDe(fbHoy()); const ops = []; for (let i = 0; i < 24; i++) ops.push(mesSuma(hoyM, -i));
+    sel = `<select id="selMes" aria-label="Mes">${ops.map(m => `<option value="${m}"${m === UI.mes ? ' selected' : ''}>${esc(nombreMes(m))}</option>`).join('')}</select>`;
+  } else sel = `<select id="selPer" aria-label="Período">${opcionesPeriodo().map(p => `<option value="${esc(p.id)}"${p.id === per.id ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>`;
+  return `<div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-tab="${k}" class="${UI.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="bar-tools">${sel}<button class="btn2" id="bCfg">⚙️ Datos de costos</button><button class="btn2" id="bRep">📥 Costos de repuestos</button><button class="btn2" id="bAct" aria-label="Actualizar">🔄</button></div>`;
+}
+function bindCabecera() {
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { UI.tab = b.dataset.tab; pintar(); });
+  if ($('selPer')) $('selPer').onchange = e => { UI.per = e.target.value; UI.verTodos = false; pintar(); };
+  if ($('selMes')) $('selMes').onchange = e => { UI.mes = e.target.value; pintar(); };
+  $('bCfg').onclick = () => modalDatos();
+  $('bRep').onclick = () => modalRepuestos();
+  $('bAct').onclick = async () => { MES_DOCS.clear(); toast('🔄 Releyendo datos…'); await cargarBase(); pintar(); };
+}
+function avisosHtml(R) {
+  let h = '';
+  if (R.faltanSal.length) h += `<div class="aviso">⚠️ <b>Faltan salarios</b> de ${R.faltanSal.length} técnico${R.faltanSal.length === 1 ? '' : 's'} (${esc(R.faltanSal.slice(0, 5).join(', '))}${R.faltanSal.length > 5 ? '…' : ''}): se usa el costo hora por defecto ${esc(money(CFG.defaults.costoHoraTecnicoDefault))}. Ponlos en 💰 Incentivos → Reglas y salarios.</div>`;
+  if (R.sinCostoRep) h += `<div class="aviso">📦 ${R.sinCostoRep} repuesto${R.sinCostoRep === 1 ? '' : 's'} sin costo (carga el inventario del mes). Se cuentan como RD$ 0.</div>`;
+  if (R.sinTecnicos) h += `<div class="aviso info">ℹ️ ${R.sinTecnicos} trabajo${R.sinTecnicos === 1 ? '' : 's'} sin técnico escrito: se cuenta una persona al costo hora por defecto.</div>`;
+  return h;
+}
+
+let _pintando = 0;
+async function pintar() {
+  const n = ++_pintando;
+  try { history.replaceState(null, '', '#' + UI.tab); } catch (e) {}
+  $('view').innerHTML = cabecera() + '<div class="card empty">Calculando costos...</div>';
+  bindCabecera();
+  try {
+    if (UI.tab === 'mes') {
+      const desde = mesSuma(UI.mes, -5) + '-01', hasta = finDeMes(UI.mes) < fbHoy() ? finDeMes(UI.mes) : fbHoy();
+      await asegurarRango(desde, hasta);
+      if (n !== _pintando) return;
+      vistaMes(desde, hasta);
+    } else {
+      const per = periodoDe(UI.per);
+      await asegurarRango(mesSuma(mesDe(per.hasta), -5) + '-01' < per.desde ? mesSuma(mesDe(per.hasta), -5) + '-01' : per.desde, per.hasta);
+      if (n !== _pintando) return;
+      const R = calcularPeriodo(per); RES = R;
+      if (UI.tab === 'anio') vistaAnio(R); else vistaEquipo(R);
+    }
+  } catch (e) {
+    console.error(e);
+    if (n === _pintando) { $('view').innerHTML = cabecera() + `<div class="card empty">⚠️ No se pudieron leer las OTs (${esc(e.code || e.message)}).</div>`; bindCabecera(); }
+  }
+}
+function publicar(R, extra) {
+  const eq = E => ({ key: E.key, nombre: E.nombre, tipo: E.tipo, c: { tec: r2(E.c.tec), op: r2(E.c.op), arr: r2(E.c.arr), rep: r2(E.c.rep) }, total: r2(E.real), mantener: r2(E.mantener), nueva: E.nueva == null ? null : r2(E.nueva), estado: E.estado, tendencia: E.tendencia, ult3: r2(E.ult3), prev3: r2(E.prev3), paradas: E.paradas, deficit: E.deficit, d: E.d,
+    ots: E.ots.map(x => ({ id: x.o.id, folio: folioDe(x.o), tec: r2(x.c.tec), op: r2(x.c.op), arr: r2(x.c.arr), rep: r2(x.c.rep), total: r2(x.total), sinCosto: x.sinCosto })) });
+  window.__rent = { tab: UI.tab, periodo: R.per, total: r2(R.totalN), c: { tec: r2(R.total.tec), op: r2(R.total.op), arr: r2(R.total.arr), rep: r2(R.total.rep) }, paradas: R.paradas, sinCostoRep: R.sinCostoRep, faltanSal: R.faltanSal, equipos: R.equipos.map(eq), lecturas: LECTURAS, ...(extra || {}) };
+}
+
+// ══════ PESTAÑA AÑO ══════
+function tarjetaEquipo(E, per) {
+  const s = SEM[E.estado];
+  const max = Math.max(E.mantener, E.nueva || 0);
+  const cmp = `<div class="cmp"><span>Mantenerla</span>${svgCmp(E.mantener, max, '#e6e5df', 'Mantenerla: ' + money(E.mantener) + ' por año')}<b>${esc(moneyK(E.mantener))}</b></div>`
+    + (E.nueva != null ? `<div class="cmp"><span>Una nueva</span>${svgCmp(E.nueva, max, '#6b6a64', 'Una nueva: ' + money(E.nueva) + ' por año')}<b>${esc(moneyK(E.nueva))}</b></div>` : `<div class="nota">Pon el precio de una nueva en ⚙️ Datos de costos para comparar.</div>`);
+  return `<div class="card eq" data-eq="${esc(E.key)}" style="border-left:4px solid ${s.c}">
+    <div class="eqh"><b>${esc(E.nombre)}</b><span class="sem">${s.i} ${esc(s.t)}</span></div>
+    <div class="cs">${E.paradas} ${E.paradas === 1 ? 'parada' : 'paradas'} · ${esc(Math.round(E.minParo / 60))} h de paro · ${E.ots.length} trabajo${E.ots.length === 1 ? '' : 's'}${per.parcial ? ' · proyectado a 12 meses' : ''}</div>
+    ${cmp}
+    <div class="lbl">En qué se fue el dinero (${esc(moneyK(E.real))} en el período)</div>${barraMezcla(E.c, 'Costo de ' + E.nombre + ' por componente')}
+    <div class="pct">${esc(pctLinea(E.c))}</div>
+    <div class="def">💡 ${esc(E.deficit)}</div></div>`;
+}
+function columnasMes(meses, porMes, ancho) {
+  return meses.map(m => ({ label: ancho ? mesCorto(m).charAt(0).toUpperCase() + mesCorto(m).slice(1) : mesCorto(m).charAt(0).toUpperCase(), tip: nombreMes(m), c: porMes[m] || cero() }));
+}
+function vistaAnio(R) {
+  const per = R.per;
+  publicar(R);
+  const cnt = { rojo: 0, amarillo: 0, verde: 0, gris: 0 }; R.equipos.forEach(e => cnt[e.estado]++);
+  const nEq = R.equipos.length, pctFalta = pctR(cnt.gris, nEq);
+  const kpis = `<div class="kpis">
+    <div class="kpi"><span>Costo del período</span><b>${esc(moneyK(R.totalN))}</b><small>${per.parcial ? esc(moneyK(R.totalN * per.factor)) + ' proyectado a 12 meses' : '4 componentes'}</small></div>
+    <div class="kpi"><span>Costo por parada</span><b>${R.paradas ? esc(moneyK(R.totalN / R.paradas)) : '—'}</b><small>${R.paradas} paradas</small></div>
+    <div class="kpi"><span>Semáforo</span><b style="font-size:15px;white-space:nowrap">🔴${cnt.rojo} 🟡${cnt.amarillo} 🟢${cnt.verde}</b><small>⚪${cnt.gris} sin datos · ${nEq} equipos</small></div>
+    <div class="kpi"><span>Faltan datos</span><b>${pctFalta} %</b><small>equipos sin precio de una nueva</small></div></div>`;
+  const cols = columnasMes(R.meses, R.porMes, R.meses.length <= 7);
+  const graf = cardGrafica('Costo de mantenimiento por mes', 'Toda la planta · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
+  const lim = UI.verTodos ? R.equipos.length : 15;
+  const cards = R.equipos.slice(0, lim).map(E => tarjetaEquipo(E, per)).join('');
+  $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + graf
+    + `<div class="ct" style="margin:6px 2px 8px">¿Seguir o reemplazar? <span style="font-weight:400;color:var(--muted);font-size:12px">· costo por año${per.parcial ? ', proyectado a 12 meses' : ''}</span></div>`
+    + (nEq ? legendHtml() + cards + (nEq > lim ? `<button class="btn2" style="width:100%;margin-bottom:10px" id="bTodos">Ver los ${nEq} equipos</button>` : '') : '<div class="card empty">No hay trabajos registrados en este período.</div>')
+    + `<div class="nota" style="margin-top:6px">«Una nueva» = precio de la máquina nueva ÷ años de vida útil + su mantenimiento esperado (% del precio). 🔴 cuando mantenerla cuesta igual o más que una nueva; 🟡 cuando llega al 70 % o el costo de los últimos 3 meses sube más de 25 %; 🟢 cuando cuesta mucho menos; ⚪ cuando falta el precio de la nueva. Los proyectos cuentan en el costo pero no en el análisis de fallas. Toca un equipo para ver su detalle.</div>`;
+  bindCabecera();
+  if ($('bTodos')) $('bTodos').onclick = () => { UI.verTodos = true; vistaAnio(R); };
+  document.querySelectorAll('[data-eq]').forEach(el => el.onclick = e => { if (e.target.closest('[data-tip]')) return; UI.eq = el.dataset.eq; UI.tab = 'equipo'; pintar(); window.scrollTo(0, 0); });
+}
+
+// ══════ PESTAÑA MES ══════
+function vistaMes(desde6, hasta) {
+  const m = UI.mes, ini = m + '-01';
+  const per = { id: 'mes:' + m, desde: ini, hasta, factor: 1, parcial: false, label: nombreMes(m), corto: nombreMes(m) };
+  const R = calcularPeriodo(per); RES = R;
+  const ant = mesSuma(m, -1);
+  const otsAnt = otsEntre(ant + '-01', finDeMes(ant));
+  const totAnt = otsAnt.reduce((s, o) => s + costoOt(o, datosEquipo(grupoDe(o))).total, 0);
+  const meses6 = mesesEntre(desde6, hasta), porMes6 = {};
+  meses6.forEach(mm => { porMes6[mm] = cero(); });
+  otsEntre(desde6, hasta).forEach(o => { const mm = mesDe(o.FECHA); if (porMes6[mm]) acum(porMes6[mm], costoOt(o, datosEquipo(grupoDe(o))).c); });
+  const horasTec = R.ots.reduce((s, o) => s + (Math.max(0, Number(o.TOTAL_MIN_TECNICO) || 0)), 0) / 60;
+  const horasParo = R.equipos.reduce((s, e) => s + e.minParo, 0) / 60;
+  const piezas = R.equipos.reduce((s, e) => s + e.ots.reduce((a, x) => a + x.piezas, 0), 0);
+  const varTxt = totAnt > 0 ? `${R.totalN >= totAnt ? '+' : '−'}${Math.abs(Math.round((R.totalN / totAnt - 1) * 100))} % vs ${MESES_L[+ant.slice(5, 7) - 1]}` : `sin costos en ${MESES_L[+ant.slice(5, 7) - 1]}`;
+  publicar(R, { mes: m, totalMesAnterior: r2(totAnt) });
+  const kpi = (cp, val, sub) => `<div class="kpi"><span><i class="sw" style="background:${cp.c}"></i>${esc(cp.n)}</span><b>${esc(moneyK(val))}</b><small>${esc(sub)}</small></div>`;
+  const kpis = `<div class="kpis"><div class="kpi w"><span>Costo total de ${esc(MESES_L[+m.slice(5, 7) - 1])}</span><b>${esc(money(Math.round(R.totalN)))}</b><small>${esc(varTxt)} · ${R.ots.length} trabajos · ${R.paradas} paradas</small></div>
+    ${kpi(COMP[0], R.total.tec, Math.round(horasTec) + ' h de técnico')}${kpi(COMP[1], R.total.op, Math.round(horasParo) + ' h de paro')}
+    ${kpi(COMP[2], R.total.arr, R.paradas + ' arranques')}${kpi(COMP[3], R.total.rep, Math.round(piezas) + ' piezas' + (R.sinCostoRep ? ' · ' + R.sinCostoRep + ' sin costo' : ''))}</div>`;
+  const cols = columnasMes(meses6, porMes6, true);
+  const g1 = cardGrafica('Costo por mes', 'Últimos 6 meses · RD$', svgBarras(cols, { aria: 'Costo por mes, últimos 6 meses' }), tablaComp(cols, 'Mes'));
+  // Equipos que más cuestan (barras horizontales apiladas)
+  const top = R.equipos.slice().sort((a, b) => b.real - a.real).filter(e => e.real > 0).slice(0, 8);
+  const maxE = Math.max(1, ...top.map(e => e.real));
+  let sv = `<svg class="ch" viewBox="0 0 ${W} ${top.length * 40 + 4}" role="img" aria-label="Equipos que más cuestan">`;
+  top.forEach((e, i) => {
+    const y = i * 40; let x = 0;
+    sv += `<text x="0" y="${y + 12}" fill="#F1F5F9" font-size="12">${esc(e.nombre.length > 44 ? e.nombre.slice(0, 43) + '…' : e.nombre)}</text>`;
+    COMP.forEach(cp => { const v = e.c[cp.k]; if (!(v > 0)) return; const w = v / maxE * (W - 50); sv += `<rect x="${x.toFixed(1)}" y="${y + 17}" width="${Math.max(0.5, w - 1.5).toFixed(1)}" height="14" rx="3" fill="${cp.c}" data-tip="${esc(e.nombre + ' · ' + cp.n + ': ' + money(v))}"/>`; x += w; });
+    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" fill="#C3CCD8" font-size="11">${esc(corto(e.real))}</text>`;
+  });
+  sv += '</svg>';
+  const colsEq = top.map(e => ({ label: e.nombre, tip: e.nombre, c: e.c }));
+  const g2 = top.length ? cardGrafica('Equipos que más cuestan', nombreMes(m) + ' · RD$', sv, tablaComp(colsEq, 'Equipo')) : '';
+  // Tabla por equipo (todos)
+  const tEq = R.equipos.slice().sort((a, b) => b.real - a.real);
+  const tablaEq = tEq.length ? `<div class="card"><div class="ct">Costo por equipo</div><div class="cs">${esc(nombreMes(m))} · RD$ · toca uno para ver su detalle</div><div class="tw"><table><tr><th>Equipo</th><th class="r">Par.</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
+    + tEq.map(e => `<tr data-eq="${esc(e.key)}" style="cursor:pointer"><td><b>${esc(e.nombre)}</b></td><td class="r">${e.paradas}</td>${COMP.map(x => `<td class="r">${esc(corto(e.c[x.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(e.real))}</b></td></tr>`).join('') + '</table></div></div>' : '';
+  // Repuestos más consumidos
+  const reps = new Map();
+  R.equipos.forEach(e => e.ots.forEach(x => x.reps.forEach(r => { const k = K(r.codigo || r.descripcion); const v = reps.get(k) || { d: r.descripcion || r.codigo, cod: r.codigo, q: 0, costo: 0, sin: false }; v.q += r.cantidad; if (r.costo == null) v.sin = true; else v.costo += r.costo; reps.set(k, v); })));
+  const topR = [...reps.values()].sort((a, b) => b.costo - a.costo || b.q - a.q).slice(0, 8);
+  const tablaR = topR.length ? `<div class="card"><div class="ct">Repuestos más consumidos</div><div class="cs">${esc(nombreMes(m))} · cantidad y costo</div><div class="tw"><table><tr><th>Repuesto</th><th class="r">Cant.</th><th class="r">Costo</th></tr>`
+    + topR.map(r => `<tr><td><b>${esc(r.d)}</b>${r.cod ? ' <span class="nota">' + esc(r.cod) + '</span>' : ''}</td><td class="r">${esc(r2(r.q))}</td><td class="r">${r.sin && !r.costo ? '<span class="tag">sin costo</span>' : esc(money(r.costo))}</td></tr>`).join('') + '</table></div></div>' : '';
+  // Trabajos más caros
+  const trabajos = R.equipos.flatMap(e => e.ots.map(x => ({ ...x, eq: e.nombre, key: e.key }))).sort((a, b) => b.total - a.total).slice(0, 10);
+  const tablaT = trabajos.length ? `<div class="card"><div class="ct">Trabajos más caros</div><div class="cs">${esc(nombreMes(m))} · RD$</div><div class="tw"><table><tr><th>Folio · equipo</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
+    + trabajos.map(x => `<tr data-eq="${esc(x.key)}" style="cursor:pointer"><td><b>${esc(folioDe(x.o))}</b> ${esc(x.eq)}${x.proyecto ? ' <span class="tag info">proyecto</span>' : ''}</td>${COMP.map(cp => `<td class="r">${esc(corto(x.c[cp.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(x.total))}</b></td></tr>`).join('') + '</table></div></div>' : '';
+  $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + g1 + g2 + tablaEq + tablaR + tablaT
+    + (R.ots.length ? '' : '<div class="card empty">No hay trabajos registrados en este mes.</div>')
+    + `<div class="nota">Cómo se calcula cada trabajo: <b>min del técnico × costo hora</b> (salario en Incentivos ÷ ${esc(CFG.defaults.horasMesTecnico)} h) + <b>min de paro × operadores × costo hora operador</b> + <b>un arranque por cada paro</b> + <b>repuestos × costo unitario</b> (inventario del mes).</div>`;
+  bindCabecera();
+  document.querySelectorAll('tr[data-eq]').forEach(el => el.onclick = () => { UI.eq = el.dataset.eq; UI.tab = 'equipo'; UI.per = periodoDe('anio:' + m.slice(0, 4)).id; pintar(); window.scrollTo(0, 0); });
+}
+
+// ══════ PESTAÑA POR EQUIPO ══════
+const fuenteTxt = (E, k) => ({ equipo: 'del equipo', tipo: 'de «' + (E.tipo || 'tipo') + '»', general: 'general', '—': 'sin dato' }[E.d.fuente[k]] || '');
+function vistaEquipo(R) {
+  const per = R.per;
+  const lista = R.equipos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }));
+  if (!UI.eq || !lista.some(e => e.key === UI.eq)) UI.eq = (R.equipos[0] || {}).key || null;
+  const E = lista.find(e => e.key === UI.eq);
+  publicar(R, { equipo: E ? E.key : null });
+  const sel = `<div class="card"><label class="f" for="selEq" style="margin-top:0">Equipo</label><select id="selEq">${lista.map(e => `<option value="${esc(e.key)}"${e.key === UI.eq ? ' selected' : ''}>${esc(e.nombre)} — ${esc(moneyK(e.real))}</option>`).join('')}</select></div>`;
+  if (!E) { $('view').innerHTML = cabecera() + '<div class="card empty">No hay trabajos registrados en este período.</div>'; bindCabecera(); return; }
+  const meses = R.meses, porMes = {}; meses.forEach(m => { porMes[m] = E.porMes[m] || cero(); });
+  const cols = columnasMes(meses, porMes, meses.length <= 7);
+  const g = cardGrafica('Costo por mes', E.nombre + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo por mes de ' + E.nombre }), tablaComp(cols, 'Mes'));
+  const d = E.d, s = SEM[E.estado];
+  let math = `<div class="card"><div class="ct">Semáforo: ${s.i} ${esc(s.t)}</div><div class="cs">${esc(E.motivo)}</div><div class="math">`;
+  math += `<b>Mantenerla</b> = ${esc(money(E.real))} en el período` + (per.parcial ? ` × ${esc(per.diasAnio)} ÷ ${esc(per.dias)} días = <b>${esc(money(E.mantener))}</b> por año (proyectado a 12 meses)` : ` = <b>${esc(money(E.mantener))}</b> por año`) + '<br>';
+  if (E.nueva != null) {
+    math += `<b>Una nueva</b> = ${esc(money(d.precioNuevo))} ÷ ${esc(d.vidaUtilAnios)} años + ${esc(money(d.precioNuevo))} × ${esc(d.mantNuevaPct)} % = <b>${esc(money(E.nueva))}</b> por año<br>`;
+    math += `Mantenerla ÷ nueva = <b>${pctR(E.mantener, E.nueva)} %</b> (🔴 desde 100 %, 🟡 desde 70 %)<br>`;
+  } else math += `<b>Una nueva</b>: falta el precio de la máquina nueva (⚙️ Datos de costos).<br>`;
+  math += `Últimos 3 meses ${esc(money(E.ult3))} vs 3 anteriores ${esc(money(E.prev3))}` + (E.prev3 > 0 ? ` (${E.ult3 >= E.prev3 ? '+' : '−'}${Math.abs(Math.round((E.ult3 / E.prev3 - 1) * 100))} %${E.tendencia ? ', sube más de 25 % → 🟡' : ''})` : '') + '<br>';
+  math += `<span class="nota">Datos: ${CAMPOS_EQ.map(c => `${esc(c.l)} <b>${d[c.k] == null ? '—' : esc(c.k === 'operadores' || c.k === 'vidaUtilAnios' || c.k === 'mantNuevaPct' ? d[c.k] : money(d[c.k]))}</b> (${esc(fuenteTxt(E, c.k))})`).join(' · ')}</span>`;
+  math += `</div><div class="def">💡 ${esc(E.deficit)}</div></div>`;
+  const ots = E.ots.slice().sort((a, b) => b.total - a.total);
+  const tabla = `<div class="card"><div class="ct">Trabajos del período</div><div class="cs">${ots.length} trabajo${ots.length === 1 ? '' : 's'} · RD$ · del más caro al más barato</div><div class="tw"><table><tr><th>Folio · fecha</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
+    + ots.map(x => `<tr><td><b>${esc(folioDe(x.o))}</b> <span class="nota">${esc(x.o.FECHA)}</span><br><span class="nota">${esc(x.o.TIPO_MANTENIMIENTO || '')}${x.o.CAUSA_FALLA ? ' · ' + esc(x.o.CAUSA_FALLA) : ''}${x.proyecto ? ' · <span class="tag info">proyecto</span>' : ''}${x.sinCosto ? ' · <span class="tag">' + x.sinCosto + ' rep. sin costo</span>' : ''}</span></td>${COMP.map(cp => `<td class="r">${esc(corto(x.c[cp.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(x.total))}</b></td></tr>`).join('')
+    + '</table></div></div>';
+  $('view').innerHTML = cabecera() + sel + tarjetaEquipo(E, per) + math + g + tabla;
+  bindCabecera();
+  $('selEq').onchange = e => { UI.eq = e.target.value; vistaEquipo(R); };
+}
+
+// ══════ ⚙️ DATOS DE COSTOS ══════
+let EDIT = null;
+function equiposParaConfig() {
+  const m = new Map();
+  Object.values(EQ_BY_ID).forEach(e => m.set(e.id, { k: e.id, nombre: e.nombre, tipo: e.tipo }));
+  Object.entries(CFG.porEquipo).forEach(([k, v]) => { if (!m.has(k)) m.set(k, { k, nombre: v.nombre || k, tipo: '' }); });
+  return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }));
+}
+function tiposParaConfig() {
+  const m = new Map(TIPOS);
+  Object.entries(CFG.porTipo).forEach(([k, v]) => { if (!m.has(k)) m.set(k, v.nombre || k); });
+  return [...m.entries()].map(([k, nombre]) => ({ k, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }));
+}
+const inputNum = (scope, key, c, val, ph) => `<div><label class="f">${esc(c.l)}</label><input type="number" inputmode="decimal" min="0" step="any" data-s="${scope}" data-k="${esc(key)}" data-f="${c.k}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph == null ? '' : ph)}"/></div>`;
+function bloqueEq(scope, key, nombre, sub, heredado) {
+  const v = (EDIT[scope][key] || {});
+  return `<div class="blk"><b>${esc(nombre)}</b>${sub ? ` <span class="nota">${esc(sub)}</span>` : ''}<div class="g3">${CAMPOS_EQ.map(c => inputNum(scope, key, c, v[c.k], heredado[c.k])).join('')}</div></div>`;
+}
+function modalDatos() {
+  EDIT = JSON.parse(JSON.stringify(CFG));
+  const D = EDIT.defaults;
+  openModal(`<h3>⚙️ Datos de costos</h3>
+    <div class="nota">Solo el Administrador ve y cambia esto. Cada equipo usa sus propios datos; si no tiene, los de su tipo de máquina; si no, los generales. Los campos vacíos heredan el valor gris.</div>
+    <button class="btn2" id="dImp" style="width:100%;margin-top:10px">📥 Importar desde Excel/CSV</button>
+    <div class="sec">Valores generales</div>
+    <div class="g2">${CAMPOS_DEF.map(c => `<div><label class="f">${esc(c.l)}</label><input type="number" inputmode="decimal" min="0" step="any" data-s="defaults" data-f="${c.k}" value="${esc(D[c.k])}"/></div>`).join('')}</div>
+    <div class="nota" style="margin-top:6px">Costo hora del técnico = salario mensual (💰 Incentivos) ÷ horas al mes. 44 h/semana × 52 ÷ 12 = 190.67 h.</div>
+    <div class="sec">Por tipo de máquina</div>
+    <div id="dTipos">${tiposParaConfig().map(t => bloqueEq('porTipo', t.k, t.nombre, '', D)).join('') || '<div class="nota">No hay tipos de máquina en el catálogo de equipos.</div>'}</div>
+    <div class="sec">Por equipo</div>
+    <input id="dBuscar" type="search" placeholder="Buscar equipo…" autocomplete="off"/>
+    <div id="dEquipos"></div>
+    <div class="modal-actions"><button class="btn2" onclick="closeModal()">Cancelar</button><button class="btn" id="dOk">Guardar</button></div>`);
+  const pintarEq = () => {
+    const q = sinAcentos($('dBuscar').value);
+    const todos = equiposParaConfig();
+    const lista = todos.filter(e => !q || sinAcentos(e.nombre + ' ' + e.tipo).includes(q));
+    const conDatos = e => Object.keys(EDIT.porEquipo[e.k] || {}).some(k => k !== 'nombre');
+    // Sin búsqueda: primero los que ya tienen datos propios.
+    const orden = q ? lista : lista.filter(conDatos).concat(lista.filter(e => !conDatos(e)));
+    const vis = orden.slice(0, 25);
+    $('dEquipos').innerHTML = vis.map(e => {
+      const g = { id: EQ_BY_ID[e.k] ? e.k : null, nombre: e.nombre, tipo: e.tipo };
+      const bt = e.tipo ? EDIT.porTipo[cfgKey(e.tipo)] || {} : {};
+      const her = {}; CAMPOS_EQ.forEach(c => { her[c.k] = numOk(bt[c.k]) ? bt[c.k] : EDIT.defaults[c.k]; });
+      return bloqueEq('porEquipo', e.k, e.nombre, e.tipo ? '· ' + e.tipo : '', her);
+    }).join('') + (orden.length > vis.length ? `<div class="nota" style="margin-top:6px">… y ${orden.length - vis.length} más: escribe en el buscador.</div>` : '') + (!orden.length ? '<div class="nota" style="margin-top:6px">Sin resultados.</div>' : '');
+  };
+  pintarEq();
+  $('dBuscar').oninput = pintarEq;
+  $('modal').oninput = e => {
+    const el = e.target; if (!el.dataset || !el.dataset.f) return;
+    const v = el.value.trim();
+    if (el.dataset.s === 'defaults') { EDIT.defaults[el.dataset.f] = v === '' ? null : Number(v); return; }
+    const sc = EDIT[el.dataset.s], k = el.dataset.k;
+    sc[k] = sc[k] || {};
+    if (v === '') delete sc[k][el.dataset.f]; else sc[k][el.dataset.f] = Number(v);
+    if (el.dataset.s === 'porTipo' && !sc[k].nombre) sc[k].nombre = (tiposParaConfig().find(t => t.k === k) || {}).nombre || k;
+    if (el.dataset.s === 'porEquipo' && !sc[k].nombre) sc[k].nombre = (equiposParaConfig().find(t => t.k === k) || {}).nombre || k;
+  };
+  $('dImp').onclick = () => modalImportarDatos();
+  $('dOk').onclick = () => {
+    const err = validarCfg(EDIT); if (err) return toast(err, 'error');
+    guardarCfg(EDIT, '⚙️ Datos de costos guardados');
+    closeModal();
+  };
+}
+function validarCfg(c) {
+  for (const f of CAMPOS_DEF) { const v = c.defaults[f.k]; if (v == null || !isFinite(v) || v < (f.min || 0) || v > f.max) return `Valor general no válido: ${f.l}`; }
+  for (const s of ['porTipo', 'porEquipo']) for (const k of Object.keys(c[s])) for (const f of CAMPOS_EQ) {
+    const v = c[s][k][f.k]; if (v == null) continue;
+    if (!isFinite(v) || v < (f.min || 0) || v > f.max) return `${f.l} no válido en ${c[s][k].nombre || k}`;
+  }
+  return null;
+}
+function guardarCfg(c, msg) {
+  const limpio = { defaults: {}, porTipo: {}, porEquipo: {} };
+  Object.keys(DEF).forEach(k => { limpio.defaults[k] = Number(c.defaults[k]); });
+  ['porTipo', 'porEquipo'].forEach(s => Object.keys(c[s]).forEach(k => { const b = limpiaBloque(c[s][k]); if (CAMPOS_EQ.some(f => f.k in b)) limpio[s][k] = b; }));
+  CFG = normCfg(limpio);
+  escribir(db.collection('costos_config').doc('general').set({ ...limpio, actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() }), msg);
+  pintar();
+}
+
+// ══════ LECTURA DE TABLAS (pegar desde Excel, CSV o .xlsx) ══════
+// Igual que la carga masiva de Inventario.
+function parseTabla(texto) {
+  texto = (texto || '').replace(/\r\n?/g, '\n');
+  const primera = texto.split('\n').find(l => l.trim()) || '';
+  const sep = primera.includes('\t') ? '\t' : (primera.includes(';') ? ';' : (primera.includes(',') ? ',' : '\t'));
+  const filas = []; let fila = [], celda = '', comillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    if (comillas) { if (ch === '"' && texto[i + 1] === '"') { celda += '"'; i++; } else if (ch === '"') comillas = false; else celda += ch; }
+    else if (ch === '"' && celda === '') comillas = true;
+    else if (ch === sep) { fila.push(celda); celda = ''; }
+    else if (ch === '\n') { fila.push(celda); filas.push(fila); fila = []; celda = ''; }
+    else celda += ch;
+  }
+  fila.push(celda); filas.push(fila);
+  return filas.map(f => f.map(c => c.replace(/\s+/g, ' ').trim())).filter(f => f.some(c => c));
+}
+// "RD$ 1,250.50", "1.250,50", "5 %" → número; vacío → null; texto → NaN.
+function parseNum(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return null;
+  s = s.replace(/rd\$|us\$|\$|%|\s/gi, '');
+  if (!s || s === '-') return null;
+  const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+  if (lc >= 0 && ld >= 0) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (lc >= 0) s = /^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3}){2,}$/.test(s)) s = s.replace(/\./g, '');
+  const n = Number(s); return isFinite(n) ? n : NaN;
+}
+const hnorm = s => sinAcentos(s).replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9% ]/g, ' ').replace(/\s+/g, ' ').trim();
+// Busca la fila de encabezados (entre las 10 primeras) y la columna de cada campo.
+function mapearColumnas(tabla, cols, requeridas) {
+  for (let r = 0; r < Math.min(10, tabla.length); r++) {
+    const head = tabla[r].map(hnorm), mapa = {};
+    cols.forEach(col => {
+      for (const a of col.alias.map(hnorm)) { const i = head.findIndex((h, j) => h === a && !Object.values(mapa).includes(j)); if (i >= 0) { mapa[col.k] = i; break; } }
+    });
+    cols.forEach(col => { // sin coincidencia exacta: encabezado que empieza con el alias
+      if (mapa[col.k] !== undefined) return;
+      for (const a of col.alias.map(hnorm)) { if (a.length < 5) continue; const i = head.findIndex((h, j) => h.startsWith(a) && !Object.values(mapa).includes(j)); if (i >= 0) { mapa[col.k] = i; break; } }
+    });
+    if (requeridas(mapa)) return { fila: r, mapa };
+  }
+  return null;
+}
+function cargarXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, mal) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.')); document.head.appendChild(s); });
+}
+async function leerArchivo(f) {
+  if (/\.(xlsx|xls)$/i.test(f.name)) {
+    await cargarXLSX();
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+    return XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], { FS: '\t', blankrows: false, dateNF: 'yyyy-mm-dd' });
+  }
+  return f.text();
+}
+function htmlImportador(id, ayuda) {
+  return `<div class="nota">${ayuda}</div>
+    <input type="file" id="${id}File" accept=".xlsx,.xls,.csv,.txt" style="display:none"/>
+    <div class="g2" style="margin-top:10px"><button class="btn2" id="${id}Abrir">📂 Elegir archivo</button><button class="btn2" id="${id}Rev">🔎 Revisar</button></div>
+    <label class="f" for="${id}Txt">…o pega aquí las celdas copiadas de Excel</label><textarea id="${id}Txt" spellcheck="false"></textarea>
+    <div class="nota" id="${id}St" style="margin-top:6px"></div><div id="${id}Prev" style="margin-top:8px"></div>`;
+}
+function bindImportador(id, revisar) {
+  $(id + 'Abrir').onclick = () => $(id + 'File').click();
+  $(id + 'Rev').onclick = revisar;
+  $(id + 'File').onchange = async ev => {
+    const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!f) return;
+    $(id + 'St').textContent = 'Leyendo archivo…';
+    try { $(id + 'Txt').value = await leerArchivo(f); $(id + 'St').textContent = `Archivo «${f.name}» leído.`; window['_fuente_' + id] = f.name; revisar(); }
+    catch (e) { $(id + 'St').textContent = '⚠️ ' + e.message; }
+  };
+}
+
+// ── Importar datos de costos por equipo / tipo ──
+const COLS_DATOS = [
+  { k: 'nombre', alias: ['equipo o tipo de maquina', 'equipo o tipo', 'equipo / tipo de maquina', 'equipo', 'maquina', 'nombre', 'tipo de maquina', 'nombre del equipo'] },
+  { k: 'aplica', alias: ['aplica a', 'aplica', 'nivel', 'tipo de fila'] },
+  { k: 'operadores', alias: ['operadores', 'operadores por maquina', 'numero de operadores', 'n de operadores', 'cantidad de operadores', 'operators'] },
+  { k: 'costoHoraOperador', alias: ['costo hora operador', 'costo por hora operador', 'costo hora del operador', 'costo por hora del operador', 'costo operador hora', 'operator hourly cost'] },
+  { k: 'costoArranque', alias: ['costo de arranque', 'costo arranque', 'costo por arranque', 'arranque', 'restart cost'] },
+  { k: 'precioNuevo', alias: ['precio maquina nueva', 'precio de maquina nueva', 'precio de la maquina nueva', 'precio nueva', 'precio nuevo', 'costo maquina nueva', 'new price'] },
+  { k: 'vidaUtilAnios', alias: ['vida util', 'vida util anos', 'anos de vida util', 'useful life'] },
+  { k: 'mantNuevaPct', alias: ['% mantenimiento nueva', '% mantenimiento de la nueva', '% mant nueva', 'mantenimiento nueva %', 'mantenimiento nueva', '% mantenimiento'] },
+];
+let IMP_DATOS = [];
+function nombresDeOts() {
+  const m = new Map();
+  MES_DOCS.forEach(arr => arr.forEach(o => { const g = grupoDe(o); if (!g.id) m.set(K(g.nombre), g.nombre); }));
+  return m;
+}
+function interpretarDatos(texto) {
+  const tabla = parseTabla(texto);
+  const map = mapearColumnas(tabla, COLS_DATOS, m => m.nombre !== undefined && CAMPOS_EQ.some(c => m[c.k] !== undefined));
+  if (!map) return { error: 'No se encontró la fila de encabezados (Equipo o Tipo de máquina, Operadores, Costo hora operador…).' };
+  const otsNombres = nombresDeOts();
+  const filas = tabla.slice(map.fila + 1).map((c, i) => {
+    const cel = k => map.mapa[k] !== undefined ? (c[map.mapa[k]] || '').trim() : '';
+    const r = { fila: map.fila + i + 2, nombre: cel('nombre'), aplica: hnorm(cel('aplica')), vals: {}, errores: [] };
+    if (!r.nombre) { r.estado = 'vacia'; return r; }
+    if (/^ejemplo\b/.test(hnorm(r.nombre))) { r.estado = 'ejemplo'; return r; }
+    CAMPOS_EQ.forEach(f => {
+      const v = parseNum(cel(f.k)); if (v == null) return;
+      if (!isFinite(v) || v < (f.min || 0) || v > f.max) r.errores.push(f.l); else r.vals[f.k] = v;
+    });
+    const k = K(r.nombre);
+    const eqId = EQ_BY_NAME[k], tipoK = [...TIPOS.keys()].find(t => K(TIPOS.get(t)) === k);
+    const quiereTipo = /tipo/.test(r.aplica), quiereEq = !quiereTipo && /equipo|maquina/.test(r.aplica);
+    if (!quiereTipo && eqId) { r.scope = 'porEquipo'; r.key = eqId; r.destino = EQ_BY_ID[eqId].nombre; }
+    else if (!quiereTipo && otsNombres.has(k)) { r.scope = 'porEquipo'; r.key = cfgKey(r.nombre); r.destino = otsNombres.get(k); }
+    else if (!quiereEq && tipoK) { r.scope = 'porTipo'; r.key = tipoK; r.destino = TIPOS.get(tipoK); }
+    r.estado = r.errores.length ? 'error' : !Object.keys(r.vals).length ? 'sinvalores' : !r.scope ? 'sin' : 'ok';
+    return r;
+  }).filter(r => r.estado !== 'vacia');
+  return { filas };
+}
+function modalImportarDatos() {
+  openModal(`<h3>📥 Importar datos de costos</h3>
+    ${htmlImportador('iD', 'Columnas: <b>Equipo o Tipo de máquina</b>, Aplica a (Equipo / Tipo de máquina; vacío = se detecta solo), Operadores, Costo hora operador, Costo de arranque, Precio máquina nueva, Vida útil (años), % mantenimiento nueva. Las celdas vacías no cambian lo que ya hay. Las filas que empiezan con «EJEMPLO» se ignoran.')}
+    <div class="modal-actions"><button class="btn2" id="iDVolver">Volver</button><button class="btn" id="iDOk" disabled>Guardar</button></div>`);
+  const revisar = () => {
+    const r = interpretarDatos($('iDTxt').value);
+    IMP_DATOS = r.filas || [];
+    if (r.error) { $('iDSt').textContent = '⚠️ ' + r.error; $('iDPrev').innerHTML = ''; $('iDOk').disabled = true; return; }
+    const n = s => IMP_DATOS.filter(x => x.estado === s).length;
+    $('iDSt').innerHTML = `<span class="tag ok">${n('ok')} para guardar</span> <span class="tag bad">${n('sin')} sin coincidencia</span> ${n('error') ? `<span class="tag bad">${n('error')} con errores</span> ` : ''}${n('sinvalores') ? `<span class="tag">${n('sinvalores')} sin valores</span> ` : ''}${n('ejemplo') ? `<span class="tag info">${n('ejemplo')} de ejemplo (ignorada)</span>` : ''}`;
+    const est = x => ({ ok: '<span class="tag ok">✓</span>', sin: '<span class="tag bad">❌ no es un equipo ni un tipo</span>', error: '<span class="tag bad">⚠️ ' + esc(x.errores.join(', ')) + '</span>', sinvalores: '<span class="tag">sin valores</span>', ejemplo: '<span class="tag info">ejemplo</span>' }[x.estado]);
+    $('iDPrev').innerHTML = `<div class="tw"><table><tr><th>Fila</th><th>Nombre → aplica a</th><th>Valores</th></tr>${IMP_DATOS.map(x => `<tr><td>${x.fila}</td><td><b>${esc(x.nombre)}</b><br>${x.scope ? (x.scope === 'porTipo' ? '🏷 Tipo: ' : '⚙️ Equipo: ') + esc(x.destino) : ''} ${est(x)}</td><td>${Object.entries(x.vals).map(([k, v]) => esc((CAMPOS_EQ.find(c => c.k === k) || {}).l + ' ' + v)).join('<br>') || '—'}</td></tr>`).join('')}</table></div>`;
+    $('iDOk').disabled = !n('ok');
+  };
+  bindImportador('iD', revisar);
+  $('iDVolver').onclick = () => modalDatos();
+  $('iDOk').onclick = () => {
+    const c = JSON.parse(JSON.stringify(CFG)); let n = 0;
+    IMP_DATOS.filter(x => x.estado === 'ok').forEach(x => { c[x.scope][x.key] = { ...(c[x.scope][x.key] || {}), nombre: x.destino, ...x.vals }; n++; });
+    const err = validarCfg(c); if (err) return toast(err, 'error');
+    guardarCfg(c, `📥 ${n} fila${n === 1 ? '' : 's'} de datos de costos guardada${n === 1 ? '' : 's'}`);
+    closeModal();
+  };
+}
+
+// ══════ 📥 COSTOS DE REPUESTOS ══════
+const COLS_REP = [
+  { k: 'codigo', alias: ['codigo', 'item', 'itemcode', 'item code', 'netsuite id', 'id netsuite', 'codigo netsuite', 'cod', 'sku', 'code', 'part number'] },
+  { k: 'descripcion', alias: ['descripcion', 'producto', 'material', 'description', 'articulo', 'nombre', 'item description'] },
+  { k: 'costo', alias: ['costo unitario', 'costo', 'precio', 'unit cost', 'unit price', 'precio unitario', 'costo promedio', 'cost', 'price', 'average cost'] },
+  { k: 'unidad', alias: ['unidad', 'um', 'uom', 'u m', 'unit', 'unidad de medida'] },
+];
+const MAX_DOC = 850000; // bytes por documento (límite de Firestore: 1 MiB)
+let IMP_REP = [];
+function interpretarRepuestos(texto) {
+  const tabla = parseTabla(texto);
+  const map = mapearColumnas(tabla, COLS_REP, m => m.costo !== undefined && (m.codigo !== undefined || m.descripcion !== undefined));
+  if (!map) return { error: 'No se encontró la fila de encabezados (código o descripción + costo unitario).' };
+  const vistos = new Map(); const filas = [];
+  tabla.slice(map.fila + 1).forEach((c, i) => {
+    const cel = k => map.mapa[k] !== undefined ? (c[map.mapa[k]] || '').trim() : '';
+    const r = { fila: map.fila + i + 2, codigo: cel('codigo').slice(0, 80), descripcion: cel('descripcion').slice(0, 200), unidad: cel('unidad').slice(0, 20) };
+    if (!r.codigo && !r.descripcion) return;
+    const v = parseNum(cel('costo'));
+    if (v == null) r.estado = 'sincosto';
+    else if (!isFinite(v) || v < 0 || v > 1e9) r.estado = 'error';
+    else { r.costo = r2(v); r.estado = 'ok'; }
+    r.key = r.codigo ? 'c_' + cfgKey(r.codigo) : 'd_' + cfgKey(r.descripcion);
+    if (r.key.length < 3) r.estado = 'error';
+    if (r.estado === 'ok') { if (vistos.has(r.key)) { vistos.get(r.key).estado = 'repetido'; } vistos.set(r.key, r); }
+    filas.push(r);
+  });
+  return { filas };
+}
+function modalRepuestos() {
+  const act = REP.actualizadoEn && REP.actualizadoEn.toDate ? fbFechaLocal(REP.actualizadoEn.toDate()) : null;
+  openModal(`<h3>📥 Cargar costos de repuestos (Excel/CSV)</h3>
+    <div class="aviso info">Catálogo actual: <b>${REP.n}</b> repuesto${REP.n === 1 ? '' : 's'} con costo${act ? ` · cargado el ${esc(act)}${REP.fuente ? ' desde «' + esc(REP.fuente) + '»' : ''}${REP.actualizadoPor ? ' por ' + esc(REP.actualizadoPor) : ''}` : ' · todavía no se ha cargado'}.</div>
+    ${htmlImportador('iR', 'Usa el Excel del inventario del mes. Columnas: <b>código</b> (o Item, ItemCode, NetSuite ID), <b>descripción</b> (o Producto, Material), <b>costo unitario</b> (o Costo, Precio, Unit cost) y unidad (UM, UOM). Al guardar se <b>reemplaza</b> el catálogo completo. Los repuestos de las OTs se buscan por código y, si no, por descripción.')}
+    <div class="modal-actions"><button class="btn2" onclick="closeModal()">Cancelar</button><button class="btn" id="iROk" disabled>Guardar catálogo</button></div>`);
+  const revisar = () => {
+    const r = interpretarRepuestos($('iRTxt').value);
+    IMP_REP = r.filas || [];
+    if (r.error) { $('iRSt').textContent = '⚠️ ' + r.error; $('iRPrev').innerHTML = ''; $('iROk').disabled = true; return; }
+    const n = s => IMP_REP.filter(x => x.estado === s).length;
+    $('iRSt').innerHTML = `<span class="tag ok">${n('ok')} con costo</span> ${n('sincosto') ? `<span class="tag">${n('sincosto')} sin costo (se ignoran)</span> ` : ''}${n('error') ? `<span class="tag bad">${n('error')} con costo no válido</span> ` : ''}${n('repetido') ? `<span class="tag info">${n('repetido')} repetidos (vale la última fila)</span>` : ''}`;
+    const vis = IMP_REP.slice(0, 30);
+    $('iRPrev').innerHTML = `<div class="tw"><table><tr><th>Fila</th><th>Código · descripción</th><th class="r">Costo</th></tr>${vis.map(x => `<tr><td>${x.fila}</td><td><b>${esc(x.codigo || '—')}</b> ${esc(x.descripcion)}${x.unidad ? ' <span class="nota">(' + esc(x.unidad) + ')</span>' : ''}</td><td class="r">${x.estado === 'ok' ? esc(money(x.costo)) : x.estado === 'repetido' ? '<span class="tag info">repetido</span>' : x.estado === 'sincosto' ? '<span class="tag">sin costo</span>' : '<span class="tag bad">no válido</span>'}</td></tr>`).join('')}</table></div>${IMP_REP.length > vis.length ? `<div class="nota">… y ${IMP_REP.length - vis.length} filas más.</div>` : ''}`;
+    $('iROk').disabled = !n('ok');
+  };
+  bindImportador('iR', revisar);
+  $('iROk').onclick = () => guardarRepuestos();
+}
+function guardarRepuestos() {
+  const items = IMP_REP.filter(x => x.estado === 'ok');
+  // Se parte en documentos de menos de ~850 KB: catalogo, catalogo_2, catalogo_3…
+  const partes = [[]]; let tam = 0;
+  items.forEach(x => { const t = JSON.stringify(x).length + 40; if (tam + t > MAX_DOC && partes[partes.length - 1].length) { partes.push([]); tam = 0; } partes[partes.length - 1].push(x); tam += t; });
+  if (partes.length > 400) return toast('El archivo es demasiado grande', 'error');
+  const ids = partes.map((_, i) => i ? 'catalogo_' + (i + 1) : 'catalogo');
+  const fuente = String(window._fuente_iR || 'pegado desde Excel').slice(0, 120);
+  const batch = db.batch(), col = db.collection('costos_repuestos');
+  partes.forEach((p, i) => {
+    const it = {}; p.forEach(x => { it[x.key] = { codigo: x.codigo, descripcion: x.descripcion, costo: x.costo, unidad: x.unidad }; });
+    batch.set(col.doc(ids[i]), { items: it, parte: i + 1, partes: partes.length, fuente, actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() });
+  });
+  REP.partes.filter(id => !ids.includes(id)).forEach(id => batch.delete(col.doc(id))); // partes viejas que sobran
+  // Copia local enseguida para recalcular sin volver a leer.
+  const docsLocales = partes.map((p, i) => ({ id: ids[i], data: () => { const it = {}; p.forEach(x => { it[x.key] = { codigo: x.codigo, descripcion: x.descripcion, costo: x.costo, unidad: x.unidad }; }); return { items: it, fuente, actualizadoPor: quien(), actualizadoEn: firebase.firestore.Timestamp.now() }; } }));
+  prepararRepuestos(docsLocales);
+  closeModal();
+  escribir(batch.commit(), `📥 ${items.length} costos de repuestos guardados`);
+  pintar();
+}
+</script>
+</body>
+</html>

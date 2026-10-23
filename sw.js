@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v46'; // (20 oct 2026) Falla / Proyecto y OTs planificadas registradas en la Bitácora
+const CACHE = 'mantenimiento-v47'; // (22 oct 2026) Rentabilidad de equipos (solo Administrador)
 const ASSETS = [
   './',
   'index.html',
@@ -20,6 +20,7 @@ const ASSETS = [
   'herramientas.html',
   'almacen.html',
   'incentivos.html',
+  'rentabilidad.html',
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',

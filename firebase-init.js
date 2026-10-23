@@ -154,6 +154,8 @@ function fbRenderMiniNav(active) {
       { id: 'almacen',    href: 'almacen.html',    label: '📦 Almacén' },
       // (20 oct 2026) Incentivos: solo lo ve el Administrador (tiene salarios).
       { id: 'incentivos', href: 'incentivos.html', label: '💰 Incentivos', roles: ['ADMINISTRADOR'] },
+      // (22 oct 2026) Rentabilidad de equipos: solo Administrador (costos y salarios).
+      { id: 'rentabilidad', href: 'rentabilidad.html', label: '📊 Rentabilidad', roles: ['ADMINISTRADOR'] },
     ].filter(p => !p.roles || userHasRole(...p.roles));
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
