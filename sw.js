@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v47'; // (22 oct 2026) Rentabilidad de equipos (solo Administrador)
+const CACHE = 'mantenimiento-v48'; // (23 oct 2026) Solo el Administrador anula; trabajos asignados como avisos
 const ASSETS = [
   './',
   'index.html',

@@ -208,6 +208,38 @@
     .av-timer b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
     .av-timer.tarde b { color: var(--red-txt); }
     .av-dup { display: inline-block; margin-top: 5px; background: #FFEDD5; color: #9A3412; border: 1px solid #FDBA74; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
+    /* (23 oct 2026) Trabajos asignados (OTs planificadas) mostrados como avisos */
+    .av-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text2); margin: 6px 0 8px; }
+    .av-sec small { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .av-card.asig { border-left-color: #0891B2; }
+    .av-card.asig.proyecto { border-left-color: var(--purple); }
+    .av-card.asig.atrasada { border-left-color: var(--red); box-shadow: 0 0 0 1px #FCA5A5; }
+    .av-timer.asig b { font-size: 14px; }
+    .av-timer.asig.hoy b { color: var(--orange); }
+    .av-timer.asig.tarde b { color: var(--red-txt); }
+    .av-rech { background: #FEF2F2; border: 1px solid #FECACA; color: var(--red-txt); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; margin: 6px 0 8px; overflow-wrap: anywhere; }
+    .av-sep { height: 1px; background: var(--border); margin: 14px 0 12px; }
+    .asig-grupo { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; }
+    .asig-grupo .g { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13.5px; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .asig-grupo .g small { font-weight: 700; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+    .asig-grupo .g small.tarde { color: var(--red-txt); }
+    .asig-fila { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 5px 0 5px 8px; border-top: 1px solid var(--line); border-left: 3px solid transparent; line-height: 1.4; }
+    .asig-fila > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .asig-fila .c { white-space: nowrap; color: var(--muted); font-weight: 700; }
+    .asig-fila.hoy .c { color: var(--orange); }
+    .asig-fila.tarde { border-left-color: var(--red); background: #FEF2F2; }
+    .asig-fila.tarde .c { color: var(--red-txt); }
+    .anu-item { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--muted2); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+    .anu-item b { font-size: 13.5px; }
+    .anu-item .m { color: var(--muted); }
+    /* (23 oct 2026) Ventana para pedir el motivo al anular (antes window.prompt) */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(11,27,46,.55); z-index: 700; align-items: center; justify-content: center; padding: 16px; }
+    .modal-bg.open { display: flex; }
+    .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; max-width: 440px; width: 100%; max-height: 85vh; overflow-y: auto; }
+    .modal-bg .modal h3 { font-size: 17px; margin-bottom: 4px; }
+    .modal-bg .modal .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .modal-bg .modal .modal-err { font-size: 12.5px; color: var(--red-txt); font-weight: 700; margin: -4px 0 8px; min-height: 0; }
+    .modal-bg .modal .modal-actions { display: flex; gap: 10px; margin-top: 4px; }
 
     /* ══ (7 oct 2026) Formulario único "Nueva entrada" / "Cerrar aviso" ══ */
     .nf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 2px 8px; }
@@ -600,7 +632,16 @@
     <div class="card-title" style="margin-bottom:4px">🚨 Avisos de producción</div>
     <div class="card-sub">Paradas y fallas reportadas desde planta. Se actualiza solo.</div>
     <button class="btn btn-secondary" id="avisos-activar" style="margin-bottom:12px;" onclick="activarAvisos()">🔔 Activar sonido y notificaciones en este celular</button>
+    <!-- (23 oct 2026) OTs planificadas para mí (checklist / proyectos), como avisos -->
+    <div id="asig-mios"></div>
     <div id="avisos-lista"></div>
+    <!-- (23 oct 2026) Supervisor / Encargado / Admin: todos los trabajos asignados -->
+    <div id="asig-todos"></div>
+    <!-- (23 oct 2026) Solo Administrador: avisos y OTs anuladas -->
+    <div id="anuladas-wrap" style="display:none">
+      <button type="button" class="btn btn-secondary btn-sm" id="anuladas-btn" style="width:100%;margin-top:6px;" onclick="toggleAnuladas()">🚫 Ver anuladas</button>
+      <div id="anuladas-lista" style="margin-top:8px;"></div>
+    </div>
   </div>
 
   <div class="screen" id="screen-config">
@@ -661,6 +702,22 @@
 </nav>
 
 <div id="toast"></div>
+<!-- (23 oct 2026) Anular aviso: el motivo es obligatorio (solo Administrador) -->
+<div class="modal-bg" id="modal-anular" onclick="if (event.target === this) cerrarModalAnular()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="anular-titulo">
+    <h3 id="anular-titulo">🚫 Anular aviso</h3>
+    <div class="modal-sub" id="anular-sub"></div>
+    <div class="field" style="margin-bottom:8px;">
+      <label for="anular-motivo">Motivo (obligatorio)</label>
+      <textarea id="anular-motivo" maxlength="300" placeholder="Ej: duplicado de OT-0123, reporte por error…"></textarea>
+    </div>
+    <div class="modal-err" id="anular-err"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="cerrarModalAnular()">Cancelar</button>
+      <button type="button" class="btn btn-danger" id="anular-ok" onclick="confirmarAnular()">🚫 Anular</button>
+    </div>
+  </div>
+</div>
 <div id="loading"><div class="spinner"></div><div style="color:var(--muted);font-size:13px">Guardando...</div></div>
 
 <script>
@@ -1542,14 +1599,29 @@ function escucharMisTrabajos() {
     if (_misTrabajosUnsub.has(n)) return;
     _misTrabajosUnsub.set(n, db.collection('ots').where('asignadoA', '==', n).where('estado', 'in', ESTADOS_REGISTRABLES)
       .onSnapshot(snap => {
-        _misTrabajosPartes.set(n, snap.docs.map(docAOt));
+        const docs = snap.docs.map(docAOt);
+        _misTrabajosPartes.set(n, docs);
         _misTrabajos.clear();
         _misTrabajosPartes.forEach(l => l.forEach(o => _misTrabajos.set(o.id, o)));
+        // (23 oct 2026) OT planificada que no estaba antes → aviso de "trabajo
+        // asignado". La primera lectura de cada nombre solo se anota (lo que ya
+        // estaba asignado al abrir la app no suena).
+        const primera = !_asigListos.has(n);
+        _asigListos.add(n);
+        docs.forEach(o => {
+          if (o.estado !== 'planificada' || !esOtPlanificable(o) || _asigVistos.has(o.id)) return;
+          _asigVistos.add(o.id);
+          if (!primera) alertarTrabajoAsignado(o);
+        });
         renderMisTrabajos();
+        if (primera) programarRecordatorioAsignados();
       }, err => console.warn('No se pudieron leer tus trabajos planificados:', err.message)));
   });
 }
 function renderMisTrabajos() {
+  // (23 oct 2026) Los mismos datos salen también en Avisos (sin otra lectura).
+  actualizarBadgeAvisos();
+  if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos();
   const card = document.getElementById('mis-trabajos');
   if (!card) return;
   const lista = _misTrabajosLista();
@@ -1568,6 +1640,170 @@ function renderMisTrabajos() {
   }).join('');
 }
 function abrirRegistroOtId(id) { const o = _misTrabajos.get(id); if (o) abrirRegistroOt(o); }
+
+// ══════ TRABAJOS ASIGNADOS COMO AVISOS (23 oct 2026) ══════
+// Pedido del dueño: "las OT que el administrador asigne deben verse como un
+// aviso para que se realicen en el tiempo acordado". Las OTs planificadas
+// (checklist / proyectos) con asignadoA + fechaPlanificada salen en Avisos
+// con cuenta regresiva hasta la fecha acordada. Las mías salen de los MISMOS
+// listeners de "Mis trabajos planificados" (sin lecturas extra). Supervisor,
+// Encargado y Administrador ven además las de todos, con una consulta
+// acotada de solo igualdad (estado 'in'): sin índice compuesto.
+// Esto es solo para mostrar: no cambia cómo Incentivos cuenta "OTs a tiempo".
+const _asigVistos = new Set();   // ids de OTs planificadas ya vistas (no vuelven a sonar)
+const _asigListos = new Set();   // nombres cuya primera lectura ya llegó
+const esSupervisorB = () => typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+const esAdminB = () => typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+// Días que faltan para la fecha acordada (negativo = atrasada; null = sin fecha).
+function asigDias(o) {
+  const f = fbParseFecha(o && o.fechaPlanificada), h = fbParseFecha(fbHoy());
+  return f && h ? Math.round((f - h) / 86400000) : null;
+}
+function asigCuenta(o) {
+  const d = asigDias(o);
+  if (d == null) return { txt: 'sin fecha', cls: '' };
+  if (d < 0) return { txt: `⚠️ atrasado ${-d} ${d === -1 ? 'día' : 'días'}`, cls: 'tarde' };
+  if (d === 0) return { txt: 'vence hoy', cls: 'hoy' };
+  return { txt: d === 1 ? 'falta 1 día' : `faltan ${d} días`, cls: '' };
+}
+// Atrasadas primero; después por fecha acordada (las que no tienen fecha, al final).
+function asigOrden(a, b) {
+  const da = asigDias(a), dz = asigDias(b);
+  const ta = da != null && da < 0 ? 0 : 1, tz = dz != null && dz < 0 ? 0 : 1;
+  if (ta !== tz) return ta - tz;
+  if (da == null || dz == null) return (da == null ? 1 : 0) - (dz == null ? 1 : 0);
+  return da - dz || String(a.folio || '').localeCompare(String(b.folio || ''));
+}
+const asigTipoBadge = o => esProyectoOt(o) ? '<span class="tag tag-proyecto">📐 Proyecto</span>' : '<span class="tag tag-predictivo">🩺 Predictivo</span>';
+
+// Sección "📅 Trabajos asignados a ti" arriba de las paradas. Devuelve cuántos hay.
+function renderAsignadosMios() {
+  const cont = document.getElementById('asig-mios');
+  if (!cont) return 0;
+  const lista = _misTrabajosLista().sort(asigOrden);
+  if (!lista.length) { cont.innerHTML = ''; return 0; }
+  const atras = lista.filter(o => (asigDias(o) ?? 0) < 0).length;
+  // Dentro del onclick solo va el id del documento (seguro).
+  cont.innerHTML = `<div class="av-sec">📅 Trabajos asignados a ti <small>${lista.length} ${lista.length === 1 ? 'pendiente' : 'pendientes'}${atras ? ' · ' + atras + (atras === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>`
+    + lista.map(o => {
+      const c = asigCuenta(o), eq = avEquipo(o), rech = o.estado === 'rechazada';
+      return `<div class="av-card asig ${esProyectoOt(o) ? 'proyecto' : ''} ${c.cls === 'tarde' ? 'atrasada' : ''}" data-ot="${esc(o.id)}">
+      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')}</div>
+        <div class="av-meta">${eq.localidad ? '📍 ' + esc(eq.localidad) + ' · ' : ''}${esc(o.folio || '')}</div>
+        <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;">${asigTipoBadge(o)}${o.prioridad ? `<span class="tag ${o.prioridad === 'alta' ? 'tag-prioridad-alta' : 'tag-synced'}">Prioridad ${esc(o.prioridad)}</span>` : ''}</div></div>
+        <div class="av-timer asig ${c.cls}">📅 Para el ${esc(fmtDdMmB(o.fechaPlanificada) || '—')}<b class="asig-cuenta">${esc(c.txt)}</b></div></div>
+      <div class="av-desc">${o.causaFalla ? '[' + esc(o.causaFalla) + '] ' : ''}${esc(o.descripcionFalla || '')}</div>
+      ${rech ? `<div class="av-rech">⚠️ Devuelta${o.revisadoPor ? ' por ' + esc(o.revisadoPor) : ''}: ${esc(o.notaRevision || 'corregir y volver a registrar')}</div>` : ''}
+      <button type="button" class="btn btn-primary" style="margin-top:6px;" onclick="abrirRegistroOtId('${esc(o.id)}')">${rech ? '📋 Corregir en Bitácora' : '📋 Registrar en Bitácora'}</button>
+    </div>`;
+    }).join('') + '<div class="av-sep"></div>';
+  return lista.length;
+}
+
+// Supervisor / Encargado / Admin: todas las OTs planificadas o devueltas,
+// agrupadas por técnico. El listener se abre solo la primera vez que se entra
+// a Avisos (cuota gratis) y trae como máximo 300 documentos.
+let _asigTodos = null, _asigTodosUnsub = null, _asigTodosErr = '';
+function escucharAsignadosTodos() {
+  if (_asigTodosUnsub || !esSupervisorB()) return;
+  _asigTodosUnsub = db.collection('ots').where('estado', 'in', ESTADOS_REGISTRABLES).limit(300)
+    .onSnapshot(snap => {
+      _asigTodos = snap.docs.map(docAOt); _asigTodosErr = '';
+      if (document.getElementById('screen-avisos').classList.contains('active')) renderAsignadosTodos();
+    }, err => {
+      _asigTodosErr = err.message || String(err);
+      console.warn('No se pudieron leer los trabajos asignados:', _asigTodosErr);
+      renderAsignadosTodos();
+    });
+}
+function renderAsignadosTodos() {
+  const cont = document.getElementById('asig-todos');
+  if (!cont) return;
+  if (!esSupervisorB()) { cont.innerHTML = ''; return; }
+  escucharAsignadosTodos();
+  const cab = (txt) => `<div class="av-sep"></div><div class="av-sec">📅 Trabajos asignados (todos) <small>${txt}</small></div>`;
+  if (_asigTodosErr) { cont.innerHTML = cab('') + `<div class="av-meta">⚠️ No se pudieron leer: ${esc(_asigTodosErr)}</div>`; return; }
+  if (_asigTodos === null) { cont.innerHTML = cab('cargando…'); return; }
+  const lista = _asigTodos.filter(o => ESTADOS_REGISTRABLES.includes(o.estado));
+  if (!lista.length) { cont.innerHTML = cab('') + '<div class="av-meta" style="margin-bottom:8px;">No hay trabajos planificados abiertos.</div>'; return; }
+  const grupos = new Map();
+  lista.forEach(o => { const k = String(o.asignadoA || '').trim() || 'Sin asignar'; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(o); });
+  const tarde = o => (asigDias(o) ?? 0) < 0;
+  const totalTarde = lista.filter(tarde).length;
+  const orden = [...grupos.entries()].map(([k, l]) => ({ k, l: l.sort(asigOrden), t: l.filter(tarde).length }))
+    .sort((a, b) => b.t - a.t || a.k.localeCompare(b.k, 'es'));
+  cont.innerHTML = cab(`${lista.length} · ${totalTarde ? totalTarde + (totalTarde === 1 ? ' atrasado' : ' atrasados') : 'ninguno atrasado'}`)
+    + orden.map(g => `<div class="asig-grupo" data-tec="${esc(g.k)}">
+      <div class="g"><span>👤 ${esc(g.k)}</span><small class="${g.t ? 'tarde' : ''}">${g.l.length}${g.t ? ' · ' + g.t + (g.t === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>
+      ${g.l.map(o => { const c = asigCuenta(o); return `<div class="asig-fila ${c.cls}" data-ot="${esc(o.id)}">
+        <span><b>${esc(o.folio || '')}</b> · ${esc(avEquipo(o).nombre || '—')} · ${esProyectoOt(o) ? '📐' : '🩺'}${o.estado === 'rechazada' ? ' · <b style="color:var(--red-txt)">devuelta</b>' : ''}</span>
+        <span class="c">${esc(fmtDdMmB(o.fechaPlanificada) || '—')} · ${esc(c.txt)}</span></div>`; }).join('')}
+    </div>`).join('');
+}
+
+// Aviso al llegar una OT nueva asignada a mí (mismo mecanismo que las paradas).
+function alertarTrabajoAsignado(o) {
+  const eq = avEquipo(o);
+  const txt = `Nuevo trabajo asignado: ${o.folio || ''} ${eq.nombre || ''}${o.fechaPlanificada ? ' para el ' + fmtDdMmB(o.fechaPlanificada) : ''}`.replace(/\s+/g, ' ').trim();
+  showToast('📅 ' + txt, 'warn', 7000);
+  avVibrarYSonar();
+  avNotificacionSistema('Nuevo trabajo asignado', txt + (o.descripcionFalla ? ' — ' + o.descripcionFalla : ''), 'asig-' + o.id);
+}
+// Recordatorio del día: al abrir la app, si tengo trabajos que vencen hoy o
+// atrasados, un solo mensaje (una vez al día por usuario en este celular).
+let _recordatorioProgramado = false;
+function programarRecordatorioAsignados() {
+  if (_recordatorioProgramado) return;
+  _recordatorioProgramado = true;
+  // Se espera un poco para que lleguen las lecturas de las otras formas del nombre.
+  setTimeout(() => {
+    const lista = _misTrabajosLista().filter(o => { const d = asigDias(o); return d != null && d <= 0; });
+    if (!lista.length) return;
+    const valor = ((window.currentUser && window.currentUser.uid) || '') + '|' + fbHoy();
+    try { if (localStorage.getItem('mant_recordatorio_asig') === valor) return; localStorage.setItem('mant_recordatorio_asig', valor); } catch (e) { /* sin almacenamiento: se muestra igual */ }
+    const atras = lista.filter(o => asigDias(o) < 0).length, hoy = lista.length - atras;
+    const partes = [];
+    if (hoy) partes.push(hoy + ' para hoy');
+    if (atras) partes.push(atras + (atras === 1 ? ' atrasado' : ' atrasados'));
+    const txt = `📅 Tienes ${lista.length === 1 ? '1 trabajo asignado' : lista.length + ' trabajos asignados'}: ${partes.join(' y ')}`;
+    showToast(txt, 'warn', 7000);
+    avNotificacionSistema('Trabajos asignados pendientes', txt.replace(/^📅 /, '') + ' — ' + lista.slice(0, 3).map(o => ((o.folio || '') + ' ' + (avEquipo(o).nombre || '')).trim()).join(', '), 'asig-recordatorio');
+  }, 2500);
+}
+
+// Solo Administrador: avisos y OTs anuladas de los últimos 90 días (máx. 50).
+// Rango + orden sobre el MISMO campo (anuladoEn): índice simple automático,
+// sin índice compuesto, y trae las más recientes. Se lee solo al tocar el botón.
+let _anuladasAbiertas = false;
+function renderAnuladasWrap() {
+  const w = document.getElementById('anuladas-wrap');
+  if (w) w.style.display = esAdminB() ? '' : 'none';
+}
+function toggleAnuladas() {
+  if (!esAdminB()) return;
+  _anuladasAbiertas = !_anuladasAbiertas;
+  document.getElementById('anuladas-btn').textContent = _anuladasAbiertas ? '🚫 Ocultar anuladas' : '🚫 Ver anuladas';
+  if (_anuladasAbiertas) cargarAnuladas(); else document.getElementById('anuladas-lista').innerHTML = '';
+}
+async function cargarAnuladas() {
+  const cont = document.getElementById('anuladas-lista');
+  cont.innerHTML = '<div class="av-meta">Cargando anuladas…</div>';
+  try {
+    const desde = firebase.firestore.Timestamp.fromMillis(Date.now() - 90 * 86400000);
+    const snap = await db.collection('ots').where('anuladoEn', '>=', desde).orderBy('anuladoEn', 'desc').limit(50).get();
+    if (!_anuladasAbiertas) return;
+    const ms = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : 0;
+    const lista = snap.docs.map(docAOt).filter(o => o.estado === 'anulada').sort((a, b) => ms(b.anuladoEn) - ms(a.anuladoEn));
+    if (!lista.length) { cont.innerHTML = '<div class="av-meta">No hay anuladas en los últimos 90 días.</div>'; return; }
+    const cuando = t => { const m = ms(t); if (!m) return '—'; const d = new Date(m); return fmtDdMmB(fbFechaLocal(d)) + ' ' + d.toTimeString().slice(0, 5); };
+    cont.innerHTML = `<div class="av-meta" style="margin-bottom:6px;">${lista.length} anulada(s) · últimos 90 días${snap.size >= 50 ? ' (las 50 más recientes)' : ''}</div>`
+      + lista.map(o => `<div class="anu-item" data-ot="${esc(o.id)}"><b>${esc(o.folio || o.id)}</b> · ${esc(avEquipo(o).nombre || '—')}${esProyectoOt(o) ? ' · 📐 Proyecto' : o.origen === 'checklist' ? ' · 🩺 Checklist' : ''}
+        <div>Motivo: ${esc(o.motivoAnulacion || '—')}</div>
+        <div class="m">🚫 ${esc(o.anuladoPor || '—')} · ${esc(cuando(o.anuladoEn))}</div></div>`).join('');
+  } catch (e) {
+    cont.innerHTML = `<div class="av-meta">⚠️ No se pudieron leer las anuladas: ${esc(msgErrorFirestore(e))}</div>`;
+  }
+}
 
 // ── Equipo en cascada: Planta → Área → Línea → Tipo → Equipo ──
 // Mientras el inventario esté incompleto la coincidencia es tolerante: un
@@ -2792,9 +3028,16 @@ function procesarAvisos(docs) {
   if (!_avisosListos) { /* todavía no llegó la lista de avisos */ }
   else if (_avisosVistos === null) _avisosVistos = new Set(pendientes.map(r => r.id));
   else pendientes.forEach(r => { if (!_avisosVistos.has(r.id)) { _avisosVistos.add(r.id); alertarAviso(r); } });
-  const badge = document.getElementById('avisos-badge');
-  if (badge) { badge.textContent = pendientes.length; badge.style.display = pendientes.length ? '' : 'none'; }
+  actualizarBadgeAvisos();
   if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos();
+}
+// (23 oct 2026) Número rojo de Avisos: paradas pendientes + trabajos asignados a mí.
+function actualizarBadgeAvisos() {
+  const badge = document.getElementById('avisos-badge');
+  if (!badge) return;
+  const n = avisos.filter(r => r.estado === 'pendiente').length + _misTrabajosLista().length;
+  badge.textContent = n;
+  badge.style.display = n ? '' : 'none';
 }
 
 function alertarAviso(r) {
@@ -2802,6 +3045,12 @@ function alertarAviso(r) {
   const dup = avAvisoPrevioMismoEquipo(r) ? ' (posible duplicado)' : '';
   const txt = `🚨 ${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${eq.nombre}${eq.localidad ? ' (' + eq.localidad + ')' : ''}${dup}`;
   showToast(txt, 'error');
+  avVibrarYSonar();
+  avNotificacionSistema('Nueva parada reportada', `${eq.nombre}${dup} — ${r.descripcionFalla || ''}`, 'aviso-' + r.id);
+}
+// (23 oct 2026) Vibración + pitido y notificación del sistema, compartidos por
+// los avisos de parada y los trabajos asignados (mismo mecanismo de siempre).
+function avVibrarYSonar() {
   try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
   try {
     if (_audioCtx) {
@@ -2813,10 +3062,12 @@ function alertarAviso(r) {
       });
     }
   } catch (e) {}
+}
+function avNotificacionSistema(titulo, cuerpo, tag) {
   try {
     if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
-      navigator.serviceWorker.ready.then(reg => reg.showNotification('Nueva parada reportada', {
-        body: `${eq.nombre}${dup} — ${r.descripcionFalla || ''}`, tag: 'aviso-' + r.id, renotify: true,
+      navigator.serviceWorker.ready.then(reg => reg.showNotification(titulo, {
+        body: cuerpo, tag, renotify: true,
         icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [300, 150, 300], data: { url: 'bitacora.html#avisos' } }));
     }
   } catch (e) {}
@@ -2839,20 +3090,28 @@ function renderAvisos() {
   const wrap = document.getElementById('avisos-lista');
   const permiso = 'Notification' in window ? Notification.permission : 'unsupported';
   document.getElementById('avisos-activar').style.display = permiso === 'granted' ? 'none' : '';
+  // (23 oct 2026) Arriba mis trabajos asignados; abajo (supervisión) los de todos.
+  const nMios = renderAsignadosMios();
+  renderAsignadosTodos();
+  renderAnuladasWrap();
+  const cab = nMios ? '<div class="av-sec">🚨 Paradas y fallas de producción</div>' : '';
   const orden = { pendiente: 0, en_atencion: 1 };
   const lista = [...avisos].sort((a, b) => (orden[a.estado] - orden[b.estado]) || ((b.maquinaParada ? 1 : 0) - (a.maquinaParada ? 1 : 0))
     || ({ alta: 0, media: 1, baja: 2 }[a.prioridad] ?? 1) - ({ alta: 0, media: 1, baja: 2 }[b.prioridad] ?? 1)
     || ((a.fechaReporte || '') + (a.horaParada || '')).localeCompare((b.fechaReporte || '') + (b.horaParada || '')));
-  if (!lista.length) { wrap.innerHTML = '<div class="empty" style="padding:40px 10px;"><span class="emoji" style="font-size:40px;display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>'; return; }
+  if (!lista.length) { wrap.innerHTML = cab + `<div class="empty" style="padding:${nMios ? '16px' : '40px'} 10px;"><span class="emoji" style="font-size:${nMios ? '28px' : '40px'};display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>`; return; }
   const esSup = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  // (23 oct 2026) Solo el Administrador anula solicitudes de producción.
+  const esAdmin = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
   // Dentro de los onclick solo va el id del documento (seguro); nunca nombres.
-  wrap.innerHTML = lista.map(r => {
+  wrap.innerHTML = cab + lista.map(r => {
     const min = avMinDesde(r.fechaReporte, r.horaParada);
     const mio = avEsMio(r);
     const eq = avEquipo(r);
     const previo = avAvisoPrevioMismoEquipo(r);
     // (5 oct 2026) "Anular (duplicado)": pendiente, o en atención si es mío o soy supervisor+.
-    const puedeAnular = r.estado === 'pendiente' || mio || esSup || !r.asignadoUid;
+    // (23 oct 2026) Ahora SOLO el Administrador (pedido del dueño; la regla también lo exige).
+    const puedeAnular = esAdmin;
     const btnAnular = puedeAnular ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%;font-size:12px;" onclick="anularAviso('${esc(r.id)}')">🚫 Anular (duplicado)</button>` : '';
     const acciones = r.estado === 'pendiente'
       ? `<button class="btn btn-primary" onclick="atenderAviso('${esc(r.id)}')">🏃 Voy a atenderlo</button>`
@@ -2909,21 +3168,43 @@ function soltarAviso(id) {
 // (5 oct 2026) Anular un aviso repetido (dos reportes de la misma parada).
 // Queda guardado como 'anulada' con quién, cuándo y por qué; no aparece en
 // Avisos, Historial ni Resumen.
+// (23 oct 2026) Solo el Administrador. El motivo se pide en una ventana de la
+// página (antes window.prompt) y es obligatorio. Sigue siendo un borrado
+// SUAVE: el documento queda con estado 'anulada', anuladoPor, anuladoEn y
+// motivoAnulacion; no se borra nada.
+let _anularId = null;
 function anularAviso(id) {
   const r = avisos.find(x => x.id === id);
   if (!r) return;
+  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) { showToast('⛔ Solo el Administrador puede anular avisos', 'error'); return; }
   const previo = avAvisoPrevioMismoEquipo(r);
-  const sugerido = previo ? 'Duplicado de ' + (previo.folio || 'otro aviso') : 'Duplicado';
-  const motivo = (window.prompt(`Anular el aviso ${r.folio || ''} (${avEquipo(r).nombre || 'equipo'}).\nEscribe el motivo (ej: duplicado de OT-0123):`, sugerido) || '').trim();
-  if (!motivo) { showToast('Anulación cancelada (falta el motivo)', 'warn'); return; }
+  _anularId = id;
+  document.getElementById('anular-sub').textContent = `${r.folio || 'Aviso'} · ${avEquipo(r).nombre || 'equipo'} — ${r.descripcionFalla || ''}`.slice(0, 220);
+  document.getElementById('anular-motivo').value = previo ? 'Duplicado de ' + (previo.folio || 'otro aviso') : '';
+  document.getElementById('anular-err').textContent = '';
+  document.getElementById('modal-anular').classList.add('open');
+  setTimeout(() => { const t = document.getElementById('anular-motivo'); if (t) t.focus(); }, 50);
+}
+function cerrarModalAnular() {
+  _anularId = null;
+  document.getElementById('modal-anular').classList.remove('open');
+}
+function confirmarAnular() {
+  const id = _anularId;
+  if (!id) return cerrarModalAnular();
+  const motivo = document.getElementById('anular-motivo').value.trim();
+  if (!motivo) { document.getElementById('anular-err').textContent = 'Escribe el motivo para poder anular.'; document.getElementById('anular-motivo').focus(); return; }
+  cerrarModalAnular();
   db.collection('ots').doc(id).update({
     estado: 'anulada', anuladoPor: miNombreUsuario(), anuladoEn: fbTimestamp(), motivoAnulacion: motivo.slice(0, 300),
     editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
   }).catch(e => showToast(e && e.code === 'permission-denied'
-      ? '⚠️ No se pudo anular: el aviso ya cambió de estado o lo está atendiendo otro técnico'
+      ? '⚠️ No se pudo anular: solo el Administrador puede anular, y el aviso no debe estar cerrado'
       : '❌ No se pudo anular el aviso: ' + e.message, 'error', 8000));
   showToast('🚫 Aviso anulado', 'warn');
+  if (_anuladasAbiertas) setTimeout(cargarAnuladas, 800);
 }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && _anularId) cerrarModalAnular(); });
 function cerrarAviso(id) {
   const r = avisos.find(x => x.id === id);
   if (!r) return;

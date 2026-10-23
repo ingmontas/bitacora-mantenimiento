@@ -141,7 +141,9 @@ service cloud.firestore {
         && (!cambiaA('en_atencion') || (estadoViejo() == 'pendiente' && !esProyecto()))
         // (20 oct 2026) Falla / Proyecto no se cambia después (solo Encargado o Admin).
         && (request.resource.data.get('tipoReporte', 'falla') == resource.data.get('tipoReporte', 'falla') || esEncargado())
-        && (!cambiaA('anulada') || estadoViejo() in ['pendiente', 'en_atencion'])
+        // (23 oct 2026) Solo el Administrador anula (borrado suave) solicitudes de
+        // producción y OTs, desde cualquier estado abierto; nunca una completada.
+        && (!cambiaA('anulada') || (esAdmin() && estadoViejo() in ['pendiente', 'en_atencion', 'planificada', 'rechazada', 'en_revision', 'validada']))
         && (estadoViejo() != 'en_atencion' || puedeSoltarAviso())
         && (estadoViejo() != 'anulada' || esSupervisorOMas());
       allow delete: if esAdmin();

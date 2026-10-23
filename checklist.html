@@ -257,6 +257,23 @@
 
 </div>
 
+<!-- MODAL: anular OT con motivo obligatorio (23 oct 2026 — solo Administrador) -->
+<div class="modal-bg" id="modalAnularOt" onclick="if (event.target === this) cerrarModalAnularOt()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="anularOtTitulo">
+    <h3 id="anularOtTitulo">🚫 Anular OT</h3>
+    <div class="modal-sub" id="anularOtSub"></div>
+    <div class="field" style="margin-bottom:6px;">
+      <label for="anularOtMotivo">Motivo (obligatorio)</label>
+      <textarea id="anularOtMotivo" maxlength="300" placeholder="Ej: duplicada, ya no aplica, reporte por error…"></textarea>
+    </div>
+    <div id="anularOtErr" style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cerrarModalAnularOt()">Cancelar</button>
+      <button class="btn btn-primary" id="anularOtOk" style="background:var(--red);" onclick="confirmarAnularOt()">🚫 Anular</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: carga masiva de frecuencias (pegar tabla, igual que en Inventario) -->
 <div class="modal-bg" id="modalBulkFrecuencias">
   <div class="modal">
@@ -890,6 +907,7 @@ function mensajeErrorPermiso(e, accion) {
     validar: 'Solo Supervisor, Encargado o Administrador puede validar una OT.',
     rechazar: 'Solo Supervisor, Encargado o Administrador puede marcar una OT como no concluida.',
     cerrar: 'Solo el Administrador puede cerrar una OT de checklist.',
+    anular: 'Solo el Administrador puede anular una OT (y no si ya está cerrada).',
     configurar: 'Solo Administrador o Encargado puede cambiar la frecuencia o el horómetro.',
     horometro: 'Tu usuario no tiene permiso para actualizar el horómetro.',
   };
@@ -1244,6 +1262,8 @@ function resumenBitacoraOt(o) {
 // se permite, pero primero se avisa aquí mismo (sin ventana del navegador).
 const _avisoCierreSinBitacora = new Set();
 
+// (23 oct 2026) Estados desde los que el Administrador puede anular (nunca 'completada').
+const ESTADOS_ANULABLES = ['pendiente', 'en_atencion', 'planificada', 'rechazada', 'en_revision', 'validada'];
 const OT_ESTADO_TAG = {
   pendiente:   { clase: 'tag-pendiente',   texto: 'Pendiente' },
   planificada: { clase: 'tag-planificada', texto: 'Planificada' },
@@ -1318,6 +1338,11 @@ function renderOts() {
       } else {
         acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
       }
+    }
+    // (23 oct 2026) Solo el Administrador anula (borrado suave, con motivo) una
+    // OT de checklist o una solicitud / proyecto de producción.
+    if (esAdminCierre && ESTADOS_ANULABLES.includes(o.estado)) {
+      acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="abrirAnularOt('${fbEsc(o.id)}')">🚫 Anular</button>`;
     }
     const tagOrigen = esProyectoOt(o) ? '<span class="tag tag-origen-proy">📐 Proyecto</span>' : '<span class="tag tag-origen-check">🩺 Checklist (predictivo)</span>';
 
@@ -1484,6 +1509,44 @@ async function cerrarOtFinal(otId) {
     showToast(esProyectoOt(o) ? 'Proyecto cerrado ✅' : 'OT cerrada ✅ — cuenta como predictivo en Análisis');
   } catch (e) {
     showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
+  }
+}
+
+// ══════ ANULAR OT (23 oct 2026 — solo Administrador) ══════
+// Pedido del dueño: "solo el administrador puede borrar las solicitudes hechas
+// por producción o algunas OT generadas". No se borra el documento: queda con
+// estado 'anulada', anuladoPor, anuladoEn y motivoAnulacion (igual que los
+// avisos duplicados de la Bitácora). firestore.rules también lo exige.
+let _anularOtId = null;
+function abrirAnularOt(otId) {
+  const o = currentOts.find(x => x.id === otId);
+  if (!o) return;
+  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) { showToast('⛔ Solo el Administrador puede anular una OT', 'error'); return; }
+  _anularOtId = otId;
+  document.getElementById('anularOtSub').textContent = `${o.folio || o.id} · ${o.equipoNombre || 'equipo'} — ${o.descripcionFalla || ''}`.slice(0, 220);
+  document.getElementById('anularOtMotivo').value = '';
+  document.getElementById('anularOtErr').textContent = '';
+  openModalGeneric('modalAnularOt');
+  setTimeout(() => document.getElementById('anularOtMotivo').focus(), 50);
+}
+function cerrarModalAnularOt() { _anularOtId = null; closeModalGeneric('modalAnularOt'); }
+async function confirmarAnularOt() {
+  const otId = _anularOtId;
+  if (!otId) return cerrarModalAnularOt();
+  const motivo = document.getElementById('anularOtMotivo').value.trim();
+  if (!motivo) { document.getElementById('anularOtErr').textContent = 'Escribe el motivo para poder anular.'; document.getElementById('anularOtMotivo').focus(); return; }
+  cerrarModalAnularOt();
+  try {
+    await db.collection('ots').doc(otId).update({
+      estado: 'anulada',
+      anuladoPor: nombreUsuarioActual(),
+      anuladoEn: fbTimestamp(),
+      motivoAnulacion: motivo.slice(0, 300),
+      ...camposEdicionOt(),
+    });
+    showToast('🚫 OT anulada', 'warn');
+  } catch (e) {
+    showToast(mensajeErrorPermiso(e, 'anular'), 'error');
   }
 }
 
