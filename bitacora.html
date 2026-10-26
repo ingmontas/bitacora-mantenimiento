@@ -16,6 +16,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <script src="filtros.js"></script>
   <!-- (7 oct 2026) Diseño claro "CMMS" aprobado (fuente Barlow; si no carga, usa la del sistema). -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
@@ -548,8 +549,10 @@
   <div class="screen" id="screen-historial">
     <div id="search-box" style="display:flex;gap:8px;align-items:center;">
       <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()" style="flex:1"/>
-      <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryCSV()">📊 Excel</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryExcel()">📊 Excel</button>
     </div>
+    <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo -->
+    <div id="fUbicHist" style="margin:0 0 10px;"></div>
     <!-- (5 oct 2026) Por rendimiento y cuota gratis solo se leen los últimos 30 días;
          "Ver más" suma el siguiente tramo y el otro botón trae todo (ver ampliarHistorial). -->
     <div id="hist-alcance" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap;">
@@ -610,6 +613,7 @@
 
     <div class="ms-section-title">🏭 Toda la planta</div>
     <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 30 días</div>
+    <div id="fUbicRes" style="margin:0 0 10px;"></div>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
       <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
@@ -753,9 +757,19 @@ function actualizarFechaChip() {
   el.textContent = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}${anio} · S${fbSemanaISO(f)}`;
 }
 
+// (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo en Historial y en
+// "Toda la planta" del Resumen (sin lecturas; "Todas" = no quita nada).
+let ubicHist = null, ubicRes = null;
+const enUbicHist = r => !ubicHist || ubicHist.coincide(r);
+const enUbicRes = r => !ubicRes || ubicRes.coincide(r);
+
 // ══════ INIT ══════
 document.addEventListener('DOMContentLoaded', () => {
   fbRenderMiniNav('bitacora');
+  window.fbReady.then(() => {
+    ubicHist = fbFiltroUbicacion({ el: document.getElementById('fUbicHist'), pagina: 'bitacora-historial', onChange: () => renderHistory() });
+    ubicRes = fbFiltroUbicacion({ el: document.getElementById('fUbicRes'), pagina: 'bitacora-resumen', onChange: () => loadStats() });
+  }).catch(() => {});
   // (5 oct 2026) Antes: d.toISOString().split('T')[0] — eso es la fecha en
   // UTC, y en UTC-4 después de las 8:00 pm ya daba la fecha de MAÑANA.
   const d = new Date();
@@ -2731,10 +2745,11 @@ function renderHistory() {
   const filtered = allRecords.filter(r => {
     if (!q) return true;
     return [r.LINEA_EQUIPO, r.EQUIPO, r.TIPO_MANTENIMIENTO, r.DESCRIPCION_FALLA, r.TECNICOS].join(' ').toLowerCase().includes(q);
-  });
+  }).filter(enUbicHist);
+  window._historyFiltrada = filtered; // (Etapa 3) lo que se ve, para el Excel
 
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty"><span class="emoji">📭</span><p>Sin registros${q ? ' con ese filtro' : ''}.<br/>Crea el primero en "Nuevo".</p></div>`;
+    list.innerHTML = `<div class="empty"><span class="emoji">📭</span><p>Sin registros${q || (ubicHist && ubicHist.activo()) ? ' con ese filtro' : ''}.<br/>Crea el primero en "Nuevo".</p></div>`;
     return;
   }
 
@@ -3301,7 +3316,7 @@ function cerrarAviso(id) {
 // ══════ STATS ══════
 function loadStats() {
   renderMiSemana();
-  const data = allRecords;
+  const data = allRecords.filter(enUbicRes); // (25 oct 2026, Etapa 3) "Toda la planta" con el filtro de ubicación
 
   document.getElementById('s-total').textContent = data.length;
   document.getElementById('s-correctivo').textContent = data.filter(r=>r.TIPO_MANTENIMIENTO==='Correctivo').length;
@@ -3372,6 +3387,23 @@ function exportHistoryCSV(full) {
   a.click();
   URL.revokeObjectURL(url);
   showToast('📊 Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
+}
+
+// (25 oct 2026, Etapa 3) Excel (.xlsx) de lo que se ve en Historial (búsqueda
+// + nave / área / línea / equipo). Si Excel no carga se ofrece el CSV. Sin costos.
+function exportHistoryExcel() {
+  if (!document.getElementById('screen-historial').classList.contains('active') || !window._historyFiltrada) renderHistory();
+  const rows = window._historyFiltrada || [];
+  if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
+  const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad','Repuestos','Herramientas'];
+  const filtro = ubicHist ? ubicHist.partes() : [];
+  const q = document.getElementById('search-input').value.trim();
+  const hojas = [{ nombre: 'Bitácora', titulo: 'Bitácora · ' + (filtro.join(' · ') || 'todas las naves') + (q ? ' · búsqueda «' + q + '»' : '') + ' · ' + (_historialCompleto ? 'todo el historial' : 'últimos ' + diasCargados() + ' días') + ' · generado ' + fbHoy(),
+    columnas: headers.map(t => ({ t, w: /Falla|Solución|Repuestos/.test(t) ? 40 : 14 })),
+    filas: rows.map(r => [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, Number(r.TOTAL_MIN_MAQUINA) || 0, Number(r.TOTAL_MIN_TECNICO) || 0, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD,
+      (Array.isArray(r.REPUESTOS) ? r.REPUESTOS : []).map(i => `${i.cantidad} x ${i.descripcion}${i.codigo ? ' (' + i.codigo + ')' : ''}`).join('; '),
+      (Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS : []).map(h => h.nombre || h.codigo).join('; ')].map(v => v == null ? '' : v)) }];
+  fbExportar({ nombre: fbNombreArchivo('bitacora', filtro, fbHoy().slice(0, 7)), hojas, aviso: m => showToast(m + ' (' + rows.length + ' OTs)') });
 }
 
 // ══════ RESPALDO ══════

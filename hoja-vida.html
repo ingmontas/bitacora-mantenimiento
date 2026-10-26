@@ -16,6 +16,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <script src="filtros.js"></script>
   <!-- QR por equipo, mismo patrón que checklist.html: solo dibuja el QR,
        cualquier cámara de celular ya lo reconoce y ofrece abrir la URL. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -191,6 +192,8 @@
       <div class="card-title">🔍 Elige un equipo</div>
       <div class="card-sub">Verás todo lo que se le ha hecho: tablero e historial completo</div>
       <input type="text" id="picker-buscar" placeholder="Buscar equipo o localidad..." oninput="renderPicker()"/>
+      <!-- (25 oct 2026, Etapa 3) Nave → Área → Línea: acota la lista de equipos -->
+      <div id="fUbicHv" style="margin-top:8px;"></div>
     </div>
     <div id="picker-lista"></div>
   </div>
@@ -312,6 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
       (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('hoja-vida');
     if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => renderPicker()); // (25 oct 2026)
+    if (typeof fbFiltroUbicacion === 'function') ubicHv = fbFiltroUbicacion({ el: document.getElementById('fUbicHv'), pagina: 'hoja-vida', niveles: ['nave', 'area', 'linea'], onChange: () => renderPicker() }); // (Etapa 3)
     cargarDatos();
     updateHeaderStatus();
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -413,11 +417,12 @@ function otsDeEquipo(e) {
 }
 
 // ══════ Screen: elegir equipo ══════
+let ubicHv = null; // (25 oct 2026, Etapa 3) filtro Nave → Área → Línea de la lista
 function renderPicker() {
   const wrap = document.getElementById('picker-lista');
   const busca = (document.getElementById('picker-buscar').value || '').toLowerCase().trim();
   // (25 oct 2026, Etapa 2) Solo los equipos de la nave elegida arriba (sin nave conocida: salen siempre).
-  const lista = currentEquipos.filter(e => fbEquipoEnNave(e)).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const lista = currentEquipos.filter(e => fbEquipoEnNave(e)).filter(e => !ubicHv || ubicHv.coincideEquipo(e)).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   if (!lista.length) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">🔍</span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
     return;
@@ -781,6 +786,7 @@ const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA
 // (5 oct 2026) Carga ExcelJS solo cuando se pide exportar (antes ~1 MB en cada visita).
 let _excelJsPromesa = null;
 function cargarExcelJS() {
+  if (typeof fbCargarExcelJS === 'function') return fbCargarExcelJS(); // (25 oct 2026, Etapa 3) mismo cargador para toda la app
   if (typeof ExcelJS !== 'undefined') return Promise.resolve();
   if (!_excelJsPromesa) {
     const tag = document.createElement('script');

@@ -13,6 +13,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
+<script src="filtros.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <style>
@@ -202,7 +203,8 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <option value="180">Últimos 6 meses</option>
       <option value="365">Últimos 12 meses</option>
     </select>
-    <select id="fArea" aria-label="Área"><option value="">Todas las áreas</option></select>
+    <!-- (25 oct 2026, Etapa 3) Nave → Área → Línea → Equipo (filtros.js; reemplaza al selector de área) -->
+    <div id="fUbic" style="flex:1 1 100%;"></div>
     <select id="fTecnico" aria-label="Técnico"><option value="">Todos los técnicos</option></select>
     <select id="fTipo" aria-label="Tipo"><option value="">Todos los tipos</option></select>
     <div class="chips" id="chipBox"></div>
@@ -214,6 +216,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <button class="tab" data-tab="equipos">Equipos y predicción <span class="cnt" id="tabRiskCnt" style="display:none;"></span></button>
     <button class="tab" data-tab="areas">Áreas</button>
     <button class="tab" data-tab="tecnicos">Técnicos</button>
+    <button class="tab" data-tab="naves" id="tabNavesBtn" style="display:none;">🏭 Naves</button>
     <button class="tab" data-tab="datos">Datos</button>
   </nav>
 
@@ -348,13 +351,33 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     </div>
   </section>
 
+  <!-- ═════════ NAVES (25 oct 2026, Etapa 3) ═════════ -->
+  <section class="tabpanel" id="tab-naves">
+    <p class="section-intro">Mismos indicadores del Resumen, calculados con las mismas fórmulas sobre las OTs de cada nave. Aplican el período, el tipo, el técnico, la semana y la causa elegidos; no la nave, el área, la línea ni el equipo (se comparan todas). Un registro cuya nave no se puede saber va en «Sin nave».</p>
+    <div class="card mb">
+      <h2>Comparativo entre naves</h2>
+      <div class="cardsub" id="cmpSub"></div>
+      <div class="toolbar"><select id="cmpMetrica" aria-label="Indicador de la gráfica">
+        <option value="ots">Órdenes de trabajo</option><option value="paroH">Paro por fallas (h)</option><option value="disp">Disponibilidad (%)</option>
+        <option value="prev">Cumplimiento preventivo (%)</option><option value="venc">Órdenes vencidas</option><option value="reinc">Reincidencia (%)</option><option value="mtbf">MTBF prom. (días)</option></select></div>
+      <div class="chart-box" id="chartNavesBox" style="height:230px"><canvas id="chartNaves"></canvas></div>
+      <div style="overflow-x:auto;margin-top:14px;"><table id="cmpTable"><thead id="cmpHead"></thead><tbody id="cmpBody"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Por área</h2>
+      <div class="cardsub" id="cmpAreaSub"></div>
+      <div style="overflow-x:auto;"><table id="cmpAreaTable"><thead id="cmpAreaHead"></thead><tbody id="cmpAreaBody"></tbody></table></div>
+    </div>
+  </section>
+
   <!-- ═════════ DATOS ═════════ -->
   <section class="tabpanel" id="tab-datos">
     <div class="card mb">
       <h2>Exportar</h2>
-      <div class="cardsub">El CSV respeta los filtros activos. El respaldo JSON (solo administrador / encargado) trae los documentos originales de todas las OTs.</div>
+      <div class="cardsub">El Excel y el CSV respetan los filtros activos (nave, área, línea, equipo, período…). El respaldo JSON (solo administrador / encargado) trae los documentos originales de todas las OTs.</div>
       <div class="feed-actions">
-        <button onclick="exportAnalisisCSV()">📊 Exportar reporte a Excel (CSV)</button>
+        <button onclick="exportAnalisisExcel()">📊 Exportar a Excel</button>
+        <button class="secondary" onclick="exportAnalisisCSV()">CSV</button>
         <button class="secondary" id="backupBtn" style="display:none;" onclick="exportAnalisisBackup()">⬇ Exportar respaldo (JSON)</button>
         <span class="feed-status" id="exportStatus"></span>
       </div>
@@ -398,6 +421,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
 const RAW = ``;
 
 let allRows = [];
+let _rowsNaves = null; // (25 oct 2026, Etapa 3) OTs de TODAS las naves del usuario, para el comparativo
 const charts = {};
 const $ = id => document.getElementById(id);
 // (5 oct 2026) Se usa el escape común de firebase-init (también escapa ` );
@@ -536,6 +560,45 @@ const paroTecnicoDe = r => isProy(r) ? 0 : r.minMaquina;
 /* ---------- estado de filtros y ficha ---------- */
 const F = { periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'' };
 let ficha = null; // {mode:'equipo'|'area'|'tecnico', val}
+// (25 oct 2026, Etapa 3) Barra Nave → Área → Línea → Equipo (filtros.js). F.area
+// es el área elegida en ella (las gráficas y tablas la siguen usando igual).
+// Con todo en "Todas" no se quita ninguna OT: los números quedan iguales.
+let ubic = null;
+const accUbic = r => ({area: r.area==='Sin área' ? '' : r.area, linea: r.linea||'', equipoId: r.equipoId||'', equipo: r.equipo||r.tipoMaquina||''});
+const enUbic = r => !ubic || ubic.coincide(r, accUbic);
+const ubicActiva = () => !!ubic && ubic.activo();
+function setUbicArea(a){ F.area = a||''; if (ubic) ubic.set({area:F.area, linea:'', equipo:''}); render(); }
+// Filtros del alcance (los mismos del panel); 'area' = barra de ubicación.
+function predsAlcance(){
+  return {
+    area: r=>enUbic(r),
+    tecnico: r=>!F.tecnico || splitTecnicos(r.tecnicos).includes(F.tecnico),
+    tipo: r=>!F.tipo || (r.tipoMant||'Sin clasificar')===F.tipo,
+    semana: r=>!F.semana || weekOf(r)===F.semana,
+    causa: r=>!F.causa || r.causa===F.causa,
+  };
+}
+const enPeriodo = (r, ref) => F.periodo==='todo' || daysBetween(parseFecha(r.fecha), ref) <= +F.periodo;
+// KPIs del Resumen para un conjunto de OTs (mismas fórmulas para el panel,
+// el comparativo entre naves y la tabla por área).
+function calcKpis(scopeRows, ref){
+  const correctivos = scopeRows.filter(isCorr), preventivos = scopeRows.filter(isPrev);
+  const totalDowntimeAll = scopeRows.reduce((s,r)=>s+paroDe(r),0);
+  const totalDowntime = correctivos.reduce((s,r)=>s+r.minMaquina,0);
+  const pctCorr = scopeRows.length ? Math.round(correctivos.length/scopeRows.length*100) : 0;
+  const predKpi = computePredictive(scopeRows, ref);
+  const mtbfs = predKpi.filter(p=>p.mtbf!=null).map(p=>p.mtbf);
+  const mtbfAvg = mtbfs.length ? mtbfs.reduce((a,b)=>a+b,0)/mtbfs.length : null;
+  const corrM = correctivos.filter(r=>r.minMaquina>0);
+  const mttrAvg = corrM.length ? corrM.reduce((s,r)=>s+r.minMaquina,0)/corrM.length : null;
+  const corrT = correctivos.filter(r=>r.minTecnico>0);
+  const tecAvg = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
+  const mtbfMin = mtbfAvg!=null ? mtbfAvg*1440 : null;
+  const disp = (mtbfMin!=null && mttrAvg!=null && (mtbfMin+mttrAvg)>0) ? mtbfMin/(mtbfMin+mttrAvg)*100 : null;
+  const prevCheck = preventivos.filter(r=>r.tiempoRespuestaMin!=null);
+  const avgResp = prevCheck.length ? prevCheck.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/prevCheck.length : null;
+  return {correctivos, preventivos, totalDowntimeAll, totalDowntime, pctCorr, mtbfs, mtbfAvg, corrM, mttrAvg, corrT, tecAvg, disp, prevCheck, avgResp};
+}
 
 /* ---------- motor predictivo (MTBF) ---------- */
 const topFreq = list => {
@@ -615,24 +678,18 @@ function render(){
   $('optCompleto').hidden = _anCompleto; $('optCompleto').disabled = _anCompleto;
   $('histCompletoBtn').style.display = _anCompleto ? 'none' : '';
 
-  fillSelect('fArea', [...new Set(rowsAll.map(r=>r.area))].sort(), 'Todas las áreas', F.area);
+  if (ubic){ F.area = ubic.get().area; ubic.pintar(); } // (Etapa 3) antes: selector de área con las de las OTs
   fillSelect('fTecnico', [...new Set(rowsAll.flatMap(r=>splitTecnicos(r.tecnicos)))].sort(), 'Todos los técnicos', F.tecnico);
   fillSelect('fTipo', [...new Set(rowsAll.map(r=>r.tipoMant||'Sin clasificar'))].sort(), 'Todos los tipos', F.tipo);
   $('fPeriodo').value = F.periodo;
 
   /* filtros: cada gráfica que filtra se dibuja SIN su propio filtro, y resalta lo elegido */
-  const periodRows = F.periodo==='todo' ? rowsAll : rowsAll.filter(r=>daysBetween(parseFecha(r.fecha), ref) <= +F.periodo);
-  const preds = {
-    area: r=>!F.area || r.area===F.area,
-    tecnico: r=>!F.tecnico || splitTecnicos(r.tecnicos).includes(F.tecnico),
-    tipo: r=>!F.tipo || (r.tipoMant||'Sin clasificar')===F.tipo,
-    semana: r=>!F.semana || weekOf(r)===F.semana,
-    causa: r=>!F.causa || r.causa===F.causa,
-  };
+  const periodRows = F.periodo==='todo' ? rowsAll : rowsAll.filter(r=>enPeriodo(r, ref));
+  const preds = predsAlcance();
   const rowsExcept = k => periodRows.filter(r=>Object.entries(preds).every(([kk,f])=>kk===k || f(r)));
   const scopeRows = rowsExcept(null);
   window._scopeRows = scopeRows;
-  window._hasFilter = F.periodo!=='todo' || ['area','tecnico','tipo','semana','causa'].some(k=>F[k]);
+  window._hasFilter = F.periodo!=='todo' || ['area','tecnico','tipo','semana','causa'].some(k=>F[k]) || ubicActiva();
 
   /* chips para filtros que no tienen selector propio */
   const chips = [];
@@ -645,8 +702,9 @@ function render(){
   const predAll = computePredictive(rowsAll, ref);
   // (5 oct 2026) Con filtro de área se toman los equipos que tienen OTs en esa
   // área, con TODO su historial (la clave de equipo ya no depende del área).
-  const keysArea = F.area ? new Set(rowsAll.filter(preds.area).map(eqKey)) : null;
-  const predScope = (F.area||F.tecnico) ? computePredictive(rowsAll.filter(r=>(!keysArea||keysArea.has(eqKey(r)))&&preds.tecnico(r)), ref) : predAll;
+  // (Etapa 3) igual con línea o equipo: los equipos que entran en la barra de ubicación.
+  const keysArea = ubicActiva() ? new Set(rowsAll.filter(preds.area).map(eqKey)) : null;
+  const predScope = (ubicActiva()||F.tecnico) ? computePredictive(rowsAll.filter(r=>(!keysArea||keysArea.has(eqKey(r)))&&preds.tecnico(r)), ref) : predAll;
   window._predictive = predScope; window._predAll = predAll;
 
   /* KPIs */
@@ -660,22 +718,8 @@ function render(){
   //    historial completo del equipo (eso sí lo necesita).
   //  - "Paro por fallas" = solo correctivos; el total de todos los tipos va en el tooltip.
   //  - Disponibilidad = MTBF / (MTBF + MTTR).
-  const correctivos = scopeRows.filter(isCorr), preventivos = scopeRows.filter(isPrev);
-  const totalDowntimeAll = scopeRows.reduce((s,r)=>s+paroDe(r),0);
-  const totalDowntime = correctivos.reduce((s,r)=>s+r.minMaquina,0);
-  const pctCorr = scopeRows.length ? Math.round(correctivos.length/scopeRows.length*100) : 0;
-  const predKpi = computePredictive(scopeRows, ref);
-  const mtbfs = predKpi.filter(p=>p.mtbf!=null).map(p=>p.mtbf);
-  const mtbfAvg = mtbfs.length ? mtbfs.reduce((a,b)=>a+b,0)/mtbfs.length : null;
-  const corrM = correctivos.filter(r=>r.minMaquina>0);
-  const mttrAvg = corrM.length ? corrM.reduce((s,r)=>s+r.minMaquina,0)/corrM.length : null;
-  const corrT = correctivos.filter(r=>r.minTecnico>0);
-  const tecAvg = corrT.length ? corrT.reduce((s,r)=>s+r.minTecnico,0)/corrT.length : null;
-  const mtbfMin = mtbfAvg!=null ? mtbfAvg*1440 : null;
-  const disp = (mtbfMin!=null && mttrAvg!=null && (mtbfMin+mttrAvg)>0) ? mtbfMin/(mtbfMin+mttrAvg)*100 : null;
+  const {correctivos, preventivos, totalDowntimeAll, totalDowntime, pctCorr, mtbfs, mtbfAvg, corrM, mttrAvg, corrT, tecAvg, disp, prevCheck, avgResp} = calcKpis(scopeRows, ref);
   const nCrit = predScope.filter(p=>p.risk==='critico').length, nAlto = predScope.filter(p=>p.risk==='alto').length;
-  const prevCheck = preventivos.filter(r=>r.tiempoRespuestaMin!=null);
-  const avgResp = prevCheck.length ? prevCheck.reduce((s,r)=>s+r.tiempoRespuestaMin,0)/prevCheck.length : null;
 
   $('kpiRow').innerHTML = `
     <div class="kpi"><div class="lbl">Órdenes de trabajo</div><div class="val">${scopeRows.length}</div><div class="foot">${correctivos.length} correctivas · ${preventivos.length} preventivas o predictivas</div></div>
@@ -768,7 +812,7 @@ function render(){
     type:'bar',
     data:{labels:areaSorted.map(a=>a[0]), datasets:[{data:areaSorted.map(a=>a[1]), backgroundColor:areaSorted.map(a=>!F.area||F.area===a[0]?'#f0a930':'#f0a93040'), borderRadius:4}]},
     options:{indexAxis:'y',
-      onClick:(e,els)=>{ if(!els.length) return; const a=areaSorted[els[0].index][0]; F.area=(F.area===a)?'':a; render(); },
+      onClick:(e,els)=>{ if(!els.length) return; const a=areaSorted[els[0].index][0]; setUbicArea(F.area===a?'':a); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
       plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
       scales:{x:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},grace:'10%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
@@ -866,29 +910,24 @@ function fechaCreacionAn(o){
 const glMas = (n, shown) => n>shown ? `<div class="prio-foot">y ${n-shown} más</div>` : '';
 const pctTxt = p => p==null ? '—' : (Math.round(p*10)/10).toLocaleString('es-DO')+'%';
 
-function renderGestion(){
-  const box = $('kpiGestion'); if (!box) return;
+// (25 oct 2026, Etapa 3) Los tres indicadores se calculan en funciones aparte
+// (las mismas para el Resumen, el comparativo entre naves y la tabla por área).
+// Las fórmulas no cambiaron; solo se separó el cálculo del dibujo.
+// 1) Cumplimiento preventivo: eqDocs = equipos del alcance (ya filtrados por
+//    nave); enAreaEq(e) = ¿el equipo entra en el filtro de área/línea/equipo?
+function calcCumplimiento(eqDocs, ckDocs, enAreaEq){
   const ref = today0();
-  // (25 oct 2026, Etapa 2) un área renombrada cuenta con su nombre vigente
-  const enArea = a => !F.area || (fbNombreActual('areas', a||'Sin área')||'Sin área') === F.area;
-  const MAXL = 8;
-  // (25 oct 2026, Etapa 2) Solo la nave elegida arriba ("Todas" = sin filtro).
-  const ckDocsN = _ckAn.docs.filter(c=>fbEnNave(c));
-  const eqDocsN = _equiposDocs ? _equiposDocs.filter(e=>fbEquipoEnNave(e)) : null;
-
-  /* ---- 1) cumplimiento preventivo ---- */
   const diasCk = ventanaChecklistDias();
-  if (_equiposDocs) cargarChecklistsAn(diasCk);
   const desdeCk = desdeDias(diasCk);
   const ckOk = !!_ckAn.desde && _ckAn.desde <= desdeCk && !_ckAn.err;
-  const ckVent = ckOk ? ckDocsN.filter(c=>c.fecha >= desdeCk && c.fecha <= fbFechaLocal(ref)) : [];
+  const ckVent = ckOk ? ckDocs.filter(c=>c.fecha >= desdeCk && c.fecha <= fbFechaLocal(ref)) : [];
   const ultCk = {}, diasCkEq = {};
-  (ckOk ? ckDocsN : []).forEach(c=>{ if (!ultCk[c.equipoId] || c.fecha > ultCk[c.equipoId]) ultCk[c.equipoId] = c.fecha; });
+  (ckOk ? ckDocs : []).forEach(c=>{ if (!ultCk[c.equipoId] || c.fecha > ultCk[c.equipoId]) ultCk[c.equipoId] = c.fecha; });
   ckVent.forEach(c=>{ (diasCkEq[c.equipoId] = diasCkEq[c.equipoId] || new Set()).add(c.fecha); });
-  let prevVal = '—', prevCls = '', prevFoot = 'cargando equipos…', vencPrev = [], nFrec = 0;
+  let prevVal = '—', prevCls = '', prevFoot = 'cargando equipos…', vencPrev = [], nFrec = 0, pAlDia = null;
   let progTot = 0, hechosTot = 0;
-  if (_equiposDocs){
-    const conFrec = eqDocsN.filter(e=>(Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) && enArea(e.localidad));
+  if (eqDocs){
+    const conFrec = eqDocs.filter(e=>(Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) && enAreaEq(e));
     nFrec = conFrec.length;
     conFrec.forEach(e=>{
       const f = Number(e.checklistFrecuenciaDias)||0, fh = Number(e.checklistFrecuenciaHoras)||0;
@@ -915,7 +954,7 @@ function renderGestion(){
       }
       if (vencido) vencPrev.push({nombre:e.nombre||'Equipo sin nombre', area:e.localidad||'Sin área', diasV, nunca, horasTxt});
     });
-    const pAlDia = nFrec ? (nFrec - vencPrev.length)/nFrec*100 : null;
+    pAlDia = nFrec ? (nFrec - vencPrev.length)/nFrec*100 : null;
     prevVal = pctTxt(pAlDia);
     prevCls = pAlDia==null ? '' : pAlDia>=90 ? 'accent-teal' : pAlDia>=75 ? 'accent-amber' : 'accent-red';
     const pVent = progTot ? hechosTot/progTot*100 : null;
@@ -924,22 +963,18 @@ function renderGestion(){
     prevFoot = _equiposDocsErr ? 'no se pudo leer el catálogo de equipos' : nFrec ? `${nFrec - vencPrev.length} de ${nFrec} equipos al día · ${ventTxt}` : 'ningún equipo tiene frecuencia de checklist';
   }
   vencPrev.sort((a,b)=>(b.nunca-a.nunca) || ((b.diasV??-1)-(a.diasV??-1)) || a.nombre.localeCompare(b.nombre));
-  $('gestPrevList').innerHTML = !_equiposDocs ? '<div class="empty">Cargando equipos…</div>'
-    : _equiposDocsErr ? '<div class="empty">No se pudo leer el catálogo de equipos.</div>'
-    : !nFrec ? '<div class="empty">Ningún equipo'+(F.area?' del área':'')+' tiene frecuencia de checklist configurada.</div>'
-    : !vencPrev.length ? '<div class="empty">✅ Todos los equipos con frecuencia tienen su checklist al día.</div>'
-    : vencPrev.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.nombre)}</div><div class="gl-meta">${esc(v.area)}${v.horasTxt?' · ⏱ '+esc(v.horasTxt):''}</div></div>
-        <div class="gl-val">${v.nunca?'sin checklist':v.diasV!=null?v.diasV+' d vencido':'por horómetro'}</div></div>`).join('') + glMas(vencPrev.length, MAXL);
-  $('gdPrevSub').textContent = 'Equipos con frecuencia de checklist cuya próxima fecha (o su horómetro) ya pasó'
-    + (F.area ? ' · área '+F.area : '') + '. Cumplimiento de la ventana: últimos '+diasCk+' días.';
-
-  /* ---- 2) órdenes vencidas ---- */
+  return {diasCk, ckOk, nFrec, vencPrev, pAlDia, progTot, hechosTot, prevVal, prevCls, prevFoot};
+}
+// 2) Órdenes vencidas: ots = OTs abiertas del alcance (ya filtradas por nave);
+//    enAreaOt(o, area) = ¿la OT entra en el filtro de área/línea/equipo?
+function calcVencidas(ots, enAreaOt){
+  const ref = today0();
   const vencOts = [];
-  (_otsAbiertasAn||[]).filter(o=>fbEnNave(o)).forEach(o=>{
+  (ots||[]).forEach(o=>{
     if (!ESTADOS_ABIERTOS_AN.includes(o.estado)) return;
     const eqDoc = o.equipoId && _equiposDocs ? _equiposDocs.find(e=>e.id===o.equipoId) : null;
     const area = o.equipoLocalidad || (eqDoc && eqDoc.localidad) || 'Sin área';
-    if (!enArea(area)) return;
+    if (!enAreaOt(o, area, eqDoc)) return;
     if (F.tecnico && !splitTecnicos(o.asignadoA||'').includes(F.tecnico)) return;
     const pD = parseFecha(String(o.fechaPlanificada||''));
     let dias = null, motivo = '';
@@ -955,16 +990,10 @@ function renderGestion(){
       asignado:o.asignadoA||'', estado:ESTADO_LBL_AN[o.estado]||o.estado, dias, motivo});
   });
   vencOts.sort((a,b)=>b.dias-a.dias || String(a.folio).localeCompare(String(b.folio)));
-  const nV = vencOts.length;
-  $('gestVencList').innerHTML = _otsAbiertasErr ? '<div class="empty">No se pudieron leer las OTs abiertas.</div>'
-    : _otsAbiertasAn == null ? '<div class="empty">Cargando OTs abiertas…</div>'
-    : !nV ? '<div class="empty">✅ Ninguna OT abierta está vencida.</div>'
-    : vencOts.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.folio)} · ${esc(v.equipo)}</div>
-        <div class="gl-meta">${esc(v.area)} · ${esc(v.estado)} · ${esc(v.motivo)} · 👤 ${esc(v.asignado||'sin asignar')}</div></div>
-        <div class="gl-val">${v.dias} d vencida</div></div>`).join('') + glMas(nV, MAXL);
-
-  /* ---- 3) reincidencia de fallas ---- */
-  const rowsAll = window._rowsAll || [], scopeRows = window._scopeRows || [];
+  return vencOts;
+}
+// 3) Reincidencia: rowsAll = todo lo cargado del alcance; scopeRows = lo filtrado.
+function calcReincidencia(rowsAll, scopeRows){
   const causaKey = r => String(r.causa||'').trim().toLowerCase().replace(/\s+/g,' ');
   const fechasPar = {}; // equipo|causa → días (ms) con correctivo en todo lo cargado
   rowsAll.filter(isCorr).forEach(r=>{ const c = causaKey(r), d = parseFecha(r.fecha); if (!c || !d) return;
@@ -983,6 +1012,46 @@ function renderGestion(){
   });
   const pReinc = corrScope.length ? nReinc/corrScope.length*100 : null;
   const paresTop = Object.values(pares).filter(p=>p.reinc>0).sort((a,b)=>b.reinc-a.reinc||b.total-a.total||b.last-a.last);
+  return {corrScope, nReinc, sinCausa, pReinc, paresTop};
+}
+// Filtro de área/línea/equipo (barra de filtros) para equipos y OTs abiertas.
+const enUbicEquipo = e => !ubic || ubic.coincideEquipo(e);
+const enUbicOtAbierta = (o, area, eqDoc) => !ubic || ubic.coincide(o, x=>({area: area==='Sin área' ? '' : area, linea: x.LINEA || (eqDoc && eqDoc.linea) || '', equipoId: x.equipoId || '', equipo: x.equipoNombre || x.EQUIPO || ''}));
+
+function renderGestion(){
+  const box = $('kpiGestion'); if (!box) return;
+  const MAXL = 8;
+  const areaSel = ubic ? ubic.get().area : '';
+  // (25 oct 2026, Etapa 2) Solo la nave elegida arriba ("Todas" = sin filtro).
+  const ckDocsN = _ckAn.docs.filter(c=>fbEnNave(c));
+  const eqDocsN = _equiposDocs ? _equiposDocs.filter(e=>fbEquipoEnNave(e)) : null;
+
+  /* ---- 1) cumplimiento preventivo ---- */
+  const diasCk = ventanaChecklistDias();
+  if (_equiposDocs) cargarChecklistsAn(diasCk);
+  const cp = calcCumplimiento(eqDocsN, ckDocsN, enUbicEquipo);
+  const {nFrec, vencPrev, prevVal, prevCls, prevFoot} = cp;
+  $('gestPrevList').innerHTML = !_equiposDocs ? '<div class="empty">Cargando equipos…</div>'
+    : _equiposDocsErr ? '<div class="empty">No se pudo leer el catálogo de equipos.</div>'
+    : !nFrec ? '<div class="empty">Ningún equipo'+(ubicActiva()?' del filtro':'')+' tiene frecuencia de checklist configurada.</div>'
+    : !vencPrev.length ? '<div class="empty">✅ Todos los equipos con frecuencia tienen su checklist al día.</div>'
+    : vencPrev.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.nombre)}</div><div class="gl-meta">${esc(v.area)}${v.horasTxt?' · ⏱ '+esc(v.horasTxt):''}</div></div>
+        <div class="gl-val">${v.nunca?'sin checklist':v.diasV!=null?v.diasV+' d vencido':'por horómetro'}</div></div>`).join('') + glMas(vencPrev.length, MAXL);
+  $('gdPrevSub').textContent = 'Equipos con frecuencia de checklist cuya próxima fecha (o su horómetro) ya pasó'
+    + (ubicActiva() ? ' · '+ubic.texto() : areaSel ? ' · área '+areaSel : '') + '. Cumplimiento de la ventana: últimos '+diasCk+' días.';
+
+  /* ---- 2) órdenes vencidas ---- */
+  const vencOts = calcVencidas((_otsAbiertasAn||[]).filter(o=>fbEnNave(o)), enUbicOtAbierta);
+  const nV = vencOts.length;
+  $('gestVencList').innerHTML = _otsAbiertasErr ? '<div class="empty">No se pudieron leer las OTs abiertas.</div>'
+    : _otsAbiertasAn == null ? '<div class="empty">Cargando OTs abiertas…</div>'
+    : !nV ? '<div class="empty">✅ Ninguna OT abierta está vencida.</div>'
+    : vencOts.slice(0,MAXL).map(v=>`<div class="gl-item"><div><div class="gl-name">${esc(v.folio)} · ${esc(v.equipo)}</div>
+        <div class="gl-meta">${esc(v.area)} · ${esc(v.estado)} · ${esc(v.motivo)} · 👤 ${esc(v.asignado||'sin asignar')}</div></div>
+        <div class="gl-val">${v.dias} d vencida</div></div>`).join('') + glMas(nV, MAXL);
+
+  /* ---- 3) reincidencia de fallas ---- */
+  const {corrScope, nReinc, sinCausa, pReinc, paresTop} = calcReincidencia(window._rowsAll || [], window._scopeRows || []);
   $('gestReincList').innerHTML = !corrScope.length ? '<div class="empty">Sin correctivos en el alcance filtrado.</div>'
     : !paresTop.length ? '<div class="empty">✅ Ningún equipo repitió la misma causa de falla en 90 días.</div>'
     : paresTop.slice(0,MAXL).map(p=>`<div class="gl-item"><div><div class="gl-name">${esc(eqLabelOf(p.key))}</div>
@@ -996,6 +1065,134 @@ function renderGestion(){
     <div class="kpi clickable ${prevCls}" data-gscroll="gdPrev" title="Equipos al día = equipos con frecuencia de checklist (días u horas) que no están vencidos ÷ equipos con frecuencia. Vencido = la próxima fecha ya pasó (o nunca se hizo checklist), o las horas desde el último servicio llegaron a la frecuencia en horas. Es la situación de HOY: no aplica el período; sí el área. El pie compara checklists hechos ÷ programados (días de la ventana ÷ frecuencia) en los últimos ${diasCk} días."><div class="lbl">Cumplimiento preventivo</div><div class="val">${prevVal}</div><div class="foot">${esc(prevFoot)}</div></div>
     <div class="kpi clickable ${vCls}" data-gscroll="gdVenc" title="OTs abiertas (no completadas ni anuladas) con fecha planificada anterior a hoy, o pendientes sin planificar creadas hace más de ${DIAS_SIN_PLAN_AN} días. Situación de HOY: aplica área y técnico asignado; no el período."><div class="lbl">Órdenes vencidas</div><div class="val">${_otsAbiertasErr?'—':_otsAbiertasAn==null?'…':nV}</div><div class="foot">${_otsAbiertasErr?'no se pudieron leer las OTs abiertas':_otsAbiertasAn==null?'cargando OTs abiertas…':`de ${(_otsAbiertasAn||[]).length} OT(s) abiertas en total`}</div></div>
     <div class="kpi clickable ${rCls}" data-gscroll="gdReinc" title="Correctivos del alcance filtrado cuyo mismo equipo tuvo otro correctivo con la misma causa de falla entre 1 y ${DIAS_REINC_AN} días antes ÷ total de correctivos del alcance. Los correctivos sin causa registrada cuentan en el total pero no pueden ser reincidentes."><div class="lbl">Reincidencia de fallas</div><div class="val">${pctTxt(pReinc)}</div><div class="foot">${corrScope.length?`${nReinc} de ${corrScope.length} correctivos${sinCausa?` · ${sinCausa} sin causa`:''}`:'sin correctivos en el alcance'}</div></div>`;
+  renderComparativo();
+}
+
+/* ══════ COMPARATIVO ENTRE NAVES Y POR ÁREA (25 oct 2026, Etapa 3) ══════
+   Cada fila se calcula con las MISMAS funciones del Resumen (calcKpis,
+   calcCumplimiento, calcVencidas, calcReincidencia) sobre el subconjunto de
+   esa nave / área. Aplican período, tipo, técnico, semana y causa; no la
+   nave, el área, la línea ni el equipo (se comparan todas). Cada OT va a una
+   sola nave: la suya o «Sin nave» si no se puede saber, así la suma de las
+   filas da el total. Cero lecturas: todo sale de lo que ya está en memoria. */
+const puedeComparar = () => typeof userHasRole === 'function' && (userHasRole('ADMINISTRADOR') || (userHasRole('ENCARGADO_MANTENIMIENTO','SUPERVISOR') && fbNavesDisponibles().length > 1));
+const kNave = n => n ? fbClaveNombre('plantas', n) : '';
+const kArea = a => (a && a!=='Sin área') ? fbClaveNombre('areas', a) : '';
+function filaCmp(nombre, rowsAll, eqDocs, ots, ref){
+  const preds = predsAlcance();
+  const scope = rowsAll.filter(r=>enPeriodo(r, ref) && Object.entries(preds).every(([k,f])=>k==='area' || f(r)));
+  const K = calcKpis(scope, ref);
+  const cp = calcCumplimiento(eqDocs, _ckAn.docs, ()=>true);
+  const venc = calcVencidas(ots, ()=>true);
+  const re = calcReincidencia(rowsAll, scope);
+  return { nombre, ots: scope.length, correctivos: K.correctivos.length, paroMin: K.totalDowntime, paroTotalMin: K.totalDowntimeAll,
+    mtbf: K.mtbfAvg, mttr: K.mttrAvg, disp: K.disp, prev: _equiposDocs ? cp.pAlDia : null, nFrec: cp.nFrec, alDia: cp.nFrec - cp.vencPrev.length,
+    venc: (_otsAbiertasAn==null || _otsAbiertasErr) ? null : venc.length, reinc: re.pReinc, nReinc: re.nReinc, nCorr: re.corrScope.length };
+}
+function calcComparativo(){
+  const ref = today0();
+  const base = (_rowsNaves||[]).filter(r=>parseFecha(r.fecha));
+  const mis = fbMisNaves();
+  const visible = n => !mis || !n || mis.some(x=>fbMismoNombre('plantas', x, n));
+  const eqs = (_equiposDocs||[]).filter(e=>visible(fbPlantaDeEquipo(e)));
+  const abiertas = (_otsAbiertasAn||[]).filter(o=>visible(fbNaveDe(o)));
+  // naves: las del usuario + las que aparecen en los datos (Administrador sin copia de /plantas)
+  const naves = fbNavesDisponibles().slice();
+  if (!mis) base.forEach(r=>{ if (r._nave && !naves.some(n=>kNave(n)===kNave(r._nave))) naves.push(r._nave); });
+  const filas = naves.map(n=>{
+    const k = kNave(n);
+    const f = filaCmp(n, base.filter(r=>kNave(r._nave)===k), _equiposDocs ? eqs.filter(e=>kNave(fbPlantaDeEquipo(e))===k) : null, abiertas.filter(o=>kNave(fbNaveDe(o))===k), ref);
+    f.inactiva = !fbNombreActivo('plantas', n); f.key = k; return f;
+  });
+  const sinR = base.filter(r=>!kNave(r._nave)), sinE = eqs.filter(e=>!kNave(fbPlantaDeEquipo(e))), sinO = abiertas.filter(o=>!kNave(fbNaveDe(o)));
+  const sin = filaCmp('Sin nave', sinR, _equiposDocs ? sinE : null, sinO, ref); sin.key = '';
+  if (sin.ots || sin.nFrec || sin.venc || sinR.length) filas.push(sin);
+  const total = filaCmp('Todas', base, _equiposDocs ? eqs : null, abiertas, ref);
+  // Por área, dentro de la nave elegida arriba (Todas = todas las naves visibles)
+  const rowsN = (window._rowsAll||[]);
+  const eqN = _equiposDocs ? _equiposDocs.filter(e=>fbEquipoEnNave(e)) : null;
+  const otsN = (_otsAbiertasAn||[]).filter(o=>fbEnNave(o));
+  const areaOt = o => { const eqDoc = o.equipoId && _equiposDocs ? _equiposDocs.find(e=>e.id===o.equipoId) : null; return o.equipoLocalidad || (eqDoc && eqDoc.localidad) || ''; };
+  const areas = new Map();
+  const addA = a => { const k = kArea(a); if (!areas.has(k)) areas.set(k, k ? fbNombreActual('areas', a) : 'Sin área'); };
+  rowsN.forEach(r=>addA(r.area)); (eqN||[]).forEach(e=>{ if (Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) addA(e.localidad); });
+  const porArea = [...areas.entries()].map(([k, nombre])=>filaCmp(nombre, rowsN.filter(r=>kArea(r.area)===k), eqN ? eqN.filter(e=>kArea(e.localidad)===k) : null, otsN.filter(o=>kArea(areaOt(o))===k), ref))
+    .sort((a,b)=>b.ots-a.ots || a.nombre.localeCompare(b.nombre, 'es', {numeric:true}));
+  return { filas, total, porArea, nave: fbNaveTexto() };
+}
+const fmtCmp = {
+  ots: f=>String(f.ots), correctivos: f=>String(f.correctivos), paroH: f=>(f.paroMin/60).toFixed(1)+' h', mtbf: f=>f.mtbf!=null?f.mtbf.toFixed(1)+' d':'—',
+  disp: f=>f.disp!=null?f.disp.toFixed(1)+'%':'—', prev: f=>f.prev!=null?pctTxt(f.prev):'—', venc: f=>f.venc==null?'…':String(f.venc), reinc: f=>pctTxt(f.reinc),
+};
+const valCmp = { ots: f=>f.ots, paroH: f=>Math.round(f.paroMin/6)/10, disp: f=>f.disp, prev: f=>f.prev, venc: f=>f.venc, reinc: f=>f.reinc, mtbf: f=>f.mtbf };
+const COLS_CMP = [['ots','OTs'],['correctivos','Correctivos'],['paroH','Paro por fallas'],['mtbf','MTBF prom.'],['disp','Disponibilidad'],['prev','Cumplimiento prev.'],['venc','Órdenes vencidas'],['reinc','Reincidencia']];
+function filaCmpHtml(f, cls){ return `<tr class="${cls||''}"><td class="eqname" style="white-space:nowrap;">${esc(f.nombre)}${f.inactiva?' <span class="areaname">(inactiva)</span>':''}</td>${COLS_CMP.map(([k])=>`<td class="numcell">${esc(fmtCmp[k](f))}</td>`).join('')}</tr>`; }
+function renderComparativo(){
+  const btn = $('tabNavesBtn'); if (!btn) return;
+  const ok = puedeComparar() && !!_rowsNaves;
+  btn.style.display = ok ? '' : 'none';
+  if (!ok){ window._cmp = null; if (window.currentUserRole && !puedeComparar() && $('tab-naves').classList.contains('active')) switchTab('resumen'); return; }
+  if (!$('tab-naves').classList.contains('active')) return; // se calcula solo cuando se mira (o al exportar)
+  const C = calcComparativo(); window._cmp = C;
+  const act = kNave(fbNaveActiva()||'');
+  $('cmpSub').textContent = C.filas.length+' fila(s) · '+(F.periodo==='todo' ? (_anCompleto?'todo el historial':'últimos '+MESES_AN+' meses') : 'últimos '+F.periodo+' días')
+    + (F.tipo?' · '+F.tipo:'') + (F.tecnico?' · '+F.tecnico:'') + ' · la fila resaltada es la nave elegida arriba.';
+  const head = `<tr><th>Nave</th>${COLS_CMP.map(([,t])=>`<th>${esc(t)}</th>`).join('')}</tr>`;
+  $('cmpHead').innerHTML = head;
+  $('cmpBody').innerHTML = C.filas.map(f=>filaCmpHtml(f, act && f.key===act ? 'selected-row' : '')).join('') + filaCmpHtml(C.total, '').replace('<tr class="">','<tr style="font-weight:700;border-top:2px solid var(--line);">');
+  $('cmpAreaSub').textContent = C.nave + ' · mismos indicadores por área (área registrada en la OT; equipos por su área del catálogo).';
+  $('cmpAreaHead').innerHTML = head.replace('<th>Nave</th>','<th>Área</th>');
+  $('cmpAreaBody').innerHTML = C.porArea.map(f=>filaCmpHtml(f, F.area && kArea(f.nombre)===kArea(F.area) ? 'selected-row' : '')).join('') || '<tr><td colspan="9" class="empty">Sin datos.</td></tr>';
+  // gráfica: una barra por nave, con su valor escrito al lado (el color no codifica nada)
+  const m = $('cmpMetrica').value || 'ots';
+  const filas = C.filas;
+  const lbl = filas.map(f=>f.nombre + (f.inactiva?' (inactiva)':''));
+  $('chartNavesBox').style.height = Math.max(160, filas.length*34+30)+'px';
+  mkChart('naves', 'chartNaves', {
+    type:'bar',
+    data:{labels:lbl, datasets:[{data:filas.map(f=>valCmp[m](f)==null?0:valCmp[m](f)), backgroundColor:filas.map(f=>!act||f.key===act?'#f0a930':'#f0a93066'), borderRadius:4}]},
+    options:{indexAxis:'y',
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtCmp[m==='paroH'?'paroH':m](filas[c.dataIndex])}}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:(v,c)=>fmtCmp[m](filas[c.dataIndex])}},
+      scales:{x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true,grace:'15%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
+  });
+}
+
+/* ══════ EXPORTAR A EXCEL (25 oct 2026, Etapa 3) ══════
+   Lo que se ve con los filtros activos (barra de ubicación, período, tipo,
+   técnico…). Análisis no tiene costos. Si Excel no carga, se ofrece CSV. */
+const COLS_OTS_AN = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Paro Planta','Técnicos','Min Máquina Parada','Min Técnico','Causa','Falla','Solución'];
+function hojasAnalisis(){
+  const rows = window._hasFilter ? (window._scopeRows||[]) : (window._rowsAll||[]);
+  const ubTxt = (ubic && ubic.texto()) || fbNaveTexto();
+  const perTxt = F.periodo==='todo' ? (_anCompleto?'todo el historial':'últimos '+MESES_AN+' meses') : 'últimos '+F.periodo+' días';
+  const titulo = 'Análisis de mantenimiento · ' + ubTxt + ' · ' + perTxt + [F.tipo, F.tecnico, F.semana && weekLabel(F.semana), F.causa].filter(Boolean).map(x=>' · '+x).join('') + ' · generado ' + fbHoy();
+  const hojas = [{ nombre:'OTs', titulo, columnas: COLS_OTS_AN.map(t=>({t, w: /Falla|Solución/.test(t)?40:14})),
+    filas: rows.map(r=>[r.ot,r.fecha,weekOf(r),r.area,r.tipoMaquina,r.equipo,r.pieza,r.tipoMant,r.me,r.paroPlanta,r.tecnicos,r.minMaquina,r.minTecnico,r.causa,r.falla,r.solucion]) }];
+  const k = calcKpis(window._scopeRows||[], today0());
+  hojas.push({ nombre:'Resumen', titulo, columnas:[{t:'Indicador', w:34},{t:'Valor', w:16},{t:'Detalle', w:50}], filas: [
+    ['Órdenes de trabajo', (window._scopeRows||[]).length, k.correctivos.length+' correctivas · '+k.preventivos.length+' preventivas o predictivas'],
+    ['% Correctivo', k.pctCorr, ''],
+    ['Paro por fallas (min)', k.totalDowntime, 'total todos los tipos: '+k.totalDowntimeAll+' min'],
+    ['MTBF prom. (días)', k.mtbfAvg!=null?Math.round(k.mtbfAvg*10)/10:'', k.mtbfs.length+' equipo(s)'],
+    ['MTTR (min)', k.mttrAvg!=null?Math.round(k.mttrAvg):'', k.corrM.length+' correctivo(s) con paro'],
+    ['Disponibilidad (%)', k.disp!=null?Math.round(k.disp*10)/10:'', 'MTBF ÷ (MTBF + MTTR)'],
+  ]});
+  const C = (puedeComparar() && _rowsNaves) ? calcComparativo() : null;
+  const colsC = n => [{t:n, w:22}].concat(COLS_CMP.map(([,t])=>({t, w:14})));
+  const filaC = f => [f.nombre + (f.inactiva?' (inactiva)':''), f.ots, f.correctivos, Math.round(f.paroMin/6)/10, f.mtbf!=null?Math.round(f.mtbf*10)/10:'', f.disp!=null?Math.round(f.disp*10)/10:'', f.prev!=null?Math.round(f.prev*10)/10:'', f.venc==null?'':f.venc, f.reinc!=null?Math.round(f.reinc*10)/10:''];
+  if (C){
+    hojas.push({ nombre:'Naves', titulo: 'Comparativo entre naves · paro en horas, % con un decimal · ' + perTxt, columnas: colsC('Nave'), filas: C.filas.concat([C.total]).map(filaC) });
+    hojas.push({ nombre:'Áreas', titulo: 'Por área · ' + C.nave + ' · ' + perTxt, columnas: colsC('Área'), filas: C.porArea.map(filaC) });
+  }
+  return hojas;
+}
+const nombreArchivoAn = () => fbNombreArchivo('analisis', ubic ? ubic.partes() : [], fbHoy().slice(0,7));
+function exportAnalisisExcel(){
+  const hojas = hojasAnalisis();
+  if (!hojas[0].filas.length){ $('exportStatus').textContent='No hay OTs para exportar con el filtro actual.'; return; }
+  $('exportStatus').textContent = '⏳ Preparando Excel…';
+  fbExportar({ nombre: nombreArchivoAn(), hojas, aviso: t=>{ $('exportStatus').textContent = t + ' (' + hojas[0].filas.length + ' OTs).'; } })
+    .then(f=>{ if (f==='csv-ofrecido') $('exportStatus').textContent = 'Excel no disponible: se ofreció el CSV.'; });
 }
 
 /* ---------- prioridades ---------- */
@@ -1038,7 +1235,7 @@ function renderConclusiones(ctx){
   }
   items.push({icon: ctx.pctCorr>=60?'🔴':ctx.pctCorr>=35?'🟡':'🟢', html:`<b>${ctx.pctCorr}%</b> de las OTs de este alcance son correctivas (${ctx.correctivos.length} de ${ctx.scopeRows.length}) — ${ctx.pctCorr>=60?'el trabajo es sobre todo reactivo.':ctx.pctCorr>=35?'todavía hay margen para crecer el preventivo.':'buena proporción de trabajo planificado.'}`});
   const topArea = ctx.areaSorted[0];
-  if (topArea && !F.area) items.push({icon:'🏭', html:`<b>${esc(topArea[0])}</b> concentra más correctivos (${topArea[1]}) — primer candidato para reforzar preventivo.`});
+  if (topArea && !ubicActiva()) items.push({icon:'🏭', html:`<b>${esc(topArea[0])}</b> concentra más correctivos (${topArea[1]}) — primer candidato para reforzar preventivo.`});
   const pred = window._predictive||[];
   const crit = pred.filter(p=>p.risk==='critico').sort((a,b)=>a.daysUntil-b.daysUntil), alt = pred.filter(p=>p.risk==='alto');
   if (crit.length) items.push({icon:'🚨', html:`<b>${crit.length} equipo(s)</b> en riesgo <b>crítico</b> — el más vencido: <b>${esc(crit[0].equipo)}</b> (${esc(crit[0].area)}).`});
@@ -1377,6 +1574,7 @@ function switchTab(id){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+id));
   try { history.replaceState(null, '', '#'+id); } catch(e) {}
+  if (id==='naves' && typeof renderComparativo==='function') renderComparativo(); // (Etapa 3)
   // las gráficas creadas con la pestaña oculta necesitan medir de nuevo su tamaño
   requestAnimationFrame(()=>Object.values(charts).forEach(c=>{ if (c) c.resize(); }));
 }
@@ -1397,13 +1595,13 @@ $('fPeriodo').addEventListener('change', e=>{
   }
   F.periodo = e.target.value; render();
 });
-$('fArea').addEventListener('change', e=>{ F.area = e.target.value; render(); });
 $('fTecnico').addEventListener('change', e=>{ F.tecnico = e.target.value; render(); });
 $('fTipo').addEventListener('change', e=>{ F.tipo = e.target.value; render(); });
 $('chipBox').addEventListener('click', e=>{ const b=e.target.closest('[data-chip]'); if (b){ F[b.dataset.chip]=''; render(); } });
-$('clearSelBtn').addEventListener('click',()=>{ Object.assign(F, {periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:''}); render(); });
+$('clearSelBtn').addEventListener('click',()=>{ Object.assign(F, {periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:''}); if (ubic) ubic.limpiar(); render(); });
 
 $('searchBox').addEventListener('input', renderTable);
+$('cmpMetrica').addEventListener('change', renderComparativo);
 $('riskFilter').addEventListener('change', renderTable);
 document.querySelectorAll('#predTable thead th').forEach(th=>th.addEventListener('click',()=>{ window._sortKey=th.dataset.k; renderTable(); }));
 document.querySelectorAll('#tecTable thead th').forEach(th=>th.addEventListener('click',()=>{ window._tecSortKey=th.dataset.tk; renderTecTable(); }));
@@ -1425,8 +1623,9 @@ document.addEventListener('keydown', e=>{ if (e.key==='Escape' && ficha){ closeF
 $('drawerFilterBtn').addEventListener('click', ()=>{
   if (!ficha) return;
   const k = ficha.mode==='area' ? 'area' : 'tecnico';
-  F[k] = (F[k]===ficha.val) ? '' : ficha.val;
-  closeFicha(); render();
+  const v = (F[k]===ficha.val) ? '' : ficha.val;
+  closeFicha();
+  if (k==='area') setUbicArea(v); else { F[k] = v; render(); }
 });
 
 $('appendBtn').addEventListener('click', async ()=>{
@@ -1480,6 +1679,7 @@ function otRecordToRow(doc){
   return {
     equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'', proyecto:doc.tipoReporte==='proyecto',
     ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:fbNombreActual('areas', doc.LINEA_EQUIPO)||'Sin área', // (25 oct 2026) área renombrada → nombre vigente (sin renombrar: igual que antes)
+    linea:doc.LINEA||doc.linea||'', // (25 oct 2026, Etapa 3) para el filtro por línea
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',
     tipoMant:doc.TIPO_MANTENIMIENTO||'Sin clasificar', paroPlanta:doc.PARO_PLANTA||'', tecnicos:doc.TECNICOS||'',
     minMaquina:Number(doc.TOTAL_MIN_MAQUINA)||0, minTecnico:Number(doc.TOTAL_MIN_TECNICO)||0,
@@ -1519,16 +1719,13 @@ async function exportAnalisisBackup(){
 }
 // el apóstrofo evita que Excel interprete como fórmula un texto que empieza con = + - @
 const csvEscape = v => { let s = String(v??''); if (/^[=+\-@]/.test(s) && isNaN(Number(s))) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+// (25 oct 2026, Etapa 3) Mismo contenido que la hoja "OTs" del Excel, en CSV.
+// (Antes el a.click() había quedado dentro de un comentario y no descargaba nada.)
 function exportAnalisisCSV(){
-  const rows = window._hasFilter ? (window._scopeRows||[]) : (window._rowsAll||[]);
-  if (!rows.length){ $('exportStatus').textContent='No hay OTs para exportar con el filtro actual.'; return; }
-  const headers = ['OT','Fecha','Semana','Área/Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Paro Planta','Técnicos','Min Máquina Parada','Min Técnico','Causa','Falla','Solución'];
-  let csv = headers.join(',')+'\n';
-  rows.forEach(r=>{ csv += [r.ot,r.fecha,weekOf(r),r.area,r.tipoMaquina,r.equipo,r.pieza,r.tipoMant,r.me,r.paroPlanta,r.tecnicos,r.minMaquina,r.minTecnico,r.causa,r.falla,r.solucion].map(csvEscape).join(',')+'\n'; });
-  const url = URL.createObjectURL(new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8'}));
-  const a = document.createElement('a'); a.href=url; a.download='reporte_analisis'+(window._hasFilter?'_filtrado':'')+'_'+fbHoy()+'.csv'; // (5 oct 2026) fecha local, no UTC a.click();
-  URL.revokeObjectURL(url);
-  $('exportStatus').textContent = `📊 Reporte exportado (${rows.length} OTs) — ábrelo con Excel.`;
+  const hojas = hojasAnalisis().slice(0,1);
+  if (!hojas[0].filas.length){ $('exportStatus').textContent='No hay OTs para exportar con el filtro actual.'; return; }
+  fbExportar({ nombre: nombreArchivoAn(), hojas, csv:true });
+  $('exportStatus').textContent = `📊 Reporte exportado (${hojas[0].filas.length} OTs) — ábrelo con Excel.`;
 }
 
 /* ---------- init ---------- */
@@ -1603,31 +1800,45 @@ function cargarHistorialCompletoAn(){
   }).finally(()=>{ _cargandoCompletoAn = null; });
   return _cargandoCompletoAn;
 }
-function combinarOtsAn(){
-  // orden estable por id de documento: el dedupe por número de OT siempre conserva el mismo documento
-  const docs = [..._docsAnViejos, ..._docsAnRecientes];
-  // (5 oct 2026) Fuera las OTs anuladas (reportes duplicados) y los avisos
-  // (operador/qr) y OTs de checklist que todavía no están completadas: es el
-  // mismo filtro que usa Bitácora. (Los abiertos no suelen tener FECHA, pero
-  // un aviso en atención o una OT de checklist sí podrían traerla.)
-  const porId = new Map();
-  docs.forEach(d=>porId.set(d.id, d));
-  // (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba. Con "Todas"
-  // no se quita ninguna: los KPIs (MTBF, disponibilidad…) quedan iguales.
-  const rows = [...porId.values()].filter(d=>fbEnNave(d.data())).map(d=>({...otRecordToRow(d.data()), _id:d.id}))
+// (5 oct 2026) Fuera las OTs anuladas (reportes duplicados) y los avisos
+// (operador/qr) y OTs de checklist que todavía no están completadas: es el
+// mismo filtro que usa Bitácora. (Los abiertos no suelen tener FECHA, pero
+// un aviso en atención o una OT de checklist sí podrían traerla.)
+// Orden estable por id de documento: el dedupe por número de OT siempre conserva el mismo documento.
+function filasDeDocsAn(docs){
+  const rows = docs.map(d=>({...otRecordToRow(d.data()), _id:d.id, _nave:fbNaveDe(d.data())}))
     .filter(r=>r.estado!=='anulada' && !(['operador','checklist','qr'].includes(r.origen) && r.estado!=='completada'))
     .sort((a,b)=>a._id.localeCompare(b._id));
   const vistos = new Set();
-  allRows = rows.filter(r=>{
+  return rows.filter(r=>{
     const k = (r.ot||'').trim();
     if (!k) return true;
     if (vistos.has(k)) return false;
     vistos.add(k); return true;
   });
+}
+function combinarOtsAn(){
+  const porId = new Map();
+  [..._docsAnViejos, ..._docsAnRecientes].forEach(d=>porId.set(d.id, d));
+  const todos = [...porId.values()];
+  // (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba. Con "Todas"
+  // no se quita ninguna: los KPIs (MTBF, disponibilidad…) quedan iguales.
+  allRows = filasDeDocsAn(todos.filter(d=>fbEnNave(d.data())));
+  // (25 oct 2026, Etapa 3) Comparativo entre naves: mismas OTs (ya en memoria,
+  // sin lecturas), de todas las naves que el usuario puede ver.
+  if (puedeComparar()){
+    const mis = fbMisNaves();
+    _rowsNaves = filasDeDocsAn(todos.filter(d=>{ const n = fbNaveDe(d.data()); return !mis || !n || mis.some(x=>fbMismoNombre('plantas', x, n)); }));
+  } else _rowsNaves = null;
   render();
 }
 
 window.fbReady.then(()=>{
+  // (25 oct 2026, Etapa 3) Barra de filtros Nave → Área → Línea → Equipo.
+  ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'analisis',
+    extras: () => ({ areas: [...new Set((window._rowsAll||[]).map(r=>r.area).filter(a=>a && a!=='Sin área'))], lineas: [...new Set((window._rowsAll||[]).map(r=>r.linea).filter(Boolean))] }),
+    onChange: () => render() });
+  F.area = ubic.get().area;
   // (5 oct 2026) Catálogo de equipos: nombre oficial para las OTs con equipoId
   // y para unir OTs viejas (sin id) cuyo nombre coincide con un equipo.
   fbEquiposCatalogo(false).then(s=>{ // (5 oct 2026) caché de 12 h
@@ -1637,7 +1848,7 @@ window.fbReady.then(()=>{
     _equiposCat = cat; _equiposPorNombre = porNombre;
     // (14 oct 2026) docs completos para el cumplimiento preventivo (frecuencias y próximas fechas)
     _equiposDocs = s.docs.map(d=>({id:d.id, ...(d.data()||{})}));
-    if (fbNavesFiltro() && (_docsAnRecientes.length || _docsAnViejos.length)) combinarOtsAn(); // (25 oct 2026) la nave de las OTs viejas sale del catálogo
+    if ((fbNavesFiltro() || puedeComparar()) && (_docsAnRecientes.length || _docsAnViejos.length)) combinarOtsAn(); // (Etapa 3) también para el comparativo // (25 oct 2026) la nave de las OTs viejas sale del catálogo
     else if (allRows.length) render(); else renderGestion();
   }).catch(err=>{
     console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err);

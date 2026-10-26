@@ -16,6 +16,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <script src="filtros.js"></script>
   <!-- Comparación con Maximo/SAP (28 sep 2026): QR por equipo para abrir su
        checklist directo desde el celular, sin buscarlo en la lista — con 26
        máquinas de Weaving casi idénticas entre sí, el riesgo de llenar el
@@ -165,6 +166,8 @@
   <!-- SCREEN: HOY -->
   <div class="screen active" id="screen-hoy">
     <div id="hoy-lista-wrap">
+      <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo (vencidos y lista) -->
+      <div class="card" id="fUbicHoyCard" style="display:none;padding:10px;"><div id="fUbicHoy"></div></div>
       <div class="card">
         <div class="card-title">🔔 Hoy te toca</div>
         <div class="card-sub">Equipos con checklist vencido o que vence hoy</div>
@@ -208,6 +211,9 @@
   <div class="screen" id="screen-historial">
     <div class="card-title" style="margin-bottom:4px">📂 Historial de Checklists</div>
     <div class="card-sub" style="margin-bottom:12px">Últimos checklists guardados</div>
+    <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo + Excel de lo que se ve -->
+    <div class="card" id="fUbicHistCard" style="display:none;padding:10px;"><div id="fUbicHist"></div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="exportHistorialExcel()">⬇️ Excel de esta lista</button></div>
     <button class="btn secondary sm" onclick="exportChecklistsBackup()" style="margin-bottom:12px;" title="Descarga TODO el historial de checklists, no solo los últimos 30 que se ven arriba">⬇ Exportar respaldo completo (JSON)</button>
     <div id="historial-lista"></div>
   </div>
@@ -515,6 +521,11 @@ document.addEventListener('DOMContentLoaded', () => {
   window.fbReady.then(() => {
     document.getElementById('header-sub').textContent =
       (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
+    // (25 oct 2026, Etapa 3) barras de filtro (sin lecturas: catálogo y listas ya guardados)
+    ubicHoy = fbFiltroUbicacion({ el: document.getElementById('fUbicHoy'), pagina: 'checklist-hoy', onChange: () => renderHoy() });
+    ubicHist = fbFiltroUbicacion({ el: document.getElementById('fUbicHist'), pagina: 'checklist-historial', onChange: () => renderHistorial() });
+    document.getElementById('fUbicHoyCard').style.display = '';
+    document.getElementById('fUbicHistCard').style.display = '';
     loadTecnicos();
     loadEquipos();
     loadOts();
@@ -536,6 +547,10 @@ document.addEventListener('DOMContentLoaded', () => {
 const enNave = r => typeof fbEnNave !== 'function' || fbEnNave(r);
 const equipoEnNave = e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e);
 const equiposDeNave = () => currentEquipos.filter(equipoEnNave);
+// (25 oct 2026, Etapa 3) Filtro de área / línea / equipo de cada pantalla ("Todas" = no quita nada).
+let ubicHoy = null, ubicHist = null;
+const enUbicHoy = e => !ubicHoy || ubicHoy.coincideEquipo(e);
+const enUbicHist = c => !ubicHist || ubicHist.coincide(c);
 function cambioDeNaveCk() {
   renderHoy();
   renderConfig();
@@ -695,14 +710,14 @@ function renderHoy() {
   const hoy = todayStr();
   const busca = (document.getElementById('hoy-buscar').value || '').trim().toLowerCase();
 
-  const vencidos = equiposDeNave().filter(e =>
+  const vencidos = equiposDeNave().filter(enUbicHoy).filter(e =>
     (e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoy)) || horometroVencido(e)
   );
   const wrapV = document.getElementById('hoy-vencidos');
   wrapV.innerHTML = vencidos.length ? vencidos.map(e => itemRowHtml(e, true)).join('') :
     `<div class="empty" style="padding:20px 10px;"><span class="emoji">✅</span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
 
-  const todos = equiposDeNave().filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const todos = equiposDeNave().filter(enUbicHoy).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   const wrapT = document.getElementById('hoy-todos');
   wrapT.innerHTML = todos.length ? todos.map(e => itemRowHtml(e, false)).join('') :
     `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
@@ -1170,9 +1185,12 @@ function loadChecklists() {
 
 function renderHistorial() {
   const wrap = document.getElementById('historial-lista');
-  const currentChecklists = currentChecklistsTodos().filter(enNave); // (25 oct 2026) nave elegida
+  const currentChecklists = currentChecklistsTodos().filter(enNave).filter(enUbicHist); // (25 oct 2026) nave elegida + filtro (Etapa 3)
+  window._histCk = currentChecklists;
   if (!currentChecklists.length) {
-    wrap.innerHTML = `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
+    wrap.innerHTML = ubicHist && ubicHist.activo() && currentChecklistsTodos().some(enNave)
+      ? `<div class="empty"><span class="emoji">🔍</span><p>Ningún checklist de ${fbEsc(ubicHist.texto())} entre los últimos guardados.</p></div>`
+      : `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
     return;
   }
   wrap.innerHTML = currentChecklists.map(c => {
@@ -1201,6 +1219,19 @@ function renderHistorial() {
       <div class="hist-det">${det || '<div class="item-sub">Sin detalle.</div>'}</div>
     </div>`;
   }).join('');
+}
+
+// (25 oct 2026, Etapa 3) Excel de los checklists que se ven (con el filtro). Sin costos.
+function exportHistorialExcel() {
+  const lista = window._histCk || [];
+  if (!lista.length) { showToast('⚠️ No hay checklists en la lista', 'error'); return; }
+  const filtro = ubicHist ? ubicHist.partes() : [];
+  const cnt = (c, k) => (Array.isArray(c.items) ? c.items : []).filter(i => i.resultado === k).length;
+  const hojas = [{ nombre: 'Checklists', titulo: 'Checklists · ' + (filtro.join(' · ') || 'todas las naves') + ' · últimos guardados · generado ' + todayStr(),
+    columnas: ['Fecha', 'Equipo', 'Área', 'Técnicos', 'Resultado', 'Conformes', 'Fallas', 'N/A', 'Puntos con falla'].map(t => ({ t, w: t === 'Puntos con falla' ? 60 : /Equipo|Técnicos|Área/.test(t) ? 24 : 12 })),
+    filas: lista.map(c => [c.fecha || '', c.equipoNombre || '', c.equipoLocalidad || '', (c.tecnicos || []).join(', '), c.tieneFallas ? 'Con fallas' : 'OK', cnt(c, 'ok'), cnt(c, 'falla'), cnt(c, 'na'),
+      (Array.isArray(c.items) ? c.items : []).filter(i => i.resultado === 'falla').map(i => (i.punto || '') + (i.nota ? ' (' + i.nota + ')' : '')).join(' | ')]) }];
+  fbExportar({ nombre: fbNombreArchivo('checklist', filtro, todayStr().slice(0, 7)), hojas, aviso: m => showToast(m) });
 }
 
 // Foto guardada en /fotos_repuestos (se lee solo cuando alguien la pide).

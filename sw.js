@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v50'; // (25 oct 2026) Etapa 2: nave en todo (selector de nave, filtros, Administración → Naves, completar nave)
+const CACHE = 'mantenimiento-v51'; // (25 oct 2026) Etapa 3: reportes filtrables por áreas (filtros.js, comparativo entre naves, Excel)
 const ASSETS = [
   './',
   'index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',
+  'filtros.js', // (25 oct 2026, Etapa 3) barra de filtros y exportar a Excel
   'login.html',
   'tecnicos.json',
   'icon-192.png',

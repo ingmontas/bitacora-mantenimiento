@@ -574,7 +574,13 @@ function fbRegistrarNombres(tipo, docs) {
     localStorage.setItem(FB_NOM_LS, JSON.stringify(c));
   } catch (e) {}
   if (tipo === 'plantas' && typeof document !== 'undefined') _fbPintarSelectorNave();
+  _fbAvisarCatalogo();
 }
+// (25 oct 2026, Etapa 3) Aviso a quien muestre listas de áreas/líneas/equipos
+// (barra de filtros, filtros.js) cuando llega el catálogo o las listas. Sin lecturas.
+const _fbCatOyentes = [];
+function fbOnCatalogo(cb) { if (typeof cb === 'function') _fbCatOyentes.push(cb); }
+function _fbAvisarCatalogo() { _fbCatOyentes.forEach(cb => { try { cb(); } catch (e) { console.error(e); } }); }
 (function () { // copia guardada en el celular → disponible al instante
   try {
     const c = JSON.parse(localStorage.getItem(FB_NOM_LS) || '{}') || {};
@@ -617,12 +623,20 @@ function _fbEqIdxReconstruirNombres() {
 try { _fbEqIdx = JSON.parse(localStorage.getItem(FB_EQIDX_LS) || '{}') || {}; _fbEqIdxReconstruirNombres(); } catch (e) { _fbEqIdx = {}; }
 function fbIndexarEquipos(lista) {
   const idx = {};
-  (lista || []).forEach(e => { if (e && e.id) idx[e.id] = [String(e.planta || ''), String(e.localidad || ''), String(e.nombre || '')]; });
+  // (25 oct 2026, Etapa 3) + línea y si está activo (posiciones 3 y 4; una copia vieja sin ellas sigue sirviendo)
+  (lista || []).forEach(e => { if (e && e.id) idx[e.id] = [String(e.planta || ''), String(e.localidad || ''), String(e.nombre || ''), String(e.linea || ''), e.activo === false ? 0 : 1]; });
   _fbEqIdx = idx; _fbEqIdxReconstruirNombres();
   try { localStorage.setItem(FB_EQIDX_LS, JSON.stringify(idx)); } catch (e) {}
   // sin copia de /plantas en el celular, las naves salen de los equipos: se repinta el selector
   if (!_fbNom.plantas.docs.length && typeof document !== 'undefined') _fbPintarSelectorNave();
+  _fbAvisarCatalogo();
 }
+// Equipos del catálogo ya leído (copia en memoria): [{id, planta, localidad, nombre, linea, activo}].
+function fbEquiposIndice() {
+  return Object.keys(_fbEqIdx).map(id => { const x = _fbEqIdx[id] || []; return { id, planta: x[0] || '', localidad: x[1] || '', nombre: x[2] || '', linea: x[3] || '', activo: x[4] !== 0 }; });
+}
+// id del equipo con ese nombre (sin mayúsculas/acentos/espacios); '' si no hay o se repite.
+function fbEquipoIdPorNombre(n) { return (n && _fbEqPorNombre.get(_fbK(n))) || ''; }
 // Nave de un equipo: su campo planta o, si no tiene, la del área (localidad).
 function fbPlantaDeEquipo(e) {
   if (!e) return '';

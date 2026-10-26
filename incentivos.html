@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <script src="filtros.js"></script>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        INCENTIVOS POR CUMPLIMIENTO (20 oct 2026)
@@ -99,6 +100,8 @@
   <small id="header-sub">Cargando...</small>
 </div>
 
+<!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo: qué técnicos y trabajos se muestran -->
+<div class="wrap" id="fUbicWrap" style="display:none;padding-bottom:0;"><div class="card" style="margin-bottom:0;padding:10px;"><div id="fUbic"></div></div></div>
 <div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
@@ -228,6 +231,8 @@ window.fbReady.then(async () => {
   // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json;
   // mismos {nombre, corto}, así el emparejamiento de nombres no cambia.
   try { prepararTecnicos(await fbTecnicos()); } catch (e) { console.warn('técnicos:', e.message); }
+  ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'incentivos', onChange: () => render() }); // (25 oct 2026, Etapa 3)
+  $('fUbicWrap').style.display = '';
   try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); }
   catch (e) { console.warn('incentivos_config:', e.message); toast('⚠️ No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
   const pedida = lunesDeId(decodeURIComponent((location.hash || '').slice(1)));
@@ -480,6 +485,7 @@ function tarjetaHtml(f, v) {
   const MAXD = 8;
   const bajo = f.bajo.length ? `<div class="det">Lo que bajó su puntaje:${f.bajo.slice(0, MAXD).map(t => `<span class="m">• ${esc(t)}</span>`).join('')}${f.bajo.length > MAXD ? `<span class="i">… y ${f.bajo.length - MAXD} más (ver Excel)</span>` : ''}</div>` : '';
   const info = f.info.length ? `<div class="det">${f.info.slice(0, 4).map(t => `<span class="i">ℹ️ ${esc(t)}</span>`).join('')}${f.info.length > 4 ? `<span class="i">… y ${f.info.length - 4} más</span>` : ''}</div>` : '';
+  const enF = f.enFiltro ? `<div class="det">📍 En el filtro (${f.enFiltro.length}): ${esc(f.enFiltro.slice(0, 6).join(' · '))}${f.enFiltro.length > 6 ? ' …' : ''}</div>` : '';
   const adj = f.ajuste ? `<div class="adj">✏️ Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : '';
   let pie;
   if (f.sinDatos) pie = `<span>Sin trabajos esta semana</span><b>${money(f.monto)}</b>`;
@@ -490,7 +496,7 @@ function tarjetaHtml(f, v) {
     <div class="top"><b>${esc(f.nombre)}</b><span class="pct" style="color:${col}">${f.sinDatos ? '—' : f.puntaje + '%'}</span></div>
     <div class="bar"><i style="width:${f.sinDatos ? 0 : Math.max(0, Math.min(100, f.puntaje))}%;background:${col}"></i></div>
     <div class="crit">${crit}</div>
-    ${bajo}${info}${adj}${sinSal}
+    ${bajo}${info}${enF}${adj}${sinSal}
     <div class="monto">${pie}</div>
   </div>`;
 }
@@ -505,10 +511,36 @@ function vistaDeNave(v) {
   const cd = filas.filter(f => !f.sinDatos);
   return { ...v, filas, promedio: cd.length ? Math.round(cd.reduce((s, f) => s + f.puntaje, 0) / cd.length) : null, total: r2(filas.reduce((s, f) => s + f.monto, 0)), parcial: filas.length !== v.filas.length };
 }
+// (25 oct 2026, Etapa 3) Filtro de área / línea / equipo: se muestran solo los
+// técnicos con trabajo de la semana en ese filtro (checklists, OTs planificadas,
+// avisos y trabajos realizados, ya leídos: sin lecturas extra) y, en cada
+// tarjeta, cuáles fueron. Su puntaje y monto NO cambian (son de toda su semana).
+// Una semana aprobada no guarda las OTs: ahí el filtro de área no se aplica.
+let ubic = null;
+function trabajosEnUbic(d) {
+  const m = new Map();
+  const add = (keys, t) => keys.forEach(k => { if (!m.has(k)) m.set(k, []); if (!m.get(k).includes(t)) m.get(k).push(t); });
+  const en = o => ubic.coincide(o);
+  const sem = f => f >= d.lunes && f <= d.domingo;
+  d.ck.filter(x => sem(x.fecha) && en(x)).forEach(x => add(tecsEn([].concat(x.tecnicos || [], x.tecnico || [])), 'Checklist ' + equipoDe(x) + ' ' + ddmm(x.fecha)));
+  d.otPlan.filter(o => !anulada(o) && sem(o.fechaPlanificada) && en(o)).forEach(o => add(tecsEn(o.asignadoA), folioDe(o) + ' ' + equipoDe(o)));
+  d.otRep.filter(o => esAviso(o) && !anulada(o) && sem(o.fechaReporte) && en(o)).forEach(o => { let k = tecsEn(o.asignadoA); if (!k.length && o.estado === 'completada') k = tecsEn(o.TECNICOS); add(k, folioDe(o) + ' ' + equipoDe(o)); });
+  d.otFecha.filter(o => sem(o.FECHA) && !anulada(o) && en(o)).forEach(o => add(tecsEn(o.TECNICOS), folioDe(o) + ' ' + equipoDe(o)));
+  d.otReal.filter(o => !anulada(o) && en(o)).forEach(o => { const f = tsFecha(o.trabajoRealizadoEn); if (!f || !sem(f)) return; let k = tecsEn(o.trabajoRealizadoPor); if (!k.length) k = tecsEn(o.asignadoA); add(k, folioDe(o) + ' ' + equipoDe(o)); });
+  return m;
+}
+function vistaDeUbic(v) {
+  if (!ubic || !ubic.activo()) return v;
+  if (v.congelada) return { ...v, ubicNoAplica: true };
+  const m = trabajosEnUbic(DATOS);
+  const filas = v.filas.filter(f => m.has(f.key)).map(f => ({ ...f, enFiltro: m.get(f.key) }));
+  const cd = filas.filter(f => !f.sinDatos);
+  return { ...v, filas, promedio: cd.length ? Math.round(cd.reduce((s, f) => s + f.puntaje, 0) / cd.length) : null, total: r2(filas.reduce((s, f) => s + f.monto, 0)), parcial: true };
+}
 function render() {
   if (!DATOS || DATOS.id !== SEM) return;
   const vTodas = semanaVista();
-  const v = vistaDeNave(vTodas);
+  const v = vistaDeUbic(vistaDeNave(vTodas));
   window.__inc = { semana: SEM, vista: v, vistaTodas: vTodas }; // (para las pruebas automáticas)
   const hoyL = lunesDe(new Date());
   const terminada = DATOS.domingo < fbHoy();
@@ -523,7 +555,8 @@ function render() {
   const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px">ℹ️ Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
   $('view').innerHTML = cabeceraHtml(v)
     + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en la lista (⚙️ Administración → Usuarios).</div>')
-    + notaCk + (v.parcial ? `<div class="nota" style="margin:0 2px 10px">🏭 Mostrando los técnicos de ${esc(fbNaveTexto())} (${v.filas.length} de ${vTodas.filas.length}). Aprobar guarda la semana de todos (${esc(money(vTodas.total))}).</div>` : '') + botones
+    + notaCk + (v.parcial ? `<div class="nota" style="margin:0 2px 10px">🏭 Mostrando los técnicos ${ubic && ubic.activo() ? 'con trabajo en ' + esc(ubic.texto()) : 'de ' + esc(fbNaveTexto())} (${v.filas.length} de ${vTodas.filas.length}). Su puntaje y monto son de toda su semana. Aprobar guarda la semana de todos (${esc(money(vTodas.total))}).</div>` : '')
+    + (v.ubicNoAplica ? '<div class="nota" style="margin:0 2px 10px">📍 Semana aprobada: se guardó sin el detalle de las OTs, así que el filtro de área / línea / equipo no se aplica (solo el de nave).</div>' : '') + botones
     + `<div class="nota" style="text-align:center;margin-top:12px">${v.congelada ? 'Toca un técnico para ver su detalle.' : 'Toca un técnico para poner un ajuste (+/− RD$).'} Pesos: ${CRITERIOS.map(x => esc(x.nombre) + ' ' + esc((v.congelada && (sd.reglas || {}).pesos ? sd.reglas.pesos : CFG.pesos)[x.k]) + '%').join(' · ')}.</div>`;
   bindCabecera();
   $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => modalAjuste(el.dataset.tec, v));
@@ -627,23 +660,20 @@ function marcarPagada(si) {
   escribir(semRef().update(cambios), si ? '💵 Semana marcada como pagada' : 'Se quitó la marca de pagada', () => cargarSemana(true));
 }
 
-// ══════ EXCEL (CSV con ; para Excel en español) ══════
+// ══════ EXCEL ══════
+// (25 oct 2026, Etapa 3) .xlsx de lo que se ve (nave y filtro de área / línea /
+// equipo); si Excel no carga se ofrece el CSV con lo mismo. Solo Administrador.
 function descargarExcel(v) {
-  const cel = x => { const s = String(x == null ? '' : x).replace(/\r?\n/g, ' '); const formula = /^[=+\-@]/.test(s) && !/^-?\d+(,\d+)?$/.test(s); return /[;"]/.test(s) || formula ? '"' + (formula ? "'" : '') + s.replace(/"/g, '""') + '"' : s; };
-  const num = n => n == null ? '' : String(r2(n)).replace('.', ',');
   const estado = v.congelada ? ((DATOS.semDoc || {}).pagada ? 'Pagada' : 'Aprobada') : 'Borrador';
-  const filas = [['Semana', 'Desde', 'Hasta', 'Técnico', ...CRITERIOS.map(x => x.nombre + ' %'), 'Puntaje %', 'Base semanal RD$', 'Monto por puntaje RD$', 'Ajuste RD$', 'Motivo del ajuste', 'Total a pagar RD$', 'Estado', 'Lo que bajó su puntaje', 'Notas']];
-  v.filas.forEach(f => filas.push([SEM, ddmmaa(DATOS.lunes), ddmmaa(DATOS.domingo), f.nombre,
+  const conF = v.filas.some(f => f.enFiltro);
+  const cols = ['Semana', 'Desde', 'Hasta', 'Técnico', ...CRITERIOS.map(x => x.nombre + ' %'), 'Puntaje %', 'Base semanal RD$', 'Monto por puntaje RD$', 'Ajuste RD$', 'Motivo del ajuste', 'Total a pagar RD$', 'Estado', 'Lo que bajó su puntaje', 'Notas'].concat(conF ? ['Trabajos en el filtro'] : []);
+  const filas = v.filas.map(f => [SEM, ddmmaa(DATOS.lunes), ddmmaa(DATOS.domingo), f.nombre,
     ...CRITERIOS.map(x => { const c = f.criterios[x.k] || {}; return c.v == null ? '—' : Math.round(c.v * 100); }),
-    f.sinDatos ? 'sin trabajos' : f.puntaje, num(f.base), num(f.montoCalc), num(f.ajuste), f.motivo, num(f.monto), estado, f.bajo.join(' | '), f.info.join(' | ')]));
-  filas.push(['', '', '', 'TOTAL', '', '', '', '', v.promedio == null ? '' : v.promedio, '', '', '', '', num(v.total), '', '', '']);
-  const csv = '﻿' + filas.map(r => r.map(cel).join(';')).join('\r\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = 'incentivos_' + SEM + '.csv';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast('⬇️ Excel descargado');
+    f.sinDatos ? 'sin trabajos' : f.puntaje, r2(f.base), r2(f.montoCalc), r2(f.ajuste), f.motivo, r2(f.monto), estado, f.bajo.join(' | '), f.info.join(' | ')].concat(conF ? [(f.enFiltro || []).join(' | ')] : []));
+  filas.push(['', '', '', 'TOTAL', '', '', '', '', v.promedio == null ? '' : v.promedio, '', '', '', '', r2(v.total), '', '', ''].concat(conF ? [''] : []));
+  const filtro = ubic ? ubic.partes() : [fbNaveActiva()].filter(Boolean);
+  const titulo = 'Incentivos · semana ' + SEM + ' (' + ddmmaa(DATOS.lunes) + ' a ' + ddmmaa(DATOS.domingo) + ') · ' + (filtro.length ? filtro.join(' · ') : 'todos los técnicos') + ' · ' + estado;
+  fbExportar({ nombre: fbNombreArchivo('incentivos', filtro, SEM), hojas: [{ nombre: 'Incentivos ' + SEM, titulo, columnas: cols.map(t => ({ t, w: /bajó|Notas|Trabajos/.test(t) ? 50 : /Técnico|Motivo/.test(t) ? 26 : 13 })), filas }], aviso: m => toast(m) });
 }
 
 // ══════ REGLAS Y SALARIOS ══════

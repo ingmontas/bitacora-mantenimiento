@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+  <script src="filtros.js"></script>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        RENTABILIDAD DE EQUIPOS (22 oct 2026)
@@ -122,6 +123,8 @@
   <small id="header-sub">Cargando...</small>
 </div>
 
+<!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo -->
+<div class="wrap" id="fUbicWrap" style="display:none;padding-bottom:0;"><div class="card" style="margin-bottom:0;padding:10px;"><div id="fUbic"></div></div></div>
 <div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
@@ -371,7 +374,13 @@ async function asegurarRango(desde, hasta) {
 }
 // (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba (se quita
 // después de depurar, así cada OT cuesta lo mismo; "Todas" = igual que antes).
-const otsEntre = (desde, hasta) => depurar(mesesEntre(desde, hasta).flatMap(m => MES_DOCS.get(m) || []).filter(o => o.FECHA >= desde && o.FECHA <= hasta)).filter(o => fbEnNave(o));
+// (25 oct 2026, Etapa 3) + filtro de área / línea / equipo (barra de filtros),
+// también después de depurar. En el comparativo por nave (_cmpNave) cada OT va
+// a una sola nave: la suya, o '' = sin nave conocida; '*' = todas.
+let ubic = null, _cmpNave = null;
+const kNaveR = n => n ? fbClaveNombre('plantas', n) : '';
+const enFiltroR = o => _cmpNave !== null ? (_cmpNave === '*' || kNaveR(fbNaveDe(o)) === _cmpNave) : (fbEnNave(o) && (!ubic || ubic.coincide(o)));
+const otsEntre = (desde, hasta) => depurar(mesesEntre(desde, hasta).flatMap(m => MES_DOCS.get(m) || []).filter(o => o.FECHA >= desde && o.FECHA <= hasta)).filter(enFiltroR);
 
 // ══════ PERÍODO ══════
 // 'anio:AAAA' (año calendario; el actual va hasta hoy y se proyecta a 12
@@ -560,7 +569,9 @@ window.fbReady.then(async () => {
     return;
   }
   const h = (location.hash || '').slice(1).split('/');
-  if (['mes', 'anio', 'equipo'].includes(h[0])) UI.tab = h[0];
+  if (['mes', 'anio', 'equipo', 'nave'].includes(h[0])) UI.tab = h[0];
+  ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'rentabilidad', onChange: () => pintar() }); // (25 oct 2026, Etapa 3)
+  $('fUbicWrap').style.display = '';
   UI.per = periodoDe('anio:' + fbHoy().slice(0, 4)).id;
   UI.mes = mesDe(fbHoy());
   await cargarBase();
@@ -588,7 +599,7 @@ async function cargarBase() {
 
 function cabecera() {
   const per = periodoDe(UI.per);
-  const tabs = [['mes', 'Mes'], ['anio', 'Año'], ['equipo', 'Por equipo']];
+  const tabs = [['mes', 'Mes'], ['anio', 'Año'], ['equipo', 'Por equipo'], ['nave', 'Por nave']];
   let sel;
   if (UI.tab === 'mes') {
     const hoyM = mesDe(fbHoy()); const ops = []; for (let i = 0; i < 24; i++) ops.push(mesSuma(hoyM, -i));
@@ -629,6 +640,7 @@ async function pintar() {
       const per = periodoDe(UI.per);
       await asegurarRango(mesSuma(mesDe(per.hasta), -5) + '-01' < per.desde ? mesSuma(mesDe(per.hasta), -5) + '-01' : per.desde, per.hasta);
       if (n !== _pintando) return;
+      if (UI.tab === 'nave') { vistaNave(per); return; } // (Etapa 3)
       const R = calcularPeriodo(per); RES = R;
       if (UI.tab === 'anio') vistaAnio(R); else vistaEquipo(R);
     }
@@ -671,14 +683,15 @@ function vistaAnio(R) {
     <div class="kpi"><span>Semáforo</span><b style="font-size:15px;white-space:nowrap">🔴${cnt.rojo} 🟡${cnt.amarillo} 🟢${cnt.verde}</b><small>⚪${cnt.gris} sin datos · ${nEq} equipos</small></div>
     <div class="kpi"><span>Faltan datos</span><b>${pctFalta} %</b><small>equipos sin precio de una nueva</small></div></div>`;
   const cols = columnasMes(R.meses, R.porMes, R.meses.length <= 7);
-  const graf = cardGrafica('Costo de mantenimiento por mes', (fbNavesFiltro() ? fbNaveTexto() : 'Toda la planta') + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
+  const graf = cardGrafica('Costo de mantenimiento por mes', (ubic && ubic.activo() ? ubic.texto() : fbNavesFiltro() ? fbNaveTexto() : 'Toda la planta') + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
   const lim = UI.verTodos ? R.equipos.length : 15;
   const cards = R.equipos.slice(0, lim).map(E => tarjetaEquipo(E, per)).join('');
   $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + graf
     + `<div class="ct" style="margin:6px 2px 8px">¿Seguir o reemplazar? <span style="font-weight:400;color:var(--muted);font-size:12px">· costo por año${per.parcial ? ', proyectado a 12 meses' : ''}</span></div>`
     + (nEq ? legendHtml() + cards + (nEq > lim ? `<button class="btn2" style="width:100%;margin-bottom:10px" id="bTodos">Ver los ${nEq} equipos</button>` : '') : '<div class="card empty">No hay trabajos registrados en este período.</div>')
+    + btnExcel()
     + `<div class="nota" style="margin-top:6px">«Una nueva» = precio de la máquina nueva ÷ años de vida útil + su mantenimiento esperado (% del precio). 🔴 cuando mantenerla cuesta igual o más que una nueva; 🟡 cuando llega al 70 % o el costo de los últimos 3 meses sube más de 25 %; 🟢 cuando cuesta mucho menos; ⚪ cuando falta el precio de la nueva. Los proyectos cuentan en el costo pero no en el análisis de fallas. Toca un equipo para ver su detalle.</div>`;
-  bindCabecera();
+  bindCabecera(); bindExcel(R);
   if ($('bTodos')) $('bTodos').onclick = () => { UI.verTodos = true; vistaAnio(R); };
   document.querySelectorAll('[data-eq]').forEach(el => el.onclick = e => { if (e.target.closest('[data-tip]')) return; UI.eq = el.dataset.eq; UI.tab = 'equipo'; pintar(); window.scrollTo(0, 0); });
 }
@@ -733,9 +746,9 @@ function vistaMes(desde6, hasta) {
   const tablaT = trabajos.length ? `<div class="card"><div class="ct">Trabajos más caros</div><div class="cs">${esc(nombreMes(m))} · RD$</div><div class="tw"><table><tr><th>Folio · equipo</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
     + trabajos.map(x => `<tr data-eq="${esc(x.key)}" style="cursor:pointer"><td><b>${esc(folioDe(x.o))}</b> ${esc(x.eq)}${x.proyecto ? ' <span class="tag info">proyecto</span>' : ''}</td>${COMP.map(cp => `<td class="r">${esc(corto(x.c[cp.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(x.total))}</b></td></tr>`).join('') + '</table></div></div>' : '';
   $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + g1 + g2 + tablaEq + tablaR + tablaT
-    + (R.ots.length ? '' : '<div class="card empty">No hay trabajos registrados en este mes.</div>')
+    + (R.ots.length ? '' : '<div class="card empty">No hay trabajos registrados en este mes.</div>') + btnExcel()
     + `<div class="nota">Cómo se calcula cada trabajo: <b>min del técnico × costo hora</b> (salario en Incentivos ÷ ${esc(CFG.defaults.horasMesTecnico)} h) + <b>min de paro × operadores × costo hora operador</b> + <b>un arranque por cada paro</b> + <b>repuestos × costo unitario</b> (inventario del mes).</div>`;
-  bindCabecera();
+  bindCabecera(); bindExcel(R);
   document.querySelectorAll('tr[data-eq]').forEach(el => el.onclick = () => { UI.eq = el.dataset.eq; UI.tab = 'equipo'; UI.per = periodoDe('anio:' + m.slice(0, 4)).id; pintar(); window.scrollTo(0, 0); });
 }
 
@@ -766,9 +779,84 @@ function vistaEquipo(R) {
   const tabla = `<div class="card"><div class="ct">Trabajos del período</div><div class="cs">${ots.length} trabajo${ots.length === 1 ? '' : 's'} · RD$ · del más caro al más barato</div><div class="tw"><table><tr><th>Folio · fecha</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
     + ots.map(x => `<tr><td><b>${esc(folioDe(x.o))}</b> <span class="nota">${esc(x.o.FECHA)}</span><br><span class="nota">${esc(x.o.TIPO_MANTENIMIENTO || '')}${x.o.CAUSA_FALLA ? ' · ' + esc(x.o.CAUSA_FALLA) : ''}${x.proyecto ? ' · <span class="tag info">proyecto</span>' : ''}${x.sinCosto ? ' · <span class="tag">' + x.sinCosto + ' rep. sin costo</span>' : ''}</span></td>${COMP.map(cp => `<td class="r">${esc(corto(x.c[cp.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(x.total))}</b></td></tr>`).join('')
     + '</table></div></div>';
-  $('view').innerHTML = cabecera() + sel + tarjetaEquipo(E, per) + math + g + tabla;
-  bindCabecera();
+  $('view').innerHTML = cabecera() + sel + tarjetaEquipo(E, per) + math + g + tabla + btnExcel();
+  bindCabecera(); bindExcel(R, E);
   $('selEq').onchange = e => { UI.eq = e.target.value; vistaEquipo(R); };
+}
+
+// ══════ POR NAVE (25 oct 2026, Etapa 3) ══════
+// Mismo cálculo (calcularPeriodo / costoOt) con las OTs de cada nave. Cada OT
+// cuenta en una sola nave (la suya o «Sin nave»), así la suma de las naves es
+// el total de la planta. Sin lecturas: son las mismas OTs del período.
+function calcularPorNave(per) {
+  const naves = fbNavesDisponibles().slice();
+  mesesEntre(per.desde, per.hasta).flatMap(m => MES_DOCS.get(m) || []).forEach(o => { const n = fbNaveDe(o); if (n && !naves.some(x => kNaveR(x) === kNaveR(n))) naves.push(n); });
+  const run = k => { _cmpNave = k; try { return calcularPeriodo(per); } finally { _cmpNave = null; } };
+  const filas = naves.map(n => ({ nombre: n, key: kNaveR(n), inactiva: !fbNombreActivo('plantas', n), R: run(kNaveR(n)) }));
+  const sin = run('');
+  if (sin.ots.length) filas.push({ nombre: 'Sin nave', key: '', inactiva: false, R: sin });
+  return { filas, tot: run('*') };
+}
+function vistaNave(per) {
+  const P = calcularPorNave(per);
+  const fil = P.filas, T = P.tot;
+  window.__rent = { tab: 'nave', periodo: per, total: r2(T.totalN), c: { tec: r2(T.total.tec), op: r2(T.total.op), arr: r2(T.total.arr), rep: r2(T.total.rep) }, paradas: T.paradas, lecturas: LECTURAS,
+    naves: fil.map(f => ({ nombre: f.nombre, key: f.key, total: r2(f.R.totalN), c: { tec: r2(f.R.total.tec), op: r2(f.R.total.op), arr: r2(f.R.total.arr), rep: r2(f.R.total.rep) }, ots: f.R.ots.length, paradas: f.R.paradas, equipos: f.R.equipos.length })) };
+  const act = kNaveR(fbNaveActiva() || '');
+  const kpis = `<div class="kpis"><div class="kpi w"><span>Costo del período · todas las naves</span><b>${esc(money(Math.round(T.totalN)))}</b><small>${esc(per.label)} · ${T.ots.length} trabajos · ${T.paradas} paradas · ${fil.length} nave${fil.length === 1 ? '' : 's'}</small></div></div>`;
+  // barras horizontales apiladas: nombre de la nave arriba, total escrito al lado
+  const maxN = Math.max(1, ...fil.map(f => f.R.totalN));
+  let sv = `<svg class="ch" viewBox="0 0 ${W} ${fil.length * 40 + 4}" role="img" aria-label="Costo de mantenimiento por nave">`;
+  fil.forEach((f, i) => {
+    const y = i * 40; let x = 0;
+    sv += `<text x="0" y="${y + 12}" fill="${f.key === act && act ? '#F59E0B' : '#F1F5F9'}" font-size="12" font-weight="${f.key === act && act ? 700 : 400}">${esc(f.nombre + (f.inactiva ? ' (inactiva)' : '') + ' · ' + f.R.ots.length + ' trabajos')}</text>`;
+    COMP.forEach(cp => { const v = f.R.total[cp.k]; if (!(v > 0)) return; const w = v / maxN * (W - 50); sv += `<rect x="${x.toFixed(1)}" y="${y + 17}" width="${Math.max(0.5, w - 1.5).toFixed(1)}" height="14" rx="3" fill="${cp.c}" data-tip="${esc(f.nombre + ' · ' + cp.n + ': ' + money(v))}"/>`; x += w; });
+    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" fill="#C3CCD8" font-size="11">${esc(corto(f.R.totalN))}</text>`;
+  });
+  sv += '</svg>';
+  const cols = fil.map(f => ({ label: f.nombre, tip: f.nombre, c: f.R.total }));
+  const g = cardGrafica('Costo por nave', per.corto + ' · RD$ · la nave elegida arriba va en amarillo', sv, tablaComp(cols.concat([{ label: 'Todas', tip: 'Todas', c: T.total }]), 'Nave'));
+  const tabla = `<div class="card"><div class="ct">Comparativo por nave</div><div class="cs">${esc(per.corto)} · RD$</div><div class="tw"><table><tr><th>Nave</th><th class="r">Trab.</th><th class="r">Par.</th><th class="r">Total</th><th class="r">% del total</th><th class="r">Por parada</th></tr>`
+    + fil.map(f => `<tr${f.key === act && act ? ' style="background:#F59E0B14"' : ''}><td><b>${esc(f.nombre)}</b>${f.inactiva ? ' <span class="nota">(inactiva)</span>' : ''}</td><td class="r">${f.R.ots.length}</td><td class="r">${f.R.paradas}</td><td class="r"><b>${esc(corto(f.R.totalN))}</b></td><td class="r">${pctR(f.R.totalN, T.totalN)} %</td><td class="r">${f.R.paradas ? esc(corto(f.R.totalN / f.R.paradas)) : '—'}</td></tr>`).join('')
+    + `<tr><td><b>Todas</b></td><td class="r"><b>${T.ots.length}</b></td><td class="r"><b>${T.paradas}</b></td><td class="r"><b>${esc(corto(T.totalN))}</b></td><td class="r">100 %</td><td class="r">${T.paradas ? esc(corto(T.totalN / T.paradas)) : '—'}</td></tr></table></div></div>`;
+  $('view').innerHTML = cabecera() + kpis + g + tabla + btnExcel()
+    + `<div class="nota">Cada trabajo se cuenta en la nave de su OT (o la de su equipo); los que no tienen nave conocida van en «Sin nave». No aplica el filtro de área: compara las naves completas.</div>`;
+  bindCabecera();
+  if ($('bXls')) $('bXls').onclick = () => {
+    const hojas = [{ nombre: 'Por nave', titulo: 'Rentabilidad por nave · ' + per.label + ' · RD$', columnas: ['Nave', 'Trabajos', 'Paradas', ...COMP.map(x => x.n + ' RD$'), 'Total RD$', '% del total'].map(t => ({ t, w: t === 'Nave' ? 22 : 15 })),
+      filas: fil.map(f => [f.nombre + (f.inactiva ? ' (inactiva)' : ''), f.R.ots.length, f.R.paradas, ...COMP.map(x => r2(f.R.total[x.k])), r2(f.R.totalN), pctR(f.R.totalN, T.totalN)])
+        .concat([['Todas', T.ots.length, T.paradas, ...COMP.map(x => r2(T.total[x.k])), r2(T.totalN), 100]]) }];
+    fbExportar({ nombre: fbNombreArchivo('rentabilidad', ['por-nave'], per.id.replace('anio:', '')), hojas, aviso: m => toast(m) });
+  };
+}
+
+// ══════ EXCEL (25 oct 2026, Etapa 3) ══════
+// Lo que se ve con el filtro (nave, área, línea, equipo) y el período. Solo
+// Administrador (es la única que entra a esta pantalla): sí lleva costos.
+const btnExcel = () => `<button class="btn2" id="bXls" style="width:100%;margin:2px 0 10px">⬇️ Descargar Excel</button>`;
+function hojasRentabilidad(R, E) {
+  const per = R.per;
+  const filtro = ubic ? ubic.texto() : '';
+  const titulo = 'Rentabilidad · ' + (filtro || 'toda la planta') + ' · ' + per.label + ' · RD$ · generado ' + fbHoy();
+  const eqs = E ? [E] : R.equipos;
+  const hojas = [];
+  hojas.push({ nombre: 'Equipos', titulo, columnas: ['Equipo', 'Tipo', 'Trabajos', 'Paradas', 'Horas de paro', ...COMP.map(x => x.n + ' RD$'), 'Total período RD$', 'Mantenerla por año RD$', 'Una nueva por año RD$', 'Semáforo', 'Motivo', 'Déficit'].map(t => ({ t, w: /Equipo|Motivo/.test(t) ? 28 : t === 'Déficit' ? 60 : 15 })),
+    filas: eqs.map(e => [e.nombre, e.tipo || '', e.ots.length, e.paradas, r2(e.minParo / 60), ...COMP.map(x => r2(e.c[x.k])), r2(e.real), r2(e.mantener), e.nueva == null ? '' : r2(e.nueva), SEM[e.estado].t, e.motivo, e.deficit]) });
+  const meses = R.meses, pm = E ? E.porMes : R.porMes;
+  hojas.push({ nombre: 'Por mes', titulo, columnas: ['Mes', ...COMP.map(x => x.n + ' RD$'), 'Total RD$'].map(t => ({ t, w: 18 })), filas: meses.map(m => { const c = pm[m] || cero(); return [nombreMes(m), ...COMP.map(x => r2(c[x.k])), r2(sumaC(c))]; }) });
+  const trab = eqs.flatMap(e => e.ots.map(x => ({ ...x, eq: e.nombre }))).sort((a, b) => String(a.o.FECHA).localeCompare(String(b.o.FECHA)) || String(folioDe(a.o)).localeCompare(String(folioDe(b.o))));
+  hojas.push({ nombre: 'Trabajos', titulo, columnas: ['Folio', 'Fecha', 'Equipo', 'Área', 'Tipo de mantenimiento', 'Causa', 'Min técnico', 'Min máquina', ...COMP.map(x => x.n + ' RD$'), 'Total RD$', 'Repuestos sin costo'].map(t => ({ t, w: /Equipo|Causa|Área|Tipo/.test(t) ? 22 : 13 })),
+    filas: trab.map(x => [folioDe(x.o), x.o.FECHA || '', x.eq, x.o.LINEA_EQUIPO || x.o.equipoLocalidad || '', x.o.TIPO_MANTENIMIENTO || '', x.o.CAUSA_FALLA || x.o.causaFalla || '', x.minTec, x.minMaq, ...COMP.map(cp => r2(x.c[cp.k])), r2(x.total), x.sinCosto || 0]) });
+  return hojas;
+}
+function bindExcel(R, E) {
+  if (!$('bXls')) return;
+  $('bXls').onclick = () => {
+    const per = R.per;
+    const periodo = per.id.startsWith('mes:') ? per.id.slice(4) : per.id.replace('anio:', '');
+    const partes = (ubic ? ubic.partes() : []).concat(E && !(ubic && ubic.get().equipo) ? [E.nombre] : []);
+    fbExportar({ nombre: fbNombreArchivo('rentabilidad', partes, periodo), hojas: hojasRentabilidad(R, E), aviso: m => toast(m) });
+  };
 }
 
 // ══════ ⚙️ DATOS DE COSTOS ══════
