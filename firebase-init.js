@@ -156,16 +156,22 @@ function fbRenderMiniNav(active) {
       { id: 'incentivos', href: 'incentivos.html', label: '💰 Incentivos', roles: ['ADMINISTRADOR'] },
       // (22 oct 2026) Rentabilidad de equipos: solo Administrador (costos y salarios).
       { id: 'rentabilidad', href: 'rentabilidad.html', label: '📊 Rentabilidad', roles: ['ADMINISTRADOR'] },
+      // (25 oct 2026) Administración (usuarios, respaldo, uso del plan gratis): solo Administrador.
+      { id: 'admin', href: 'admin.html', label: '⚙️ Administración', roles: ['ADMINISTRADOR'] },
     ].filter(p => !p.roles || userHasRole(...p.roles));
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
     bar.style.cssText = 'display:flex;gap:4px;overflow-x:auto;padding:8px 14px;background:#0B131C;border-bottom:1px solid #2D3F55;font-size:11px;align-items:center;position:sticky;top:0;z-index:250;';
-    bar.innerHTML = pages.map(p =>
+    // (25 oct 2026, Etapa 2) Selector de nave al principio (siempre a la vista).
+    bar.innerHTML = `<span data-fb-nave style="display:flex;flex:0 0 auto;align-items:center;">${fbHtmlSelectorNave()}</span>`
+    + pages.map(p =>
       `<a href="${p.href}" style="padding:5px 9px;border-radius:6px;white-space:nowrap;text-decoration:none;font-weight:600;color:${p.id===active?'#F59E0B':'#94A3B8'};background:${p.id===active?'#F59E0B18':'transparent'};">${p.label}</a>`
     ).join('')
     + `<span style="margin-left:auto;color:#94A3B8;white-space:nowrap;padding-left:8px;">👤 ${fbEsc((window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '')}</span>`
     + `<button onclick="fbLogout()" style="margin-left:8px;background:none;border:1px solid #2D3F55;color:#94A3B8;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">Salir</button>`;
     document.body.insertBefore(bar, document.body.firstChild);
+    _fbPintarSelectorNave();
+    fbCargarPlantas().then(() => _fbPintarSelectorNave()).catch(() => {});
   }).catch(()=>{}); // si no hay sesión, fbReady ya redirigió a login.html — no hacer nada aquí
 }
 
@@ -404,6 +410,9 @@ async function fbFolioNuevo() {
 const FB_EQ_TTL_MS = 12 * 60 * 60 * 1000; // 12 h (una lectura completa al día por celular, aprox.)
 function _fbEqSnap(docs) {
   const lista = docs.slice().sort((a, b) => String((a.data() || {}).nombre || '').localeCompare(String((b.data() || {}).nombre || ''), 'es', { numeric: true }));
+  // (25 oct 2026, Etapa 2) Cada vez que llega el catálogo se anota de qué nave
+  // es cada equipo (sin lecturas extra), para fbEnNave() / fbPlantaDeEquipo().
+  try { fbIndexarEquipos(lista.map(d => ({ id: d.id, ...(d.data() || {}) }))); } catch (e) { console.warn('índice de naves:', e.message); }
   return { docs: lista, size: lista.length, empty: !lista.length, forEach: f => lista.forEach(f) };
 }
 async function fbEquiposCatalogo(forzar) {
@@ -439,4 +448,294 @@ function fbRefrescarEquipos(soloCelular) {
   // cambios hechos en ESTE celular) sin gastar lecturas del servidor.
   const p = soloCelular ? db.collection('equipos').get({ source: 'cache' }).then(c => _fbEqSnap(c.docs)) : fbEquiposCatalogo(true);
   return p.then(s => { _fbEqOyentes.forEach(o => { try { o.cb(s); } catch (e) { console.error(e); } }); return s; });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// LISTA DE TÉCNICOS COMPARTIDA (25 oct 2026 — ampliación a 6 naves)
+// Antes cada pantalla leía tecnicos.json del repositorio (había que editar
+// GitHub para agregar un técnico). Ahora la lista la mantiene el
+// Administrador en ⚙️ Administración → Usuarios y se guarda en
+// /config/tecnicos { lista: [{nombre, corto, plantas, activo, uid}] }.
+// fbTecnicos() → Promise de los técnicos ACTIVOS [{nombre, corto, plantas}]
+// (misma forma {nombre, corto} que tenía tecnicos.json).
+//  - 1 lectura por sesión: se guarda en memoria y en el celular
+//    (localStorage); en la misma sesión del navegador (y por 6 h como
+//    máximo) se usa esa copia sin volver a leer.
+//  - Si /config/tecnicos todavía no existe → tecnicos.json (como antes), así
+//    nada cambia hasta que el Administrador use el panel.
+//  - Sin señal o sin permiso (RR.HH./Operador no leen /config) → la última
+//    copia del celular y, si no hay, tecnicos.json.
+// ══════════════════════════════════════════════════════════════════════
+const FB_TEC_LS = 'fbTecnicosCopia';
+const FB_TEC_SES = 'fbTecnicosSesion';
+const FB_TEC_TTL_MS = 6 * 60 * 60 * 1000;
+let _fbTecPromesa = null;
+function _fbTecActivos(lista) {
+  return (Array.isArray(lista) ? lista : []).filter(t => t && t.nombre && t.activo !== false).map(t => ({
+    nombre: String(t.nombre), corto: String(t.corto || t.nombre),
+    plantas: Array.isArray(t.plantas) ? t.plantas.map(String) : [],
+  }));
+}
+function _fbTecLeerCopia() {
+  try { const c = JSON.parse(localStorage.getItem(FB_TEC_LS) || 'null'); return c && Array.isArray(c.lista) ? c : null; } catch (e) { return null; }
+}
+// admin.html la llama al guardar, para que este celular vea el cambio ya.
+function fbTecnicosActualizarCopia(lista) {
+  const activos = _fbTecActivos(lista);
+  try { localStorage.setItem(FB_TEC_LS, JSON.stringify({ lista: activos, fuente: 'config', guardado: Date.now() })); } catch (e) {}
+  try { sessionStorage.setItem(FB_TEC_SES, String(Date.now())); } catch (e) {}
+  _fbTecPromesa = Promise.resolve(activos.map(t => ({ ...t, plantas: t.plantas.slice() })));
+  return activos;
+}
+async function _fbTecDesdeJson() {
+  const r = await fetch('tecnicos.json?_=' + Date.now()); // evita caché vieja
+  if (!r.ok) throw new Error('tecnicos.json HTTP ' + r.status);
+  return _fbTecActivos(await r.json());
+}
+function fbTecnicos(forzar) {
+  if (_fbTecPromesa && !forzar) return _fbTecPromesa.then(l => l.map(t => ({ ...t, plantas: t.plantas.slice() })));
+  _fbTecPromesa = (async () => {
+    const copia = _fbTecLeerCopia();
+    let ses = 0;
+    try { ses = +sessionStorage.getItem(FB_TEC_SES) || 0; } catch (e) {}
+    if (!forzar && copia && copia.fuente === 'config' && ses && Date.now() - ses < FB_TEC_TTL_MS) return copia.lista;
+    try {
+      await window.fbReady;
+      const s = await db.collection('config').doc('tecnicos').get();
+      if (s.exists && Array.isArray((s.data() || {}).lista)) return fbTecnicosActualizarCopia(s.data().lista);
+      try { localStorage.removeItem(FB_TEC_LS); } catch (e) {} // aún no existe: manda tecnicos.json
+    } catch (e) {
+      if (!(e && e.code === 'permission-denied')) console.warn('No se pudo leer /config/tecnicos:', (e && e.message) || e);
+      if (copia && copia.fuente === 'config') return copia.lista;
+    }
+    try { return await _fbTecDesdeJson(); }
+    catch (e) { console.warn('No se pudo cargar tecnicos.json:', e.message); return copia ? copia.lista : []; }
+  })();
+  return _fbTecPromesa.then(l => l.map(t => ({ ...t, plantas: t.plantas.slice() })));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// NAVES (25 oct 2026 — Etapa 2 "Nave en todo")
+// "Nave" = un documento de /plantas. En toda la app la nave se guarda por
+// NOMBRE (equipos.planta, areas.plantaNombre, usuarios.plantas, OTs PLANTA),
+// así que aquí todo se compara por nombre (fbEquipoKey: sin mayúsculas,
+// acentos ni espacios) y respetando los nombres viejos de una nave, área o
+// línea renombrada (campo nombresAnteriores, ⚙️ Administración → Naves).
+//
+//  fbMisNaves()          null = todas las naves; si no, [nombres] del usuario
+//                        (/usuarios.plantas, ya leído al iniciar sesión: 0 lecturas).
+//                        El Administrador siempre tiene todas.
+//  fbNaveActiva()        null = "Todas" (o todas las mías); si no, el nombre.
+//  fbSetNaveActiva(x)    x = nombre | 'todas'. Se guarda en este celular.
+//  fbNavesFiltro()       null (sin filtro) o [claves] de las naves que se ven.
+//  fbNaveDe(doc)         nave de un registro: su campo planta / PLANTA o, si
+//                        es viejo y no lo tiene, la de su equipo en el catálogo
+//                        (por equipoId, por nombre o por área). '' = no se sabe.
+//  fbEnNave(doc)         ¿se muestra con la nave elegida? Un registro cuya nave
+//                        no se puede saber SE MUESTRA (nunca se esconde nada).
+//  fbEquipoEnNave(e) / fbPlantaDeEquipo(e|id) / fbTecnicoEnNave(t)
+//  fbOnNaveCambio(cb)    la pantalla se repinta al cambiar de nave; si una
+//                        pantalla no se registra, se recarga.
+// Lecturas: ninguna extra. Todo sale de lo que ya se leía (usuario, catálogo
+// de equipos, /plantas, /areas y /lineas de Bitácora / Inventario / Admin).
+// ══════════════════════════════════════════════════════════════════════
+const FB_NAV_LS = 'fbNaveActiva';
+const FB_NOM_LS = 'fbNombresCopia';   // { plantas: [...], areas: [...], lineas: [...] } (copia de las listas)
+const FB_EQIDX_LS = 'fbEqIndice';     // { id: [planta, localidad, nombre] }
+const _fbK = s => fbEquipoKey(s);
+// Por tipo: docs [{id, nombre, nombresAnteriores, activo, plantaNombre|areaNombre, …}],
+// actual: clave → nombre vigente, viejo: clave de un nombre anterior → nombre vigente.
+const _fbNom = { plantas: { docs: [], actual: new Map(), viejo: new Map() }, areas: { docs: [], actual: new Map(), viejo: new Map() }, lineas: { docs: [], actual: new Map(), viejo: new Map() } };
+function _fbNomLimpio(d) {
+  if (!d || !d.nombre) return null;
+  const o = { id: String(d.id || ''), nombre: String(d.nombre), activo: d.activo !== false,
+    nombresAnteriores: Array.isArray(d.nombresAnteriores) ? d.nombresAnteriores.map(String).filter(Boolean) : [] };
+  if (d.plantaNombre != null || d.planta != null) o.plantaNombre = String(d.plantaNombre || d.planta || '');
+  if (d.areaNombre != null) o.areaNombre = String(d.areaNombre || '');
+  if (d.encargado) o.encargado = String(d.encargado);
+  if (d.encargadoNombre) o.encargadoNombre = String(d.encargadoNombre);
+  if (d.descripcion) o.descripcion = String(d.descripcion);
+  return o;
+}
+function _fbNomIndexar(tipo) {
+  const t = _fbNom[tipo]; t.actual = new Map(); t.viejo = new Map();
+  t.docs.forEach(d => { const k = _fbK(d.nombre); if (k && !t.actual.has(k)) t.actual.set(k, d.nombre); });
+  t.docs.forEach(d => d.nombresAnteriores.forEach(v => { const k = _fbK(v); if (k && !t.actual.has(k) && !t.viejo.has(k)) t.viejo.set(k, d.nombre); }));
+}
+// Las pantallas que ya leen /plantas, /areas o /lineas pasan aquí sus
+// documentos (sin lecturas extra); se guarda una copia en el celular.
+function fbRegistrarNombres(tipo, docs) {
+  if (!_fbNom[tipo]) return;
+  _fbNom[tipo].docs = (docs || []).map(d => _fbNomLimpio(d && typeof d.data === 'function' ? { id: d.id, ...d.data() } : d)).filter(Boolean);
+  _fbNomIndexar(tipo);
+  try {
+    const c = JSON.parse(localStorage.getItem(FB_NOM_LS) || '{}') || {};
+    c[tipo] = _fbNom[tipo].docs;
+    localStorage.setItem(FB_NOM_LS, JSON.stringify(c));
+  } catch (e) {}
+  if (tipo === 'plantas' && typeof document !== 'undefined') _fbPintarSelectorNave();
+}
+(function () { // copia guardada en el celular → disponible al instante
+  try {
+    const c = JSON.parse(localStorage.getItem(FB_NOM_LS) || '{}') || {};
+    Object.keys(_fbNom).forEach(t => { if (Array.isArray(c[t])) { _fbNom[t].docs = c[t].map(_fbNomLimpio).filter(Boolean); _fbNomIndexar(t); } });
+  } catch (e) {}
+})();
+function fbListaNombres(tipo) { return (_fbNom[tipo] ? _fbNom[tipo].docs : []).map(d => ({ ...d, nombresAnteriores: d.nombresAnteriores.slice() })); }
+// Nombre vigente: solo cambia un nombre ANTERIOR (renombrado); cualquier otro
+// texto se devuelve tal cual (así nada cambia mientras no se renombre nada).
+function fbNombreActual(tipo, s) {
+  if (s == null || s === '') return s;
+  const t = _fbNom[tipo]; if (!t) return s;
+  const k = _fbK(s);
+  return (!t.actual.has(k) && t.viejo.has(k)) ? t.viejo.get(k) : s;
+}
+function fbClaveNombre(tipo, s) { return _fbK(fbNombreActual(tipo, s)); }
+function fbMismoNombre(tipo, a, b) { const ka = fbClaveNombre(tipo, a); return !!ka && ka === fbClaveNombre(tipo, b); }
+// ¿Está activo? (inactivo = no sale en las listas para registros nuevos).
+// Un nombre que no está en la lista cuenta como activo.
+function fbNombreActivo(tipo, s) {
+  const t = _fbNom[tipo]; if (!t || !s) return true;
+  const k = fbClaveNombre(tipo, s);
+  const d = t.docs.find(x => _fbK(x.nombre) === k);
+  return !d || d.activo !== false;
+}
+// Nave de un área (por su plantaNombre); '' si no tiene.
+function fbPlantaDeArea(area) {
+  if (!area) return '';
+  const k = fbClaveNombre('areas', area);
+  const a = _fbNom.areas.docs.find(x => _fbK(x.nombre) === k);
+  return a && a.plantaNombre ? fbNombreActual('plantas', a.plantaNombre) : '';
+}
+
+// ── Índice de equipos (id → nave) ──
+let _fbEqIdx = {}, _fbEqPorNombre = new Map();
+function _fbEqIdxReconstruirNombres() {
+  _fbEqPorNombre = new Map();
+  Object.keys(_fbEqIdx).forEach(id => { const k = _fbK(_fbEqIdx[id][2]); if (!k) return; _fbEqPorNombre.set(k, _fbEqPorNombre.has(k) ? null : id); }); // null = nombre repetido
+}
+try { _fbEqIdx = JSON.parse(localStorage.getItem(FB_EQIDX_LS) || '{}') || {}; _fbEqIdxReconstruirNombres(); } catch (e) { _fbEqIdx = {}; }
+function fbIndexarEquipos(lista) {
+  const idx = {};
+  (lista || []).forEach(e => { if (e && e.id) idx[e.id] = [String(e.planta || ''), String(e.localidad || ''), String(e.nombre || '')]; });
+  _fbEqIdx = idx; _fbEqIdxReconstruirNombres();
+  try { localStorage.setItem(FB_EQIDX_LS, JSON.stringify(idx)); } catch (e) {}
+  // sin copia de /plantas en el celular, las naves salen de los equipos: se repinta el selector
+  if (!_fbNom.plantas.docs.length && typeof document !== 'undefined') _fbPintarSelectorNave();
+}
+// Nave de un equipo: su campo planta o, si no tiene, la del área (localidad).
+function fbPlantaDeEquipo(e) {
+  if (!e) return '';
+  if (typeof e === 'string') { const x = _fbEqIdx[e]; if (!x) return ''; e = { planta: x[0], localidad: x[1] }; }
+  if (e.planta) return fbNombreActual('plantas', e.planta);
+  return fbPlantaDeArea(e.localidad);
+}
+function fbNaveDe(doc) {
+  if (!doc) return '';
+  const propia = doc.planta || doc.PLANTA;
+  if (propia && typeof propia === 'string') return fbNombreActual('plantas', propia);
+  if (doc.equipoId && _fbEqIdx[doc.equipoId]) { const p = fbPlantaDeEquipo(doc.equipoId); if (p) return p; }
+  const nom = doc.EQUIPO || doc.equipoNombre || (typeof doc.equipo === 'string' ? doc.equipo : '');
+  if (nom) { const id = _fbEqPorNombre.get(_fbK(nom)); if (id) { const p = fbPlantaDeEquipo(id); if (p) return p; } }
+  return fbPlantaDeArea(doc.LINEA_EQUIPO || doc.equipoLocalidad || '');
+}
+
+// ── Naves del usuario y nave elegida ──
+function fbMisNaves() {
+  const u = window.currentUserRole;
+  if (!u || u.rol === 'ADMINISTRADOR' || !Array.isArray(u.plantas)) return null;
+  const out = [];
+  u.plantas.forEach(p => { const n = fbNombreActual('plantas', String(p || '').trim()); if (n && !out.some(x => _fbK(x) === _fbK(n))) out.push(n); });
+  return out.length ? out : null;
+}
+// Naves que el usuario puede elegir (con nombre vigente). Sin /plantas en el
+// celular: las que aparecen en el catálogo de equipos.
+function fbNavesDisponibles() {
+  const mis = fbMisNaves();
+  if (mis) return mis.slice();
+  let l = _fbNom.plantas.docs.map(d => d.nombre);
+  if (!l.length) Object.keys(_fbEqIdx).forEach(id => { const p = fbPlantaDeEquipo(id); if (p && !l.some(x => _fbK(x) === _fbK(p))) l.push(p); });
+  return l.slice().sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+}
+function fbNaveActiva() {
+  const disp = fbNavesDisponibles();
+  let v = null;
+  try { v = localStorage.getItem(FB_NAV_LS); } catch (e) {}
+  if (v && v !== 'todas') { const k = fbClaveNombre('plantas', v); const hit = disp.find(x => _fbK(x) === k); if (hit) return hit; }
+  if (fbMisNaves() && disp.length === 1) return disp[0];
+  return null;
+}
+function fbNavesFiltro() {
+  const a = fbNaveActiva();
+  if (a) return [_fbK(a)];
+  const mis = fbMisNaves();
+  return mis ? mis.map(_fbK) : null;
+}
+function _fbNaveVisible(nombre, f) {
+  if (!f) return true;
+  if (!nombre) return true; // sin nave conocida: se muestra
+  return f.includes(fbClaveNombre('plantas', nombre));
+}
+function fbEnNave(doc) { const f = fbNavesFiltro(); return !f || _fbNaveVisible(fbNaveDe(doc), f); }
+function fbEquipoEnNave(e) { const f = fbNavesFiltro(); return !f || _fbNaveVisible(fbPlantaDeEquipo(e), f); }
+// Técnico sin naves (lista vacía) = de todas las naves.
+function fbTecnicoEnNave(t) {
+  const f = fbNavesFiltro();
+  if (!f || !t || !Array.isArray(t.plantas) || !t.plantas.length) return true;
+  return t.plantas.some(p => f.includes(fbClaveNombre('plantas', p)));
+}
+// ¿Esta nave (nombre) se puede usar para un registro nuevo de este usuario?
+function fbNavePermitida(nombre) {
+  const mis = fbMisNaves();
+  return !mis || !nombre || mis.some(x => fbMismoNombre('plantas', x, nombre));
+}
+const _fbNaveOyentes = [];
+function fbOnNaveCambio(cb) { if (typeof cb === 'function') _fbNaveOyentes.push(cb); }
+function fbSetNaveActiva(v) {
+  try { if (!v || v === 'todas') localStorage.setItem(FB_NAV_LS, 'todas'); else localStorage.setItem(FB_NAV_LS, String(v)); } catch (e) {}
+  _fbPintarSelectorNave();
+  if (!_fbNaveOyentes.length) { location.reload(); return; }
+  _fbNaveOyentes.forEach(cb => { try { cb(fbNaveActiva()); } catch (e) { console.error(e); } });
+}
+// Texto corto para encabezados: "PLANTA 2", "Todas las naves" o "Mis naves".
+function fbNaveTexto() {
+  const a = fbNaveActiva();
+  if (a) return a;
+  return fbMisNaves() ? 'Mis naves' : 'Todas las naves';
+}
+
+// /plantas: NO se lee aquí (0 lecturas extra). La lista sale de la copia que
+// dejan en el celular las pantallas que ya leen /plantas (Bitácora la escucha
+// en vivo, Inventario y Administración la leen al abrir sus formularios) y,
+// si todavía no hay copia, de las naves que tienen los equipos del catálogo.
+function fbCargarPlantas() { return Promise.resolve(fbListaNombres('plantas')); }
+
+// ── Selector de nave (barra superior) ──
+// Se muestra solo si el usuario puede ver más de una nave. Con una sola nave
+// asignada se muestra su nombre, sin selector.
+function fbHtmlSelectorNave() {
+  const disp = fbNavesDisponibles();
+  const mis = fbMisNaves();
+  if (disp.length <= 1) {
+    return (mis && disp.length === 1) ? `<span class="fbNaveTxt" id="fbNaveTxt" style="color:#F59E0B;font-weight:700;white-space:nowrap;padding:4px 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">🏭 ${fbEsc(disp[0])}</span>` : '';
+  }
+  const act = fbNaveActiva();
+  const inact = n => !fbNombreActivo('plantas', n);
+  return `<select id="fbNaveSel" aria-label="Nave" title="Nave" style="flex:0 0 auto;max-width:150px;background:#1A2535;color:#F59E0B;border:1px solid #F59E0B66;border-radius:6px;padding:4px 6px;font-size:11px;font-weight:700;font-family:inherit;">`
+    + `<option value="todas"${act ? '' : ' selected'}>🏭 ${mis ? 'Mis naves' : 'Todas las naves'}</option>`
+    + disp.map(n => `<option value="${fbEsc(n)}"${act && _fbK(act) === _fbK(n) ? ' selected' : ''}>🏭 ${fbEsc(n)}${inact(n) ? ' (inactiva)' : ''}</option>`).join('')
+    + `</select>`;
+}
+function _fbPintarSelectorNave() {
+  document.querySelectorAll('[data-fb-nave]').forEach(el => {
+    el.innerHTML = fbHtmlSelectorNave();
+    const s = el.querySelector('select');
+    if (s) s.onchange = () => fbSetNaveActiva(s.value);
+  });
+}
+// Para pantallas sin barra superior (Inicio, Reportar): pinta el selector en `el`.
+function fbRenderSelectorNave(el) {
+  if (!el) return;
+  el.setAttribute('data-fb-nave', '');
+  window.fbReady.then(() => { _fbPintarSelectorNave(); return fbCargarPlantas(); }).then(() => _fbPintarSelectorNave()).catch(() => {});
 }
