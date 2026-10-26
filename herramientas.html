@@ -180,7 +180,9 @@ window.fbReady.then(async () => {
   YO = u.tecnico || u.nombre || '';
   $('header-sub').textContent = (window.APP_EMPRESA ? window.APP_EMPRESA + ' · ' : '') + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function' && ROL !== 'RRHH') fbRenderMiniNav('herramientas');
-  try { const r = await fetch('tecnicos.json?_=' + Date.now()); if (r.ok) tecnicosJson = (await r.json()).map(t => t.nombre).filter(Boolean); } catch (e) {}
+  // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json.
+  // RR.HH. no la usa (no tiene la pestaña Técnicos) y no puede leer /config.
+  if (ROL !== 'RRHH') { try { tecnicosJson = (await fbTecnicos()).map(t => t.nombre).filter(Boolean); } catch (e) {} }
 
   const tabs = [];
   if (esGestor() || ROL === 'SUPERVISOR') tabs.push(['tecnicos', '👷 Técnicos']);
@@ -283,7 +285,7 @@ function renderTecnicos() {
         <div class="item-s">${unidadesDe(act)} herramienta(s) · ${u ? `último arqueo ${fmtF(u.fecha)} (hace ${d} d)` : 'nunca se le ha hecho arqueo'}</div>
         <div class="row" style="margin-top:6px">${pend ? `<span class="tag t-warn">${pend} sin confirmar</span>` : ''}${act.length && (!u || d > 30) ? '<span class="tag t-bad">Arqueo pendiente</span>' : ''}${cargos.length ? `<span class="tag t-info">${cargos.length} cargo(s) en proceso · ${money(cargos.reduce((s, a) => s + (a.totalCargo || 0), 0))}</span>` : ''}</div>
       </div>`;
-    }).join('') : '<div class="card empty">No hay técnicos. Agrégalos en tecnicos.json.</div>'}`;
+    }).join('') : '<div class="card empty">No hay técnicos. El Administrador los agrega en ⚙️ Administración → Usuarios.</div>'}`;
   $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => { tecSel = el.dataset.tec; render(); window.scrollTo(0, 0); });
 }
 

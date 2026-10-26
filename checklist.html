@@ -499,7 +499,15 @@ let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se
 
 let currentEquipos = [];      // desde /equipos (onSnapshot)
 let currentOts = [];          // desde /ots: origen checklist + proyectos, estado en curso (onSnapshot)
+const currentOtsTodas = () => currentOts;
+// (25 oct 2026, Etapa 2) Técnico que puede tomar una OT: sin naves asignadas o de la nave de la OT.
+function tecParaOt(t, o) {
+  if (typeof fbNaveDe !== 'function' || !t || !Array.isArray(t.plantas) || !t.plantas.length) return true;
+  const n = fbNaveDe(o);
+  return !n || t.plantas.some(p => fbMismoNombre('plantas', p, n));
+}
 let currentChecklists = [];   // desde /checklists (onSnapshot, últimos 30)
+const currentChecklistsTodos = () => currentChecklists;
 let equipoSeleccionado = null; // {id, nombre, localidad}
 let itemsFormState = [];       // [{punto, resultado:'ok'|'falla', nota}] mientras se llena el formulario
 
@@ -522,6 +530,20 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('online', updateHeaderStatus);
   window.addEventListener('offline', updateHeaderStatus);
 });
+
+// (25 oct 2026, Etapa 2) Nave elegida arriba: equipos, checklists y OTs se
+// filtran con lo que ya está en memoria (sin lecturas). Con "Todas" no se quita nada.
+const enNave = r => typeof fbEnNave !== 'function' || fbEnNave(r);
+const equipoEnNave = e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e);
+const equiposDeNave = () => currentEquipos.filter(equipoEnNave);
+function cambioDeNaveCk() {
+  renderHoy();
+  renderConfig();
+  renderHorometro();
+  renderHistorial();
+  renderOts();
+}
+if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(cambioDeNaveCk);
 
 function updateHeaderStatus() {
   const bar = document.getElementById('offline-bar');
@@ -598,15 +620,13 @@ const TECNICOS_FALLBACK = [
 ];
 let TECNICOS_LISTA = TECNICOS_FALLBACK;
 
+// (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json.
 async function loadTecnicos() {
   try {
-    const r = await fetch('tecnicos.json?_=' + Date.now());
-    if (r.ok) {
-      const data = await r.json();
-      if (Array.isArray(data) && data.length) TECNICOS_LISTA = data;
-    }
+    const data = await fbTecnicos();
+    if (Array.isArray(data) && data.length) TECNICOS_LISTA = data;
   } catch (e) {
-    console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message);
+    console.warn('No se pudo cargar la lista de técnicos, usando lista por defecto', e.message);
   }
 }
 
@@ -615,7 +635,8 @@ async function loadTecnicos() {
 // antes de meterse en innerHTML; los onclick solo reciben ids de documento.
 function renderTecGridInto(elId, seleccionados) {
   const grid = document.getElementById(elId);
-  grid.innerHTML = TECNICOS_LISTA.map(t => `
+  // (25 oct 2026, Etapa 2) Técnicos de la nave elegida (sin naves = todas); los ya elegidos se conservan.
+  grid.innerHTML = TECNICOS_LISTA.filter(t => typeof fbTecnicoEnNave !== 'function' || fbTecnicoEnNave(t) || (seleccionados || []).includes(t.nombre)).map(t => `
     <button type="button" class="tec-chip${(seleccionados||[]).includes(t.nombre) ? ' sel' : ''}" data-tec="${fbEsc(t.nombre)}" onclick="this.classList.toggle('sel')">${fbEsc(t.corto || t.nombre)}</button>
   `).join('');
 }
@@ -674,14 +695,14 @@ function renderHoy() {
   const hoy = todayStr();
   const busca = (document.getElementById('hoy-buscar').value || '').trim().toLowerCase();
 
-  const vencidos = currentEquipos.filter(e =>
+  const vencidos = equiposDeNave().filter(e =>
     (e.checklistFrecuenciaDias && (!e.checklistProximaFecha || e.checklistProximaFecha <= hoy)) || horometroVencido(e)
   );
   const wrapV = document.getElementById('hoy-vencidos');
   wrapV.innerHTML = vencidos.length ? vencidos.map(e => itemRowHtml(e, true)).join('') :
     `<div class="empty" style="padding:20px 10px;"><span class="emoji">✅</span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
 
-  const todos = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const todos = equiposDeNave().filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   const wrapT = document.getElementById('hoy-todos');
   wrapT.innerHTML = todos.length ? todos.map(e => itemRowHtml(e, false)).join('') :
     `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p></div>`;
@@ -1037,10 +1058,12 @@ async function submitChecklist() {
       return o;
     });
     const cuenta = k => items.filter(i => i.resultado === k).length;
+    const plantaEq = typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(equipo) : ''; // (25 oct 2026, Etapa 2)
     batch.set(checklistRef, {
       equipoId: equipo.id,
       equipoNombre: equipo.nombre || '',
       equipoLocalidad: equipo.localidad || '',
+      ...(plantaEq ? { planta: plantaEq } : {}),
       fecha: hoy,
       tecnicos: tecnicos,
       items: itemsGuardar,
@@ -1076,6 +1099,7 @@ async function submitChecklist() {
         estado: 'pendiente',
         folio: folios[i],
         equipoId: equipo.id,
+        ...(plantaEq ? { planta: plantaEq } : {}),
         equipoNombre: equipo.nombre || '',
         equipoLocalidad: equipo.localidad || '',
         descripcionFalla: f.punto + (f.med && numOk(f.valor) ? ` (lectura ${f.valor}${f.med.unidad ? ' ' + f.med.unidad : ''}, rango ${rangoTxt(f.med)})` : '') + (f.nota ? ' — ' + f.nota : ''),
@@ -1146,6 +1170,7 @@ function loadChecklists() {
 
 function renderHistorial() {
   const wrap = document.getElementById('historial-lista');
+  const currentChecklists = currentChecklistsTodos().filter(enNave); // (25 oct 2026) nave elegida
   if (!currentChecklists.length) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
     return;
@@ -1279,6 +1304,7 @@ function renderOts() {
   const puedeMarcarHecho = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
   const esAdminCierre = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
 
+  const currentOts = currentOtsTodas().filter(enNave); // (25 oct 2026) nave elegida
   if (!currentOts.length) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">✅</span><p>No hay OTs pendientes por planificar.</p></div>`;
     return;
@@ -1291,7 +1317,7 @@ function renderOts() {
       acciones = `
         <div class="row" style="margin-top:10px;">
           <div class="field" style="margin-bottom:0;">
-            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.map(t => `<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto || t.nombre)}</option>`).join('')}</select>
+            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.filter(t => tecParaOt(t, o)).map(t => `<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto || t.nombre)}</option>`).join('')}</select>
           </div>
           <div class="field" style="margin-bottom:0;max-width:130px;">
             <input type="date" id="ot-fecha-${o.id}" value="${todayStr()}"/>
@@ -1942,7 +1968,7 @@ function renderConfig() {
 
   const puedeEditarPuntosEquipo = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
 
-  wrap.innerHTML = currentEquipos.map(e => {
+  wrap.innerHTML = equiposDeNave().map(e => {
     const tienePersonalizados = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length > 0;
     const usaHorometro = !!e.checklistFrecuenciaHoras;
     return `
@@ -2098,7 +2124,7 @@ async function desactivarHorometro(equipoId) {
 function renderHorometro() {
   const wrap = document.getElementById('horometro-lista');
   if (!wrap) return;
-  const equiposConHorometro = currentEquipos.filter(e => e.checklistFrecuenciaHoras);
+  const equiposConHorometro = equiposDeNave().filter(e => e.checklistFrecuenciaHoras);
   if (!equiposConHorometro.length) {
     wrap.innerHTML = `<div class="empty" style="padding:20px 10px;"><span class="emoji">⏱</span><p>Ningún equipo tiene horómetro activado todavía. Se activa por equipo desde "⚙️ Config".</p></div>`;
     return;

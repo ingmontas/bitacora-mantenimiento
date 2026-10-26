@@ -131,6 +131,7 @@
   <div>
     <h1>🚨 Reportar Parada</h1>
     <small id="header-sub">2026 · Cargando...</small>
+    <div id="nave-rep" style="margin-top:4px;font-size:11px;display:flex;"></div>
   </div>
   <div id="sp-status" title="Estado de conexión">⚙️</div>
 </div>
@@ -280,6 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // enlaces solo lo llevarían a pantallas con error de permisos.
     loadEquipos();
     escucharReportes();
+    // (25 oct 2026, Etapa 2) Nave: selector (si ve más de una) y repintado sin recargar.
+    if (typeof fbRenderSelectorNave === 'function') fbRenderSelectorNave(document.getElementById('nave-rep'));
+    if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => { renderListaEquipos(); unirReportes(); });
     updateHeaderStatus();
     // Si llega desde un QR con ?equipo=<id>, salta directo al formulario.
     const qEquipo = new URLSearchParams(location.search).get('equipo');
@@ -352,7 +356,7 @@ function actualizarListaEquipos() {
 function renderListaEquipos() {
   const busca = (document.getElementById('buscar-equipo').value || '').trim().toLowerCase();
   const wrap = document.getElementById('lista-equipos');
-  const filtrados = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const filtrados = currentEquipos.filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e)).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   wrap.innerHTML = filtrados.length ? filtrados.map(e => `
     <div class="item-row" onclick="abrirForm('${e.id}')">
       <div class="item-header">
@@ -462,10 +466,15 @@ async function enviarReporte() {
     // (5 oct 2026) No se espera al servidor: sin señal la promesa no termina
     // hasta reconectar y el operador quedaba en "Enviando…" y reenviaba
     // (reportes duplicados). Firestore lo guarda en el celular y lo sube solo.
+    // (25 oct 2026, Etapa 2) Nave del equipo (campo nuevo). El rol Operador NO
+    // lo manda: la regla de /ots solo le acepta una lista cerrada de campos
+    // (ver propuesta de reglas); su reporte se ubica por el equipo.
+    const plantaEq = !userHasRole('OPERADOR') && typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(equipoSeleccionado) : '';
     db.collection('ots').doc().set({
       origen: 'operador',
       estado: 'pendiente',
       tipoReporte: esProy ? 'proyecto' : 'falla', // (20 oct 2026)
+      ...(plantaEq ? { planta: plantaEq } : {}),
       folio: folio,
       equipoId: equipoSeleccionado.id,
       equipoNombre: equipoSeleccionado.nombre || '',
@@ -529,7 +538,7 @@ function escucharParte(clave, q) {
 function unirReportes() {
   const porId = new Map();
   Object.values(_repPartes).forEach(l => l.forEach(r => porId.set(r.id, r)));
-  reportes = [...porId.values()].filter(r => r.estado !== 'anulada');
+  reportes = [...porId.values()].filter(r => r.estado !== 'anulada' && (typeof fbEnNave !== 'function' || fbEnNave(r))); // (25 oct 2026) nave elegida
   renderEstado();
 }
 // Deja un listener por cada día del período visible (y quita los que sobran,

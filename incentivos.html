@@ -188,7 +188,7 @@ const tecKey = nombre => K(nombre).replace(/[^a-z0-9]/g, '_');
 function prepararTecnicos(lista) {
   TECS = (lista || []).filter(t => t && t.nombre).map(t => {
     const num = ((String(t.nombre) + ' ' + String(t.corto || '')).match(/#\s*(\d+)/) || [])[1] || '';
-    return { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key: tecKey(t.nombre), kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]) };
+    return { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key: tecKey(t.nombre), kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]), plantas: Array.isArray(t.plantas) ? t.plantas.slice() : [] };
   });
 }
 function _coincideDirecto(t, k, nums) {
@@ -220,11 +220,14 @@ window.fbReady.then(async () => {
   const u = window.currentUserRole || {};
   $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('incentivos');
+  fbOnNaveCambio(() => render()); // (25 oct 2026, Etapa 2)
   if (!userHasRole('ADMINISTRADOR')) {
     $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Los incentivos incluyen salarios y montos de cada técnico.</div>';
     return;
   }
-  try { const r = await fetch('tecnicos.json'); if (r.ok) prepararTecnicos(await r.json()); } catch (e) { console.warn('tecnicos.json:', e.message); }
+  // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json;
+  // mismos {nombre, corto}, así el emparejamiento de nombres no cambia.
+  try { prepararTecnicos(await fbTecnicos()); } catch (e) { console.warn('técnicos:', e.message); }
   try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); }
   catch (e) { console.warn('incentivos_config:', e.message); toast('⚠️ No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
   const pedida = lunesDeId(decodeURIComponent((location.hash || '').slice(1)));
@@ -491,10 +494,22 @@ function tarjetaHtml(f, v) {
     <div class="monto">${pie}</div>
   </div>`;
 }
+// (25 oct 2026, Etapa 2) Con una nave elegida arriba se muestran solo sus
+// técnicos (sin naves asignadas = de todas). El cálculo de cada técnico NO
+// cambia (cuenta todo su trabajo); "Todas" = exactamente lo de antes. Aprobar
+// la semana siempre guarda a TODOS los técnicos.
+function vistaDeNave(v) {
+  if (!fbNavesFiltro()) return v;
+  const plantasDe = key => { const t = TECS.find(x => x.key === key); return t ? t.plantas : []; };
+  const filas = v.filas.filter(f => fbTecnicoEnNave({ plantas: plantasDe(f.key) }));
+  const cd = filas.filter(f => !f.sinDatos);
+  return { ...v, filas, promedio: cd.length ? Math.round(cd.reduce((s, f) => s + f.puntaje, 0) / cd.length) : null, total: r2(filas.reduce((s, f) => s + f.monto, 0)), parcial: filas.length !== v.filas.length };
+}
 function render() {
   if (!DATOS || DATOS.id !== SEM) return;
-  const v = semanaVista();
-  window.__inc = { semana: SEM, vista: v }; // (para las pruebas automáticas)
+  const vTodas = semanaVista();
+  const v = vistaDeNave(vTodas);
+  window.__inc = { semana: SEM, vista: v, vistaTodas: vTodas }; // (para las pruebas automáticas)
   const hoyL = lunesDe(new Date());
   const terminada = DATOS.domingo < fbHoy();
   const esActual = fbFechaLocal(LUNES) === fbFechaLocal(hoyL);
@@ -507,12 +522,12 @@ function render() {
   botones += `<button class="btn2" id="bExcel">⬇️ Descargar Excel</button><button class="btn2" id="bReglas">⚙️ Reglas y salarios</button>`;
   const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px">ℹ️ Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
   $('view').innerHTML = cabeceraHtml(v)
-    + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en tecnicos.json.</div>')
-    + notaCk + botones
+    + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en la lista (⚙️ Administración → Usuarios).</div>')
+    + notaCk + (v.parcial ? `<div class="nota" style="margin:0 2px 10px">🏭 Mostrando los técnicos de ${esc(fbNaveTexto())} (${v.filas.length} de ${vTodas.filas.length}). Aprobar guarda la semana de todos (${esc(money(vTodas.total))}).</div>` : '') + botones
     + `<div class="nota" style="text-align:center;margin-top:12px">${v.congelada ? 'Toca un técnico para ver su detalle.' : 'Toca un técnico para poner un ajuste (+/− RD$).'} Pesos: ${CRITERIOS.map(x => esc(x.nombre) + ' ' + esc((v.congelada && (sd.reglas || {}).pesos ? sd.reglas.pesos : CFG.pesos)[x.k]) + '%').join(' · ')}.</div>`;
   bindCabecera();
   $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => modalAjuste(el.dataset.tec, v));
-  if ($('bAprobar')) $('bAprobar').onclick = () => modalAprobar(v, esActual);
+  if ($('bAprobar')) $('bAprobar').onclick = () => modalAprobar(vTodas, esActual); // siempre todos los técnicos
   if ($('bReabrir')) $('bReabrir').onclick = () => modalReabrir();
   if ($('bPagada')) $('bPagada').onclick = () => marcarPagada(!sd.pagada);
   $('bExcel').onclick = () => descargarExcel(v);

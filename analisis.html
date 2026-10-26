@@ -838,7 +838,7 @@ function cargarChecklistsAn(dias){
   let q = db.collection('checklists').where('fecha', '>=', desde);
   if (_ckAn.desde) q = q.where('fecha', '<', _ckAn.desde);
   q.get().then(snap=>{
-    snap.docs.forEach(d=>{ const c = d.data()||{}; if (c.equipoId && c.fecha) _ckAn.docs.push({equipoId:c.equipoId, fecha:String(c.fecha)}); });
+    snap.docs.forEach(d=>{ const c = d.data()||{}; if (c.equipoId && c.fecha) _ckAn.docs.push({equipoId:c.equipoId, fecha:String(c.fecha), ...(c.planta ? {planta:c.planta} : {})}); });
     _ckAn.desde = desde;
   }).catch(err=>{
     console.warn('No se pudieron leer los checklists para el cumplimiento preventivo:', err);
@@ -869,22 +869,26 @@ const pctTxt = p => p==null ? '—' : (Math.round(p*10)/10).toLocaleString('es-D
 function renderGestion(){
   const box = $('kpiGestion'); if (!box) return;
   const ref = today0();
-  const enArea = a => !F.area || (a||'Sin área') === F.area;
+  // (25 oct 2026, Etapa 2) un área renombrada cuenta con su nombre vigente
+  const enArea = a => !F.area || (fbNombreActual('areas', a||'Sin área')||'Sin área') === F.area;
   const MAXL = 8;
+  // (25 oct 2026, Etapa 2) Solo la nave elegida arriba ("Todas" = sin filtro).
+  const ckDocsN = _ckAn.docs.filter(c=>fbEnNave(c));
+  const eqDocsN = _equiposDocs ? _equiposDocs.filter(e=>fbEquipoEnNave(e)) : null;
 
   /* ---- 1) cumplimiento preventivo ---- */
   const diasCk = ventanaChecklistDias();
   if (_equiposDocs) cargarChecklistsAn(diasCk);
   const desdeCk = desdeDias(diasCk);
   const ckOk = !!_ckAn.desde && _ckAn.desde <= desdeCk && !_ckAn.err;
-  const ckVent = ckOk ? _ckAn.docs.filter(c=>c.fecha >= desdeCk && c.fecha <= fbFechaLocal(ref)) : [];
+  const ckVent = ckOk ? ckDocsN.filter(c=>c.fecha >= desdeCk && c.fecha <= fbFechaLocal(ref)) : [];
   const ultCk = {}, diasCkEq = {};
-  (ckOk ? _ckAn.docs : []).forEach(c=>{ if (!ultCk[c.equipoId] || c.fecha > ultCk[c.equipoId]) ultCk[c.equipoId] = c.fecha; });
+  (ckOk ? ckDocsN : []).forEach(c=>{ if (!ultCk[c.equipoId] || c.fecha > ultCk[c.equipoId]) ultCk[c.equipoId] = c.fecha; });
   ckVent.forEach(c=>{ (diasCkEq[c.equipoId] = diasCkEq[c.equipoId] || new Set()).add(c.fecha); });
   let prevVal = '—', prevCls = '', prevFoot = 'cargando equipos…', vencPrev = [], nFrec = 0;
   let progTot = 0, hechosTot = 0;
   if (_equiposDocs){
-    const conFrec = _equiposDocs.filter(e=>(Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) && enArea(e.localidad));
+    const conFrec = eqDocsN.filter(e=>(Number(e.checklistFrecuenciaDias)>0 || Number(e.checklistFrecuenciaHoras)>0) && enArea(e.localidad));
     nFrec = conFrec.length;
     conFrec.forEach(e=>{
       const f = Number(e.checklistFrecuenciaDias)||0, fh = Number(e.checklistFrecuenciaHoras)||0;
@@ -931,7 +935,7 @@ function renderGestion(){
 
   /* ---- 2) órdenes vencidas ---- */
   const vencOts = [];
-  (_otsAbiertasAn||[]).forEach(o=>{
+  (_otsAbiertasAn||[]).filter(o=>fbEnNave(o)).forEach(o=>{
     if (!ESTADOS_ABIERTOS_AN.includes(o.estado)) return;
     const eqDoc = o.equipoId && _equiposDocs ? _equiposDocs.find(e=>e.id===o.equipoId) : null;
     const area = o.equipoLocalidad || (eqDoc && eqDoc.localidad) || 'Sin área';
@@ -1475,7 +1479,7 @@ function rowToOtRecord(r){
 function otRecordToRow(doc){
   return {
     equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'', proyecto:doc.tipoReporte==='proyecto',
-    ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:doc.LINEA_EQUIPO||'Sin área',
+    ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:fbNombreActual('areas', doc.LINEA_EQUIPO)||'Sin área', // (25 oct 2026) área renombrada → nombre vigente (sin renombrar: igual que antes)
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',
     tipoMant:doc.TIPO_MANTENIMIENTO||'Sin clasificar', paroPlanta:doc.PARO_PLANTA||'', tecnicos:doc.TECNICOS||'',
     minMaquina:Number(doc.TOTAL_MIN_MAQUINA)||0, minTecnico:Number(doc.TOTAL_MIN_TECNICO)||0,
@@ -1532,6 +1536,8 @@ window._sortKey = 'risk';
 switchTab((location.hash||'').slice(1) || 'resumen');
 document.addEventListener('DOMContentLoaded',()=>{
   fbRenderMiniNav('analisis');
+  // (25 oct 2026, Etapa 2) Cambio de nave: se recalcula con lo que ya está en memoria.
+  fbOnNaveCambio(()=>{ combinarOtsAn(); renderGestion(); });
   // la barra de filtros se pega justo debajo de la barra de navegación de la app
   window.fbReady.then(()=>{
     const n = $('fbMiniNav'); if (n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight+'px');
@@ -1606,7 +1612,9 @@ function combinarOtsAn(){
   // un aviso en atención o una OT de checklist sí podrían traerla.)
   const porId = new Map();
   docs.forEach(d=>porId.set(d.id, d));
-  const rows = [...porId.values()].map(d=>({...otRecordToRow(d.data()), _id:d.id}))
+  // (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba. Con "Todas"
+  // no se quita ninguna: los KPIs (MTBF, disponibilidad…) quedan iguales.
+  const rows = [...porId.values()].filter(d=>fbEnNave(d.data())).map(d=>({...otRecordToRow(d.data()), _id:d.id}))
     .filter(r=>r.estado!=='anulada' && !(['operador','checklist','qr'].includes(r.origen) && r.estado!=='completada'))
     .sort((a,b)=>a._id.localeCompare(b._id));
   const vistos = new Set();
@@ -1629,7 +1637,8 @@ window.fbReady.then(()=>{
     _equiposCat = cat; _equiposPorNombre = porNombre;
     // (14 oct 2026) docs completos para el cumplimiento preventivo (frecuencias y próximas fechas)
     _equiposDocs = s.docs.map(d=>({id:d.id, ...(d.data()||{})}));
-    if (allRows.length) render(); else renderGestion();
+    if (fbNavesFiltro() && (_docsAnRecientes.length || _docsAnViejos.length)) combinarOtsAn(); // (25 oct 2026) la nave de las OTs viejas sale del catálogo
+    else if (allRows.length) render(); else renderGestion();
   }).catch(err=>{
     console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err);
     _equiposDocs = []; _equiposDocsErr = true; renderGestion();

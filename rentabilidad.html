@@ -369,7 +369,9 @@ async function asegurarRango(desde, hasta) {
   mesesEntre(d0, d1).forEach(m => MES_DOCS.set(m, []));
   snap.docs.forEach(x => { const o = { id: x.id, ...x.data() }; const m = mesDe(o.FECHA); if (MES_DOCS.has(m)) MES_DOCS.get(m).push(o); });
 }
-const otsEntre = (desde, hasta) => depurar(mesesEntre(desde, hasta).flatMap(m => MES_DOCS.get(m) || []).filter(o => o.FECHA >= desde && o.FECHA <= hasta));
+// (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba (se quita
+// después de depurar, así cada OT cuesta lo mismo; "Todas" = igual que antes).
+const otsEntre = (desde, hasta) => depurar(mesesEntre(desde, hasta).flatMap(m => MES_DOCS.get(m) || []).filter(o => o.FECHA >= desde && o.FECHA <= hasta)).filter(o => fbEnNave(o));
 
 // ══════ PERÍODO ══════
 // 'anio:AAAA' (año calendario; el actual va hasta hoy y se proyecta a 12
@@ -551,6 +553,7 @@ window.fbReady.then(async () => {
   const u = window.currentUserRole || {};
   $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('rentabilidad');
+  fbOnNaveCambio(() => { if (userHasRole('ADMINISTRADOR')) pintar(); }); // (25 oct 2026, Etapa 2)
   if (!userHasRole('ADMINISTRADOR')) {
     // Sin lecturas de costos, salarios ni OTs para otros roles.
     $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Incluye costos, salarios y precios de máquinas.</div>';
@@ -566,7 +569,8 @@ window.fbReady.then(async () => {
 
 // Configuración: tecnicos.json + 3 lecturas (costos, salarios, repuestos) + catálogo de equipos (caché).
 async function cargarBase() {
-  try { const r = await fetch('tecnicos.json'); if (r.ok) prepararTecnicos(await r.json()); } catch (e) { console.warn('tecnicos.json:', e.message); }
+  // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json.
+  try { prepararTecnicos(await fbTecnicos()); } catch (e) { console.warn('técnicos:', e.message); }
   const [c, inc, rep, eqs] = await Promise.all([
     db.collection('costos_config').doc('general').get().catch(e => ({ err: e })),
     db.collection('incentivos_config').doc('general').get().catch(e => ({ err: e })),
@@ -667,7 +671,7 @@ function vistaAnio(R) {
     <div class="kpi"><span>Semáforo</span><b style="font-size:15px;white-space:nowrap">🔴${cnt.rojo} 🟡${cnt.amarillo} 🟢${cnt.verde}</b><small>⚪${cnt.gris} sin datos · ${nEq} equipos</small></div>
     <div class="kpi"><span>Faltan datos</span><b>${pctFalta} %</b><small>equipos sin precio de una nueva</small></div></div>`;
   const cols = columnasMes(R.meses, R.porMes, R.meses.length <= 7);
-  const graf = cardGrafica('Costo de mantenimiento por mes', 'Toda la planta · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
+  const graf = cardGrafica('Costo de mantenimiento por mes', (fbNavesFiltro() ? fbNaveTexto() : 'Toda la planta') + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
   const lim = UI.verTodos ? R.equipos.length : 15;
   const cards = R.equipos.slice(0, lim).map(E => tarjetaEquipo(E, per)).join('');
   $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + graf

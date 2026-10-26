@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v48'; // (23 oct 2026) Solo el Administrador anula; trabajos asignados como avisos
+const CACHE = 'mantenimiento-v50'; // (25 oct 2026) Etapa 2: nave en todo (selector de nave, filtros, Administración → Naves, completar nave)
 const ASSETS = [
   './',
   'index.html',
@@ -21,6 +21,7 @@ const ASSETS = [
   'almacen.html',
   'incentivos.html',
   'rentabilidad.html',
+  'admin.html', // (25 oct 2026)
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',

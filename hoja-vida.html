@@ -311,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('header-sub').textContent =
       (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('hoja-vida');
+    if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => renderPicker()); // (25 oct 2026)
     cargarDatos();
     updateHeaderStatus();
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -415,7 +416,8 @@ function otsDeEquipo(e) {
 function renderPicker() {
   const wrap = document.getElementById('picker-lista');
   const busca = (document.getElementById('picker-buscar').value || '').toLowerCase().trim();
-  const lista = currentEquipos.filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  // (25 oct 2026, Etapa 2) Solo los equipos de la nave elegida arriba (sin nave conocida: salen siempre).
+  const lista = currentEquipos.filter(e => fbEquipoEnNave(e)).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   if (!lista.length) {
     wrap.innerHTML = `<div class="empty"><span class="emoji">🔍</span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
     return;

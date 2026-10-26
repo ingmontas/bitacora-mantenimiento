@@ -78,6 +78,7 @@
 <script>
 const esc = fbEsc;
 let tab = 'pendiente', pendientes = [], atendidas = [];
+const pendientesTodas = () => pendientes, atendidasTodas = () => atendidas;
 const enCurso = new Set();
 const ROLES = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'ALMACEN'];
 
@@ -89,6 +90,9 @@ window.fbReady.then(() => {
   const u = window.currentUserRole || {};
   document.getElementById('quien').textContent = 'Almacén · ' + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('almacen');
+  fbOnNaveCambio(() => pintar()); // (25 oct 2026, Etapa 2)
+  // Con una nave elegida, la nave de las solicitudes viejas sale del catálogo de equipos (caché de 12 h).
+  if (fbNavesFiltro()) fbEquiposCatalogo(false).then(() => pintar()).catch(() => {});
   if (!ROLES.includes(u.rol)) {
     document.getElementById('lista').innerHTML = '<div class="vacio">🔒 Esta pantalla es para Almacén, Encargado o Administrador.</div>';
     return;
@@ -114,6 +118,9 @@ document.getElementById('tabs').addEventListener('click', ev => {
 });
 
 function pintar() {
+  // (25 oct 2026, Etapa 2) Solo la nave elegida arriba: cada solicitud lleva
+  // su equipo (y las nuevas su nave). Sin nave conocida: se muestra siempre.
+  const pendientes = pendientesTodas().filter(s => fbEnNave(s)), atendidas = atendidasTodas().filter(s => fbEnNave(s));
   document.querySelector('#tabs [data-t="pendiente"]').textContent = 'Pendientes (' + pendientes.length + ')';
   const orden = (a, b) => ((a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0) - (b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0));
   const lista = tab === 'pendiente' ? pendientes.slice().sort(orden) : atendidas.slice().sort((a, b) => -orden(a, b));

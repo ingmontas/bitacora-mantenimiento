@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0F1923"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Administración — Mantenimiento</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-init.js"></script>
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       ADMINISTRACIÓN (25 oct 2026) — Etapa 1 de la ampliación a 6 naves
+       Solo Administrador. Tres pestañas:
+         👥 Usuarios   alta de cuentas (correo + contraseña temporal), rol,
+                       naves (/plantas), nombre de técnico, activar/desactivar.
+                       Cada vez que se guarda, se reescribe /config/tecnicos
+                       (la lista de técnicos que usan Bitácora, Checklist,
+                       Inventario, Herramientas, Incentivos y Rentabilidad).
+         💾 Respaldo   un archivo .json con TODAS las colecciones, leído por
+                       páginas de 500 (nunca una colección entera de golpe).
+         📊 Uso        cuánto ocupa la base frente al plan gratis (Spark).
+       Plan gratis de Firebase: sin Cloud Functions ni Storage. Las cuentas
+       se crean con una segunda instancia de Firebase en este navegador
+       ("altaUsuarios") para que el Administrador no pierda su sesión.
+       Nada se borra: "Desactivar" pone activo:false.
+       ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
+      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8; --orange: #F97316;
+      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { overflow-x: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
+    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
+    #header h1 { font-size: 17px; font-weight: 800; }
+    #header small { font-size: 11px; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 60px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tabs button { flex: 1; min-width: 0; padding: 10px 4px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tabs button.on { color: var(--accent); border-color: var(--accent); background: #F59E0B18; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
+    .card h2 { font-size: 15px; font-weight: 800; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #F59E0B22; color: var(--accent); white-space: nowrap; }
+    .tag.ok { background: #10B98122; color: #4ade80; } .tag.info { background: #818CF822; color: #a5b4fc; } .tag.bad { background: #EF444422; color: #ff8a8a; }
+    .nota { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 6px; overflow-wrap: anywhere; }
+    .nota a { color: var(--accent); }
+    .usr { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-top: 10px; min-width: 0; }
+    .usr.off { opacity: .6; }
+    .usr .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .usr .top b { font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
+    .usr .det { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; overflow-wrap: anywhere; }
+    .usr .acts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { font-size: 12px; padding: 4px 9px; border-radius: 14px; background: #818CF822; color: #c7d2fe; overflow-wrap: anywhere; max-width: 100%; }
+    .chip small { color: var(--muted); }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: 0; font-weight: 800; font-size: 15px; background: var(--accent); color: #0F1923; margin-top: 4px; cursor: pointer; font-family: inherit; }
+    .btn2 { width: 100%; padding: 11px; border-radius: 10px; border: 0; font-weight: 700; font-size: 14px; background: var(--border); color: var(--text); margin-top: 8px; cursor: pointer; font-family: inherit; }
+    .btn-sm { width: auto; padding: 9px 14px; font-size: 13.5px; margin-top: 0; }
+    .btn-danger { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444455; }
+    .btn[disabled], .btn2[disabled] { opacity: .5; cursor: default; }
+    .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
+    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
+    input:focus, select:focus { border-color: var(--accent); }
+    input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
+    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
+    label.ck { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 6px 0; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+    .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+    .naves { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+    .caja { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
+    .caja.err { background: #EF444418; border-color: #EF444466; color: #fecaca; }
+    .caja.warn { background: #F59E0B14; border-color: #F59E0B55; }
+    .caja.ok { background: #10B98114; border-color: #10B98155; }
+    .prog { margin-top: 10px; font-size: 12.5px; }
+    .prog div { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); min-width: 0; }
+    .prog div span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .prog div span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+    table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; table-layout: fixed; }
+    table.t th { text-align: left; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+    table.t td { padding: 6px 4px; border-bottom: 1px dashed var(--border); overflow-wrap: anywhere; }
+    table.t td.n, table.t th.n { text-align: right; font-variant-numeric: tabular-nums; }
+    .bar { height: 10px; background: var(--border); border-radius: 6px; margin: 8px 0 4px; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--green); min-width: 2px; }
+    .lim { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+    .lim div { background: var(--surface); border-radius: 10px; padding: 10px 8px; text-align: center; min-width: 0; }
+    .lim b { display: block; font-size: 16px; } .lim span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 24px 10px; overflow-y: auto; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; width: 100%; max-width: 560px; min-width: 0; }
+    .modal h3 { font-size: 16px; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: #B45309; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>⚙️ Administración</h1>
+  <small id="header-sub">Cargando...</small>
+</div>
+
+<div class="wrap">
+  <div class="tabs" id="tabs" style="display:none">
+    <button data-tab="usuarios">👥 Usuarios</button>
+    <button data-tab="naves">🏭 Naves</button>
+    <button data-tab="respaldo">💾 Respaldo</button>
+    <button data-tab="uso">📊 Uso</button>
+  </div>
+  <div id="view"><div class="card empty">Cargando...</div></div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+// ══════ AYUDAS ══════
+const esc = s => fbEsc(s);
+const $ = id => document.getElementById(id);
+const K = s => fbEquipoKey(s);
+const num = n => (Number(n) || 0).toLocaleString('es-DO');
+const quien = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
+let _toastT = null;
+function toast(msg, tipo) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3200); }
+function openModal(html) { $('modal').innerHTML = html; $('modalBg').classList.add('open'); }
+function closeModal() { $('modalBg').classList.remove('open'); }
+$('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg' && !MODAL_FIJO) closeModal(); });
+let MODAL_FIJO = false; // mientras se crea una cuenta o se descarga el respaldo no se cierra tocando afuera
+const tsDate = t => (t && typeof t.toDate === 'function') ? t.toDate() : null;
+const fechaTxt = d => d ? d.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : '—';
+const diasDesde = d => d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
+const mb = b => b >= 1048576 ? (b / 1048576).toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' MB' : Math.max(1, Math.round(b / 1024)).toLocaleString('es-DO') + ' KB';
+
+const ROLES = [
+  ['ADMINISTRADOR', 'Administrador'],
+  ['ENCARGADO_MANTENIMIENTO', 'Encargado de mantenimiento'],
+  ['SUPERVISOR', 'Supervisor'],
+  ['TECNICO', 'Técnico'],
+  ['ALMACEN', 'Almacén'],
+  ['OPERADOR', 'Operador (producción)'],
+  ['RRHH', 'Recursos Humanos'],
+];
+const rolTxt = r => (ROLES.find(x => x[0] === r) || [r, r || 'Sin rol'])[1];
+
+// Todas las colecciones que usa la app (db.collection('…') en las páginas y
+// firebase-init.js) + las que solo aparecen en firestore.rules (pueden tener
+// datos viejos). No hay subcolecciones. fotos_repuestos va aparte (pesada).
+const COLECCIONES = ['usuarios', 'config', 'plantas', 'areas', 'lineas', 'equipos', 'equipos_publico', 'ots', 'checklists',
+  'movimientos', 'reubicaciones', 'solicitudes_repuestos', 'auditoria',
+  'herramientas', 'herramientas_asignadas', 'herramientas_arqueos', 'herramientas_movimientos',
+  'incentivos_config', 'incentivos_semanas', 'costos_config', 'costos_repuestos',
+  'repuestos', 'planes_preventivos', 'solicitudes_compra', 'proveedores'];
+const COL_FOTOS = 'fotos_repuestos';
+const PAGINA = 500;
+// Tamaño típico de un documento (bytes) para estimar el espacio cuando aún
+// no hay un respaldo del que sacar el tamaño real.
+const TIPICO = { ots: 2000, equipos: 4000, equipos_publico: 9000, checklists: 2500, herramientas_arqueos: 2000, fotos_repuestos: 120000, incentivos_semanas: 6000, incentivos_config: 3000, costos_config: 3000 };
+const tipico = c => TIPICO[c] || 700;
+const GIB = 1073741824;
+const URL_USO = 'https://console.firebase.google.com/project/mantenimiento-planta-174c2/firestore/usage';
+
+// ¿Este SDK trae count() (cuenta sin leer cada documento)? La versión compat
+// 9.23 puede no traerlo: entonces se usan los números del último respaldo.
+function hayCount() {
+  try {
+    if (firebase.firestore.Query && firebase.firestore.Query.prototype && typeof firebase.firestore.Query.prototype.count === 'function') return true;
+    return typeof db.collection('config').count === 'function';
+  } catch (e) { return false; }
+}
+// count() cobra 1 lectura por cada 1.000 documentos contados (mínimo 1).
+async function contar(col) {
+  const s = await db.collection(col).count().get();
+  const n = Number(s.data().count) || 0;
+  return { n, lecturas: Math.max(1, Math.ceil(n / 1000)) };
+}
+
+// ══════ ESTADO ══════
+let TAB = 'usuarios';
+let USUARIOS = null;     // [{id, …datos de /usuarios}]
+let TEC_CFG;             // datos de /config/tecnicos (null = no existe todavía)
+let PLANTAS = null;      // ['PLANTA 1', …]
+let RESPALDO;            // datos de /config/respaldo (null = nunca)
+let USO = null;          // { col: {n, fuente} } del conteo de esta visita
+let FOTOS_BYTES = null;  // bytes reales de fotos (si se tocó "Calcular")
+let FOTOS_N = null;      // cuántas fotos se leyeron al calcular
+let FILTRO = '';
+
+window.fbReady.then(() => {
+  const u = window.currentUserRole || {};
+  $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('admin');
+  if (!userHasRole('ADMINISTRADOR')) {
+    $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Aquí se crean usuarios y se descarga el respaldo de toda la base de datos.</div>';
+    return;
+  }
+  $('tabs').style.display = '';
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => irA(b.dataset.tab));
+  const h = (location.hash || '').slice(1);
+  irA(['usuarios', 'naves', 'respaldo', 'uso'].includes(h) ? h : 'usuarios');
+}).catch(e => { try { console.error(e); } catch (_) {} });
+
+function irA(tab) {
+  TAB = tab;
+  try { history.replaceState(null, '', '#' + tab); } catch (e) {}
+  $('tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  if (tab === 'usuarios') verUsuarios();
+  else if (tab === 'naves') verNaves();
+  else if (tab === 'respaldo') verRespaldo();
+  else verUso();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 👥 USUARIOS
+// Lecturas: /usuarios completo (1 por usuario) + /config/tecnicos (1) la
+// primera vez; /plantas (1 por nave) al abrir el formulario. Luego todo se
+// queda en memoria mientras la página esté abierta.
+// ══════════════════════════════════════════════════════════════════════
+async function cargarUsuarios(forzar) {
+  if (USUARIOS && !forzar) return;
+  const [us, tc] = await Promise.all([
+    db.collection('usuarios').get(),
+    db.collection('config').doc('tecnicos').get(),
+  ]);
+  USUARIOS = us.docs.map(d => ({ id: d.id, ...d.data() }));
+  TEC_CFG = tc.exists ? tc.data() : null;
+}
+async function cargarPlantas() {
+  if (PLANTAS) return PLANTAS;
+  try {
+    const s = await db.collection('plantas').get();
+    if (typeof fbRegistrarNombres === 'function') fbRegistrarNombres('plantas', s.docs); // (25 oct 2026) copia para el selector de nave
+    PLANTAS = s.docs.map(d => String((d.data() || {}).nombre || '').trim()).filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  } catch (e) { console.warn('plantas:', e.message); PLANTAS = []; }
+  return PLANTAS;
+}
+const navesTxt = p => (Array.isArray(p) && p.length) ? p.join(', ') : 'Todas las naves';
+// Un usuario aparece en la lista de técnicos si su rol es Técnico o si tiene
+// "nombre de técnico" (mismo criterio que miTecnico() en firestore.rules).
+const esTecnicoUsuario = u => u.rol === 'TECNICO' || !!String(u.tecnico || '').trim();
+const nombreTecDe = u => String(u.tecnico || '').trim() || String(u.nombre || '').trim();
+
+async function verUsuarios() {
+  if (!USUARIOS) $('view').innerHTML = '<div class="card empty">Cargando usuarios…</div>';
+  try { await cargarUsuarios(); }
+  catch (e) { $('view').innerHTML = '<div class="card empty">❌ No se pudieron leer los usuarios: ' + esc(e.message) + '</div>'; return; }
+  if (TAB !== 'usuarios') return;
+  pintarUsuarios();
+}
+function pintarUsuarios() {
+  const q = K(FILTRO);
+  const lista = USUARIOS.slice()
+    .sort((a, b) => ((b.activo === true) - (a.activo === true)) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'))
+    .filter(u => !q || K([u.nombre, u.email, u.rol, u.tecnico].join(' ')).includes(q));
+  const activos = USUARIOS.filter(u => u.activo === true).length;
+  const tecLista = (TEC_CFG && Array.isArray(TEC_CFG.lista)) ? TEC_CFG.lista : null;
+  const sinCuenta = tecLista ? tecLista.map((t, i) => ({ t, i })).filter(x => !x.t.uid) : [];
+  $('view').innerHTML = `
+    <div class="card">
+      <div class="row"><h2>👥 Usuarios</h2><span class="tag info">${activos} activos · ${USUARIOS.length} en total</span></div>
+      <div class="nota">Cada persona entra con su correo y contraseña. El rol decide qué pantallas ve; las naves, de qué plantas es (vacío = todas).</div>
+      <button class="btn" id="bNuevo" style="margin-top:10px">＋ Nuevo usuario</button>
+      ${USUARIOS.length > 6 ? `<input id="fUsr" placeholder="🔎 Buscar por nombre, correo o rol" value="${esc(FILTRO)}" style="margin-top:10px">` : ''}
+      <div id="lUsr">${lista.map(u => tarjetaUsuario(u)).join('') || '<div class="empty">Ningún usuario coincide.</div>'}</div>
+    </div>
+    <div class="card">
+      <div class="row"><h2>👷 Lista de técnicos</h2>${tecLista ? '<span class="tag ok">En Firebase</span>' : '<span class="tag">tecnicos.json</span>'}</div>
+      <div class="nota">Es la lista que sale en Bitácora, Checklist, Inventario, Herramientas, Incentivos y Rentabilidad. Se actualiza sola cada vez que guardas un usuario técnico.
+        ${tecLista ? 'Última actualización: ' + esc(fechaTxt(tsDate(TEC_CFG.actualizadoEn))) + (TEC_CFG.actualizadoPor ? ' · ' + esc(TEC_CFG.actualizadoPor) : '') + '.'
+          : '<br><b style="color:var(--accent)">Todavía se usa el archivo tecnicos.json.</b> Pulsa "Migrar" para pasarla a Firebase sin cambiar ningún nombre.'}</div>
+      <div class="chips">${(tecLista || []).filter(t => t.activo !== false).map(t => `<span class="chip">${esc(t.corto || t.nombre)} <small>${esc(t.nombre !== t.corto ? t.nombre : '')}${t.plantas && t.plantas.length ? ' · ' + esc(t.plantas.join(', ')) : ''}</small></span>`).join('')}</div>
+      ${sinCuenta.length ? `<div class="nota" style="margin-top:10px">Técnicos sin cuenta en la app (solo nombre en la lista):</div>
+        ${sinCuenta.map(x => `<div class="usr${x.t.activo === false ? ' off' : ''}"><div class="top"><b>${esc(x.t.nombre)}</b>${x.t.activo === false ? '<span class="tag bad">Inactivo</span>' : '<span class="tag ok">Activo</span>'}</div>
+          <div class="det">Corto: ${esc(x.t.corto || x.t.nombre)} · 🏭 ${esc(navesTxt(x.t.plantas))}</div>
+          <div class="acts"><button class="btn2 btn-sm" data-tsc="${x.i}">✏️ Editar</button></div></div>`).join('')}` : ''}
+      <div class="g2" style="margin-top:10px">
+        <button class="btn2" id="bMigrar">⤵️ Migrar desde tecnicos.json</button>
+        <button class="btn2" id="bTecSin">＋ Técnico sin cuenta</button>
+      </div>
+    </div>`;
+  $('bNuevo').onclick = () => modalUsuario(null);
+  if ($('fUsr')) $('fUsr').oninput = e => { FILTRO = e.target.value; const p = e.target.selectionStart; pintarUsuarios(); const f = $('fUsr'); f.focus(); try { f.setSelectionRange(p, p); } catch (_) {} };
+  $('view').querySelectorAll('[data-ed]').forEach(b => b.onclick = () => modalUsuario(USUARIOS.find(u => u.id === b.dataset.ed)));
+  $('view').querySelectorAll('[data-tsc]').forEach(b => b.onclick = () => modalTecSinCuenta(+b.dataset.tsc));
+  $('bMigrar').onclick = modalMigrar;
+  $('bTecSin').onclick = () => modalTecSinCuenta(null);
+}
+function tarjetaUsuario(u) {
+  const act = u.activo === true;
+  const tec = esTecnicoUsuario(u) ? nombreTecDe(u) + (u.tecnicoCorto ? ' (' + u.tecnicoCorto + ')' : '') : '';
+  return `<div class="usr${act ? '' : ' off'}">
+    <div class="top"><b>${esc(u.nombre || '(sin nombre)')}</b><span class="tag ${act ? 'ok' : 'bad'}">${act ? 'Activo' : 'Inactivo'}</span></div>
+    <div class="det">✉️ ${esc(u.email || 'sin correo guardado')}<br>🔑 ${esc(rolTxt(u.rol))} · 🏭 ${esc(navesTxt(u.plantas))}${tec ? '<br>👷 ' + esc(tec) : ''}${u.id === uidYo() ? '<br><span class="tag info">Eres tú</span>' : ''}</div>
+    <div class="acts"><button class="btn2 btn-sm" data-ed="${esc(u.id)}">✏️ Editar</button></div>
+  </div>`;
+}
+
+// ── Formulario de usuario (nuevo o editar) ──
+async function modalUsuario(u) {
+  const nuevo = !u;
+  u = u || { rol: 'TECNICO', plantas: [], activo: true };
+  const plantas = await cargarPlantas();
+  // (25 oct 2026) Una nave guardada con su nombre anterior (renombrada) se marca en la vigente.
+  const sel = (Array.isArray(u.plantas) ? u.plantas : []).map(p => fbNombreActual('plantas', p));
+  const extra = sel.filter(p => !plantas.includes(p)); // naves guardadas que ya no están en /plantas
+  const yo = u.id && u.id === uidYo();
+  openModal(`
+    <h3>${nuevo ? '＋ Nuevo usuario' : '✏️ ' + esc(u.nombre || u.email || 'Usuario')}</h3>
+    <div class="nota">${nuevo ? 'Se crea la cuenta de acceso (correo + contraseña temporal) y su rol. Tu sesión no se cierra.' : 'El correo no se puede cambiar desde aquí.'}</div>
+    <label class="f">Correo</label>
+    <input id="uEmail" type="email" autocomplete="off" value="${esc(u.email || '')}" ${nuevo ? '' : 'readonly style="opacity:.7"'} placeholder="nombre@empresa.com">
+    <label class="f">Nombre</label>
+    <input id="uNombre" maxlength="100" value="${esc(u.nombre || '')}" placeholder="Nombre y apellido">
+    <label class="f">Rol</label>
+    <select id="uRol" ${yo ? 'disabled' : ''}>${ROLES.map(r => `<option value="${r[0]}"${r[0] === u.rol ? ' selected' : ''}>${esc(r[1])}</option>`).join('')}</select>
+    ${yo ? '<div class="nota">No puedes quitarte el rol de Administrador a ti mismo.</div>' : ''}
+    <label class="f">Naves (vacío = todas)</label>
+    <div class="naves" id="uNaves">${plantas.concat(extra).map(p => `<label class="ck"><input type="checkbox" value="${esc(p)}"${sel.includes(p) ? ' checked' : ''}> ${esc(p)}</label>`).join('') || '<div class="nota">No hay plantas en /plantas todavía.</div>'}</div>
+    <div id="uTecBox">
+      <div class="g2">
+        <div><label class="f">Nombre de técnico</label><input id="uTec" maxlength="100" value="${esc(u.tecnico || '')}" placeholder="FELIX M. GIL #777"></div>
+        <div><label class="f">Nombre corto</label><input id="uTecC" maxlength="40" value="${esc(u.tecnicoCorto || '')}" placeholder="FELIX #777"></div>
+      </div>
+      <div class="nota">Igual que se escribe en las OTs. Incentivos y Rentabilidad buscan las OTs por este nombre: si lo cambias, las OTs viejas siguen con el nombre anterior.</div>
+    </div>
+    ${nuevo ? `<label class="f">Contraseña temporal (mínimo 6)</label><input id="uPw" type="text" autocomplete="new-password" maxlength="64" placeholder="Se la das a la persona; luego la cambia">`
+      : `<label class="ck" style="margin-top:10px"><input type="checkbox" id="uAct"${u.activo === true ? ' checked' : ''}${yo ? ' disabled' : ''}> Activo (puede entrar a la app)</label>`}
+    <div id="uMsg"></div>
+    <div class="modal-actions">
+      ${nuevo ? '' : `<button class="btn2 btn-sm" id="uReset">📧 Enviar correo para cambiar contraseña</button>`}
+      ${nuevo || yo ? '' : (u.activo === true ? '<button class="btn2 btn-sm btn-danger" id="uDes">Desactivar</button>' : '<button class="btn2 btn-sm" id="uReac">Reactivar</button>')}
+      <button class="btn2 btn-sm" id="uCancel">Cancelar</button>
+      <button class="btn btn-sm" id="uOk">${nuevo ? 'Crear usuario' : 'Guardar'}</button>
+    </div>`);
+  const tecVis = () => { $('uTecBox').style.display = ($('uRol').value === 'TECNICO' || $('uTec').value.trim()) ? '' : 'none'; };
+  $('uRol').onchange = tecVis; tecVis();
+  // Al corregir un dato se quita el aviso anterior (menos al escribir en la caja del UID).
+  $('modal').oninput = e => { if (!e.target.closest('#uMsg')) msg(''); };
+  $('uCancel').onclick = closeModal;
+  $('uOk').onclick = () => nuevo ? crearUsuario() : guardarUsuario(u);
+  if ($('uReset')) $('uReset').onclick = () => enviarReset(u);
+  if ($('uDes')) $('uDes').onclick = () => confirmarActivo(u, false);
+  if ($('uReac')) $('uReac').onclick = () => confirmarActivo(u, true);
+}
+function msg(html, tipo) { const m = $('uMsg'); if (m) m.innerHTML = html ? `<div class="caja ${tipo || 'err'}">${html}</div>` : ''; }
+function leerForm() {
+  const email = ($('uEmail').value || '').trim().toLowerCase();
+  const nombre = ($('uNombre').value || '').trim().replace(/\s+/g, ' ');
+  const rol = $('uRol').value;
+  const plantas = [...$('uNaves').querySelectorAll('input:checked')].map(i => i.value);
+  const tecnico = ($('uTec').value || '').trim().replace(/\s+/g, ' ');
+  const tecnicoCorto = ($('uTecC').value || '').trim().replace(/\s+/g, ' ');
+  return { email, nombre, rol, plantas, tecnico, tecnicoCorto };
+}
+function validar(f, nuevo) {
+  if (nuevo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return 'Escribe un correo válido.';
+  if (!f.nombre) return 'Escribe el nombre.';
+  if (!ROLES.some(r => r[0] === f.rol)) return 'Elige un rol.';
+  if (f.tecnicoCorto && !f.tecnico && f.rol !== 'TECNICO') return 'Escribe también el nombre de técnico.';
+  return '';
+}
+function docTecnico(f, previo) {
+  // Solo se agregan los campos de técnico si hay algo que guardar (o si ya existían).
+  const d = {};
+  if (f.tecnico || (previo && previo.tecnico)) d.tecnico = f.tecnico;
+  if (f.tecnicoCorto || (previo && previo.tecnicoCorto)) d.tecnicoCorto = f.tecnicoCorto;
+  return d;
+}
+
+// Segunda instancia de Firebase SOLO para crear cuentas: crear una cuenta con
+// la instancia principal cerraría la sesión del Administrador.
+function appAltas() {
+  const ya = (firebase.apps || []).find(a => a && a.name === 'altaUsuarios');
+  return ya || firebase.initializeApp(firebaseConfig, 'altaUsuarios');
+}
+const ERR_AUTH = {
+  'auth/email-already-in-use': 'Ese correo ya tiene una cuenta en Firebase Authentication.',
+  'auth/weak-password': 'La contraseña es muy débil: usa al menos 6 caracteres.',
+  'auth/invalid-email': 'El correo no es válido.',
+  'auth/operation-not-allowed': 'El acceso con correo y contraseña está apagado en Firebase. Actívalo en Firebase console → Authentication → Sign-in method → "Correo electrónico/contraseña" → Habilitar, y vuelve a intentar.',
+  'auth/network-request-failed': 'Sin conexión: crear cuentas necesita internet.',
+  'auth/too-many-requests': 'Firebase bloqueó temporalmente las altas por muchos intentos. Espera unos minutos.',
+};
+async function crearUsuario() {
+  const f = leerForm();
+  const pw = $('uPw').value || '';
+  const e = validar(f, true) || (pw.length < 6 ? 'La contraseña temporal debe tener al menos 6 caracteres.' : '');
+  if (e) return msg(esc(e));
+  const dup = USUARIOS.find(u => String(u.email || '').toLowerCase() === f.email);
+  if (dup) return msg('Ya hay un usuario con ese correo: <b>' + esc(dup.nombre || dup.email) + '</b>. Edítalo en la lista.');
+  const b = $('uOk'); b.disabled = true; b.textContent = 'Creando…'; MODAL_FIJO = true; msg('');
+  const sec = appAltas().auth();
+  try { if (firebase.auth.Auth && firebase.auth.Auth.Persistence) await sec.setPersistence(firebase.auth.Auth.Persistence.NONE); } catch (_) {}
+  let uid = '';
+  try {
+    const cred = await sec.createUserWithEmailAndPassword(f.email, pw);
+    uid = cred.user.uid;
+  } catch (err) {
+    b.disabled = false; b.textContent = 'Crear usuario'; MODAL_FIJO = false;
+    const code = (err && err.code) || '';
+    const t = ERR_AUTH[code] || ('No se pudo crear la cuenta: ' + ((err && err.message) || code));
+    if (code === 'auth/email-already-in-use') return mostrarPegarUid(t, f);
+    return msg(esc(t));
+  }
+  try {
+    await escribirUsuario(uid, f);
+    try { await sec.signOut(); } catch (_) {}
+    MODAL_FIJO = false; closeModal();
+    toast('✅ Usuario creado: ' + f.email);
+  } catch (err) {
+    try { await sec.signOut(); } catch (_) {}
+    MODAL_FIJO = false; b.disabled = false; b.textContent = 'Crear usuario';
+    // La cuenta de acceso sí se creó: se ofrece reintentar con su UID.
+    mostrarPegarUid('La cuenta se creó (UID <b>' + esc(uid) + '</b>) pero no se pudo guardar su rol: ' + esc(err.message || err.code), f, uid, true);
+  }
+}
+async function escribirUsuario(uid, f) {
+  const doc = { nombre: f.nombre, email: f.email, rol: f.rol, plantas: f.plantas, ...docTecnico(f, null), activo: true,
+    creadoPor: quien(), creadoPorUid: uidYo(), creadoEn: fbTimestamp() };
+  await db.collection('usuarios').doc(uid).set(doc);
+  USUARIOS.push({ id: uid, ...doc, creadoEn: null });
+  await sincronizarTecnicos();
+  pintarUsuarios();
+}
+// "Si ya existe en Firebase Auth, pega su UID para darle rol"
+function mostrarPegarUid(texto, f, uid, html) {
+  msg(`${html ? texto : esc(texto)}<br><br>Si la cuenta ya existe en Firebase Auth, <b>pega su UID para darle rol</b> (Firebase console → Authentication → Usuarios → columna "UID de usuario"):
+    <input id="uUid" style="margin-top:8px" maxlength="128" placeholder="UID de 28 letras y números" value="${esc(uid || '')}">
+    <button class="btn btn-sm" id="uUidOk" style="margin-top:8px">Dar rol con este UID</button>`, 'warn');
+  $('uUidOk').onclick = async () => {
+    const id = ($('uUid').value || '').trim();
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(id)) return toast('Ese UID no parece válido', 'error');
+    if (USUARIOS.some(u => u.id === id)) return toast('Ese UID ya tiene usuario: edítalo en la lista', 'error');
+    const bb = $('uUidOk'); bb.disabled = true;
+    try {
+      const ya = await db.collection('usuarios').doc(id).get();
+      if (ya.exists) { bb.disabled = false; return toast('Ese UID ya tiene usuario: recarga la lista', 'error'); }
+      await escribirUsuario(id, leerForm());
+      closeModal(); toast('✅ Rol asignado');
+    } catch (err) { bb.disabled = false; toast('❌ ' + (err.message || err.code), 'error'); }
+  };
+}
+async function guardarUsuario(u) {
+  const f = leerForm();
+  const e = validar(f, false);
+  if (e) return msg(esc(e));
+  const yo = u.id === uidYo();
+  const cambios = { nombre: f.nombre, rol: yo ? u.rol : f.rol, plantas: f.plantas, ...docTecnico(f, u),
+    activo: yo ? true : !!($('uAct') && $('uAct').checked), actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() };
+  const b = $('uOk'); b.disabled = true; b.textContent = 'Guardando…';
+  try {
+    await db.collection('usuarios').doc(u.id).update(cambios);
+    Object.assign(u, cambios, { actualizadoEn: null });
+    await sincronizarTecnicos();
+    closeModal(); pintarUsuarios(); toast('✅ Usuario guardado');
+  } catch (err) { b.disabled = false; b.textContent = 'Guardar'; msg(esc('No se pudo guardar: ' + (err.message || err.code))); }
+}
+function confirmarActivo(u, activo) {
+  openModal(`<h3>${activo ? 'Reactivar' : 'Desactivar'} a ${esc(u.nombre || u.email)}</h3>
+    <div class="nota">${activo ? 'Podrá volver a entrar a la app con su correo y contraseña.' : 'No podrá entrar a la app. Sus OTs, checklists y demás registros no se tocan; su usuario no se borra y se puede reactivar.'}</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" id="cNo">Cancelar</button><button class="btn btn-sm${activo ? '' : ' btn-danger'}" id="cSi">Sí, ${activo ? 'reactivar' : 'desactivar'}</button></div>`);
+  $('cNo').onclick = () => modalUsuario(u);
+  $('cSi').onclick = async () => {
+    $('cSi').disabled = true;
+    const cambios = { activo, actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() };
+    try {
+      await db.collection('usuarios').doc(u.id).update(cambios);
+      Object.assign(u, cambios, { actualizadoEn: null });
+      await sincronizarTecnicos();
+      closeModal(); pintarUsuarios(); toast(activo ? '✅ Usuario reactivado' : '⛔ Usuario desactivado');
+    } catch (err) { $('cSi').disabled = false; toast('❌ ' + (err.message || err.code), 'error'); }
+  };
+}
+async function enviarReset(u) {
+  if (!u.email) return msg('Este usuario no tiene correo guardado en su ficha.');
+  const b = $('uReset'); b.disabled = true;
+  try {
+    await firebase.auth().sendPasswordResetEmail(u.email);
+    msg('📧 Correo enviado a <b>' + esc(u.email) + '</b>. Que revise también la carpeta de spam.', 'ok');
+  } catch (err) {
+    b.disabled = false;
+    msg(esc(err.code === 'auth/user-not-found' ? 'Ese correo no tiene cuenta en Firebase Authentication.' : 'No se pudo enviar: ' + (err.message || err.code)));
+  }
+}
+
+// ══════ LISTA DE TÉCNICOS (/config/tecnicos) ══════
+// { lista: [{nombre, corto, plantas, activo, uid}], actualizadoEn, … }
+// Los técnicos con cuenta se enlazan por uid; los que solo estaban en
+// tecnicos.json (sin cuenta) se conservan con uid ''. Los nombres de
+// tecnicos.json se copian EXACTOS (Incentivos y Rentabilidad buscan por ellos).
+async function listaDesdeJson() {
+  try {
+    const r = await fetch('tecnicos.json?_=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    return (Array.isArray(d) ? d : []).filter(t => t && t.nombre)
+      .map(t => ({ nombre: String(t.nombre), corto: String(t.corto || t.nombre), plantas: [], activo: true, uid: '' }));
+  } catch (e) { console.warn('tecnicos.json:', e.message); return []; }
+}
+function limpiarEntrada(t) {
+  return { nombre: String(t.nombre || ''), corto: String(t.corto || t.nombre || ''), plantas: Array.isArray(t.plantas) ? t.plantas.map(String) : [], activo: t.activo !== false, uid: String(t.uid || '') };
+}
+function mezclarUsuarios(lista, usuarios) {
+  lista = lista.map(limpiarEntrada);
+  usuarios.forEach(u => {
+    let i = lista.findIndex(t => t.uid && t.uid === u.id);
+    if (!esTecnicoUsuario(u)) { if (i >= 0) lista[i].activo = false; return; } // dejó de ser técnico
+    const nombre = nombreTecDe(u);
+    if (!nombre) return;
+    const corto = String(u.tecnicoCorto || '').trim();
+    if (i < 0) {
+      // Primera vez: se enlaza con el nombre igual de tecnicos.json y se conserva
+      // ese nombre tal cual (sin importar mayúsculas/acentos de la ficha).
+      i = lista.findIndex(t => !t.uid && K(t.nombre) === K(nombre));
+      if (i >= 0) { lista[i] = { ...lista[i], corto: corto || lista[i].corto, plantas: Array.isArray(u.plantas) ? u.plantas.slice() : [], activo: u.activo === true, uid: u.id }; return; }
+      lista.push({ nombre, corto: corto || nombre, plantas: Array.isArray(u.plantas) ? u.plantas.slice() : [], activo: u.activo === true, uid: u.id });
+      return;
+    }
+    const mismo = K(lista[i].nombre) === K(nombre);
+    lista[i] = { nombre: mismo ? lista[i].nombre : nombre, corto: corto || (mismo ? lista[i].corto : nombre), plantas: Array.isArray(u.plantas) ? u.plantas.slice() : [], activo: u.activo === true, uid: u.id };
+  });
+  return lista;
+}
+async function guardarListaTecnicos(lista) {
+  const doc = { lista, actualizadoEn: fbTimestamp(), actualizadoPor: quien(), actualizadoPorUid: uidYo() };
+  await db.collection('config').doc('tecnicos').set(doc);
+  TEC_CFG = { ...doc, actualizadoEn: firebase.firestore.Timestamp.now() };
+  if (typeof fbTecnicosActualizarCopia === 'function') fbTecnicosActualizarCopia(lista);
+}
+// Se llama después de guardar cualquier usuario. Si /config/tecnicos todavía
+// no existe, parte de tecnicos.json para no perder a los técnicos sin cuenta.
+async function sincronizarTecnicos() {
+  const base = (TEC_CFG && Array.isArray(TEC_CFG.lista)) ? TEC_CFG.lista : await listaDesdeJson();
+  try { await guardarListaTecnicos(mezclarUsuarios(base, USUARIOS)); }
+  catch (e) { console.warn('config/tecnicos:', e.message); toast('⚠️ Usuario guardado, pero no se pudo actualizar la lista de técnicos: ' + e.message, 'warn'); }
+}
+async function modalMigrar() {
+  const json = await listaDesdeJson();
+  const base = (TEC_CFG && Array.isArray(TEC_CFG.lista)) ? TEC_CFG.lista.concat(json.filter(j => !TEC_CFG.lista.some(t => K(t.nombre) === K(j.nombre)))) : json;
+  const nueva = mezclarUsuarios(base, USUARIOS);
+  openModal(`<h3>⤵️ Migrar lista de técnicos</h3>
+    <div class="nota">Se guardará en Firebase (/config/tecnicos) esta lista: lo que hay en tecnicos.json${TEC_CFG ? ' y en la lista actual' : ''} + los usuarios técnicos. Los nombres quedan exactamente iguales.</div>
+    <div class="prog">${nueva.map(t => `<div><span>${esc(t.nombre)} <small style="color:var(--muted)">(${esc(t.corto)})</small></span><span>${t.uid ? '👤 cuenta' : 'sin cuenta'} · ${t.activo ? '✅' : '⛔'}</span></div>`).join('') || '<div><span>tecnicos.json está vacío</span><span></span></div>'}</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="mOk"${nueva.length ? '' : ' disabled'}>Guardar lista</button></div>`);
+  $('mOk').onclick = async () => {
+    $('mOk').disabled = true;
+    try { await guardarListaTecnicos(nueva); closeModal(); pintarUsuarios(); toast('✅ Lista de técnicos en Firebase (' + nueva.length + ')'); }
+    catch (e) { $('mOk').disabled = false; toast('❌ ' + e.message, 'error'); }
+  };
+}
+async function modalTecSinCuenta(i) {
+  const plantas = await cargarPlantas();
+  const lista = (TEC_CFG && Array.isArray(TEC_CFG.lista)) ? TEC_CFG.lista.map(limpiarEntrada) : mezclarUsuarios(await listaDesdeJson(), USUARIOS);
+  const t0 = i == null ? { nombre: '', corto: '', plantas: [], activo: true, uid: '' } : lista[i];
+  if (!t0) return;
+  const t = { ...t0, plantas: (t0.plantas || []).map(p => fbNombreActual('plantas', p)) }; // (25 oct 2026) nombres vigentes
+  openModal(`<h3>${i == null ? '＋ Técnico sin cuenta' : '✏️ ' + esc(t.nombre)}</h3>
+    <div class="nota">Para técnicos que salen en las listas pero no entran a la app. Si luego le creas una cuenta con el mismo nombre de técnico, se enlaza solo.</div>
+    <div class="g2"><div><label class="f">Nombre de técnico</label><input id="sNom" maxlength="100" value="${esc(t.nombre)}" ${i == null ? '' : 'readonly style="opacity:.7"'}></div>
+    <div><label class="f">Nombre corto</label><input id="sCor" maxlength="40" value="${esc(t.corto)}"></div></div>
+    <label class="f">Naves (vacío = todas)</label>
+    <div class="naves" id="sNav">${plantas.concat(t.plantas.filter(p => !plantas.includes(p))).map(p => `<label class="ck"><input type="checkbox" value="${esc(p)}"${t.plantas.includes(p) ? ' checked' : ''}> ${esc(p)}</label>`).join('') || '<div class="nota">No hay plantas.</div>'}</div>
+    <label class="ck" style="margin-top:10px"><input type="checkbox" id="sAct"${t.activo ? ' checked' : ''}> Activo (aparece en las listas)</label>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="sOk">Guardar</button></div>`);
+  $('sOk').onclick = async () => {
+    const nombre = $('sNom').value.trim().replace(/\s+/g, ' ');
+    if (!nombre) return toast('Escribe el nombre', 'error');
+    if (i == null && lista.some(x => K(x.nombre) === K(nombre))) return toast('Ese técnico ya está en la lista', 'error');
+    const e = { nombre, corto: $('sCor').value.trim().replace(/\s+/g, ' ') || nombre, plantas: [...$('sNav').querySelectorAll('input:checked')].map(x => x.value), activo: $('sAct').checked, uid: '' };
+    if (i == null) lista.push(e); else lista[i] = e;
+    $('sOk').disabled = true;
+    try { await guardarListaTecnicos(mezclarUsuarios(lista, USUARIOS)); closeModal(); pintarUsuarios(); toast('✅ Lista de técnicos guardada'); }
+    catch (err) { $('sOk').disabled = false; toast('❌ ' + err.message, 'error'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 🏭 NAVES (PLANTAS) — 25 oct 2026, Etapa 2
+// Nave = un documento de /plantas. Sus áreas (/areas, campo plantaNombre) y
+// las líneas de cada área (/lineas, campo areaNombre). Todo el resto de la app
+// guarda la nave, el área y la línea por NOMBRE, así que:
+//  · Nada se borra: "Desactivar" pone activo:false (deja de salir en las listas
+//    para registros nuevos; los registros viejos se siguen viendo y contando).
+//  · Renombrar cambia `nombre` y AGREGA el nombre anterior a
+//    `nombresAnteriores` (arrayUnion). Los registros viejos NO se reescriben:
+//    la app los reconoce por cualquiera de los dos nombres.
+//  · Nombres repetidos no se aceptan (sin mayúsculas, acentos ni espacios).
+// Lecturas: /plantas + /areas + /lineas (1 por documento) al abrir la pestaña.
+// ══════════════════════════════════════════════════════════════════════
+let NAVES = null; // { plantas: [{id,…}], areas: [...], lineas: [...] }
+async function cargarNaves(forzar) {
+  if (NAVES && !forzar) return NAVES;
+  const [p, a, l] = await Promise.all(['plantas', 'areas', 'lineas'].map(c => db.collection(c).get()));
+  const docs = s => s.docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.nombre)
+    .sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es', { numeric: true }));
+  NAVES = { plantas: docs(p), areas: docs(a), lineas: docs(l) };
+  fbRegistrarNombres('plantas', NAVES.plantas); fbRegistrarNombres('areas', NAVES.areas); fbRegistrarNombres('lineas', NAVES.lineas);
+  PLANTAS = NAVES.plantas.map(x => String(x.nombre).trim()).filter(Boolean);
+  return NAVES;
+}
+const tipoTxt = { plantas: 'nave', areas: 'área', lineas: 'línea' };
+const antesTxt = d => (Array.isArray(d.nombresAnteriores) && d.nombresAnteriores.length) ? ' · antes: ' + d.nombresAnteriores.join(', ') : '';
+const activoDoc = d => d.activo !== false;
+const plantaDeAreaDoc = a => a.plantaNombre || a.planta || '';
+function areasDeNave(p) { return NAVES.areas.filter(a => plantaDeAreaDoc(a) && fbMismoNombre('plantas', plantaDeAreaDoc(a), p.nombre)); }
+function lineasDeArea(a) { return NAVES.lineas.filter(l => l.areaNombre && fbMismoNombre('areas', l.areaNombre, a.nombre)); }
+
+async function verNaves() {
+  if (!NAVES) $('view').innerHTML = '<div class="card empty">Cargando naves…</div>';
+  try { await cargarNaves(); }
+  catch (e) { $('view').innerHTML = '<div class="card empty">❌ No se pudieron leer las naves: ' + esc(e.message) + '</div>'; return; }
+  if (TAB !== 'naves') return;
+  pintarNaves();
+}
+function filaLinea(l) {
+  return `<span class="chip${activoDoc(l) ? '' : ' off'}" style="${activoDoc(l) ? '' : 'opacity:.55'}">${esc(l.nombre)}<small>${esc(antesTxt(l))}${activoDoc(l) ? '' : ' · inactiva'}</small>
+    <button class="btn2 btn-sm" data-le="${esc(l.id)}" style="padding:2px 7px;font-size:11px;margin:0 0 0 4px" aria-label="Editar línea ${esc(l.nombre)}">✏️</button></span>`;
+}
+function filaArea(a) {
+  const lins = lineasDeArea(a);
+  return `<div class="usr${activoDoc(a) ? '' : ' off'}" data-area="${esc(a.id)}" style="margin-top:8px;padding:10px">
+    <div class="top"><b>📍 ${esc(a.nombre)}</b>${activoDoc(a) ? '' : '<span class="tag bad">Inactiva</span>'}</div>
+    ${antesTxt(a) ? `<div class="det" style="margin-top:2px">${esc(antesTxt(a).slice(3))}</div>` : ''}
+    <div class="chips">${lins.map(filaLinea).join('') || '<span class="nota" style="margin:0">Sin líneas.</span>'}</div>
+    <div class="acts"><button class="btn2 btn-sm" data-ae="${esc(a.id)}">✏️ Área</button><button class="btn2 btn-sm" data-al="${esc(a.id)}">＋ Línea</button></div>
+  </div>`;
+}
+function pintarNaves() {
+  const P = NAVES.plantas;
+  const sinNave = NAVES.areas.filter(a => !plantaDeAreaDoc(a) || !P.some(p => fbMismoNombre('plantas', plantaDeAreaDoc(a), p.nombre)));
+  $('view').innerHTML = `
+    <div class="card">
+      <div class="row"><h2>🏭 Naves (plantas)</h2><span class="tag info">${P.filter(activoDoc).length} activas · ${P.length} en total</span></div>
+      <div class="nota">Cada nave tiene sus áreas y cada área sus líneas. Nada se borra: lo que se desactiva deja de salir en las listas para registros nuevos, pero los registros viejos se siguen viendo y contando en los reportes. Al renombrar, los registros viejos conservan el nombre anterior y siguen contando para la misma nave, área o línea.</div>
+      <button class="btn" id="bNave" style="margin-top:10px">＋ Nueva nave</button>
+    </div>
+    ${P.map(p => {
+      const ar = areasDeNave(p);
+      return `<div class="card${activoDoc(p) ? '' : ' off'}" data-nave="${esc(p.id)}" style="${activoDoc(p) ? '' : 'opacity:.75'}">
+        <div class="row"><h2>🏭 ${esc(p.nombre)}</h2><span class="tag ${activoDoc(p) ? 'ok' : 'bad'}">${activoDoc(p) ? 'Activa' : 'Inactiva'}</span></div>
+        <div class="nota" style="margin-top:2px">${p.encargadoNombre ? '👤 Encargado: ' + esc(p.encargadoNombre) + '<br>' : ''}${p.descripcion ? esc(p.descripcion) + '<br>' : ''}${ar.length} área${ar.length === 1 ? '' : 's'}${esc(antesTxt(p))}</div>
+        <div class="acts" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn2 btn-sm" data-pe="${esc(p.id)}">✏️ Editar nave</button><button class="btn2 btn-sm" data-pa="${esc(p.id)}">＋ Área</button></div>
+        ${ar.map(filaArea).join('')}
+      </div>`;
+    }).join('')}
+    ${sinNave.length ? `<div class="card"><h2>📍 Áreas sin nave</h2><div class="nota">Salen bajo cualquier nave. Asígnales una con ✏️ Área.</div>${sinNave.map(filaArea).join('')}</div>` : ''}
+    ${htmlMigracion()}`;
+  $('bNave').onclick = () => modalNombre('plantas', null);
+  $('view').querySelectorAll('[data-pe]').forEach(b => b.onclick = () => modalNombre('plantas', NAVES.plantas.find(x => x.id === b.dataset.pe)));
+  $('view').querySelectorAll('[data-pa]').forEach(b => b.onclick = () => modalNombre('areas', null, { plantaNombre: (NAVES.plantas.find(x => x.id === b.dataset.pa) || {}).nombre || '' }));
+  $('view').querySelectorAll('[data-ae]').forEach(b => b.onclick = () => modalNombre('areas', NAVES.areas.find(x => x.id === b.dataset.ae)));
+  $('view').querySelectorAll('[data-al]').forEach(b => b.onclick = () => modalNombre('lineas', null, { areaNombre: (NAVES.areas.find(x => x.id === b.dataset.al) || {}).nombre || '' }));
+  $('view').querySelectorAll('[data-le]').forEach(b => b.onclick = () => modalNombre('lineas', NAVES.lineas.find(x => x.id === b.dataset.le)));
+  bindMigracion();
+}
+// ¿Ya existe ese nombre? Naves y áreas: en toda la colección (también los
+// nombres anteriores); líneas: dentro de la misma área.
+function nombreRepetido(tipo, nombre, doc, areaNombre) {
+  const k = K(nombre);
+  return NAVES[tipo].some(x => x !== doc && (tipo !== 'lineas' || fbMismoNombre('areas', x.areaNombre, areaNombre))
+    && [x.nombre, ...(Array.isArray(x.nombresAnteriores) ? x.nombresAnteriores : [])].some(n => K(n) === k));
+}
+async function modalNombre(tipo, doc, def) {
+  const nuevo = !doc;
+  const d = doc || { nombre: '', activo: true, ...(def || {}) };
+  const t = tipoTxt[tipo];
+  let extra = '';
+  if (tipo === 'plantas') {
+    try { await cargarUsuarios(); } catch (e) { console.warn('usuarios:', e.message); }
+    const us = (USUARIOS || []).filter(u => u.activo === true).sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+    extra = `<label class="f" for="nEnc">Encargado (opcional)</label><select id="nEnc"><option value="">— Sin encargado —</option>${us.map(u => `<option value="${esc(u.id)}"${u.id === d.encargado ? ' selected' : ''}>${esc(u.nombre || u.email)} · ${esc(rolTxt(u.rol))}</option>`).join('')}</select>
+      <label class="f" for="nDesc">Descripción (opcional)</label><textarea id="nDesc" maxlength="300" rows="2">${esc(d.descripcion || '')}</textarea>`;
+  } else if (tipo === 'areas') {
+    const act = plantaDeAreaDoc(d) ? fbNombreActual('plantas', plantaDeAreaDoc(d)) : '';
+    const ops = NAVES.plantas.filter(p => activoDoc(p) || K(p.nombre) === K(act));
+    extra = `<label class="f" for="nPadre">Nave</label><select id="nPadre"><option value="">— Sin nave —</option>${ops.map(p => `<option value="${esc(p.nombre)}"${K(p.nombre) === K(act) ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('')}${act && !ops.some(p => K(p.nombre) === K(act)) ? `<option value="${esc(act)}" selected>${esc(act)}</option>` : ''}</select>`;
+  } else {
+    const act = d.areaNombre ? fbNombreActual('areas', d.areaNombre) : '';
+    const ops = NAVES.areas.filter(a => activoDoc(a) || K(a.nombre) === K(act));
+    extra = `<label class="f" for="nPadre">Área</label><select id="nPadre">${ops.map(a => `<option value="${esc(a.nombre)}"${K(a.nombre) === K(act) ? ' selected' : ''}>${esc(a.nombre)}${plantaDeAreaDoc(a) ? ' — ' + esc(fbNombreActual('plantas', plantaDeAreaDoc(a))) : ''}</option>`).join('')}${act && !ops.some(a => K(a.nombre) === K(act)) ? `<option value="${esc(act)}" selected>${esc(act)}</option>` : ''}</select>`;
+  }
+  openModal(`<h3>${nuevo ? '＋ Nueva ' + t : '✏️ ' + esc(d.nombre)}</h3>
+    <label class="f" for="nNom">Nombre de la ${t}</label><input id="nNom" maxlength="80" value="${esc(d.nombre)}" placeholder="${tipo === 'plantas' ? 'NAVE 2' : tipo === 'areas' ? 'WEAVING' : 'LINEA A'}">
+    <div id="nRen"></div>
+    ${extra}
+    ${nuevo ? '' : `<label class="ck" style="margin-top:10px"><input type="checkbox" id="nAct"${activoDoc(d) ? ' checked' : ''}> Activa (sale en las listas para registros nuevos)</label>
+      <div class="nota" style="margin-top:0">Desactivar no borra nada: los registros viejos se siguen viendo y contando en los reportes.</div>`}
+    <div id="nMsg"></div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="nOk">${nuevo ? 'Agregar' : 'Guardar'}</button></div>`);
+  const avisoRen = () => {
+    const v = $('nNom').value.trim().replace(/\s+/g, ' ');
+    $('nRen').innerHTML = (!nuevo && v && v !== d.nombre)
+      ? `<div class="caja warn">⚠️ Vas a renombrar «${esc(d.nombre)}» a «${esc(v)}». Los registros viejos (OTs, equipos, checklists, usuarios…) conservan el nombre «${esc(d.nombre)}» y <b>siguen contando para esta misma ${t}</b>: el nombre anterior se guarda en la ${t}. No se reescribe ningún registro.</div>` : '';
+  };
+  $('nNom').oninput = () => { avisoRen(); $('nMsg').innerHTML = ''; };
+  $('nOk').onclick = () => guardarNombre(tipo, doc, d);
+}
+async function guardarNombre(tipo, doc, d) {
+  const nombre = $('nNom').value.trim().replace(/\s+/g, ' ');
+  const err = m => { $('nMsg').innerHTML = `<div class="caja err">${esc(m)}</div>`; };
+  if (!nombre) return err('Escribe el nombre.');
+  const padre = $('nPadre') ? $('nPadre').value : '';
+  if (tipo === 'lineas' && !padre) return err('Elige el área de la línea.');
+  if (nombreRepetido(tipo, nombre, doc, padre)) return err('Ya existe una ' + tipoTxt[tipo] + ' con ese nombre (o lo tuvo antes)' + (tipo === 'lineas' ? ' en esa área' : '') + '.');
+  const FV = firebase.firestore.FieldValue;
+  const cambios = {};
+  if (!doc || nombre !== doc.nombre) cambios.nombre = nombre;
+  if (doc && nombre !== doc.nombre) cambios.nombresAnteriores = FV.arrayUnion(doc.nombre);
+  if (tipo === 'plantas') {
+    const enc = $('nEnc').value, u = (USUARIOS || []).find(x => x.id === enc);
+    if (enc !== (d.encargado || '')) { cambios.encargado = enc; cambios.encargadoNombre = u ? (u.nombre || u.email || '') : ''; }
+    const desc = $('nDesc').value.trim().slice(0, 300);
+    if (desc !== (d.descripcion || '')) cambios.descripcion = desc;
+  } else if (tipo === 'areas') {
+    const kN = p => K(p ? fbNombreActual('plantas', p) : '');
+    if (!doc || kN(padre) !== kN(plantaDeAreaDoc(d))) cambios.plantaNombre = padre;
+  } else if (!doc || !fbMismoNombre('areas', padre, d.areaNombre)) cambios.areaNombre = padre;
+  if (doc && $('nAct')) { const act = $('nAct').checked; if (act !== activoDoc(doc)) cambios.activo = act; }
+  if (doc && !Object.keys(cambios).length) { closeModal(); return; }
+  $('nOk').disabled = true;
+  try {
+    if (doc) {
+      await db.collection(tipo).doc(doc.id).update({ ...cambios, actualizadoPor: quien(), actualizadoPorUid: uidYo(), actualizadoEn: fbTimestamp() });
+    } else {
+      await db.collection(tipo).add({ ...cambios, activo: true, createdAt: fbTimestamp(), creadoPor: quien(), creadoPorUid: uidYo() });
+    }
+    await cargarNaves(true);
+    closeModal(); pintarNaves();
+    toast(doc ? '✅ ' + (cambios.nombre ? 'Renombrada' : 'Guardada') : '✅ ' + tipoTxt[tipo].charAt(0).toUpperCase() + tipoTxt[tipo].slice(1) + ' agregada');
+  } catch (e) { $('nOk').disabled = false; err('No se pudo guardar: ' + (e.message || e.code)); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 🧩 COMPLETAR NAVE EN REGISTROS VIEJOS
+// Agrega el campo `planta` (y SOLO ese campo) a los documentos que no lo
+// tienen, deducido de: su campo PLANTA (OTs de Bitácora) → su equipo
+// (equipoId o nombre) → el área → (opcional) una nave elegida aquí.
+// Equipos sin planta: la de su área. Colecciones: equipos, ots, checklists,
+// movimientos, reubicaciones. (solicitudes_repuestos no: la regla actual no
+// deja a nadie agregarle campos — ver la propuesta de reglas.)
+//  · Primero "Revisar": cuenta las lecturas (count) y lee por páginas de 500.
+//  · Después "Completar": escribe por lotes de 400, máximo MIG_MAX_DIA
+//    escrituras por día (plan gratis: 20.000). Si quedan, "continúa mañana".
+//  · Se puede repetir: lo que ya tiene `planta` no se toca (idempotente) y se
+//    sigue desde donde quedó (/config/navesMigracion guarda el avance).
+// ══════════════════════════════════════════════════════════════════════
+const MIG_COLS = ['equipos', 'ots', 'checklists', 'movimientos', 'reubicaciones'];
+const MIG_MAX_DIA = window.__MIG_MAX_DIA || 5000;
+const MIG_MAX_LECTURAS = window.__MIG_MAX_LECTURAS || 15000;
+const MIG_LOTE = 400;
+let MIG = null; // resultado de la última revisión
+async function leerMig() {
+  try { const s = await db.collection('config').doc('navesMigracion').get(); return s.exists ? s.data() : {}; }
+  catch (e) { console.warn('navesMigracion:', e.message); return {}; }
+}
+function htmlMigracion() {
+  const P = NAVES.plantas;
+  return `<div class="card" id="migCard">
+    <h2>🧩 Completar nave en registros viejos</h2>
+    <div class="nota">Los registros de antes no dicen de qué nave son: la app los ubica por su equipo. Esto les <b>agrega solo el campo «planta»</b> (no cambia ni borra nada más). Primero <b>Revisar</b> (lee), después <b>Completar</b> (escribe, máximo ${num(MIG_MAX_DIA)} por día; si quedan, sigue mañana).</div>
+    <label class="f" for="migFb">Registros cuya nave no se puede saber</label>
+    <select id="migFb"><option value="">No tocarlos (se siguen viendo en todas las naves)</option>${P.map(p => `<option value="${esc(p.nombre)}">Ponerles: ${esc(p.nombre)}</option>`).join('')}</select>
+    <div class="g2" style="margin-top:10px"><button class="btn2" id="migRev">🔍 Revisar</button><button class="btn2" id="migReset">↺ Revisar todo de nuevo</button></div>
+    <div id="migEst"></div><div class="prog" id="migProg"></div>
+  </div>`;
+}
+function bindMigracion() {
+  if (!$('migRev')) return;
+  $('migRev').onclick = () => prepararMigracion(false);
+  $('migReset').onclick = () => prepararMigracion(true);
+}
+function migFila(c, txt) {
+  let el = document.querySelector('#migProg [data-c="' + c + '"]');
+  if (!el) { el = document.createElement('div'); el.dataset.c = c; el.innerHTML = '<span></span><span></span>'; $('migProg').appendChild(el); }
+  el.children[0].textContent = c; el.children[1].textContent = txt;
+}
+async function prepararMigracion(deNuevo) {
+  const est = $('migEst');
+  const reg = await leerMig();
+  let total = null;
+  if (hayCount()) {
+    try { total = 0; for (const c of MIG_COLS) total += (await contar(c)).n; } catch (e) { total = null; }
+  }
+  const lect = total == null ? 'una lectura por documento' : `≈ ${num(Math.min(total, MIG_MAX_LECTURAS + (NAVES.areas.length)))} lecturas (${num(total)} documentos en total${total > MIG_MAX_LECTURAS ? '; hoy se revisan como máximo ' + num(MIG_MAX_LECTURAS) : ''})`;
+  openModal(`<h3>🔍 Revisar registros</h3>
+    <div class="nota">${deNuevo ? 'Se revisa todo desde el principio' : (reg.cursores && Object.keys(reg.cursores).length ? 'Se sigue desde donde quedó la última vez' : 'Se revisa todo')}: ${esc(lect)} de ${num(50000)} diarias. Todavía no se escribe nada.</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="migSi">Revisar</button></div>`);
+  $('migSi').onclick = () => { closeModal(); revisarMigracion(deNuevo, reg).catch(e => { est.innerHTML = '<div class="caja err">❌ ' + esc(e.message) + '</div>'; }); };
+}
+// Lee una colección por páginas (desde `desde`), hasta `max` documentos.
+async function leerPaginas(col, desde, max, alAvanzar) {
+  const docs = []; let ultimo = desde || null, fin = false, lecturas = 0;
+  for (;;) {
+    const lim = Math.min(PAGINA, max - docs.length);
+    if (lim <= 0) break;
+    let q = db.collection(col).orderBy(firebase.firestore.FieldPath.documentId()).limit(lim);
+    if (ultimo) q = q.startAfter(ultimo);
+    const s = await q.get({ source: 'server' });
+    lecturas += Math.max(1, s.size);
+    s.docs.forEach(d => docs.push({ id: d.id, data: d.data() || {} }));
+    if (alAvanzar) alAvanzar(docs.length);
+    if (s.size < lim) { fin = true; break; }
+    ultimo = s.docs[s.docs.length - 1].id;
+  }
+  return { docs, fin, lecturas, ultimo: docs.length ? docs[docs.length - 1].id : (desde || null) };
+}
+async function revisarMigracion(deNuevo, reg) {
+  $('migRev').disabled = true; $('migReset').disabled = true; $('migProg').innerHTML = '';
+  $('migEst').innerHTML = '<div class="caja">Revisando…</div>';
+  const fb = $('migFb').value;
+  const cursores = deNuevo ? {} : { ...((reg && reg.cursores) || {}) };
+  const terminadas = deNuevo ? {} : { ...((reg && reg.terminadas) || {}) };
+  // Nave vigente de un nombre (por nombre o nombre anterior de /plantas); si no está, tal cual.
+  const canon = n => { n = String(n || '').trim(); if (!n) return ''; const hit = NAVES.plantas.find(p => [p.nombre, ...(p.nombresAnteriores || [])].some(x => K(x) === K(n))); return hit ? hit.nombre : n; };
+  const plantaArea = a => { if (!a) return ''; const hit = NAVES.areas.find(x => [x.nombre, ...(x.nombresAnteriores || [])].some(y => K(y) === K(a))); return hit && plantaDeAreaDoc(hit) ? canon(plantaDeAreaDoc(hit)) : ''; };
+  const pend = [], res = {}; let lecturas = 0, parcial = false;
+  // 1) equipos: siempre todos (hacen falta para ubicar lo demás)
+  const eq = await leerPaginas('equipos', null, Infinity, n => migFila('equipos', '⏳ ' + num(n)));
+  lecturas += eq.lecturas;
+  const eqPlanta = {}, eqNombre = new Map();
+  res.equipos = { rev: eq.docs.length, ya: 0, pend: 0, sin: 0 };
+  eq.docs.forEach(({ id, data }) => {
+    const k = K(data.nombre); if (k) eqNombre.set(k, eqNombre.has(k) ? null : id);
+    if (typeof data.planta === 'string' && data.planta.trim()) { res.equipos.ya++; eqPlanta[id] = canon(data.planta); return; }
+    const p = plantaArea(data.localidad) || fb;
+    if (p) { pend.push({ col: 'equipos', id, planta: p }); res.equipos.pend++; eqPlanta[id] = p; } else res.equipos.sin++;
+  });
+  migFila('equipos', `${num(res.equipos.rev)} · ya ${num(res.equipos.ya)} · completar ${num(res.equipos.pend)} · sin nave ${num(res.equipos.sin)}`);
+  const deDoc = d => canon(d.PLANTA) || (d.equipoId && eqPlanta[d.equipoId]) || (() => { const n = d.EQUIPO || d.equipoNombre || d.equipo; const id = n ? eqNombre.get(K(n)) : null; return id ? eqPlanta[id] || '' : ''; })() || plantaArea(d.LINEA_EQUIPO || d.equipoLocalidad) || fb;
+  // 2) el resto, desde donde quedó
+  const ultimos = {}, fines = {};
+  for (const c of MIG_COLS.slice(1)) {
+    res[c] = { rev: 0, ya: 0, pend: 0, sin: 0 };
+    if (terminadas[c]) { migFila(c, 'ya revisada (usa «Revisar todo de nuevo»)'); continue; }
+    const quedan = MIG_MAX_LECTURAS - lecturas;
+    if (quedan <= 0) { parcial = true; migFila(c, 'mañana'); continue; }
+    const r = await leerPaginas(c, cursores[c] || null, quedan, n => migFila(c, '⏳ ' + num(n)));
+    lecturas += r.lecturas; ultimos[c] = r.ultimo; fines[c] = r.fin;
+    if (!r.fin) parcial = true;
+    r.docs.forEach(({ id, data }) => {
+      res[c].rev++;
+      if (typeof data.planta === 'string' && data.planta.trim()) { res[c].ya++; return; }
+      const p = deDoc(data);
+      if (p) { pend.push({ col: c, id, planta: p }); res[c].pend++; } else res[c].sin++;
+    });
+    migFila(c, `${num(res[c].rev)} · ya ${num(res[c].ya)} · completar ${num(res[c].pend)} · sin nave ${num(res[c].sin)}`);
+  }
+  const hoy = fbHoy();
+  const hechasHoy = reg && reg.dia === hoy ? Number(reg.escritasHoy) || 0 : 0;
+  const cupo = Math.max(0, MIG_MAX_DIA - hechasHoy);
+  MIG = { pend, res, cursores, terminadas, ultimos, fines, parcial, lecturas, hoy, hechasHoy, cupo, fb, reg: reg || {} };
+  window.__mig = { pend: pend.length, res, lecturas, cupo, parcial }; // (para las pruebas)
+  $('migRev').disabled = false; $('migReset').disabled = false;
+  const n = Math.min(pend.length, cupo);
+  const lotes = Math.ceil(n / MIG_LOTE);
+  const sinTot = Object.values(res).reduce((s, x) => s + x.sin, 0);
+  $('migEst').innerHTML = `<div class="caja ${pend.length ? 'warn' : 'ok'}">Revisión: ${num(lecturas)} lecturas.<br>
+    <b>${num(pend.length)}</b> registros sin nave que se pueden completar${sinTot ? ` · ${num(sinTot)} sin nave deducible (se siguen viendo en todas)` : ''}.
+    ${pend.length ? `<br>Escrituras estimadas: <b>${num(n + 1)}</b> (${num(n)} registros en ${num(lotes)} lote${lotes === 1 ? '' : 's'} + 1 de avance). Hoy van ${num(hechasHoy)} de ${num(MIG_MAX_DIA)}.${pend.length > cupo ? ` <b>Quedan ${num(pend.length - cupo)} para mañana: continúa mañana.</b>` : ''}` : ''}
+    ${parcial ? '<br>Hoy no se alcanzó a revisar todo: al completar, la próxima revisión sigue desde aquí.' : ''}</div>
+    ${n ? `<button class="btn" id="migGo" style="margin-top:10px">✅ Completar ${num(n)} registros</button>` : (cupo === 0 && pend.length ? '<div class="caja warn">Ya se usó el cupo de escrituras de hoy: continúa mañana.</div>' : '')}`;
+  if ($('migGo')) $('migGo').onclick = () => completarMigracion();
+  else await guardarAvanceMig(pend.length ? [] : null, 0); // sin nada que escribir: se anota el avance de la revisión
+}
+// Guarda en /config/navesMigracion hasta dónde se revisó. `escritos` = los
+// pendientes que sí se escribieron (null = no había ninguno).
+async function guardarAvanceMig(escritos, nEscritos) {
+  const M = MIG; if (!M) return;
+  const cur = { ...M.cursores }, ter = { ...M.terminadas };
+  const hechos = new Set((escritos || []).map(x => x.col + '/' + x.id));
+  MIG_COLS.slice(1).forEach(c => {
+    if (!(c in M.ultimos)) return;
+    const faltan = M.pend.filter(x => x.col === c && !hechos.has(x.col + '/' + x.id));
+    if (!faltan.length) { if (M.ultimos[c]) cur[c] = M.ultimos[c]; if (M.fines[c]) ter[c] = true; return; }
+    // quedó algo sin escribir: se sigue desde justo antes del primero que falta
+    const prev = M.pend.filter(x => x.col === c && x.id < faltan[0].id && hechos.has(x.col + '/' + x.id)).pop();
+    if (prev) cur[c] = prev.id;
+  });
+  const doc = { cursores: cur, terminadas: ter, dia: M.hoy, escritasHoy: M.hechasHoy + nEscritos, total: (Number(M.reg.total) || 0) + nEscritos, actualizadoEn: fbTimestamp(), actualizadoPor: quien(), actualizadoPorUid: uidYo() };
+  try { await db.collection('config').doc('navesMigracion').set(doc); } catch (e) { console.warn('navesMigracion:', e.message); }
+}
+async function completarMigracion() {
+  const M = MIG; if (!M) return;
+  const lista = M.pend.slice(0, M.cupo);
+  $('migGo').disabled = true; $('migRev').disabled = true; $('migReset').disabled = true;
+  const hechos = [];
+  try {
+    for (let i = 0; i < lista.length; i += MIG_LOTE) {
+      const b = db.batch(), lote = lista.slice(i, i + MIG_LOTE);
+      lote.forEach(x => b.update(db.collection(x.col).doc(x.id), { planta: x.planta })); // SOLO el campo planta
+      await b.commit();
+      hechos.push(...lote);
+      $('migGo').textContent = '⏳ ' + num(hechos.length) + ' de ' + num(lista.length);
+    }
+  } catch (e) {
+    await guardarAvanceMig(hechos, hechos.length);
+    $('migEst').innerHTML += `<div class="caja err">❌ Se detuvo después de ${num(hechos.length)}: ${esc(e.message || e.code)}. Lo escrito queda; vuelve a «Revisar» para seguir.</div>`;
+    $('migRev').disabled = false; $('migReset').disabled = false; return;
+  }
+  await guardarAvanceMig(hechos, hechos.length);
+  const quedan = M.pend.length - hechos.length;
+  window.__mig = { ...(window.__mig || {}), escritos: hechos.length, quedan };
+  $('migEst').innerHTML = `<div class="caja ok">✅ Se completó la nave en ${num(hechos.length)} registros.${quedan || M.parcial ? ' <b>Quedan registros: continúa mañana</b> (vuelve a tocar «Revisar»).' : ' No queda nada pendiente.'}</div>`;
+  $('migRev').disabled = false; $('migReset').disabled = false;
+  if (typeof fbRefrescarEquipos === 'function' && lista.some(x => x.col === 'equipos')) fbRefrescarEquipos().catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 💾 RESPALDO COMPLETO
+// Lee cada colección por páginas de 500 ordenadas por id (startAfter), así
+// nunca pide una colección entera de golpe. Costo: 1 lectura por documento
+// (una página vacía cuesta 1). Antes, si el SDK trae count(), se calcula el
+// costo (1 lectura por colección por cada 1.000 documentos).
+// Fechas de Firestore → {"__ts": "2026-10-25T14:00:00.000Z"}.
+// ══════════════════════════════════════════════════════════════════════
+async function cargarRespaldoDoc(forzar) {
+  if (RESPALDO !== undefined && !forzar) return RESPALDO;
+  try { const s = await db.collection('config').doc('respaldo').get(); RESPALDO = s.exists ? s.data() : null; }
+  catch (e) { console.warn('config/respaldo:', e.message); RESPALDO = null; }
+  return RESPALDO;
+}
+let RESPALDANDO = false;
+async function verRespaldo() {
+  $('view').innerHTML = '<div class="card empty">Cargando…</div>';
+  await cargarRespaldoDoc();
+  if (TAB !== 'respaldo') return;
+  const d = tsDate(RESPALDO && RESPALDO.ultimo), dias = diasDesde(d);
+  $('view').innerHTML = `
+    <div class="card">
+      <h2>💾 Respaldo completo</h2>
+      <div class="nota">Descarga en este celular o computadora un archivo <b>.json</b> con toda la base de datos (OTs, equipos, checklists, inventario, herramientas, usuarios, incentivos…). Guárdalo fuera del teléfono: correo, Google Drive o una memoria USB.</div>
+      <div class="caja ${!d || dias > 30 ? 'warn' : 'ok'}" id="rUlt">${d ? `Último respaldo: <b>${esc(fechaTxt(d))}</b> (hace ${dias} día${dias === 1 ? '' : 's'})${RESPALDO.por ? ' · ' + esc(RESPALDO.por) : ''}${RESPALDO.documentos != null ? '<br>' + num(RESPALDO.documentos) + ' documentos · ' + num(RESPALDO.lecturas) + ' lecturas' : ''}` : '⚠️ Todavía no se ha descargado ningún respaldo.'}
+        ${d && dias > 30 ? '<br><b>Ya pasó más de un mes: descarga uno nuevo.</b>' : ''}</div>
+      <label class="ck" style="margin-top:8px"><input type="checkbox" id="rFotos"> Incluir fotos (archivo más pesado)</label>
+      <div class="nota" style="margin-top:0">Las fotos de repuestos ocupan mucho; sin ellas el archivo es pequeño y gasta menos lecturas.</div>
+      <button class="btn" id="rGo" style="margin-top:10px">💾 Descargar respaldo</button>
+      <div id="rEst"></div>
+      <div class="prog" id="rProg"></div>
+    </div>
+    <div class="card">
+      <h2>¿Cuánto cuesta?</h2>
+      <div class="nota">Cada documento leído es 1 lectura del plan gratis (${num(50000)} al día para toda la empresa). Un respaldo de una base pequeña usa unos pocos miles. Hazlo una vez por semana o por mes, no varias veces al día.</div>
+    </div>`;
+  $('rGo').onclick = prepararRespaldo;
+}
+function filaProg(col, txt) {
+  let el = document.querySelector('#rProg [data-c="' + col + '"]');
+  if (!el) { el = document.createElement('div'); el.dataset.c = col; el.innerHTML = '<span></span><span></span>'; $('rProg').appendChild(el); }
+  el.children[0].textContent = col; el.children[1].textContent = txt;
+}
+async function prepararRespaldo() {
+  if (RESPALDANDO) return;
+  const fotos = $('rFotos').checked;
+  const cols = COLECCIONES.concat(fotos ? [COL_FOTOS] : []);
+  $('rProg').innerHTML = '';
+  const est = $('rEst');
+  if (hayCount()) {
+    $('rGo').disabled = true;
+    est.innerHTML = '<div class="caja">Calculando el costo con count()…</div>';
+    let total = 0, lectCount = 0, costo = 0;
+    try {
+      for (const c of cols) {
+        const r = await contar(c); total += r.n; lectCount += r.lecturas; filaProg(c, num(r.n) + ' docs');
+        // 1 por documento; una colección vacía (o una última página vacía) cuesta 1
+        costo += r.n === 0 ? 1 : r.n + (r.n % PAGINA === 0 ? 1 : 0);
+      }
+    } catch (e) { $('rGo').disabled = false; est.innerHTML = '<div class="caja err">No se pudo calcular: ' + esc(e.message) + '</div>'; return; }
+    $('rGo').disabled = false;
+    est.innerHTML = `<div class="caja warn">Este respaldo leerá <b>${num(total)}</b> documentos ≈ <b>${num(costo)} lecturas</b> (el cálculo costó ${num(lectCount)}). Límite diario: ${num(50000)}.</div>`;
+    confirmarRespaldo(cols, `Leerá ${num(total)} documentos ≈ ${num(costo)} lecturas de ${num(50000)} diarias.`);
+  } else {
+    const prev = RESPALDO && RESPALDO.lecturas != null ? ` El último respaldo${RESPALDO.incluyeFotos ? ' (con fotos)' : ''} usó ${num(RESPALDO.lecturas)} lecturas.` : '';
+    confirmarRespaldo(cols, 'Esta versión de Firebase no puede contar los documentos antes: se irá mostrando cuántos lleva. Cuesta 1 lectura por documento.' + prev);
+  }
+}
+function confirmarRespaldo(cols, texto) {
+  openModal(`<h3>💾 Descargar respaldo</h3>
+    <div class="nota">${esc(texto)}</div>
+    <div class="nota">${cols.includes(COL_FOTOS) ? 'Incluye las fotos de repuestos.' : 'Sin fotos de repuestos.'} No cierres esta pantalla hasta que termine.</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="rSi">Sí, descargar</button></div>`);
+  $('rSi').onclick = () => { closeModal(); hacerRespaldo(cols); };
+}
+// Fechas de Firestore → {"__ts": ISO}; referencias → {"__ref": ruta}; ubicaciones → {"__geo": [lat, lng]}.
+function serializar(v) {
+  if (v == null || typeof v !== 'object') return v;
+  if (typeof v.toDate === 'function' && typeof v.seconds === 'number') return { __ts: v.toDate().toISOString() };
+  if (v instanceof Date) return { __ts: v.toISOString() };
+  if (typeof v.latitude === 'number' && typeof v.longitude === 'number' && Object.keys(v).length <= 2) return { __geo: [v.latitude, v.longitude] };
+  if (typeof v.path === 'string' && v.firestore && typeof v.collection === 'function') return { __ref: v.path };
+  if (Array.isArray(v)) return v.map(serializar);
+  const o = {}; for (const k of Object.keys(v)) o[k] = serializar(v[k]); return o;
+}
+// Lee una colección completa por páginas de PAGINA documentos.
+async function leerPaginado(col, alAvanzar) {
+  const docs = {}; let ultimo = null, n = 0, lecturas = 0;
+  for (;;) {
+    let q = db.collection(col).orderBy(firebase.firestore.FieldPath.documentId()).limit(PAGINA);
+    if (ultimo) q = q.startAfter(ultimo);
+    const s = await q.get({ source: 'server' });
+    lecturas += Math.max(1, s.size);
+    s.docs.forEach(d => { docs[d.id] = serializar(d.data()); });
+    n += s.size;
+    if (alAvanzar) alAvanzar(n, lecturas);
+    if (s.size < PAGINA) break;
+    ultimo = s.docs[s.docs.length - 1];
+  }
+  return { docs, n, lecturas };
+}
+function descargarArchivo(nombre, texto) {
+  const blob = new Blob([texto], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 10000);
+}
+async function hacerRespaldo(cols) {
+  RESPALDANDO = true; $('rGo').disabled = true; $('rGo').textContent = '⏳ Respaldando…';
+  $('rProg').innerHTML = ''; $('rEst').innerHTML = '<div class="caja" id="rTot">Leyendo… 0 lecturas</div>';
+  const out = { app: 'mantenimiento', proyecto: firebaseConfig.projectId, version: 1, generado: new Date().toISOString(), por: quien(), porUid: uidYo(), incluyeFotos: cols.includes(COL_FOTOS), colecciones: {} };
+  const conteos = {}, bytes = {};
+  let total = 0, lecturas = 0;
+  try {
+    for (const c of cols) {
+      filaProg(c, '⏳');
+      const r = await leerPaginado(c, (n, l) => { filaProg(c, '⏳ ' + num(n)); $('rTot').textContent = 'Leyendo… ' + num(total + n) + ' documentos · ' + num(lecturas + l) + ' lecturas'; });
+      out.colecciones[c] = { n: r.n, docs: r.docs };
+      conteos[c] = r.n; bytes[c] = JSON.stringify(r.docs).length;
+      total += r.n; lecturas += r.lecturas;
+      filaProg(c, '✅ ' + num(r.n));
+    }
+  } catch (e) {
+    RESPALDANDO = false; $('rGo').disabled = false; $('rGo').textContent = '💾 Descargar respaldo';
+    $('rEst').innerHTML = '<div class="caja err">❌ El respaldo no se completó: ' + esc(e.code === 'unavailable' ? 'sin conexión con el servidor.' : e.message) + ' No se descargó nada.</div>';
+    return;
+  }
+  out.documentos = total; out.lecturas = lecturas;
+  const texto = JSON.stringify(out);
+  const nombre = 'respaldo-mantenimiento-' + fbHoy() + '.json';
+  descargarArchivo(nombre, texto);
+  const reg = { ultimo: fbTimestamp(), ultimoFecha: fbHoy(), por: quien(), porUid: uidYo(), documentos: total, lecturas, incluyeFotos: out.incluyeFotos, tamano: texto.length, conteos, bytes };
+  try { await db.collection('config').doc('respaldo').set(reg); RESPALDO = { ...reg, ultimo: firebase.firestore.Timestamp.now() }; }
+  catch (e) { console.warn('config/respaldo:', e.message); toast('⚠️ Respaldo descargado, pero no se pudo anotar la fecha: ' + e.message, 'warn'); }
+  RESPALDANDO = false; $('rGo').disabled = false; $('rGo').textContent = '💾 Descargar respaldo';
+  $('rEst').innerHTML = `<div class="caja ok">✅ Listo: <b>${esc(nombre)}</b> (${esc(mb(texto.length))}) · ${num(total)} documentos · ${num(lecturas)} lecturas.<br>Búscalo en Descargas y guárdalo fuera del celular.</div>`;
+  const d = new Date();
+  $('rUlt').className = 'caja ok';
+  $('rUlt').innerHTML = 'Último respaldo: <b>' + esc(fechaTxt(d)) + '</b> (hoy) · ' + esc(quien()) + '<br>' + num(total) + ' documentos · ' + num(lecturas) + ' lecturas';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 📊 USO DEL PLAN GRATIS
+// No lee nada al abrir (solo /config/respaldo, 1 lectura). "Contar" usa
+// count() si el SDK lo trae (1 lectura por colección por cada 1.000 docs).
+// "Calcular" en fotos lee todas las fotos (1 lectura por foto).
+// ══════════════════════════════════════════════════════════════════════
+async function verUso() {
+  $('view').innerHTML = '<div class="card empty">Cargando…</div>';
+  await cargarRespaldoDoc();
+  if (TAB !== 'uso') return;
+  pintarUso();
+}
+function filasUso() {
+  const cols = COLECCIONES.concat([COL_FOTOS]);
+  const rc = (RESPALDO && RESPALDO.conteos) || {}, rb = (RESPALDO && RESPALDO.bytes) || {};
+  return cols.map(c => {
+    let n = USO && USO[c] != null ? USO[c] : (rc[c] != null ? rc[c] : null);
+    if (c === COL_FOTOS && FOTOS_N != null) n = FOTOS_N;
+    let b = null;
+    if (c === COL_FOTOS && FOTOS_BYTES != null) b = FOTOS_BYTES;
+    else if (n != null) {
+      const prom = (rc[c] > 0 && rb[c] != null) ? rb[c] / rc[c] : tipico(c);
+      b = n * prom;
+    }
+    return { c, n, b };
+  });
+}
+function pintarUso() {
+  const filas = filasUso();
+  const conDatos = filas.some(f => f.n != null);
+  const total = filas.reduce((s, f) => s + (f.b || 0), 0);
+  const pct = total / GIB * 100;
+  const fuente = USO ? 'conteo de ahora' : (RESPALDO && RESPALDO.conteos ? 'último respaldo (' + fechaTxt(tsDate(RESPALDO.ultimo)) + ')' : '');
+  const fotosF = filas.find(f => f.c === COL_FOTOS);
+  $('view').innerHTML = `
+    <div class="card">
+      <h2>📊 Uso del plan gratis</h2>
+      <div class="nota">La app está en el plan gratis de Firebase (Spark): no se paga nada mientras no se pasen estos límites. Si un día se pasan, Firebase deja de responder hasta el día siguiente (no cobra).</div>
+      <div class="lim">
+        <div><b>1 GiB</b><span>Espacio guardado</span></div>
+        <div><b>${num(50000)}</b><span>Lecturas por día</span></div>
+        <div><b>${num(20000)}</b><span>Escrituras por día</span></div>
+        <div><b>${num(20000)}</b><span>Borrados por día</span></div>
+      </div>
+      <div class="nota">Las lecturas exactas de hoy (de todos los celulares) solo se ven en <a href="${URL_USO}" target="_blank" rel="noopener">Firebase console → Firestore → Uso</a>.</div>
+    </div>
+    <div class="card">
+      <div class="row"><h2>🗄️ Espacio usado</h2>${fuente ? `<span class="tag info">${esc(fuente)}</span>` : ''}</div>
+      ${conDatos ? `<div class="bar"><i style="width:${Math.min(100, pct).toFixed(2)}%;${pct > 70 ? 'background:var(--red)' : pct > 40 ? 'background:var(--accent)' : ''}"></i></div>
+        <div class="nota" style="margin-top:0">≈ <b>${esc(mb(total))}</b> de 1 GiB (${pct < 0.1 ? 'menos de 0,1' : pct.toLocaleString('es-DO', { maximumFractionDigits: 1 })} %). Aproximado: Firebase también guarda índices, el uso real puede ser hasta el doble.${fotosF && FOTOS_BYTES == null ? ' Las fotos se estiman; toca "Calcular" para el tamaño real.' : ''}</div>` : ''}
+      ${hayCount() ? `<button class="btn2" id="uCont">🔢 Contar documentos (≈ ${COLECCIONES.length + 1} lecturas)</button>`
+        : `<div class="caja warn">Esta versión de Firebase no puede contar documentos sin leerlos uno por uno, así que aquí se muestran los números del <b>último respaldo</b>.${conDatos ? '' : ' Todavía no hay ninguno: descarga un respaldo en la pestaña 💾 Respaldo y vuelve aquí.'}</div>`}
+      ${conDatos ? `<table class="t"><thead><tr><th style="width:50%">Colección</th><th class="n">Docs</th><th class="n">Tamaño</th></tr></thead><tbody>
+        ${filas.map(f => `<tr><td>${esc(f.c)}</td><td class="n">${f.n == null ? '—' : num(f.n)}</td><td class="n">${f.c === COL_FOTOS ? (f.b != null && FOTOS_BYTES != null ? esc(mb(f.b)) : `<button class="btn2 btn-sm" id="uFotos" style="padding:5px 9px;font-size:12px">Calcular</button>`) : (f.b == null ? '—' : esc(mb(f.b)))}</td></tr>`).join('')}
+      </tbody></table>` : `<div style="margin-top:8px"><button class="btn2" id="uFotos">🖼️ Calcular tamaño de las fotos</button></div>`}
+    </div>`;
+  if ($('uCont')) $('uCont').onclick = contarTodo;
+  if ($('uFotos')) $('uFotos').onclick = confirmarFotos;
+}
+async function contarTodo() {
+  const b = $('uCont'); b.disabled = true; b.textContent = 'Contando…';
+  const res = {}; let lect = 0;
+  try {
+    for (const c of COLECCIONES.concat([COL_FOTOS])) { const r = await contar(c); res[c] = r.n; lect += r.lecturas; b.textContent = 'Contando… ' + c; }
+  } catch (e) { b.disabled = false; b.textContent = '🔢 Contar documentos'; toast('❌ ' + e.message, 'error'); return; }
+  USO = res;
+  pintarUso();
+  toast('🔢 Conteo listo (' + lect + ' lecturas)');
+}
+function confirmarFotos() {
+  const n = FOTOS_N != null ? FOTOS_N : USO && USO[COL_FOTOS] != null ? USO[COL_FOTOS] : (RESPALDO && RESPALDO.conteos && RESPALDO.conteos[COL_FOTOS] != null ? RESPALDO.conteos[COL_FOTOS] : null);
+  openModal(`<h3>🖼️ Tamaño real de las fotos</h3>
+    <div class="nota">Para medirlas hay que leer cada foto: ${n != null ? '≈ <b>' + num(Math.max(1, n)) + ' lecturas</b>' : '1 lectura por foto'} de las ${num(50000)} diarias.</div>
+    <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="fSi">Calcular</button></div>`);
+  $('fSi').onclick = async () => {
+    $('fSi').disabled = true; $('fSi').textContent = 'Leyendo…';
+    try {
+      let bytes = 0, ultimo = null, n2 = 0;
+      for (;;) {
+        let q = db.collection(COL_FOTOS).orderBy(firebase.firestore.FieldPath.documentId()).limit(PAGINA);
+        if (ultimo) q = q.startAfter(ultimo);
+        const s = await q.get({ source: 'server' });
+        s.docs.forEach(d => { const x = d.data() || {}; bytes += String(x.data || '').length + 200; });
+        n2 += s.size; $('fSi').textContent = 'Leyendo… ' + n2;
+        if (s.size < PAGINA) break;
+        ultimo = s.docs[s.docs.length - 1];
+      }
+      FOTOS_BYTES = bytes; FOTOS_N = n2;
+      closeModal(); pintarUso(); toast('🖼️ Fotos: ' + num(n2) + ' · ' + mb(bytes));
+    } catch (e) { $('fSi').disabled = false; $('fSi').textContent = 'Calcular'; toast('❌ ' + e.message, 'error'); }
+  };
+}
+</script>
+</body>
+</html>

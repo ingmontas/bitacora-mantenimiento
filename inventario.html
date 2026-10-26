@@ -569,9 +569,10 @@ const TECNICOS_INV_FALLBACK = [
 let tecnicosInv = TECNICOS_INV_FALLBACK;
 async function loadTecnicosInventario(){
   try{
-    const r = await fetch('tecnicos.json?_=' + Date.now());
-    if(r.ok){ const data = await r.json(); if(Array.isArray(data) && data.length) tecnicosInv = data; }
-  }catch(e){ console.warn('No se pudo cargar tecnicos.json, usando lista por defecto', e.message); }
+    // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json.
+    const data = await fbTecnicos();
+    if(Array.isArray(data) && data.length) tecnicosInv = data;
+  }catch(e){ console.warn('No se pudo cargar la lista de técnicos, usando lista por defecto', e.message); }
   const sel = document.getElementById('mov-tecnico');
   if(sel){
     // (5 oct 2026) nombres escapados con fbEsc (antes solo se escapaban las comillas del value)
@@ -762,8 +763,10 @@ function parseNumero(txt){
 }
 // Registro de /movimientos (ver forma en confirmMovimiento / bulkImportRepuestos).
 function docMovimiento(equipoId, equipoNombre, p, extra){
+  const planta = fbPlantaDeEquipo(DB.find(x => x.id === equipoId) || equipoId); // (25 oct 2026, Etapa 2) nave del equipo
   return {
     equipoId, equipo: equipoNombre || '', repuestoId: p.id || null, repuesto: p.r || '',
+    ...(planta ? { planta } : {}),
     quien: quienSoy(), quienUid: miUid(), fecha: fbTimestamp(),
     ...extra,
   };
@@ -850,6 +853,7 @@ async function loadDB(){
     // (5 oct 2026) equipos creados desde otras pantallas pueden no traer
     // "repuestos": se normaliza a [] para que nada falle al pintar.
     DB = snap.docs.map(doc => { const d = doc.data(); return { id: doc.id, ...d, repuestos: Array.isArray(d.repuestos) ? d.repuestos : [] }; }).sort((a, b) => cmpNat(a.nombre, b.nombre));
+    fbIndexarEquipos(DB); // (25 oct 2026, Etapa 2) nave de cada equipo para las demás pantallas
     updateSyncStatus('ok');
     const box = document.getElementById('fbStatusBox');
     if(box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${fbEsc(firebaseConfig.projectId)}</strong>) — ${DB.length} equipo(s) sincronizados en tiempo real.`;
@@ -1182,7 +1186,8 @@ function renderEquipoLocalidadOptions(valorActual){
   // Si el equipo ya tenía un valor de Localidad de texto libre (ej. "PLANTA
   // 1", de antes de este cambio) que no está en la lista de Áreas, se agrega
   // igual como opción para no perder ni esconder ese dato ya guardado.
-  const lista = currentAreasInventario.slice();
+  // (25 oct 2026, Etapa 2) Sin las áreas inactivas ni las de naves que el usuario no tiene (la del equipo se conserva).
+  const lista = currentAreasInventario.filter(a => fbNombreActivo('areas', a) && fbNavePermitida(fbPlantaDeArea(a)));
   if (valorActual && !lista.some(a => a.toLowerCase() === valorActual.toLowerCase())) lista.unshift(valorActual);
   sel.innerHTML = '<option value="">Seleccionar área...</option>'
     + lista.map(a => `<option value="${fbEsc(a)}"${a === valorActual ? ' selected' : ''}>${fbEsc(a)}</option>`).join(''); // (5 oct 2026) escapado
@@ -1192,12 +1197,13 @@ function loadAreasParaEquipos(){
   renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
   window.fbReady.then(() => {
     db.collection('areas').orderBy('nombre').onSnapshot((snap) => {
+      fbRegistrarNombres('areas', snap.docs); // (25 oct 2026) nombres anteriores / activas
       if (!snap.empty) {
         currentAreasInventario = snap.docs.map(d => d.data().nombre).filter(Boolean);
         // (7 oct 2026) planta de cada área (plantaNombre, como en Bitácora) para
         // proponer la Planta al elegir el Área en el formulario de equipo.
         plantaDeAreaInv = {};
-        snap.docs.forEach(d => { const a = d.data(); if (a.nombre && a.plantaNombre) plantaDeAreaInv[fbEquipoKey(a.nombre)] = a.plantaNombre; });
+        snap.docs.forEach(d => { const a = d.data(); if (a.nombre && a.plantaNombre) [a.nombre, ...(Array.isArray(a.nombresAnteriores) ? a.nombresAnteriores : [])].forEach(n => { const k = fbEquipoKey(n); if (!plantaDeAreaInv[k]) plantaDeAreaInv[k] = fbNombreActual('plantas', a.plantaNombre); }); });
         renderEquipoLocalidadOptions(document.getElementById('eq-localidad')?.value || '');
       }
     }, (err) => {
@@ -1225,8 +1231,9 @@ function cargarCatalogoUbicacion(){
     .catch(err => { console.warn('No se pudo leer /' + col + ':', err.message); return null; });
   // solo se lee lo que aún no está en memoria (si una falló, se reintenta solo esa)
   _catUbicPromesa = window.fbReady.then(() => Promise.all([
-    plantasInv ? plantasInv : leer('plantas', d => d.nombre || ''),
-    lineasInv ? lineasInv : leer('lineas', d => d.nombre ? { nombre: d.nombre, areaNombre: d.areaNombre || '' } : null),
+    // (25 oct 2026, Etapa 2) se guardan también activo / nombres anteriores (fbRegistrarNombres)
+    plantasInv ? plantasInv : leer('plantas', d => d.nombre ? d : null).then(l => { if (l) { fbRegistrarNombres('plantas', l); return l.map(d => d.nombre); } return l; }),
+    lineasInv ? lineasInv : leer('lineas', d => d.nombre ? d : null).then(l => { if (l) { fbRegistrarNombres('lineas', l); return l.map(d => ({ nombre: d.nombre, areaNombre: d.areaNombre || '', activo: d.activo !== false })); } return l; }),
   ])).then(([pl, li]) => {
     if (pl) plantasInv = pl;
     if (li) lineasInv = li;
@@ -1252,17 +1259,20 @@ function opcionesSelect(sel, lista, valorActual, vacio){
 }
 function renderEquipoPlantaOptions(valorActual){
   // /plantas + las que ya tienen los equipos; el mismo nombre con otra escritura se muestra una sola vez
+  // (25 oct 2026, Etapa 2) Un nombre viejo de una nave renombrada cuenta como la misma
+  // nave; sin naves inactivas ni las que el usuario no tiene (la del equipo se conserva).
   const lista = [];
-  [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean)].forEach(p => { if (!lista.some(q => fbEquipoKey(q) === fbEquipoKey(p))) lista.push(p); });
-  opcionesSelect(document.getElementById('eq-planta'), lista.sort(cmpNat), valorActual, 'Sin planta');
+  [...(plantasInv || []), ...DB.map(e => e.planta).filter(Boolean).map(p => fbNombreActual('plantas', p))].forEach(p => { if (!lista.some(q => fbMismoNombre('plantas', q, p))) lista.push(p); });
+  const usable = lista.filter(p => fbNombreActivo('plantas', p) && fbNavePermitida(p));
+  opcionesSelect(document.getElementById('eq-planta'), usable.sort(cmpNat), valorActual, 'Sin planta');
 }
 // Líneas del Área elegida (sin importar mayúsculas/acentos, como Bitácora).
 // Sin Área elegida se muestran todas, con su área al lado.
 function lineasParaAreaInv(area){
   const todas = lineasInv || [];
-  if (!area) return todas.map(l => ({ v: l.nombre, t: l.areaNombre ? `${l.nombre} — ${l.areaNombre}` : l.nombre }));
-  const k = fbEquipoKey(area);
-  return [...new Set(todas.filter(l => fbEquipoKey(l.areaNombre) === k).map(l => l.nombre))];
+  if (!area) return todas.filter(l => l.activo !== false).map(l => ({ v: l.nombre, t: l.areaNombre ? `${l.nombre} — ${l.areaNombre}` : l.nombre }));
+  // (25 oct 2026, Etapa 2) sin líneas inactivas; área renombrada = misma área
+  return [...new Set(todas.filter(l => l.activo !== false && fbMismoNombre('areas', l.areaNombre, area)).map(l => l.nombre))];
 }
 function renderEquipoLineaOptions(valorActual){
   const area = document.getElementById('eq-localidad')?.value || '';
@@ -1652,9 +1662,11 @@ async function showMovimientos(){
 // que "movimientos" arriba — nunca se borra ni se sobrescribe, solo se
 // agrega un renglón nuevo por cambio. Ver saveEquipo() para dónde se llama.
 function logReubicacion(equipo, ubicacionAnterior, ubicacionNueva){
+  const plantaR = fbPlantaDeEquipo(equipo); // (25 oct 2026, Etapa 2)
   db.collection('reubicaciones').add({
     equipoId: equipo.id,
     equipo: equipo.nombre,
+    ...(plantaR ? { planta: plantaR } : {}),
     ubicacionAnterior: ubicacionAnterior || '(sin ubicación)',
     ubicacionNueva: ubicacionNueva || '(sin ubicación)',
     quien: quienSoy(),
@@ -2313,8 +2325,9 @@ function equiposOrdenados(){
   const area = selA ? selA.value : '';
   const orden = document.getElementById('eqOrden')?.value || 'area';
   const planta = document.getElementById('eqPlanta')?.value || ''; // (7 oct 2026)
-  let lista = DB.filter(e => (!area || (area === '__sin__' ? !e.localidad : e.localidad === area))
-    && (!planta || (planta === '__sin__' ? !e.planta : fbEquipoKey(e.planta) === fbEquipoKey(planta)))
+  // (25 oct 2026, Etapa 2) Solo la nave elegida arriba (equipos sin nave conocida salen siempre).
+  let lista = DB.filter(e => fbEquipoEnNave(e) && (!area || (area === '__sin__' ? !e.localidad : e.localidad === area))
+    && (!planta || (planta === '__sin__' ? !e.planta : fbMismoNombre('plantas', e.planta, planta)))
     && (!q || sinAcentos([e.nombre, e.marca, e.modelo, e.serie, e.localidad, e.linea, e.tipoMaquina].join(' ')).includes(q)));
   const faltan = e => (e.repuestos || []).filter(p => stockStatus(p) === 'sin').length * 1000 + (e.repuestos || []).filter(p => stockStatus(p) === 'bajo').length;
   if (orden === 'nombre') lista.sort((a, b) => cmpNat(a.nombre, b.nombre));
@@ -2330,7 +2343,7 @@ function pintarFiltroPlantas(){
   const cur = sel.dataset.pend !== undefined ? sel.dataset.pend : sel.value;
   delete sel.dataset.pend;
   const cuenta = {}, nombre = {};
-  DB.forEach(e => { const k = e.planta ? fbEquipoKey(e.planta) : '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; if (e.planta && !nombre[k]) nombre[k] = e.planta; });
+  DB.forEach(e => { const pn = e.planta ? fbNombreActual('plantas', e.planta) : ''; const k = pn ? fbEquipoKey(pn) : '__sin__'; cuenta[k] = (cuenta[k] || 0) + 1; if (pn && !nombre[k]) nombre[k] = pn; }); // (25 oct 2026) nombre vigente
   const plantas = Object.keys(nombre).sort((a, b) => cmpNat(nombre[a], nombre[b]));
   sel.style.display = plantas.length ? '' : 'none';
   sel.innerHTML = `<option value="">Todas las plantas (${DB.length})</option>` + plantas.map(k => `<option value="${escInv(nombre[k])}">${escInv(nombre[k])} (${cuenta[k]})</option>`).join('')
@@ -3065,6 +3078,7 @@ function showUndoToast(msg, onUndo, delayMs=5200){
 /* ═══════════════ INIT ═══════════════ */
 async function initApp(){
   fbRenderMiniNav('inventario');
+  fbOnNaveCambio(() => { if (currentEquipoId) renderDetail(); else renderHome(); }); // (25 oct 2026, Etapa 2)
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   loadTecnicosInventario();
   loadAreasParaEquipos();
