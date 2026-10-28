@@ -28,11 +28,11 @@
     const st = document.createElement('style');
     st.id = 'fbFiltrosCss';
     st.textContent = '.fbFiltros{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%;}'
-      + '.fbFiltros select{flex:1 1 140px;min-width:0;max-width:100%;width:auto;background:var(--surface,var(--panel-2,#1A2535));color:var(--text,#F1F5F9);border:1px solid var(--border,var(--line,#2D3F55));border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}'
-      + '.fbFiltros select.on{border-color:var(--accent,var(--amber,#F59E0B));color:var(--accent,var(--amber,#F59E0B));font-weight:700;}'
-      + '.fbFiltros .fbFiltroTxt{flex:1 1 100%;font-size:11px;color:var(--muted,#94A3B8);}'
-      + '#fbExpDlg{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,system-ui,sans-serif;}'
-      + '#fbExpDlg>div{background:#202F42;border:1px solid #2D3F55;border-radius:14px;padding:18px;max-width:360px;width:100%;color:#F1F5F9;font-size:14px;line-height:1.5;}'
+      + '.fbFiltros select{flex:1 1 140px;min-width:0;max-width:100%;width:auto;background:var(--color-input-bg,var(--surface,var(--panel-2,#1A2535)));color:var(--color-text,var(--text,#F1F5F9));border:1px solid var(--color-border,var(--border,var(--line,#2D3F55)));border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}'
+      + '.fbFiltros select.on{border-color:var(--color-accent,var(--accent,var(--amber,#F59E0B)));color:var(--color-accent-text,var(--accent,var(--amber,#F59E0B)));background:var(--color-accent-soft,transparent);font-weight:700;}'
+      + '.fbFiltros .fbFiltroTxt{flex:1 1 100%;font-size:11px;color:var(--color-muted,var(--muted,#94A3B8));}'
+      + '#fbExpDlg{position:fixed;inset:0;z-index:1200;background:var(--color-overlay,rgba(0,0,0,.6));display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,system-ui,sans-serif;}'
+      + '#fbExpDlg>div{background:var(--color-surface,#202F42);border:1px solid var(--color-border,#2D3F55);border-radius:14px;padding:18px;max-width:360px;width:100%;color:var(--color-text,#F1F5F9);font-size:14px;line-height:1.5;}'
       + '#fbExpDlg button{width:100%;margin-top:10px;padding:11px;border-radius:10px;border:0;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}';
     document.head.appendChild(st);
   }
@@ -254,8 +254,8 @@
     const d = document.createElement('div');
     d.id = 'fbExpDlg';
     d.innerHTML = `<div role="dialog" aria-modal="true"><div style="font-size:28px;text-align:center">📵</div><div>${fbEsc(msg)}</div>
-      <button id="fbExpCsv" style="background:#F59E0B;color:#0F1923">⬇️ Descargar CSV (se abre con Excel)</button>
-      <button id="fbExpNo" style="background:#2D3F55;color:#F1F5F9">Cerrar</button></div>`;
+      <button id="fbExpCsv" style="background:var(--color-primary,#F59E0B);color:var(--color-on-primary,#0F1923)">⬇️ Descargar CSV (se abre con Excel)</button>
+      <button id="fbExpNo" style="background:var(--color-surface-2,#2D3F55);color:var(--color-text,#F1F5F9);border:1px solid var(--color-border,#2D3F55)">Cerrar</button></div>`;
     document.body.appendChild(d);
     d.querySelector('#fbExpCsv').onclick = () => { d.remove(); alCsv(); };
     d.querySelector('#fbExpNo').onclick = () => d.remove();
@@ -288,4 +288,5 @@
   window.fbSlug = fbSlug;
   window.fbNombreArchivo = fbNombreArchivo;
   window.fbCsv = fbCsv;
+  window.fbDescargar = descargar; // (26 oct 2026) Reporte de incentivos
 })();

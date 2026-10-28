@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Guía"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Guía de inicio — Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+  /* ══════════════════════════════════════════════════════════════════
+     GUÍA DE INICIO POR NAVE (26 oct 2026, Etapa 5)
+     Explica a cada rol cómo usar la app, para que una nave o un técnico
+     nuevo empiece sin que el dueño tenga que explicarlo todo.
+     - La sección del rol de la persona sale primero y abierta
+       (window.currentUserRole, ya leído al iniciar sesión: 0 lecturas).
+     - Buscador que filtra en el celular, sin internet.
+     - "Abrir una nave nueva" (Administrador): progreso guardado en ESTE
+       celular (localStorage), por nombre de nave.
+     - Se puede imprimir (abre todas las secciones al imprimir).
+     Esta página no lee ni escribe nada en Firebase.
+     ══════════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+  body { min-height: 100vh; font-size: 15px; line-height: 1.5; overflow-x: hidden; }
+  #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--color-accent); padding: 14px 16px; }
+  #header .in { max-width: 680px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #header h1 { font-size: 17px; font-weight: 800; }
+  #header small { font-size: 10.5px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; letter-spacing: .02em; }
+  #header .acc { display: flex; gap: 6px; flex-shrink: 0; }
+  .hbtn { background: rgba(255,255,255,.1); color: var(--color-header-text); border: 1px solid rgba(255,255,255,.22); border-radius: var(--radius-sm); padding: 7px 10px; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 14px 16px 60px; }
+  .intro { font-size: 14px; color: var(--color-text-2); margin-bottom: 12px; }
+  .buscar { position: relative; margin-bottom: 8px; }
+  .buscar input { width: 100%; font: inherit; font-size: 16px; padding: 11px 38px 11px 38px; border: 1px solid var(--color-border-strong); border-radius: var(--radius); }
+  .buscar .lupa { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
+  .buscar input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+  .buscar button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-muted); font-size: 18px; padding: 4px 8px; cursor: pointer; display: none; }
+  .buscar.con button { display: block; }
+  #resBusqueda { font-size: 12.5px; color: var(--color-muted); margin-bottom: 8px; }
+  #resBusqueda:empty { margin: 0; }
+  .sin-res { display: none; text-align: center; color: var(--color-muted); padding: 24px 10px; background: var(--color-surface); border: 1px dashed var(--color-border-strong); border-radius: var(--radius); margin-bottom: 10px; }
+
+  details.sec { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  details.sec > summary { list-style: none; cursor: pointer; padding: 14px 14px; display: flex; align-items: center; gap: 12px; user-select: none; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary .ic { font-size: 26px; width: 44px; height: 44px; border-radius: 12px; background: var(--color-surface-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  details.sec > summary .tx { flex: 1; min-width: 0; }
+  details.sec > summary b { display: block; font-size: 16px; font-weight: 700; }
+  details.sec > summary span.sub { display: block; font-size: 12.5px; color: var(--color-muted); line-height: 1.4; }
+  details.sec > summary .chev { color: var(--color-muted); transition: transform .15s; flex-shrink: 0; }
+  details.sec[open] > summary .chev { transform: rotate(180deg); }
+  details.sec.mio { border-color: var(--color-accent); }
+  .tag-mio { display: inline-block; background: var(--color-accent-soft); color: var(--color-accent-text); border: 1px solid var(--color-accent); border-radius: var(--radius-pill); font-size: 10.5px; font-weight: 700; padding: 1px 8px; margin-left: 4px; vertical-align: 2px; }
+  .cuerpo { padding: 0 14px 12px; border-top: 1px solid var(--color-border); }
+  .it { padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+  .it:last-child { border-bottom: none; }
+  .it h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .it p { font-size: 14px; color: var(--color-text-2); margin-bottom: 6px; }
+  .it p:last-child { margin-bottom: 0; }
+  .it ol, .it ul { padding-left: 22px; font-size: 14px; color: var(--color-text-2); }
+  .it li { margin-bottom: 4px; }
+  .it b, .it strong { color: var(--color-text); }
+  .it .ojo { background: var(--color-warn-soft); color: var(--color-text); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13.5px; margin-top: 6px; }
+  .it .ojo.rojo { background: var(--color-danger-soft); }
+  .ir { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--color-primary-text); text-decoration: none; border: 1px solid var(--color-border-strong); background: var(--color-surface-2); border-radius: var(--radius-pill); padding: 4px 12px; }
+  .ir + .ir { margin-left: 6px; }
+  .k { display: inline; font-weight: 700; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; padding: 0 5px; color: var(--color-text); -webkit-box-decoration-break: clone; box-decoration-break: clone; overflow-wrap: anywhere; }
+  mark { background: var(--color-accent-soft); color: inherit; border-radius: 3px; box-shadow: 0 0 0 1px var(--color-accent); }
+
+  /* Abrir una nave nueva */
+  .nn-nave { display: flex; gap: 8px; align-items: center; margin: 12px 0 8px; flex-wrap: wrap; }
+  .nn-nave label { font-size: 13px; font-weight: 700; color: var(--color-text-2); }
+  .nn-nave input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); }
+  .nn-barra { height: 10px; border-radius: 99px; background: var(--color-surface-3); overflow: hidden; margin: 6px 0 4px; }
+  .nn-barra > i { display: block; height: 100%; width: 0; background: var(--color-success); transition: width .2s; }
+  #nnTxt { font-size: 12.5px; color: var(--color-muted); }
+  .paso { display: flex; gap: 10px; align-items: flex-start; }
+  .paso input[type=checkbox] { width: 22px; height: 22px; margin-top: 2px; flex-shrink: 0; accent-color: var(--color-success); }
+  .paso .pc { flex: 1; min-width: 0; }
+  .paso.hecho h3 { text-decoration: line-through; color: var(--color-muted); }
+  .nn-reset { background: none; border: none; color: var(--color-muted); font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; margin-top: 8px; }
+
+  .pie { margin-top: 18px; font-size: 12px; color: var(--color-muted); text-align: center; line-height: 1.6; }
+
+  /* Impresión: todo abierto, sin barra, sin buscador, blanco y negro. */
+  @media print {
+    #fbMiniNav, .no-print, .buscar, #resBusqueda, .nn-reset, #fbErrArranque { display: none !important; }
+    html, body { background: #fff !important; color: #000 !important; }
+    #header { background: #fff !important; color: #000 !important; border-bottom: 2px solid #000; padding: 0 0 8px; }
+    #header small { color: #333 !important; }
+    .wrap { max-width: none; padding: 10px 0 0; }
+    details.sec { box-shadow: none; border: 1px solid #999; break-inside: auto; background: #fff !important; }
+    details.sec > summary .chev { display: none; }
+    details.sec > summary .ic { background: none; }
+    .it { break-inside: avoid; }
+    .it p, .it ol, .it ul, details.sec > summary span.sub { color: #222 !important; }
+    .it b, .it strong, .it h3 { color: #000 !important; }
+    .ir { border: none; background: none; padding: 0; color: #000 !important; font-weight: 400; }
+    .ir::after { content: " (" attr(href) ")"; font-size: 11px; color: #555; }
+    .it .ojo { background: #f1f1f1 !important; border: 1px solid #ccc; }
+    .sin-res { display: none !important; }
+    details.sec.oculto, .it.oculto { display: block !important; }
+  }
+  .oculto { display: none !important; }
+</style>
+</head>
+<body>
+<div id="header">
+  <div class="in">
+    <div>
+      <h1>📘 Guía de inicio</h1>
+      <small id="header-sub">Cómo usar la app</small>
+    </div>
+    <div class="acc no-print">
+      <a class="hbtn" id="volver" href="index.html" style="display:none">← Volver</a>
+      <button class="hbtn" type="button" onclick="imprimirGuia()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <p class="intro">Aquí está paso a paso lo que hace cada persona en la app. Tu parte sale primero. Toca un título para abrirlo o cerrarlo.</p>
+
+  <div class="buscar" id="buscarBox">
+    <span class="lupa">🔍</span>
+    <input type="search" id="buscar" placeholder="Buscar: reloj, QR, repuesto, nave…" autocomplete="off" aria-label="Buscar en la guía"/>
+    <button type="button" id="limpiar" aria-label="Borrar búsqueda">✕</button>
+  </div>
+  <div id="resBusqueda" aria-live="polite"></div>
+  <div class="sin-res" id="sinRes">No encontramos nada con esa palabra. Prueba con otra (por ejemplo: <b>aviso</b>, <b>hora</b>, <b>almacén</b>).</div>
+
+  <div id="secciones">
+
+  <!-- ══════ OPERADOR ══════ -->
+  <details class="sec" id="sec-operador" data-roles="OPERADOR">
+    <summary><span class="ic">🚨</span><span class="tx"><b>Operador (producción)</b><span class="sub">Avisar una falla o pedir un proyecto</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>¿Qué haces tú en la app?</h3>
+        <p>Tú avisas a mantenimiento cuando una máquina falla. Al entrar, la app te abre directo <b>🚨 Reportar Parada</b>.</p>
+        <a class="ir" href="reportar.html">Abrir Reportar →</a>
+      </div>
+      <div class="it">
+        <h3>⚠️ Reportar una falla</h3>
+        <ol>
+          <li>Busca la máquina y tócala.</li>
+          <li>Elige <span class="k">⚠️ Falla en la máquina</span>.</li>
+          <li>Di si está parada: <span class="k">⛔ Sí, está parada</span> o <span class="k">⚠️ No, sigue trabajando</span>, y desde qué hora.</li>
+          <li>Escribe qué le pasa: qué se ve, se oye o se siente raro.</li>
+          <li>Elige qué tan urgente es: 🔴 Alta, 🟡 Media o 🟢 Baja.</li>
+          <li>Pon tu nombre y toca <span class="k">🚨 Enviar reporte</span>.</li>
+        </ol>
+        <p>Los técnicos reciben el aviso al momento en su celular.</p>
+      </div>
+      <div class="it">
+        <h3>📐 ¿Falla o proyecto?</h3>
+        <p><b>Falla</b>: la máquina tiene un problema ahora. Se atiende ya.</p>
+        <p><b>Proyecto / mejora</b>: algo que se quiere hacer o mejorar, sin apuro (por ejemplo, mover una máquina o poner una guarda). No suena como aviso: el Encargado le pone técnico y fecha.</p>
+      </div>
+      <div class="it">
+        <h3>No mandes el mismo reporte dos veces</h3>
+        <p>Si esa máquina ya tiene un reporte abierto, la app te avisa antes de enviar otro. Mejor revisa el estado.</p>
+      </div>
+      <div class="it">
+        <h3>📋 Ver cómo va tu reporte</h3>
+        <p>Toca <span class="k">📋 Ver estado de los reportes</span>. Se actualiza solo:</p>
+        <ul>
+          <li>🔴 Rojo: esperando técnico.</li>
+          <li>🟡 Amarillo: un técnico lo está atendiendo.</li>
+          <li>🟢 Verde: resuelto.</li>
+          <li>🟣 Morado: proyecto.</li>
+        </ul>
+        <p>Puedes ver Hoy, 3 días o 7 días.</p>
+      </div>
+      <div class="it">
+        <h3>📷 Reportar con el código QR</h3>
+        <p>Cada máquina tiene pegado un sticker <b>“¿Máquina parada?”</b>. Escanéalo con la cámara del celular. Salen dos opciones: <span class="k">🚨 Reportar parada o falla</span> y <span class="k">🗂️ Hoja de vida</span>.</p>
+        <p>Funciona aunque no tengas usuario. Escribe tu nombre y tu área o turno.</p>
+      </div>
+      <div class="it">
+        <h3>📵 Sin señal</h3>
+        <p>Si sale <b>“Sin conexión”</b>, envía el reporte igual. Se guarda en el celular y se envía solo cuando vuelva la señal. No lo mandes otra vez.</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ TÉCNICO ══════ -->
+  <details class="sec" id="sec-tecnico" data-roles="TECNICO">
+    <summary><span class="ic">🔧</span><span class="tx"><b>Técnico</b><span class="sub">Avisos, Bitácora, trabajos asignados, checklists, repuestos y herramientas</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>🔔 Primero: activa los avisos</h3>
+        <p>Entra a <b>📋 Bitácora → 🚨 Avisos</b> y toca <span class="k">🔔 Activar sonido y notificaciones en este celular</span>. Se hace una sola vez en cada celular.</p>
+        <a class="ir" href="bitacora.html#avisos">Abrir Avisos →</a>
+      </div>
+      <div class="it">
+        <h3>🚨 Atender un aviso</h3>
+        <ol>
+          <li>En <b>Avisos</b> salen las paradas que reporta producción, con el tiempo que lleva la máquina esperando.</li>
+          <li>Toca <span class="k">🏃 Voy a atenderlo</span>. El aviso queda a tu nombre con tu hora de llegada. Si otro técnico ya lo tomó, la app te lo dice.</li>
+          <li>Si no puedes seguir, toca <span class="k">↩ Soltar</span> para que otro lo tome.</li>
+          <li>Cuando termines, toca <span class="k">✅ Terminé — registrar OT</span>.</li>
+          <li>Se abre la Bitácora con el equipo, la falla y las horas ya puestas. Escribe la solución, revisa la causa y los técnicos, y toca <span class="k">Guardar</span>. El aviso queda resuelto.</li>
+        </ol>
+      </div>
+      <div class="it">
+        <h3>📋 Registrar un trabajo en la Bitácora</h3>
+        <p>En <b>➕ Nuevo</b>:</p>
+        <ol>
+          <li>Revisa la fecha (arriba) y elige el <b>Equipo</b>. La planta, el área y la línea se llenan solas.</li>
+          <li>Tipo: Correctivo, Preventivo, Predictivo o Proyecto.</li>
+          <li>Causa, pieza, <b>Falla</b> (qué pasó) y <b>Solución</b> (cómo se resolvió).</li>
+          <li>Las horas: <b>Paró</b>, <b>Llegó</b> y <b>Terminó</b>.</li>
+          <li>Técnicos que trabajaron, herramientas usadas y repuestos.</li>
+          <li>Toca <span class="k">Guardar</span>.</li>
+        </ol>
+        <a class="ir" href="bitacora.html">Abrir Bitácora →</a>
+      </div>
+      <div class="it">
+        <h3>⏰ Las horas: botón “Ahora”</h3>
+        <p>Cada recuadro de hora tiene un botón <span class="k">Ahora</span>: pone la hora de este momento de un toque. Tócalo cuando llegas y cuando terminas.</p>
+        <p>Si tocas el recuadro se abre el reloj para elegir otra hora. Si el trabajo pasó de la medianoche (23:30 a 01:10), la app calcula bien el tiempo.</p>
+      </div>
+      <div class="it">
+        <h3>📅 Trabajos asignados (con fecha)</h3>
+        <p>Arriba en <b>Avisos</b> sale <b>“📅 Trabajos asignados a ti”</b>: fallas de checklist y proyectos que el Encargado te planificó para un día. Esa fecha es tu plazo. Si ya pasó, dice <b>(atrasada)</b>.</p>
+        <ol>
+          <li>Haz el trabajo.</li>
+          <li>Toca <span class="k">Registrar</span>: se abre la Bitácora con ese trabajo.</li>
+          <li>Llena la solución y las horas, y toca <span class="k">Guardar</span>. Pasa a revisión del supervisor.</li>
+        </ol>
+        <p>Si el supervisor dice que no está terminado, vuelve como <b>⚠️ Devuelta</b> con una nota. Toca <span class="k">Corregir</span>, arregla y guarda otra vez.</p>
+        <p>También lo puedes hacer desde <b>🩺 Checklist → 🛠 OTs → 📋 Registrar en Bitácora</b>.</p>
+      </div>
+      <div class="it">
+        <h3>🩺 Hacer un checklist</h3>
+        <ol>
+          <li>Entra a <b>🩺 Checklist</b>. En <b>“🔔 Hoy te toca”</b> salen los equipos con checklist vencido o que vence hoy. También puedes buscar cualquier equipo en <b>“📋 Todos los equipos”</b>.</li>
+          <li>Marca cada punto: ✅ Conforme, ⚠️ No conforme, ➖ No aplica o ⏸ No inspeccionado. <span class="k">✅ El resto Conforme</span> marca los que faltan.</li>
+          <li>Elige quién lo hizo y toca <span class="k">✅ Guardar Checklist</span>.</li>
+        </ol>
+        <p>Cada punto <b>No conforme</b> crea solo una OT para que el Encargado la planifique.</p>
+        <p>Si el equipo tiene el QR de checklist (en <b>🗂️ Hoja de Vida → 📱 Código QR</b>), al escanearlo se abre su checklist directo.</p>
+        <a class="ir" href="checklist.html">Abrir Checklist →</a>
+      </div>
+      <div class="it">
+        <h3>📦 Pedir repuestos a almacén</h3>
+        <p>En el formulario de la Bitácora, en <b>Repuestos</b> toca <span class="k">Con repuestos</span>. Escribe código, descripción y cantidad, y toca <span class="k">+ Solicitar a almacén</span>.</p>
+        <p>Almacén lo entrega o lo rechaza. Ves el estado en tu trabajo: Por solicitar, Pendiente, Entregado o Rechazado.</p>
+      </div>
+      <div class="it">
+        <h3>🧰 Tus herramientas</h3>
+        <p>En <b>🧰 Herramientas → Mis herramientas</b> ves lo que tienes a tu cargo y su valor.</p>
+        <ul>
+          <li>Cuando te entreguen una herramienta, revísala y toca <span class="k">✅ Confirmo que la recibí</span>. Confirma solo si de verdad la recibiste.</li>
+          <li>Después de un arqueo (conteo) toca <span class="k">✓ Estoy de acuerdo</span> o <span class="k">✗ No estoy de acuerdo</span> y explica por qué. Tu nota llega a tu encargado y a RR.HH.</li>
+          <li>En la Bitácora marca las <b>Herramientas usadas</b> en cada trabajo.</li>
+        </ul>
+        <a class="ir" href="herramientas.html#mis">Abrir Mis herramientas →</a>
+      </div>
+      <div class="it">
+        <h3>🦺 Antes de empezar: bloqueo (LOTO)</h3>
+        <p>Cuando tocas <span class="k">🏃 Voy a atenderlo</span>, cuando abres un trabajo planificado o cuando registras en la Bitácora, sale <b>“Antes de empezar — Seguridad”</b>.</p>
+        <ol>
+          <li>¿Hay que bloquear la máquina? Si el equipo es <span class="fbc fbc-A">A · Crítico</span> es <b>obligatorio</b> (sale en rojo). Si vas a meter las manos o quitar guardas, di <b>Sí</b>.</li>
+          <li>Marca cada paso cuando lo hagas de verdad: avisé a producción, apagué, energías (eléctrica, aire, aceite, gravedad, calor, química), candado y tarjeta con su <b>número</b>, liberé la energía que queda, intenté arrancar y no arrancó, y tu EPP.</li>
+          <li>Toca <span class="k">✅ Listo, empezar</span>.</li>
+        </ol>
+        <p><b>Riesgos especiales</b> (altura, espacio confinado, soldar o cortar, eléctrico con corriente): márcalos y tu Supervisor o Encargado los autoriza desde su celular. Mientras dice <b>⏳ Por autorizar</b>, no hagas esa parte del trabajo.</p>
+        <p>Al guardar el trabajo te sale <b>🔓 Retirar bloqueo</b>: herramientas fuera, personal fuera, guardas puestas, candado retirado y aviso a producción. Si todavía no lo quitas, toca <span class="k">Guardar y retirar después</span> y luego retíralo en <b>Avisos → 🔒 Mis bloqueos abiertos</b>.</p>
+        <p>Sin señal también funciona: se guarda en el celular y se sube solo (dice <b>📵 sin subir todavía</b>).</p>
+        <a class="ir" href="bitacora.html#avisos">Abrir Avisos →</a>
+      </div>
+      <div class="it">
+        <h3>🎯 ¿Qué es A, B y C?</h3>
+        <p>Es la <b>criticidad</b> del equipo: <span class="fbc fbc-A">A · Crítico</span>, <span class="fbc fbc-B">B · Importante</span> y <span class="fbc fbc-C">C · Normal</span>. Sale junto al nombre del equipo en Avisos, Bitácora, Checklist y Hoja de vida. Con la misma prioridad, los avisos de equipos A salen primero.</p>
+      </div>
+      <div class="it">
+        <h3>🗂️ Historia de una máquina</h3>
+        <p>En <b>🗂️ Hoja de Vida</b> eliges un equipo y ves todo lo que se le ha hecho: fallas, soluciones, técnicos y tiempos.</p>
+        <a class="ir" href="hoja-vida.html">Abrir Hoja de Vida →</a>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ SUPERVISOR / ENCARGADO ══════ -->
+  <details class="sec" id="sec-supervisor" data-roles="SUPERVISOR,ENCARGADO_MANTENIMIENTO">
+    <summary><span class="ic">🧑‍🔧</span><span class="tx"><b>Supervisor y Encargado</b><span class="sub">Validar, planificar, asignar, checklists, carga masiva, análisis y filtros</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>✅ Validar o devolver un trabajo</h3>
+        <p>En <b>🩺 Checklist → 🛠 OTs</b>, las que dicen <b>“En revisión”</b> ya las registró el técnico. Abajo ves lo que escribió en la Bitácora.</p>
+        <ul>
+          <li><span class="k">✅ Buena y válida</span>: el trabajo quedó bien.</li>
+          <li><span class="k">⚠️ No concluido</span>: escribe en la nota qué falta. Le vuelve al técnico como devuelta.</li>
+        </ul>
+        <p>Lo pueden hacer el Supervisor, el Encargado y el Administrador. El cierre final (<b>🔒 Cerrar OT</b>) lo hace el Administrador.</p>
+        <a class="ir" href="checklist.html">Abrir Checklist →</a>
+      </div>
+      <div class="it">
+        <h3>📅 Planificar y asignar (Encargado)</h3>
+        <p>En <b>🛠 OTs</b>, las que dicen <b>“Pendiente”</b> son fallas de un checklist (🩺) o proyectos que pidió producción (📐).</p>
+        <ol>
+          <li>En <span class="k">Asignar a...</span> elige el técnico.</li>
+          <li>Pon la fecha en que debe hacerlo.</li>
+          <li>Toca <span class="k">📅 Planificar</span>.</li>
+        </ol>
+        <p>Al técnico le llega en <b>Avisos → Trabajos asignados a ti</b>. Solo el Encargado y el Administrador pueden planificar.</p>
+      </div>
+      <div class="it">
+        <h3>👀 Ver todos los trabajos asignados</h3>
+        <p>En <b>📋 Bitácora → 🚨 Avisos</b>, abajo, sale <b>“📅 Trabajos asignados (todos)”</b> agrupados por técnico. Así ves quién tiene trabajo atrasado o devuelto.</p>
+        <a class="ir" href="bitacora.html#avisos">Abrir Avisos →</a>
+      </div>
+      <div class="it">
+        <h3>🩺 Checklists por equipo (Encargado)</h3>
+        <p>En <b>🩺 Checklist → ⚙️ Config</b>:</p>
+        <ul>
+          <li><b>📝 Puntos del Checklist</b>: la lista general que usan todos los equipos.</li>
+          <li>Lista propia de un equipo: abre su checklist y toca <span class="k">📝 Agregar/editar puntos de este equipo</span>.</li>
+          <li><b>⚙️ Configurar Frecuencias</b>: cada cuántos días se revisa cada equipo. Sin frecuencia, el equipo no sale en “Hoy te toca” (pero se puede revisar igual).</li>
+        </ul>
+      </div>
+      <div class="it">
+        <h3>📥 Carga masiva desde Excel</h3>
+        <ul>
+          <li><b>Checklist → ⚙️ Config → 📥 Cargar listas por equipo</b>: la lista de puntos de muchos equipos a la vez.</li>
+          <li><b>Checklist → ⚙️ Config → 📋 Carga masiva</b>: las frecuencias.</li>
+          <li><b>🔧 Inventario → 📋 Carga masiva de equipos</b> y la de repuestos.</li>
+        </ul>
+        <p>Copia las filas de Excel y pégalas en el cuadro (o abre el archivo). En las listas y en los equipos primero revisas una vista previa y después guardas. Las listas tienen una <span class="k">⬇️ Plantilla</span> para llenar.</p>
+      </div>
+      <div class="it">
+        <h3>🦺 Autorizar permisos de trabajo</h3>
+        <p>Si un técnico marca un riesgo especial (altura, espacio confinado, soldar o cortar, eléctrico con corriente), te sale en <b>📋 Bitácora → 🚨 Avisos → 🦺 Permisos por autorizar</b> y suma al número rojo.</p>
+        <ol>
+          <li>Toca <span class="k">Revisar y autorizar</span>: ves el técnico, el equipo, el LOTO (candado, energías, EPP) y los riesgos.</li>
+          <li>Ve al lugar si hace falta. Toca <span class="k">✅ Autorizar</span> o <span class="k">✋ Rechazar</span> (al rechazar escribe por qué).</li>
+        </ol>
+        <p>Tu propio permiso lo autoriza otra persona. Sin señal se guarda en tu celular y se sube solo. En <b>📊 Análisis → 🦺 Seguridad</b> ves el % de trabajos en equipos A con LOTO, los bloqueos abiertos más de 12 horas (candados olvidados) y los que esperan autorización, y lo puedes exportar a Excel.</p>
+        <a class="ir" href="bitacora.html#avisos">Abrir Avisos →</a>
+      </div>
+      <div class="it">
+        <h3>🎯 Evaluar la criticidad (Encargado)</h3>
+        <p>En <b>🩺 Checklist → ⚙️ Config</b>, <b>🗂️ Hoja de Vida</b> o <b>🔧 Inventario</b> toca <span class="k">🎯 Evaluar criticidad</span>. Ves los equipos de tu nave y cuántos van evaluados.</p>
+        <ol>
+          <li>Toca <span class="k">Evaluar</span> en un equipo y contesta 5 preguntas: riesgo para personas o ambiente, producción, calidad, costo de reparación y qué tan seguido falla (la app sugiere esta según los correctivos de la Bitácora en 12 meses).</li>
+          <li>Cada respuesta vale 1, 3 o 5 puntos. <b>A</b>: riesgo grave para personas o ambiente, o 19 puntos o más. <b>B</b>: de 13 a 17 puntos, o si al fallar para la línea o la planta. <b>C</b>: 11 o menos.</li>
+          <li>Toca <span class="k">💾 Guardar</span>.</li>
+        </ol>
+        <p>Muchos a la vez: <span class="k">📥 Cargar desde Excel o pegar</span> con las columnas <b>Equipo · Criticidad</b> (A, B o C). El Administrador puede cambiar el nivel calculado escribiendo el motivo. En <b>📊 Análisis</b> puedes filtrar por criticidad y ver los indicadores de cada nivel.</p>
+      </div>
+      <div class="it">
+        <h3>📊 Análisis</h3>
+        <p>Pestañas: <b>Resumen</b> (checklists y órdenes vencidas, fallas que se repiten), <b>Equipos y predicción</b> (riesgo por equipo), <b>Áreas</b>, <b>Técnicos</b>, <b>🏭 Naves</b> (si ves más de una) y <b>Datos</b> (📊 Exportar a Excel).</p>
+        <a class="ir" href="analisis.html">Abrir Análisis →</a> <a class="ir" href="analisis.html#equipos">Equipos en riesgo →</a>
+      </div>
+      <div class="it">
+        <h3>🏭 Filtros de nave y área</h3>
+        <p>Arriba, en la barra, está la <b>nave</b> (🏭). Lo que eliges ahí se usa en todas las pantallas de ese celular. Si tienes varias naves, puedes ver “Mis naves” o una sola.</p>
+        <p>En el <b>Historial</b> de la Bitácora, en <b>Checklist</b> y en <b>Análisis</b> hay además filtros <b>Nave → Área → Línea → Equipo</b>. El Excel sale con lo que tengas filtrado.</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ ALMACÉN ══════ -->
+  <details class="sec" id="sec-almacen" data-roles="ALMACEN">
+    <summary><span class="ic">📦</span><span class="tx"><b>Almacén</b><span class="sub">Solicitudes de repuestos, inventario y herramientas</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>📦 Atender solicitudes de repuestos</h3>
+        <p>Los técnicos piden repuestos desde la Bitácora. Te llegan en <b>📦 Almacén → Pendientes</b>, al momento.</p>
+        <ul>
+          <li><span class="k">Entregar</span> cuando le das el repuesto.</li>
+          <li><span class="k">Rechazar</span> si no se puede. La app te pide el motivo (por ejemplo: no hay en almacén).</li>
+        </ul>
+        <p>En <b>Atendidas</b> ves lo de los últimos 30 días. El técnico ve el estado en su trabajo.</p>
+        <a class="ir" href="almacen.html">Abrir Almacén →</a>
+      </div>
+      <div class="it">
+        <h3>🔧 Inventario de repuestos</h3>
+        <ul>
+          <li>Cada equipo tiene sus repuestos, con stock, fotos y manuales.</li>
+          <li>El buscador de arriba busca un repuesto en <b>todos</b> los equipos.</li>
+          <li><b>📦 Movimiento de stock</b>: 📥 Entrada o 📤 Salida, con cantidad, técnico, motivo y folio de OT.</li>
+          <li><span class="k">🛒 Lista de compra (faltantes)</span>: lo que está por debajo del mínimo.</li>
+        </ul>
+        <a class="ir" href="inventario.html">Abrir Inventario →</a>
+      </div>
+      <div class="it">
+        <h3>🧰 Herramientas de los técnicos</h3>
+        <ul>
+          <li><b>👷 Técnicos</b>: elige el técnico y usa <span class="k">➕ Entregar</span>, <span class="k">↩ Devolución</span> o <span class="k">📋 Hacer arqueo</span>. El técnico confirma con su usuario que la recibió.</li>
+          <li><span class="k">🖨️ Acta de entrega</span> y <span class="k">🖨️ Constancia</span> del arqueo para firmar.</li>
+          <li><b>🧰 Catálogo</b>: las herramientas con su valor de reposición.</li>
+          <li><b>💼 Recursos Humanos</b>: si en el arqueo falta o se dañó algo, se crea un cargo. Tócalo y <span class="k">Enviar a RR.HH.</span></li>
+        </ul>
+        <a class="ir" href="herramientas.html#tecnicos">Abrir Herramientas →</a>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ RRHH ══════ -->
+  <details class="sec" id="sec-rrhh" data-roles="RRHH">
+    <summary><span class="ic">💼</span><span class="tx"><b>Recursos Humanos</b><span class="sub">Cargos por herramientas perdidas o dañadas</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>¿Qué haces tú en la app?</h3>
+        <p>Al entrar se abre <b>🧰 Herramientas → 💼 Recursos Humanos</b>. Ahí llegan los cargos que manda Almacén o el Encargado cuando, en un arqueo, falta o se dañó una herramienta.</p>
+        <a class="ir" href="herramientas.html#rrhh">Abrir Recursos Humanos →</a>
+      </div>
+      <div class="it">
+        <h3>Los filtros</h3>
+        <p><b>Por enviar</b>, <b>En RR.HH.</b>, <b>Descontados</b>, <b>Anulados</b> y <b>Todos</b>. Cada cargo trae la constancia del arqueo y si el técnico estuvo de acuerdo.</p>
+      </div>
+      <div class="it">
+        <h3>✓ Marcar descontado</h3>
+        <p>Cuando lo apliques en nómina, toca <span class="k">✓ Marcar descontado</span> y escribe en qué nómina y cómo (por ejemplo: nómina 15/10, 2 cuotas).</p>
+        <p>La decisión de descontar, el monto y las cuotas son de RR.HH., según la política de la empresa y la ley.</p>
+      </div>
+      <div class="it">
+        <h3>Anular un cargo</h3>
+        <p>Toca <span class="k">Anular</span> y escribe el motivo (la herramienta apareció, error de conteo…). Las herramientas vuelven a la custodia del técnico.</p>
+      </div>
+      <div class="it">
+        <h3>⬇ Exportar</h3>
+        <p><span class="k">⬇ Exportar CSV</span> descarga la lista que estás viendo, para abrirla en Excel.</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ ADMINISTRADOR ══════ -->
+  <details class="sec" id="sec-admin" data-roles="ADMINISTRADOR">
+    <summary><span class="ic">⚙️</span><span class="tx"><b>Administrador</b><span class="sub">Usuarios, naves, respaldo, plan gratis, incentivos, rentabilidad y reglas</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>👥 Usuarios</h3>
+        <p>En <b>⚙️ Administración → 👥 Usuarios</b> toca <span class="k">＋ Nuevo usuario</span>: correo, contraseña temporal (mínimo 6), <b>rol</b> y <b>naves</b> (vacío = todas). Al técnico ponle su <b>nombre de técnico</b>, igual que sale en las OTs.</p>
+        <ul>
+          <li>El rol decide qué pantallas ve la persona.</li>
+          <li>Si alguien se va, toca <span class="k">Desactivar</span>. No se borra: sus registros siguen.</li>
+          <li><span class="k">📧 Enviar correo para cambiar contraseña</span> si se le olvidó.</li>
+          <li><b>👷 Lista de técnicos</b>: los nombres que salen en la Bitácora. Se puede agregar un técnico sin cuenta.</li>
+        </ul>
+        <a class="ir" href="admin.html#usuarios">Abrir Usuarios →</a>
+      </div>
+      <div class="it">
+        <h3>🏭 Naves, áreas y líneas</h3>
+        <p>En <b>🏭 Naves</b>: <span class="k">＋ Nueva nave</span>, dentro de cada nave <span class="k">＋ Área</span>, y dentro de cada área <span class="k">＋ Línea</span>. Con ✏️ se renombra o se desactiva.</p>
+        <p>Nada se borra: lo desactivado ya no sale para registros nuevos, pero lo viejo se sigue viendo. Si renombras, los registros viejos siguen contando para la misma nave.</p>
+        <a class="ir" href="admin.html#naves">Abrir Naves →</a>
+      </div>
+      <div class="it">
+        <h3>🧩 Completar nave en registros viejos</h3>
+        <p>Al final de <b>🏭 Naves</b>. Los registros de antes no dicen de qué nave son. Primero <span class="k">Revisar</span> (solo lee) y después <span class="k">Completar</span> (agrega solo el campo de la nave). Tiene un máximo por día: si quedan, sigue mañana.</p>
+      </div>
+      <div class="it">
+        <h3>💾 Respaldo cada mes</h3>
+        <p>En <b>💾 Respaldo</b> toca <span class="k">💾 Descargar respaldo</span>. Baja un archivo con toda la base de datos. Antes te dice cuántas lecturas va a gastar.</p>
+        <p>Hazlo una vez al mes (o cada semana). Si pasan más de 30 días, en Inicio te sale un aviso. Guarda el archivo fuera del celular: en la computadora o en Drive.</p>
+        <a class="ir" href="admin.html#respaldo">Abrir Respaldo →</a>
+      </div>
+      <div class="it">
+        <h3>📊 Uso del plan gratis</h3>
+        <p>En <b>📊 Uso</b> ves el espacio usado y los límites del plan gratis de Firebase. Las lecturas exactas de hoy solo se ven en la consola de Firebase.</p>
+        <a class="ir" href="admin.html#uso">Abrir Uso →</a>
+      </div>
+      <div class="it">
+        <h3>💰 Incentivos</h3>
+        <p>Puntaje semanal (lunes a domingo) de cada técnico con 4 criterios: checklists a tiempo, OTs a tiempo, respuesta a avisos y calidad (sin rechazos ni reincidencias). Al terminar la semana, revisa y toca <span class="k">✅ Aprobar semana</span>: queda guardada.</p>
+        <a class="ir" href="incentivos.html">Abrir Incentivos →</a>
+      </div>
+      <div class="it">
+        <h3>📊 Rentabilidad de equipos</h3>
+        <p>Cuánto cuesta mantener cada máquina (técnico, operador detenido, arranques y repuestos) y si conviene seguir con ella o comprar una nueva.</p>
+        <a class="ir" href="rentabilidad.html">Abrir Rentabilidad →</a>
+      </div>
+      <div class="it">
+        <h3>🦺 Seguridad (LOTO)</h3>
+        <p>En <b>⚙️ Administración → 🦺 Seguridad</b> eliges cuándo el bloqueo es obligatorio (criticidad del equipo y tipo de trabajo) y la lista de EPP que marca el técnico.</p>
+        <a class="ir" href="admin.html">Abrir Administración →</a>
+      </div>
+      <div class="it">
+        <h3>🔒 Lo que solo hace el Administrador</h3>
+        <ul>
+          <li><span class="k">🔒 Cerrar OT</span>: cierre final de una OT ya validada.</li>
+          <li><span class="k">🚫 Anular</span> avisos duplicados y OTs, siempre con motivo. Se ven en <b>🚫 Ver anuladas</b>.</li>
+          <li>Eliminar un equipo completo en Inventario.</li>
+        </ul>
+      </div>
+      <div class="it">
+        <h3>⛔ Reglas: lo que nunca se hace</h3>
+        <div class="ojo rojo">
+          <ul>
+            <li><b>No borres</b> usuarios, naves, áreas ni equipos que ya tienen trabajos: <b>desactívalos</b>. Un aviso repetido se <b>anula</b>, no se borra.</li>
+            <li><b>No te quedes sin respaldo</b>: descarga uno cada mes y guárdalo fuera del celular.</li>
+            <li><b>No uses “⚡ Cerrar directo”</b> si el trabajo no se registró en la Bitácora: queda sin solución, sin técnicos y cuenta como no reportado en Incentivos.</li>
+            <li><b>No descargues el respaldo varias veces al día</b>: gasta lecturas del plan gratis.</li>
+            <li><b>No compartas cuentas</b>: cada persona con su usuario y su rol.</li>
+            <li><b>No cambies el nombre de un técnico</b> sin necesidad: las OTs viejas siguen con el nombre anterior.</li>
+            <li><b>No des el rol Administrador</b> a quien no lo necesita: ve salarios y costos.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══════ ABRIR UNA NAVE NUEVA (Administrador) ══════ -->
+  <details class="sec" id="sec-nave-nueva" data-roles="ADMINISTRADOR" data-solo="ADMINISTRADOR">
+    <summary><span class="ic">🏗️</span><span class="tx"><b>Checklist para abrir una nave nueva</b><span class="sub">Los 8 pasos, en orden. Tu progreso se guarda en este celular.</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="nn-nave">
+        <label for="nnNave">Nave:</label>
+        <input id="nnNave" list="nnNaves" maxlength="80" placeholder="Nombre de la nave nueva (ej. NAVE 2)" autocomplete="off"/>
+        <datalist id="nnNaves"></datalist>
+      </div>
+      <div class="nn-barra" aria-hidden="true"><i id="nnBarra"></i></div>
+      <div id="nnTxt">0 de 8 pasos</div>
+      <div id="nnPasos">
+        <div class="it paso" data-paso="nave"><input type="checkbox" id="nn-nave" aria-label="Paso 1 hecho"/><div class="pc">
+          <h3>1. Crear la nave</h3>
+          <p><b>⚙️ Administración → 🏭 Naves → ＋ Nueva nave</b>. Ponle el nombre y, si quieres, su Encargado.</p>
+          <a class="ir" href="admin.html#naves">Ir a Naves →</a></div></div>
+        <div class="it paso" data-paso="areas"><input type="checkbox" id="nn-areas" aria-label="Paso 2 hecho"/><div class="pc">
+          <h3>2. Crear las áreas</h3>
+          <p>En la tarjeta de la nave, toca <b>＋ Área</b> por cada área (ej. WEAVING, EXTRUSION).</p>
+          <a class="ir" href="admin.html#naves">Ir a Naves →</a></div></div>
+        <div class="it paso" data-paso="lineas"><input type="checkbox" id="nn-lineas" aria-label="Paso 3 hecho"/><div class="pc">
+          <h3>3. Crear las líneas</h3>
+          <p>Dentro de cada área, toca <b>＋ Línea</b> (ej. LINEA A).</p>
+          <a class="ir" href="admin.html#naves">Ir a Naves →</a></div></div>
+        <div class="it paso" data-paso="equipos"><input type="checkbox" id="nn-equipos" aria-label="Paso 4 hecho"/><div class="pc">
+          <h3>4. Cargar los equipos</h3>
+          <p>En <b>🔧 Inventario</b>: <b>＋ Agregar equipo</b> uno por uno, o <b>📋 Carga masiva de equipos</b> desde Excel. A cada equipo ponle su <b>Planta</b> (la nave), su <b>Área</b> y su <b>Línea</b>.</p>
+          <a class="ir" href="inventario.html">Ir a Inventario →</a></div></div>
+        <div class="it paso" data-paso="qr"><input type="checkbox" id="nn-qr" aria-label="Paso 5 hecho"/><div class="pc">
+          <h3>5. Imprimir y pegar los QR</h3>
+          <p>En <b>🏷️ Etiquetas QR</b> filtra por área, selecciona los equipos y toca <b>🖨️ Imprimir etiquetas</b>. Pega cada sticker en su máquina, a la vista del operador. Al imprimir se publica la hoja de vida de cada equipo.</p>
+          <a class="ir" href="etiquetas-qr.html">Ir a Etiquetas QR →</a></div></div>
+        <div class="it paso" data-paso="usuarios"><input type="checkbox" id="nn-usuarios" aria-label="Paso 6 hecho"/><div class="pc">
+          <h3>6. Crear los usuarios con su nave</h3>
+          <p><b>👥 Usuarios → ＋ Nuevo usuario</b> para técnicos, supervisor, encargado, operadores y almacén. En <b>Naves</b> marca esta nave. Revisa que los técnicos salgan en la <b>Lista de técnicos</b> con esta nave.</p>
+          <a class="ir" href="admin.html#usuarios">Ir a Usuarios →</a></div></div>
+        <div class="it paso" data-paso="checklists"><input type="checkbox" id="nn-checklists" aria-label="Paso 7 hecho"/><div class="pc">
+          <h3>7. Cargar las listas de checklist por equipo</h3>
+          <p>En <b>🩺 Checklist → ⚙️ Config</b>: <b>📥 Cargar listas por equipo</b> y después <b>⚙️ Configurar Frecuencias</b> (cada cuántos días).</p>
+          <a class="ir" href="checklist.html">Ir a Checklist →</a></div></div>
+        <div class="it paso" data-paso="respaldo"><input type="checkbox" id="nn-respaldo" aria-label="Paso 8 hecho"/><div class="pc">
+          <h3>8. Primer respaldo</h3>
+          <p>Con todo cargado, descarga el primer respaldo en <b>💾 Respaldo</b> y guárdalo fuera del celular.</p>
+          <a class="ir" href="admin.html#respaldo">Ir a Respaldo →</a></div></div>
+      </div>
+      <button type="button" class="nn-reset no-print" id="nnReset">Empezar de nuevo esta nave</button>
+    </div>
+  </details>
+
+  <!-- ══════ PREGUNTAS FRECUENTES ══════ -->
+  <details class="sec" id="sec-faq" data-roles="">
+    <summary><span class="ic">❓</span><span class="tx"><b>Preguntas frecuentes</b><span class="sub">Reloj, máquinas, señal, costo y actualizar</span></span><span class="chev">▾</span></summary>
+    <div class="cuerpo">
+      <div class="it">
+        <h3>⏰ No me sale el reloj</h3>
+        <p>Toca el botón <span class="k">Ahora</span> al lado de la hora: pone la hora de este momento. Si necesitas otra hora, toca el recuadro de la hora otra vez.</p>
+      </div>
+      <div class="it">
+        <h3>🏭 No veo mis máquinas</h3>
+        <p>Mira la <b>nave</b> elegida arriba (🏭). Cambia a tu nave o a “Todas las naves” / “Mis naves”.</p>
+        <p>Si aun así no sale, pide al Administrador que revise las naves de tu usuario. En Reportar, si no hay resultados, toca <span class="k">🔄 Actualizar lista de equipos</span>.</p>
+      </div>
+      <div class="it">
+        <h3>📵 Sin señal</h3>
+        <p>Trabaja normal. Lo que guardes se queda en el celular y sube solo cuando vuelva la señal. No cierres la sesión ni borres el caché mientras tanto.</p>
+        <p>Si la Bitácora dice <b>“⚠️ No se subió”</b>, toca <span class="k">Recuperar</span> para no perder lo escrito.</p>
+      </div>
+      <div class="it">
+        <h3>💵 ¿Cuánto cuesta?</h3>
+        <p>Nada. La app usa el plan gratis de Firebase. Límites al día, para toda la empresa: <b>50.000 lecturas</b>, <b>20.000 escrituras</b> y <b>20.000 borrados</b>, y <b>1 GiB</b> de espacio.</p>
+        <p>Si un día se pasa, Firebase deja de responder hasta el día siguiente. No cobra.</p>
+      </div>
+      <div class="it">
+        <h3>🔄 ¿Cómo actualizo la app?</h3>
+        <p>Cierra la app del todo (quítala de las apps abiertas) y ábrela otra vez, con señal. A veces hay que hacerlo dos veces.</p>
+      </div>
+      <div class="it">
+        <h3>📱 ¿Cómo la pongo en el celular?</h3>
+        <p><b>Android (Chrome)</b>: menú ⋮ → “Agregar a pantalla de inicio”. <b>iPhone (Safari)</b>: botón compartir 📤 → “En la pantalla de inicio”.</p>
+      </div>
+      <div class="it">
+        <h3>🔑 Olvidé mi contraseña</h3>
+        <p>En la pantalla de entrada, escribe tu correo y toca <b>“Olvidé mi contraseña”</b>. Te llega un correo para cambiarla. O pídeselo al Administrador.</p>
+      </div>
+    </div>
+  </details>
+
+  </div>
+
+  <div class="pie">Mantenimiento 2026 · Esta guía funciona sin internet una vez abierta.</div>
+</div>
+
+<script>
+// ══════ Rol → sección ══════
+const ROL_SECCION = { OPERADOR: 'sec-operador', TECNICO: 'sec-tecnico', SUPERVISOR: 'sec-supervisor', ENCARGADO_MANTENIMIENTO: 'sec-supervisor', ALMACEN: 'sec-almacen', RRHH: 'sec-rrhh', ADMINISTRADOR: 'sec-admin' };
+const ROL_TXT = { OPERADOR: 'Operador', TECNICO: 'Técnico', SUPERVISOR: 'Supervisor', ENCARGADO_MANTENIMIENTO: 'Encargado', ALMACEN: 'Almacén', RRHH: 'Recursos Humanos', ADMINISTRADOR: 'Administrador' };
+const $ = id => document.getElementById(id);
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+let ROL = '';
+
+function prepararPorRol(rol) {
+  ROL = rol || '';
+  const cont = $('secciones');
+  // La "nave nueva" es solo para el Administrador.
+  cont.querySelectorAll('[data-solo]').forEach(d => { if (!d.dataset.solo.split(',').includes(ROL)) d.remove(); });
+  const id = ROL_SECCION[ROL];
+  const mia = id && $(id);
+  if (mia) {
+    cont.insertBefore(mia, cont.firstChild);
+    mia.open = true;
+    mia.classList.add('mio');
+    mia.querySelector('summary b').insertAdjacentHTML('beforeend', ' <span class="tag-mio">Tu rol</span>');
+    // Administrador: la nave nueva justo debajo de su sección.
+    const nn = $('sec-nave-nueva');
+    if (nn) mia.after(nn);
+  }
+  if (ROL_TXT[ROL]) $('header-sub').textContent = 'Cómo usar la app · ' + ROL_TXT[ROL];
+  // Operador y RR.HH. no tienen la barra de páginas (no tienen permiso en las demás).
+  const v = $('volver');
+  if (ROL === 'OPERADOR') { v.href = 'reportar.html'; v.textContent = '← Reportar'; v.style.display = ''; }
+  else if (ROL === 'RRHH') { v.href = 'herramientas.html#rrhh'; v.textContent = '← Volver'; v.style.display = ''; }
+}
+
+// ══════ Buscador ══════
+function quitarMarcas(el) {
+  el.querySelectorAll('mark').forEach(m => { const t = document.createTextNode(m.textContent); m.replaceWith(t); });
+  el.normalize();
+}
+function marcar(el, q) {
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  const nodos = [];
+  while (w.nextNode()) nodos.push(w.currentNode);
+  nodos.forEach(n => {
+    const t = n.nodeValue, nt = norm(t);
+    // norm() no cambia el largo para letras con acento simple (NFD + quitar marcas
+    // equivale a 1 letra por letra), así que las posiciones coinciden.
+    if (nt.length !== t.length) return;
+    let i = nt.indexOf(q);
+    if (i < 0) return;
+    const frag = document.createDocumentFragment();
+    let desde = 0;
+    while (i >= 0) {
+      frag.appendChild(document.createTextNode(t.slice(desde, i)));
+      const m = document.createElement('mark'); m.textContent = t.slice(i, i + q.length); frag.appendChild(m);
+      desde = i + q.length; i = nt.indexOf(q, desde);
+    }
+    frag.appendChild(document.createTextNode(t.slice(desde)));
+    n.replaceWith(frag);
+  });
+}
+let _abiertasAntes = null;
+function buscar() {
+  const q = norm($('buscar').value.trim());
+  $('buscarBox').classList.toggle('con', !!q);
+  const secs = [...document.querySelectorAll('#secciones > details.sec')];
+  secs.forEach(s => quitarMarcas(s));
+  if (!q) {
+    secs.forEach(s => { s.classList.remove('oculto'); s.querySelectorAll('.it').forEach(i => i.classList.remove('oculto')); });
+    if (_abiertasAntes) { secs.forEach(s => { s.open = _abiertasAntes.has(s.id); }); _abiertasAntes = null; }
+    $('resBusqueda').textContent = '';
+    $('sinRes').style.display = 'none';
+    return;
+  }
+  if (!_abiertasAntes) _abiertasAntes = new Set(secs.filter(s => s.open).map(s => s.id));
+  let total = 0, nSec = 0;
+  secs.forEach(s => {
+    const titulo = norm(s.querySelector('summary').textContent).includes(q);
+    const its = [...s.querySelectorAll('.cuerpo .it')];
+    let n = 0;
+    its.forEach(it => {
+      const si = titulo || norm(it.textContent).includes(q);
+      it.classList.toggle('oculto', !si);
+      if (si) n++;
+    });
+    const ver = titulo || n > 0;
+    s.classList.toggle('oculto', !ver);
+    s.open = ver;
+    if (ver) { nSec++; total += n; marcar(s, q); }
+  });
+  $('sinRes').style.display = nSec ? 'none' : 'block';
+  $('resBusqueda').textContent = nSec ? `${total} ${total === 1 ? 'resultado' : 'resultados'} en ${nSec} ${nSec === 1 ? 'sección' : 'secciones'}` : '';
+}
+$('buscar').addEventListener('input', buscar);
+$('limpiar').addEventListener('click', () => { $('buscar').value = ''; buscar(); $('buscar').focus(); });
+
+// ══════ Abrir una nave nueva: progreso por nave en este celular ══════
+const NN_LS = 'guiaNaveNueva';      // { claveNave: { nombre, hechos: [paso…] } }
+const NN_ULT = 'guiaNaveNuevaUlt';  // último nombre de nave escrito
+const claveNave = n => norm(n).replace(/\s+/g, '');
+// Copia en memoria: si el celular no deja guardar (modo privado, sin espacio),
+// los pasos se pueden marcar igual mientras la página esté abierta.
+let _nnMem = null;
+function nnLeer() {
+  if (_nnMem) return JSON.parse(JSON.stringify(_nnMem));
+  try { const o = JSON.parse(localStorage.getItem(NN_LS) || '{}'); _nnMem = o && typeof o === 'object' ? o : {}; } catch (e) { _nnMem = {}; }
+  return JSON.parse(JSON.stringify(_nnMem));
+}
+function nnGuardar(o) { _nnMem = o; try { localStorage.setItem(NN_LS, JSON.stringify(o)); } catch (e) {} }
+function nnNave() { return ($('nnNave') && $('nnNave').value.trim()) || ''; }
+function nnPintar() {
+  const box = $('nnPasos'); if (!box) return;
+  const k = claveNave(nnNave());
+  const hechos = new Set(k ? ((nnLeer()[k] || {}).hechos || []) : []);
+  const pasos = [...box.querySelectorAll('.paso')];
+  pasos.forEach(p => { const c = p.querySelector('input'); c.checked = hechos.has(p.dataset.paso); c.disabled = !k; p.classList.toggle('hecho', c.checked); });
+  const n = pasos.filter(p => p.querySelector('input').checked).length;
+  $('nnBarra').style.width = (n / pasos.length * 100) + '%';
+  $('nnTxt').textContent = k ? `${n} de ${pasos.length} pasos${n === pasos.length ? ' · ✅ ¡Nave lista!' : ''}` : 'Escribe el nombre de la nave para marcar los pasos.';
+}
+function nnIniciar() {
+  const inp = $('nnNave'); if (!inp) return;
+  let ult = '';
+  try { ult = localStorage.getItem(NN_ULT) || ''; } catch (e) {}
+  let activa = '';
+  try { activa = (typeof fbNaveActiva === 'function' && fbNaveActiva()) || ''; } catch (e) {}
+  inp.value = ult || activa || '';
+  try {
+    const naves = typeof fbNavesDisponibles === 'function' ? fbNavesDisponibles() : [];
+    $('nnNaves').innerHTML = naves.map(n => `<option value="${fbEsc(n)}"></option>`).join('');
+  } catch (e) {}
+  inp.addEventListener('input', () => { try { localStorage.setItem(NN_ULT, inp.value.trim()); } catch (e) {} nnPintar(); });
+  $('nnPasos').addEventListener('change', e => {
+    const c = e.target; if (!c.matches('input[type=checkbox]')) return;
+    const nombre = nnNave(), k = claveNave(nombre); if (!k) return;
+    const o = nnLeer();
+    const reg = o[k] || { nombre, hechos: [] };
+    const paso = c.closest('.paso').dataset.paso;
+    reg.nombre = nombre;
+    reg.hechos = (reg.hechos || []).filter(x => x !== paso);
+    if (c.checked) reg.hechos.push(paso);
+    o[k] = reg; nnGuardar(o);
+    try { localStorage.setItem(NN_ULT, nombre); } catch (e) {}
+    nnPintar();
+  });
+  $('nnReset').addEventListener('click', () => {
+    const k = claveNave(nnNave()); if (!k) return;
+    if (!confirm('¿Desmarcar todos los pasos de "' + nnNave() + '"? (Solo en este celular; no cambia nada en la app.)')) return;
+    const o = nnLeer(); delete o[k]; nnGuardar(o); nnPintar();
+  });
+  nnPintar();
+}
+
+// ══════ Imprimir: todo abierto ══════
+let _abiertasImp = null;
+window.addEventListener('beforeprint', () => {
+  const secs = [...document.querySelectorAll('#secciones > details.sec')];
+  _abiertasImp = new Set(secs.filter(s => s.open).map(s => s.id));
+  secs.forEach(s => { s.open = true; });
+});
+window.addEventListener('afterprint', () => {
+  if (!_abiertasImp) return;
+  document.querySelectorAll('#secciones > details.sec').forEach(s => { s.open = _abiertasImp.has(s.id); });
+  _abiertasImp = null;
+});
+function imprimirGuia() { window.print(); }
+
+// ══════ Arranque ══════
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+window.fbReady.then(() => {
+  const rol = (window.currentUserRole && window.currentUserRole.rol) || '';
+  prepararPorRol(rol);
+  if (rol !== 'OPERADOR' && rol !== 'RRHH' && typeof fbRenderMiniNav === 'function') fbRenderMiniNav('guia');
+  nnIniciar();
+  window.__guiaLista = true;
+}).catch(() => { /* sin sesión: firebase-init ya mandó a login.html */ });
+</script>
+</body>
+</html>

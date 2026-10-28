@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Checklist"/>
@@ -17,6 +19,7 @@
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
+  <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C por equipo -->
   <!-- Comparación con Maximo/SAP (28 sep 2026): QR por equipo para abrir su
        checklist directo desde el celular, sin buscarlo en la lista — con 26
        máquinas de Weaving casi idénticas entre sí, el riesgo de llenar el
@@ -25,6 +28,9 @@
        la cámara normal del celular ya reconoce QRs con una URL y ofrece
        abrirla sola). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        NOTA (17 sep 2026): este archivo es un módulo NUEVO e INDEPENDIENTE
@@ -36,20 +42,20 @@
        usan las otras tres apps, para que se vea igual de consistente.
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
-      --blue: #818CF8; --orange: #F97316;
-      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface);
+      --accent: var(--color-accent); --green: var(--color-success); --red: var(--color-danger);
+      --blue: var(--color-primary); --orange: var(--color-warn);
+      --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
     #header h1 { font-size: 15px; font-weight: 800; }
-    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
     #nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; }
     .nav-btn { flex: 1; padding: 8px 4px 10px; background: none; border: none; color: var(--muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
-    .nav-btn.active { color: var(--accent); }
+    .nav-btn.active { color: var(--color-accent-text); }
     .nav-btn span { font-size: 22px; }
     #content { padding: 14px 14px 80px; }
     .screen { display: none; }
@@ -58,50 +64,50 @@
     .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
     .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
     .field { margin-bottom: 13px; }
-    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
-    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    label { font-size: 10px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
     textarea { resize: vertical; min-height: 55px; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     .row { display: flex; gap: 10px; }
     .row .field { flex: 1; }
     .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
     .btn:active { opacity: .8; }
-    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-primary { background: var(--color-primary); color: var(--color-on-primary); }
     .btn-secondary { background: var(--border); color: var(--text); }
     .btn-danger { background: var(--red); color: #fff; }
     .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
     .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
-    .tag-ok { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
-    .tag-falla { background: #e6676722; color: #ff8a8a; border: 1px solid #e6676744; }
-    .tag-pendiente { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
-    .tag-planificada { background: #3987e522; color: #7fb3f5; border: 1px solid #3987e544; }
-    .tag-completada { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
-    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
-    .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
-    .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-ok { background: #199e7022; color: var(--color-success-text); border: 1px solid #199e7044; }
+    .tag-falla { background: #e6676722; color: var(--color-danger-text); border: 1px solid #e6676744; }
+    .tag-pendiente { background: #F59E0B22; color: var(--color-accent-text); border: 1px solid #F59E0B44; }
+    .tag-planificada { background: #3987e522; color: var(--color-primary-text); border: 1px solid #3987e544; }
+    .tag-completada { background: #199e7022; color: var(--color-success-text); border: 1px solid #199e7044; }
+    .tag-prioridad-alta { background: #d03b3b22; color: var(--color-danger-text); border: 1px solid #d03b3b44; }
+    .tag-prioridad-media { background: #F59E0B22; color: var(--color-accent-text); border: 1px solid #F59E0B44; }
+    .tag-prioridad-baja { background: #199e7022; color: var(--color-success-text); border: 1px solid #199e7044; }
     /* (20 oct 2026) De dónde viene la OT: checklist (predictivo) o proyecto de producción */
-    .tag-origen-check { background: #0891B222; color: #67D4EA; border: 1px solid #0891B244; }
-    .tag-origen-proy { background: #A78BFA22; color: #C4B5FD; border: 1px solid #A78BFA44; }
+    .tag-origen-check { background: #0891B222; color: var(--color-info-text); border: 1px solid #0891B244; }
+    .tag-origen-proy { background: #A78BFA22; color: var(--color-purple-text); border: 1px solid #A78BFA44; }
     .ot-bita { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: #0891B214; border: 1px solid #0891B240; font-size: 12px; line-height: 1.5; }
-    .ot-bita b { color: #67D4EA; }
+    .ot-bita b { color: var(--color-info-text); }
     .ot-aviso-cierre { margin-top: 8px; padding: 9px 10px; border-radius: 8px; background: #F59E0B14; border: 1px solid #F59E0B66; font-size: 12.5px; line-height: 1.5; }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     .tec-chip { padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all .15s; }
-    .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
+    .tec-chip.sel { border-color: var(--accent); background: #F59E0B18; color: var(--color-accent-text); }
     .toggle-row { display: flex; gap: 6px; }
     .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-    .toggle-btn.sel-ok { border-color: var(--green); background: #10B98118; color: var(--green); }
-    .toggle-btn.sel-falla { border-color: var(--red); background: #EF444418; color: var(--red); }
+    .toggle-btn.sel-ok { border-color: var(--green); background: #10B98118; color: var(--color-success-text); }
+    .toggle-btn.sel-falla { border-color: var(--red); background: #EF444418; color: var(--color-danger-text); }
     /* (14 oct 2026) Cuatro respuestas por punto (Conforme / No conforme / No aplica / No inspeccionado) */
     .res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .toggle-btn.sel-na { border-color: #94A3B8; background: #94A3B818; color: #CBD5E1; }
-    .toggle-btn.sel-ni { border-color: var(--orange); background: #F9731618; color: var(--orange); }
+    .toggle-btn.sel-na { border-color: var(--color-muted); background: #94A3B818; color: var(--color-text-2); }
+    .toggle-btn.sel-ni { border-color: var(--orange); background: #F9731618; color: var(--color-warn-text); }
     .checklist-punto.sin-resp { border-color: #F59E0B66; }
     .checklist-punto.res-falla { border-color: #EF444466; }
     .med-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .med-row input { flex: 1; font-size: 16px; font-weight: 700; }
     .med-rango { font-size: 12px; color: var(--muted); white-space: nowrap; }
-    .med-fuera { color: var(--red); font-weight: 700; font-size: 12px; margin: -2px 0 8px; }
+    .med-fuera { color: var(--color-danger-text); font-weight: 700; font-size: 12px; margin: -2px 0 8px; }
     .cf-progreso { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
     .foto-mini { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
     .hist-det { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; display: none; }
@@ -114,7 +120,7 @@
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
     #toast.warn { background: var(--orange); }
-    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading { position: fixed; inset: 0; background: var(--color-scrim); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
     #loading.show { display: flex; }
     .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -132,7 +138,7 @@
     .checklist-punto-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     .info-box { background: #F59E0B11; border: 1px solid #F59E0B33; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
     /* Modal genérico (carga masiva) — mismo patrón visual que inventario.html */
-    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: center; justify-content: center; padding: 20px; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: var(--color-overlay); z-index: 600; align-items: center; justify-content: center; padding: 20px; }
     .modal-bg.open { display: flex; }
     .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
     .modal-bg .modal h3 { font-size: 16px; margin-bottom: 4px; }
@@ -246,6 +252,13 @@
       <div id="config-puntos-lista"></div>
     </div>
 
+    <!-- (28 oct 2026) Criticidad A/B/C: Encargado y Administrador -->
+    <div class="card" id="card-criticidad" style="display:none;">
+      <div class="card-title">🎯 Criticidad de equipos</div>
+      <div class="card-sub" id="crit-progreso">A · Crítico, B · Importante, C · Normal. Los críticos salen primero en Avisos y llevan bloqueo (LOTO) siempre.</div>
+      <button class="btn btn-primary" onclick="fbCritAbrirLista({ onClose: () => { renderHoy(); renderConfig(); } })">🎯 Evaluar criticidad</button>
+    </div>
+
     <div class="card" id="card-bulk-listas" style="display:none;">
       <div class="card-title">📥 Listas por equipo — carga masiva</div>
       <div class="card-sub">Sube desde Excel la lista de puntos propia de muchos equipos a la vez. Todos los usuarios la ven al momento.</div>
@@ -272,7 +285,7 @@
       <label for="anularOtMotivo">Motivo (obligatorio)</label>
       <textarea id="anularOtMotivo" maxlength="300" placeholder="Ej: duplicada, ya no aplica, reporte por error…"></textarea>
     </div>
-    <div id="anularOtErr" style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:6px;"></div>
+    <div id="anularOtErr" style="font-size:12px;color:var(--color-danger-text);font-weight:700;margin-bottom:6px;"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="cerrarModalAnularOt()">Cancelar</button>
       <button class="btn btn-primary" id="anularOtOk" style="background:var(--red);" onclick="confirmarAnularOt()">🚫 Anular</button>
@@ -475,7 +488,7 @@ function htmlEditorPuntos(lista, pref, fnDel, fnMed) {
     <div class="ed-punto">
       <div class="row" style="gap:6px;">
         <div class="field" style="margin-bottom:0;"><input type="text" id="${pref}-${idx}" value="${fbEsc(e.p || '')}" placeholder="Punto a revisar..."/></div>
-        <button type="button" class="btn btn-secondary btn-sm" title="Medición con límites" style="${e.med ? 'background:#3987e533;color:#7fb3f5;' : ''}" onclick="${fnMed}(${idx})">📏</button>
+        <button type="button" class="btn btn-secondary btn-sm" title="Medición con límites" style="${e.med ? 'background:#3987e533;color:var(--color-primary-text);' : ''}" onclick="${fnMed}(${idx})">📏</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="${fnDel}(${idx})">🗑</button>
       </div>
       ${e.med ? `<div class="ed-med">
@@ -737,6 +750,7 @@ function itemRowHtml(e, marcarVencido) {
       <div class="item-header">
         <div class="item-title">${fbEsc(e.nombre || '(sin nombre)')}</div>
         <div style="display:flex;gap:6px;align-items:center;">
+          ${typeof fbCritBadge === 'function' ? fbCritBadge(fbCritNivel(e)) : ''}
           ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
           <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
         </div>
@@ -758,6 +772,8 @@ function abrirFormChecklist(equipoId) {
 
   document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
   document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  // (28 oct 2026) Criticidad del equipo junto a su nombre (texto escapado por fbCritBadge).
+  if (typeof fbCritBadge === 'function' && fbCritNivel(e)) document.getElementById('cf-equipo-sub').insertAdjacentHTML('beforeend', ' ' + fbCritBadge(fbCritNivel(e)));
   renderPuntosForm();
   renderTecGridInto('cf-tec-grid', []);
 
@@ -1358,7 +1374,7 @@ function renderOts() {
     } else if (o.estado === 'planificada' || o.estado === 'rechazada') {
       acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · 📅 ${fbEsc(o.fechaPlanificada || '—')}</div>`;
       if (o.estado === 'rechazada' && o.notaRevision) {
-        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--red);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
+        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--color-danger-text);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
       }
       if (o.estado === 'rechazada') acciones += resumenBitacoraOt(o);
       // (20 oct 2026) Todo trabajo realizado se reporta en la Bitácora: el
@@ -1829,7 +1845,7 @@ async function verCostoRepuestosOt(otId) {
     let total = 0, sinPrecio = 0;
     movs.forEach(m => { if (m.costoTotal != null) total += m.costoTotal; else sinPrecio++; });
     el.innerHTML = `📦 ${movs.length} repuesto(s) · Total: $${total.toFixed(2)}` +
-      (sinPrecio ? ` <span style="color:var(--accent)">(${sinPrecio} sin costo unitario cargado)</span>` : '');
+      (sinPrecio ? ` <span style="color:var(--color-accent-text)">(${sinPrecio} sin costo unitario cargado)</span>` : '');
   } catch (e) {
     el.textContent = 'Error al buscar: ' + e.message;
   }
@@ -1989,6 +2005,12 @@ function renderConfig() {
   if (btnBulk) btnBulk.style.display = puedeConfigurar ? '' : 'none';
   const cardBulkListas = document.getElementById('card-bulk-listas');
   if (cardBulkListas) cardBulkListas.style.display = (typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR')) ? '' : 'none';
+  const cardCrit = document.getElementById('card-criticidad');
+  if (cardCrit) {
+    const ve = typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar();
+    cardCrit.style.display = ve ? '' : 'none';
+    if (ve) { const l = equiposDeNave().filter(e => e.activo !== false); const n = l.filter(e => fbCritNivel(e)).length; document.getElementById('crit-progreso').textContent = `${n} de ${l.length} equipos evaluados. A · Crítico sale primero en Avisos y lleva bloqueo (LOTO) siempre.`; }
+  }
 
   if (!puedeConfigurar) {
     info.innerHTML = `<div class="info-box">Solo Administrador o Encargado de Mantenimiento pueden cambiar las frecuencias de checklist.</div>`;

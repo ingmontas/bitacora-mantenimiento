@@ -161,11 +161,11 @@ function fbRenderMiniNav(active) {
     ].filter(p => !p.roles || userHasRole(...p.roles));
     const bar = document.createElement('div');
     bar.id = 'fbMiniNav';
-    bar.style.cssText = 'display:flex;gap:4px;overflow-x:auto;padding:8px 14px;background:#0B131C;border-bottom:1px solid #2D3F55;font-size:11px;align-items:center;position:sticky;top:0;z-index:250;';
+    bar.style.cssText = 'display:flex;gap:4px;overflow-x:auto;padding:8px 14px;background:var(--color-nav-bg,#0B131C);border-bottom:1px solid var(--color-nav-border,#2D3F55);font-size:11px;align-items:center;position:sticky;top:0;z-index:250;';
     // (25 oct 2026, Etapa 2) Selector de nave al principio (siempre a la vista).
     bar.innerHTML = `<span data-fb-nave style="display:flex;flex:0 0 auto;align-items:center;">${fbHtmlSelectorNave()}</span>`
     + pages.map(p =>
-      `<a href="${p.href}" style="padding:5px 9px;border-radius:6px;white-space:nowrap;text-decoration:none;font-weight:600;color:${p.id===active?'#F59E0B':'#94A3B8'};background:${p.id===active?'#F59E0B18':'transparent'};">${p.label}</a>`
+      `<a href="${p.href}"${p.id===active?' class="fbActivo" aria-current="page"':''} style="padding:5px 9px;border-radius:6px;white-space:nowrap;text-decoration:none;font-weight:600;color:${p.id===active?'#F59E0B':'#94A3B8'};background:${p.id===active?'#F59E0B18':'transparent'};">${p.label}</a>`
     ).join('')
     + `<span style="margin-left:auto;color:#94A3B8;white-space:nowrap;padding-left:8px;">👤 ${fbEsc((window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '')}</span>`
     + `<button onclick="fbLogout()" style="margin-left:8px;background:none;border:1px solid #2D3F55;color:#94A3B8;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;white-space:nowrap;">Salir</button>`;
@@ -474,6 +474,8 @@ function _fbTecActivos(lista) {
   return (Array.isArray(lista) ? lista : []).filter(t => t && t.nombre && t.activo !== false).map(t => ({
     nombre: String(t.nombre), corto: String(t.corto || t.nombre),
     plantas: Array.isArray(t.plantas) ? t.plantas.map(String) : [],
+    // (26 oct 2026) nombre completo del usuario enlazado (solo si la lista lo trae): Reporte de incentivos
+    ...(t.nombreCompleto ? { nombreCompleto: String(t.nombreCompleto) } : {}),
   }));
 }
 function _fbTecLeerCopia() {
@@ -624,7 +626,8 @@ try { _fbEqIdx = JSON.parse(localStorage.getItem(FB_EQIDX_LS) || '{}') || {}; _f
 function fbIndexarEquipos(lista) {
   const idx = {};
   // (25 oct 2026, Etapa 3) + línea y si está activo (posiciones 3 y 4; una copia vieja sin ellas sigue sirviendo)
-  (lista || []).forEach(e => { if (e && e.id) idx[e.id] = [String(e.planta || ''), String(e.localidad || ''), String(e.nombre || ''), String(e.linea || ''), e.activo === false ? 0 : 1]; });
+  // (28 oct 2026) + criticidad A/B/C (posición 5; '' = sin evaluar)
+  (lista || []).forEach(e => { if (e && e.id) idx[e.id] = [String(e.planta || ''), String(e.localidad || ''), String(e.nombre || ''), String(e.linea || ''), e.activo === false ? 0 : 1, ['A', 'B', 'C'].includes(e.criticidad) ? e.criticidad : '']; });
   _fbEqIdx = idx; _fbEqIdxReconstruirNombres();
   try { localStorage.setItem(FB_EQIDX_LS, JSON.stringify(idx)); } catch (e) {}
   // sin copia de /plantas en el celular, las naves salen de los equipos: se repinta el selector
@@ -633,7 +636,15 @@ function fbIndexarEquipos(lista) {
 }
 // Equipos del catálogo ya leído (copia en memoria): [{id, planta, localidad, nombre, linea, activo}].
 function fbEquiposIndice() {
-  return Object.keys(_fbEqIdx).map(id => { const x = _fbEqIdx[id] || []; return { id, planta: x[0] || '', localidad: x[1] || '', nombre: x[2] || '', linea: x[3] || '', activo: x[4] !== 0 }; });
+  return Object.keys(_fbEqIdx).map(id => { const x = _fbEqIdx[id] || []; return { id, planta: x[0] || '', localidad: x[1] || '', nombre: x[2] || '', linea: x[3] || '', activo: x[4] !== 0, criticidad: x[5] || '' }; });
+}
+// (28 oct 2026) Criticidad de un equipo desde el índice (0 lecturas). Al guardar
+// una evaluación se corrige aquí mismo para que el celular la vea al instante.
+function fbCriticidadDeEquipo(id) { const x = id && _fbEqIdx[id]; return (x && x[5]) || ''; }
+function fbIndiceCriticidad(id, nivel) {
+  const x = id && _fbEqIdx[id]; if (!x) return;
+  x[5] = ['A', 'B', 'C'].includes(nivel) ? nivel : '';
+  try { localStorage.setItem(FB_EQIDX_LS, JSON.stringify(_fbEqIdx)); } catch (e) {}
 }
 // id del equipo con ese nombre (sin mayúsculas/acentos/espacios); '' si no hay o se repite.
 function fbEquipoIdPorNombre(n) { return (n && _fbEqPorNombre.get(_fbK(n))) || ''; }

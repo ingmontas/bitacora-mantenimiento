@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <title>Incentivos — Mantenimiento</title>
@@ -13,6 +15,9 @@
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        INCENTIVOS POR CUMPLIMIENTO (20 oct 2026)
@@ -30,16 +35,16 @@
        Sin Firebase Storage.
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8; --orange: #F97316;
-      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface);
+      --accent: var(--color-accent); --green: var(--color-success); --red: var(--color-danger); --blue: var(--color-primary); --orange: var(--color-warn);
+      --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { overflow-x: hidden; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; }
+    #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
     #header h1 { font-size: 17px; font-weight: 800; }
-    #header small { font-size: 11px; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
+    #header small { font-size: 11px; color: var(--color-header-sub); font-weight: 700; display: block; margin-top: 2px; }
     .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 60px; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
     .wk { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -52,8 +57,8 @@
     .tot b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
     .tot span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
     .estado { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.7; }
-    .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #F59E0B22; color: var(--accent); }
-    .tag.ok { background: #10B98122; color: #4ade80; } .tag.info { background: #818CF822; color: #a5b4fc; } .tag.bad { background: #EF444422; color: #ff8a8a; }
+    .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #F59E0B22; color: var(--color-accent-text); }
+    .tag.ok { background: #10B98122; color: var(--color-success-text); } .tag.info { background: #818CF822; color: var(--color-primary-text); } .tag.bad { background: #EF444422; color: var(--color-danger-text); }
     .nota { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
     .tec { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; min-width: 0; }
     .tec.amb { border-color: #F59E0B66; } .tec.roj { border-color: #EF444466; }
@@ -65,32 +70,90 @@
     .crit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 10px; font-size: 12px; color: var(--muted); }
     .crit b { color: var(--text); }
     .det { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.55; overflow-wrap: anywhere; }
-    .det .m { color: #ff8a8a; display: block; } .det .i { color: var(--muted); display: block; }
-    .adj { font-size: 12px; color: #7fb3f5; margin-top: 6px; overflow-wrap: anywhere; }
+    .det .m { color: var(--color-danger-text); display: block; } .det .i { color: var(--muted); display: block; }
+    .adj { font-size: 12px; color: var(--color-primary-text); margin-top: 6px; overflow-wrap: anywhere; }
     .monto { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 13px; }
     .monto span { min-width: 0; } .monto b { font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .btn { width: 100%; padding: 13px; border-radius: 10px; border: 0; font-weight: 800; font-size: 15px; background: var(--accent); color: #0F1923; margin-top: 4px; cursor: pointer; font-family: inherit; }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: 0; font-weight: 800; font-size: 15px; background: var(--color-primary); color: var(--color-on-primary); margin-top: 4px; cursor: pointer; font-family: inherit; }
     .btn2 { width: 100%; padding: 11px; border-radius: 10px; border: 0; font-weight: 700; font-size: 14px; background: var(--border); color: var(--text); margin-top: 8px; cursor: pointer; font-family: inherit; }
     .btn-sm { width: auto; padding: 9px 14px; font-size: 13.5px; margin-top: 0; }
-    .btn-danger { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444455; }
+    .btn-danger { background: #EF444422; color: var(--color-danger-text); border: 1px solid #EF444455; }
     .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
-    input, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
+    input, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
     input:focus, textarea:focus { border-color: var(--accent); }
     textarea { min-height: 64px; resize: vertical; }
-    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
+    label.f { display: block; font-size: 10.5px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
     .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
     .sec { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 4px; }
     .ts { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
     .ts .g2 label.f { margin-top: 6px; }
     .formula { background: #F59E0B14; border: 1px solid #F59E0B44; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin-top: 8px; }
     /* modal */
-    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 24px 10px; overflow-y: auto; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: var(--color-overlay); z-index: 600; align-items: flex-start; justify-content: center; padding: 24px 10px; overflow-y: auto; }
     .modal-bg.open { display: flex; }
     .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; width: 100%; max-width: 560px; min-width: 0; }
     .modal h3 { font-size: 16px; margin-bottom: 4px; overflow-wrap: anywhere; }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
     #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
-    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: #B45309; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: var(--color-warn); }
+    /* ── Reporte para pago (26 oct 2026): pantalla con los colores de la app y la hoja en blanco (papel) ── */
+    select { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 8px; color: var(--text); font-size: 15px; font-family: inherit; min-width: 0; max-width: 100%; }
+    .rep-bg { display: none; position: fixed; inset: 0; z-index: 700; background: var(--color-bg); overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+    .rep-bg.open { display: block; }
+    html.rep-abierto, html.rep-abierto body { overflow: hidden; }
+    .rep-bar { position: sticky; top: 0; z-index: 2; background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+    .rep-bar button { background: rgba(255,255,255,.14); color: var(--color-header-text); border: 0; border-radius: 8px; padding: 7px 13px; font-size: 18px; font-weight: 800; cursor: pointer; font-family: inherit; }
+    .rep-bar .t { min-width: 0; flex: 1; } .rep-bar b { display: block; font-size: 15px; } .rep-bar small { display: block; font-size: 11px; color: var(--color-header-sub); font-weight: 700; overflow-wrap: anywhere; }
+    .rep-in { max-width: 820px; margin: 0 auto; padding: 12px 12px 60px; min-width: 0; }
+    .rep-acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .rep-acts .btn, .rep-acts .btn2 { margin-top: 0; padding: 11px 4px; font-size: 13.5px; }
+    .rep-wrap { overflow: hidden; margin-bottom: 12px; border-radius: 6px; box-shadow: var(--shadow-lg); background: #fff; border: 1px solid var(--border); }
+    .paper { width: 760px; transform-origin: top left; background: #fff; color: #000; color-scheme: light; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; padding: 28px 30px 40px; font-size: 13px; line-height: 1.35; cursor: default; }
+    .p-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; min-height: 72px; }
+    .p-logo img { max-width: 220px; max-height: 72px; display: block; }
+    .p-ph { font-weight: 900; font-size: 30px; letter-spacing: -.5px; color: #000; font-family: Arial, sans-serif; white-space: nowrap; } .p-ph i { font-style: normal; color: #C00000; }
+    .p-tit { text-align: right; } .p-title { font-size: 30px; font-weight: 800; letter-spacing: .5px; } .p-fecha { font-weight: 700; margin-top: 6px; }
+    .p-tab { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+    .p-tab td.nom { overflow-wrap: anywhere; }
+    .p-tab th, .p-tab td { border: 1px solid #000; padding: 5px 6px; }
+    .p-tab th { background: #FFFF00; font-weight: 700; text-align: center; font-size: 12px; }
+    .p-tab td.c { text-align: center; } .p-tab td.m { text-align: right; white-space: nowrap; } .p-tab td.nom { background: #D9D9D9; }
+    .p-tab tr[data-rid] { cursor: pointer; } .p-vacio { color: #666; }
+    .p-mk { color: #C00000; font-style: normal; font-weight: 700; margin-left: 2px; }
+    .p-total { display: flex; justify-content: flex-end; margin: 12px 0 20px; } .p-total span, .p-total b { border: 2px solid #000; padding: 6px 12px; font-weight: 700; }
+    .p-total span { border-right: 0; min-width: 220px; text-align: center; } .p-total b { min-width: 130px; text-align: right; }
+    .p-desc { margin-top: 18px; } .p-desc div { padding: 2px 0; }
+    .p-firma { margin: 70px auto 0; width: 280px; text-align: center; font-weight: 700; } .p-linea { border-top: 1px solid #000; margin-bottom: 4px; }
+    .rf { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 10px; min-width: 0; }
+    .rf-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .rf-top b { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+    .rf-btns { display: flex; gap: 4px; flex-shrink: 0; } .rf-btns button { background: var(--border); color: var(--text); border: 0; border-radius: 7px; width: 32px; height: 30px; font-weight: 800; cursor: pointer; font-family: inherit; }
+    .rf-btns button.del { background: var(--color-danger-soft); color: var(--color-danger-text); }
+    .rf-g { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0 8px; } .rf-g > div { min-width: 0; }
+    .rf-g .w1 { grid-column: span 2; } .rf-g .w2 { grid-column: span 3; } .rf-g .w3 { grid-column: span 4; }
+    .rf-g label.f { margin: 8px 0 4px; } .rf-g input, .rf-g select { padding: 8px 8px; font-size: 14px; }
+    .rf-mk { margin-top: 8px; font-size: 12px; line-height: 1.8; }
+    .lnk { background: none; border: 0; color: var(--color-primary-text); font-weight: 800; cursor: pointer; font-size: 14px; font-family: inherit; }
+    .rep-add { display: flex; gap: 8px; margin-top: 8px; } .rep-add input { flex: 1; } .rep-add .btn { flex-shrink: 0; }
+    #repUsr, #repCargarUsr { margin-top: 8px; }
+    .rep-logo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .rep-logo-v { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-height: 46px; display: flex; align-items: center; max-width: 100%; }
+    .rep-logo-v img { max-height: 40px; max-width: 180px; display: block; } .rep-logo-v .p-ph { font-size: 18px; }
+    .rep-file { position: relative; overflow: hidden; display: inline-block; width: auto; margin-top: 0; text-align: center; }
+    .rep-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    .rep-dlg { display: none; position: fixed; inset: 0; z-index: 800; background: var(--color-overlay); align-items: center; justify-content: center; padding: 16px; }
+    .rep-dlg.open { display: flex; } .rep-dlg .modal { max-width: 380px; }
+    @media print {
+      @page { size: letter portrait; margin: 12mm; }
+      html.rep-abierto body > *:not(#repBg) { display: none !important; }
+      html.rep-abierto, html.rep-abierto body { overflow: visible !important; background: #fff !important; }
+      #repBg { position: static !important; overflow: visible !important; background: #fff !important; }
+      #repBg .rep-ui { display: none !important; }
+      #repBg .rep-in { padding: 0 !important; max-width: none !important; }
+      .rep-wrap { height: auto !important; box-shadow: none !important; overflow: visible !important; border: 0 !important; margin: 0 !important; }
+      .paper { transform: none !important; width: auto !important; padding: 0 !important; }
+      .p-mk { display: none !important; }
+      .p-tab th, .p-tab td.nom { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body>
@@ -106,6 +169,20 @@
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
 <div id="toast"></div>
+
+<!-- (26 oct 2026) Reporte para pago: pantalla completa con la hoja (papel) y lo que se edita -->
+<div id="repBg" class="rep-bg">
+  <div class="rep-bar rep-ui"><button id="repCerrar" aria-label="Volver a incentivos">←</button><div class="t"><b>📄 Reporte para pago</b><small id="repTit"></small></div></div>
+  <div class="rep-in">
+    <div class="rep-ui" id="repEstado" style="margin-bottom:8px"></div>
+    <div class="rep-acts rep-ui"><button class="btn" id="repGuardar">💾 Guardar reporte</button><button class="btn2" id="repXls">⬇️ Excel</button><button class="btn2" id="repPdf">🖨 PDF / Imprimir</button></div>
+    <div class="rep-wrap" id="repWrap"><div class="paper" id="repPaper"></div></div>
+    <div class="nota rep-ui" style="margin:-4px 2px 12px">Toca una fila de la hoja para cambiarla. <b style="color:#C00000">*</b> = monto u horas puestos a mano (no sale al imprimir).</div>
+    <div class="rep-ui" id="repEd"></div>
+  </div>
+</div>
+<div id="repCsvDlg" class="rep-dlg"><div class="modal" role="dialog" aria-modal="true"><h3>📵 Excel no disponible</h3><div class="nota" id="repCsvMsg"></div>
+  <div class="modal-actions"><button class="btn2 btn-sm" id="repCsvNo">Cerrar</button><button class="btn btn-sm" id="repCsvOk">⬇️ Descargar CSV</button></div></div></div>
 
 <script>
 // ══════ AYUDAS ══════
@@ -189,10 +266,21 @@ function normCfg(d) {
 let TECS = [];
 const tecKey = nombre => K(nombre).replace(/[^a-z0-9]/g, '_');
 function prepararTecnicos(lista) {
-  TECS = (lista || []).filter(t => t && t.nombre).map(t => {
+  // (26 oct 2026) Red de seguridad: la misma persona (misma clave) sale UNA sola
+  // vez aunque la lista la traiga repetida; sus naves se juntan (sin naves = todas).
+  const porKey = new Map();
+  (lista || []).filter(t => t && t.nombre).forEach(t => {
+    const key = tecKey(t.nombre), pl = Array.isArray(t.plantas) ? t.plantas.slice() : [];
+    const ya = porKey.get(key);
+    if (ya) {
+      if (!ya.plantas.length || !pl.length) ya.plantas = []; else pl.forEach(p => { if (!ya.plantas.includes(p)) ya.plantas.push(p); });
+      if (!ya.nombreCompleto && t.nombreCompleto) ya.nombreCompleto = String(t.nombreCompleto);
+      return;
+    }
     const num = ((String(t.nombre) + ' ' + String(t.corto || '')).match(/#\s*(\d+)/) || [])[1] || '';
-    return { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key: tecKey(t.nombre), kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]), plantas: Array.isArray(t.plantas) ? t.plantas.slice() : [] };
+    porKey.set(key, { nombre: String(t.nombre), corto: String(t.corto || t.nombre), key, kN: K(t.nombre), kC: K(t.corto || ''), num, primero: K(String(t.nombre).trim().split(/\s+/)[0]), plantas: pl, nombreCompleto: t.nombreCompleto ? String(t.nombreCompleto) : '' });
   });
+  TECS = [...porKey.values()];
 }
 function _coincideDirecto(t, k, nums) {
   if (t.kN && (k === t.kN || (t.kN.length >= 4 && k.includes(t.kN)))) return true;
@@ -233,7 +321,7 @@ window.fbReady.then(async () => {
   try { prepararTecnicos(await fbTecnicos()); } catch (e) { console.warn('técnicos:', e.message); }
   ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'incentivos', onChange: () => render() }); // (25 oct 2026, Etapa 3)
   $('fUbicWrap').style.display = '';
-  try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); }
+  try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); REPCFG = repCfgDe(c.exists ? c.data() : null); }
   catch (e) { console.warn('incentivos_config:', e.message); toast('⚠️ No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
   const pedida = lunesDeId(decodeURIComponent((location.hash || '').slice(1)));
   const hoyL = lunesDe(new Date());
@@ -551,7 +639,7 @@ function render() {
   if (v.congelada) {
     botones += sd.pagada ? `<button class="btn2" id="bPagada">↩ Quitar marca de pagada</button>` : `<button class="btn" id="bPagada">💵 Marcar como pagada</button><button class="btn2 btn-danger" id="bReabrir">🔓 Reabrir semana</button>`;
   }
-  botones += `<button class="btn2" id="bExcel">⬇️ Descargar Excel</button><button class="btn2" id="bReglas">⚙️ Reglas y salarios</button>`;
+  botones += `<button class="btn2" id="bReporte">📄 Reporte para pago</button><button class="btn2" id="bExcel">⬇️ Descargar Excel</button><button class="btn2" id="bReglas">⚙️ Reglas y salarios</button>`;
   const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px">ℹ️ Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
   $('view').innerHTML = cabeceraHtml(v)
     + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en la lista (⚙️ Administración → Usuarios).</div>')
@@ -564,6 +652,7 @@ function render() {
   if ($('bReabrir')) $('bReabrir').onclick = () => modalReabrir();
   if ($('bPagada')) $('bPagada').onclick = () => marcarPagada(!sd.pagada);
   $('bExcel').onclick = () => descargarExcel(v);
+  $('bReporte').onclick = () => abrirReporte();
   $('bReglas').onclick = () => modalReglas();
 }
 
@@ -702,7 +791,7 @@ function modalReglas() {
   const val = id => { const s = $(id).value.trim(); return s === '' ? null : Number(s); };
   const refrescar = () => {
     const suma = CRITERIOS.reduce((s, x) => s + (Number($('rp-' + x.k).value) || 0), 0);
-    $('rpSuma').innerHTML = suma === 100 ? `Suma: <b style="color:var(--green)">100 ✓</b>` : `Suma: <b style="color:var(--red)">${esc(suma)}</b> (debe ser 100)`;
+    $('rpSuma').innerHTML = suma === 100 ? `Suma: <b style="color:var(--color-success-text)">100 ✓</b>` : `Suma: <b style="color:var(--color-danger-text)">${esc(suma)}</b> (debe ser 100)`;
     const pd = val('rPct');
     TECS.forEach((t, i) => {
       const s = val('rs-' + i) || 0, q = val('rq-' + i), p = q == null ? (pd || 0) : q;
@@ -735,6 +824,609 @@ function modalReglas() {
     if (diasCambio && !(DATOS.semDoc && DATOS.semDoc.estado === 'aprobada')) cargarSemana(true); else render();
   };
 }
+// ══════ REPORTE PARA PAGO (26 oct 2026) ══════
+// Hoja "INCENTIVO" en el formato de la empresa (la que se entrega para pagar):
+// logo arriba a la izquierda, título INCENTIVO, FECHAS, tabla # / code / NOMBRE /
+// DEPARTAMENTO / CANTIDAD DE HORA / $ incentivo, un TOTAL por nave, la lista de
+// trabajos de la semana y la línea de firma.
+//  · Se llena con lo que ya se leyó de la semana (CERO lecturas extra): una fila
+//    por técnico del cálculo, horas = minutos de técnico de sus OTs ÷ 60 y $ = su
+//    monto de incentivo. Todo se puede cambiar (lo cambiado se marca) y se pueden
+//    agregar personas que no son técnicos (supervisor, administrador…).
+//  · El cálculo del incentivo NO cambia: el reporte solo copia los montos.
+//  · Se guarda en /incentivos_semanas/{AAAA-Wss} en el campo NUEVO `reporte`
+//    (los demás campos de la semana no se tocan) y los códigos de empleado y el
+//    departamento en /incentivos_config/general (campos nuevos `codigos`,
+//    `nombresReporte`, `departamentos`, `departamentoDefault`, `extrasReporte`).
+//  · Logo: /incentivos_config/logo { data } (imagen reducida a 300 px de ancho
+//    como máximo y 150 KB). 1 lectura la primera vez que se abre el reporte.
+//  · Descargas: Excel (.xlsx con el mismo formato), PDF / Imprimir (carta
+//    vertical) y, si Excel no carga (sin señal), CSV con lo mismo.
+let REPCFG = repCfgDe(null);
+function repCfgDe(d) {
+  d = d || {};
+  const obj = x => (x && typeof x === 'object' && !Array.isArray(x)) ? x : {};
+  return {
+    codigos: obj(d.codigos), nombres: obj(d.nombresReporte), departamentos: obj(d.departamentos),
+    departamentoDefault: String(d.departamentoDefault || '').trim() || 'MANTENIMIENTO',
+    extras: Array.isArray(d.extrasReporte) ? d.extrasReporte.filter(x => x && x.nombre) : [],
+  };
+}
+let REP = null;     // reporte que se está editando
+let LOGO;           // undefined = sin leer · null = no hay · { data, tipo, ancho, alto }
+let REP_USUARIOS = null; // /usuarios (solo si el Administrador pide "Elegir de Usuarios")
+const FIRMA_DEF = 'Gte: mantenimiento';
+const COLS_REP = ['#', 'code', 'NOMBRE', 'DEPARTAMENTO', 'CANTIDAD DE HORA', '$ incentivo'];
+const usd = n => '$ ' + r2(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const numTxt = s => (String(s || '').match(/#\s*(\d+)/) || [])[1] || '';
+const sinNum = s => String(s || '').replace(/\s*#\s*\d+\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const nk = s => s ? fbClaveNombre('plantas', s) : '';
+const numIn = s => { const v = Number(String(s == null ? '' : s).replace(/[$\s,]/g, '')); return isFinite(v) ? v : 0; };
+let _nid = 0; const nid = () => 'r' + (++_nid);
+
+// Horas de técnico de la semana: OTs de la Bitácora (FECHA en la semana, ya
+// hechas, sin repetir número de OT) → TOTAL_MIN_TECNICO a cada técnico que la hizo.
+function horasPorTecnico(d) {
+  if (!d || !Array.isArray(d.otFecha)) return null;
+  const min = {}, titulos = new Set();
+  const realizado = o => !anulada(o) && !(['operador', 'qr', 'checklist'].includes(o.origen) && o.estado !== 'completada');
+  d.otFecha.filter(o => o.FECHA >= d.lunes && o.FECHA <= d.domingo && realizado(o)).sort((a, b) => String(a.id).localeCompare(String(b.id))).forEach(o => {
+    const t = String(o.Title || '').trim();
+    if (t) { if (titulos.has(t)) return; titulos.add(t); }
+    const m = Math.max(0, Number(o.TOTAL_MIN_TECNICO) || 0);
+    if (m) tecsEn(o.TECNICOS).forEach(k => { min[k] = (min[k] || 0) + m; });
+  });
+  const h = {}; Object.keys(min).forEach(k => { h[k] = r2(min[k] / 60); });
+  return h;
+}
+
+// Resumen automático de los trabajos de la semana (de la nave elegida arriba):
+// los equipos con más OTs; un área con 3 equipos o más va en una sola línea.
+function resumenTrabajos(d) {
+  if (!d || !Array.isArray(d.otFecha)) return [];
+  const sem = f => !!f && f >= d.lunes && f <= d.domingo;
+  const realizado = o => !anulada(o) && !(['operador', 'qr', 'checklist'].includes(o.origen) && o.estado !== 'completada');
+  const hechas = new Map(), titulos = new Set();
+  const agrega = o => { const t = String(o.Title || '').trim(); if (t) { if (titulos.has(t)) return; titulos.add(t); } hechas.set(o.id, o); };
+  d.otFecha.filter(o => sem(o.FECHA) && realizado(o)).sort((a, b) => String(a.id).localeCompare(String(b.id))).forEach(agrega);
+  (d.otReal || []).filter(o => !anulada(o) && !hechas.has(o.id) && sem(tsFecha(o.trabajoRealizadoEn))).forEach(agrega);
+  const idx = new Map(fbEquiposIndice().map(e => [e.id, e]));
+  const filtraNave = !!fbNavesFiltro();
+  const eqs = new Map();
+  hechas.forEach(o => {
+    if (filtraNave && !fbEnNave(o)) return;
+    const e = o.equipoId ? idx.get(o.equipoId) : null;
+    const nombre = String(o.EQUIPO || o.equipoNombre || (e && e.nombre) || o.TIPO_MAQUINA || '').trim();
+    const area = String(o.LINEA_EQUIPO || o.equipoLocalidad || (e && e.localidad) || '').trim();
+    if (!nombre && !area) return;
+    const k = nombre ? 'e:' + K(nombre) : 'a:' + K(area);
+    const x = eqs.get(k) || { nombre, area, n: 0, tipos: new Set() };
+    x.n++;
+    x.tipos.add(esProyecto(o) ? 'proyecto' : String(o.TIPO_MANTENIMIENTO || (o.origen === 'checklist' ? 'preventivo' : '')).trim().toLowerCase());
+    eqs.set(k, x);
+  });
+  const porArea = new Map();
+  eqs.forEach(x => { if (!x.area || !x.nombre) return; const ka = K(x.area); const a = porArea.get(ka) || { area: x.area, eqs: [], n: 0 }; a.eqs.push(x); a.n += x.n; porArea.set(ka, a); });
+  const items = [], juntos = new Set();
+  porArea.forEach(a => { if (a.eqs.length >= 3) { a.eqs.forEach(x => juntos.add(x)); items.push({ n: a.n, txt: `Mantenimiento de los equipos del área de ${a.area}.` }); } });
+  eqs.forEach(x => {
+    if (juntos.has(x)) return;
+    const tipos = [...x.tipos].filter(Boolean), t = tipos.length === 1 ? tipos[0] : '';
+    const que = x.nombre || 'el área de ' + x.area;
+    items.push({ n: x.n, txt: t === 'proyecto' ? `Proyecto / mejora en ${que}.` : `Mantenimiento ${['preventivo', 'correctivo', 'predictivo'].includes(t) ? t + ' ' : ''}de ${que}.` });
+  });
+  return items.sort((a, b) => b.n - a.n || a.txt.localeCompare(b.txt, 'es')).slice(0, 6).map(x => x.txt);
+}
+
+// ── Armar el reporte ──
+function semanaAprobada() { return !!(DATOS.semDoc && DATOS.semDoc.estado === 'aprobada'); }
+function filaTec(f, horas, nave) {
+  const t = TECS.find(x => x.key === f.key) || {};
+  const nombreDef = sinNum(t.nombreCompleto || f.nombre) || String(f.nombre);
+  const hc = horas ? r2(horas[f.key] || 0) : null;
+  return {
+    id: nid(), tipo: 'tec', key: f.key, nombreDef,
+    codigo: String(REPCFG.codigos[f.key] != null ? REPCFG.codigos[f.key] : numTxt(f.nombre)),
+    nombre: String(REPCFG.nombres[f.key] || nombreDef),
+    departamento: String(REPCFG.departamentos[f.key] || REPCFG.departamentoDefault),
+    horas: hc == null ? 0 : hc, horasCalc: hc, monto: r2(f.monto), montoCalc: r2(f.monto), nave: nave || '',
+  };
+}
+function naveDeTec(key) {
+  const act = fbNaveActiva(); if (act) return act;
+  const t = TECS.find(x => x.key === key);
+  return t && t.plantas.length === 1 ? fbNombreActual('plantas', t.plantas[0]) : '';
+}
+function reporteNuevo() {
+  const v = vistaDeNave(semanaVista());
+  const horas = semanaAprobada() ? null : horasPorTecnico(DATOS);
+  const act = fbNaveActiva() || '';
+  const filas = v.filas.map(f => filaTec(f, horas, naveDeTec(f.key)));
+  // Personas que no son técnicos y se agregaron antes (supervisor, administrador…): con su último monto.
+  REPCFG.extras.forEach(x => {
+    if (act && x.nave && nk(x.nave) !== nk(act)) return;
+    if (x.key && filas.some(r => r.key === x.key)) return;
+    filas.push({ id: nid(), tipo: x.tipo === 'usr' ? 'usr' : 'libre', key: String(x.key || ''), codigo: String(x.codigo || ''), nombre: String(x.nombre), departamento: String(x.departamento || REPCFG.departamentoDefault), horas: r2(x.horas), horasCalc: null, monto: r2(x.monto), montoCalc: null, nave: act || String(x.nave || '') });
+  });
+  const r = { fecha: DATOS.domingo < fbHoy() ? DATOS.domingo : fbHoy(), firma: FIRMA_DEF, departamentoDefault: REPCFG.departamentoDefault, filas, grupos: [], descripciones: resumenTrabajos(DATOS).join('\n'), sinHoras: !horas, guardado: false };
+  normalizarGrupos(r);
+  return r;
+}
+function reporteDeGuardado(sr) {
+  const v = semanaVista();
+  const horas = semanaAprobada() ? null : horasPorTecnico(DATOS);
+  const filas = (Array.isArray(sr.filas) ? sr.filas : []).filter(x => x && (x.nombre || x.key)).map(x => {
+    const tipo = ['tec', 'usr', 'libre'].includes(x.tipo) ? x.tipo : 'libre';
+    const f = tipo === 'tec' ? v.filas.find(y => y.key === x.key) : null;
+    const t = tipo === 'tec' ? TECS.find(y => y.key === x.key) : null;
+    return {
+      id: nid(), tipo, key: String(x.key || ''), codigo: String(x.codigo == null ? '' : x.codigo), nombre: String(x.nombre || ''),
+      nombreDef: t ? (sinNum(t.nombreCompleto || t.nombre) || t.nombre) : '',
+      departamento: String(x.departamento || ''), horas: r2(x.horas),
+      horasCalc: tipo === 'tec' && horas ? r2(horas[x.key] || 0) : (x.horasCalc == null ? null : r2(x.horasCalc)),
+      monto: r2(x.monto), montoCalc: f ? r2(f.monto) : (x.montoCalc == null ? null : r2(x.montoCalc)), nave: String(x.nave || ''),
+    };
+  });
+  const r = {
+    departamentoDefault: REPCFG.departamentoDefault,
+    fecha: /^\d{4}-\d{2}-\d{2}$/.test(sr.fecha || '') ? sr.fecha : DATOS.domingo, firma: String(sr.firma == null ? FIRMA_DEF : sr.firma), filas,
+    grupos: (Array.isArray(sr.grupos) ? sr.grupos : []).map(g => ({ nave: String((g && g.nave) || ''), etiqueta: String((g && g.etiqueta) || '') })),
+    descripciones: (Array.isArray(sr.descripciones) ? sr.descripciones : []).map(String).join('\n'), sinHoras: !horas, guardado: true,
+  };
+  normalizarGrupos(r);
+  return r;
+}
+// Un TOTAL por nave (en el orden en que aparecen). Filas sin nave van con la única nave que haya.
+function normalizarGrupos(r) {
+  const prev = r.grupos || [];
+  let naves = [];
+  r.filas.forEach(f => { if (!naves.some(n => nk(n) === nk(f.nave))) naves.push(f.nave || ''); });
+  const con = naves.filter(Boolean);
+  if (con.length === 1 && naves.includes('')) { r.filas.forEach(f => { if (!f.nave) f.nave = con[0]; }); naves = con; }
+  if (!naves.length || (naves.length === 1 && !naves[0])) {
+    const disp = fbNavesDisponibles();
+    const def = fbNaveActiva() || (disp.length === 1 ? disp[0] : '') || (prev[0] && prev[0].nave) || '';
+    r.filas.forEach(f => { f.nave = def; });
+    naves = [def];
+  }
+  r.grupos = naves.map(n => { const p = prev.find(g => nk(g.nave) === nk(n)); return { nave: n, etiqueta: p && p.etiqueta ? p.etiqueta : 'TOTAL' + (n ? ' ' + n : '') }; });
+}
+const filasDe = g => REP.filas.filter(f => nk(f.nave) === nk(g.nave));
+const totalGrupo = g => r2(filasDe(g).reduce((s, f) => s + r2(f.monto), 0));
+const totalRep = () => r2(REP.filas.reduce((s, f) => s + r2(f.monto), 0));
+const descLineas = () => String(REP.descripciones || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+const montoEditado = f => f.montoCalc != null && r2(f.monto) !== r2(f.montoCalc);
+const horasEditadas = f => f.horasCalc != null && r2(f.horas) !== r2(f.horasCalc);
+function naveArchivo() {
+  if (REP.grupos.length === 1 && REP.grupos[0].nave) return fbSlug(REP.grupos[0].nave);
+  return REP.grupos.length === 1 && fbNaveActiva() ? fbSlug(fbNaveActiva()) : 'todas';
+}
+const archivoRep = () => 'incentivo_' + SEM + '_' + naveArchivo();
+
+// ── Pantalla ──
+async function abrirReporte() {
+  if (!DATOS || DATOS.id !== SEM) return;
+  const sr = DATOS.semDoc && DATOS.semDoc.reporte;
+  REP = sr && typeof sr === 'object' ? reporteDeGuardado(sr) : reporteNuevo();
+  $('repBg').classList.add('open');
+  document.documentElement.classList.add('rep-abierto');
+  pintarReporte();
+  $('repBg').scrollTop = 0;
+  if (LOGO === undefined) { await cargarLogo(); if (REP) pintarPapel(); }
+}
+function cerrarReporte() {
+  $('repBg').classList.remove('open');
+  document.documentElement.classList.remove('rep-abierto');
+  REP = null;
+}
+async function cargarLogo() {
+  if (LOGO !== undefined) return LOGO;
+  try {
+    const s = await db.collection('incentivos_config').doc('logo').get();
+    const d = s.exists ? s.data() : null;
+    LOGO = d && typeof d.data === 'string' && /^data:image\/(png|jpeg);base64,/.test(d.data) ? { data: d.data, tipo: /^data:image\/jpeg/.test(d.data) ? 'jpeg' : 'png', ancho: Number(d.ancho) || 0, alto: Number(d.alto) || 0 } : null;
+  } catch (e) { console.warn('logo:', e.message); LOGO = null; }
+  return LOGO;
+}
+function pintarReporte() {
+  const sd = DATOS.semDoc || {};
+  $('repTit').textContent = 'Semana ' + fbSemanaISO(LUNES) + ' · ' + rangoTxt(LUNES);
+  $('repEstado').innerHTML = (semanaAprobada() ? '<span class="tag ok">✅ Aprobada</span> ' : '<span class="tag">Borrador</span> ')
+    + (REP.guardado ? `<span class="tag info">💾 Reporte guardado${sd.reporte && sd.reporte.guardadoPor ? ' por ' + esc(sd.reporte.guardadoPor) : ''}</span>` : '<span class="tag info">Sin guardar</span>');
+  pintarPapel();
+  pintarEditor();
+}
+function logoHtml() {
+  if (LOGO && LOGO.data) return `<img src="${esc(LOGO.data)}" alt="Logo">`;
+  return '<span class="p-ph" title="Sube el logo con 🖼 Subir logo">Void<i>Tech</i></span>';
+}
+function pintarPapel() {
+  if (!REP) return;
+  const tabla = g => {
+    const fs = filasDe(g);
+    return `<table class="p-tab"><colgroup><col style="width:5%"><col style="width:8%"><col style="width:33%"><col style="width:19%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr>${COLS_REP.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>
+      ${fs.map((f, i) => `<tr data-rid="${esc(f.id)}"><td class="c">${i + 1}</td><td class="c">${esc(f.codigo)}</td><td class="nom">${esc(f.nombre)}</td><td class="c">${esc(f.departamento)}</td><td class="c">${esc(r2(f.horas).toFixed(2))}${horasEditadas(f) ? '<i class="p-mk">*</i>' : ''}</td><td class="m">${esc(usd(f.monto))}${montoEditado(f) || f.montoCalc == null ? '<i class="p-mk">*</i>' : ''}</td></tr>`).join('')
+        || '<tr><td colspan="6" class="c p-vacio">Sin personas</td></tr>'}</tbody></table>
+      <div class="p-total"><span>${esc(g.etiqueta)}</span><b>${esc(usd(totalGrupo(g)).replace('$ ', ''))}</b></div>`;
+  };
+  $('repPaper').innerHTML = `<div class="p-head"><div class="p-logo">${logoHtml()}</div><div class="p-tit"><div class="p-title">INCENTIVO</div><div class="p-fecha">FECHAS: ${esc(ddmmaa(REP.fecha))}</div></div></div>
+    ${REP.grupos.map(tabla).join('')}
+    ${descLineas().length ? `<div class="p-desc">${descLineas().map(l => `<div>${esc(l)}</div>`).join('')}</div>` : ''}
+    <div class="p-firma"><div class="p-linea"></div><div>${esc(REP.firma)}</div></div>`;
+  ajustarPapel();
+}
+const PAPEL_W = 760;
+function ajustarPapel() {
+  const w = $('repWrap'), p = $('repPaper'); if (!w || !p) return;
+  const s = Math.min(1, (w.clientWidth || PAPEL_W) / PAPEL_W);
+  p.style.transform = s < 1 ? `scale(${s})` : '';
+  w.style.height = Math.ceil(p.offsetHeight * s) + 'px';
+}
+window.addEventListener('resize', () => { if (REP) ajustarPapel(); });
+
+function opcionesNave(sel) {
+  const naves = [];
+  fbNavesDisponibles().concat(REP.grupos.map(g => g.nave)).forEach(n => { if (!naves.some(x => nk(x) === nk(n))) naves.push(n); });
+  return naves.map(n => `<option value="${esc(n)}"${nk(n) === nk(sel) ? ' selected' : ''}>${esc(n || '(sin nave)')}</option>`).join('');
+}
+function pintarEditor() {
+  const multi = REP.grupos.length > 1 || fbNavesDisponibles().length > 1;
+  const tarjeta = f => {
+    const marca = [];
+    if (f.tipo !== 'tec') marca.push('<span class="tag info">Monto manual</span>');
+    if (montoEditado(f)) marca.push(`<span class="tag">✏️ $ cambiado (calculado ${esc(usd(f.montoCalc))})</span> <button class="lnk" data-act="mreset" data-rid="${esc(f.id)}">↺</button>`);
+    if (horasEditadas(f)) marca.push(`<span class="tag">✏️ horas cambiadas (calculado ${esc(r2(f.horasCalc).toFixed(2))})</span> <button class="lnk" data-act="hreset" data-rid="${esc(f.id)}">↺</button>`);
+    return `<div class="rf" data-rid="${esc(f.id)}">
+      <div class="rf-top"><b>${esc(f.nombre || '(sin nombre)')}</b><span class="rf-btns"><button data-act="up" data-rid="${esc(f.id)}" aria-label="Subir">↑</button><button data-act="down" data-rid="${esc(f.id)}" aria-label="Bajar">↓</button><button data-act="del" data-rid="${esc(f.id)}" aria-label="Quitar" class="del">✕</button></span></div>
+      <div class="rf-g">
+        <div class="w1"><label class="f">code</label><input data-k="codigo" data-rid="${esc(f.id)}" value="${esc(f.codigo)}" maxlength="20" inputmode="numeric"></div>
+        <div class="w3"><label class="f">Nombre</label><input data-k="nombre" data-rid="${esc(f.id)}" value="${esc(f.nombre)}" maxlength="80"></div>
+        <div class="w2"><label class="f">Departamento</label><input data-k="departamento" data-rid="${esc(f.id)}" value="${esc(f.departamento)}" maxlength="40"></div>
+        <div class="w1"><label class="f">Horas</label><input data-k="horas" data-rid="${esc(f.id)}" value="${esc(r2(f.horas))}" type="number" step="0.01" min="0" inputmode="decimal"></div>
+        <div class="w2"><label class="f">$ incentivo</label><input data-k="monto" data-rid="${esc(f.id)}" value="${esc(r2(f.monto))}" type="number" step="0.01" min="0" inputmode="decimal"></div>
+        ${multi ? `<div class="w2"><label class="f">Nave</label><select data-k="nave" data-rid="${esc(f.id)}">${opcionesNave(f.nave)}</select></div>` : ''}
+      </div>
+      ${marca.length ? `<div class="rf-mk">${marca.join(' ')}</div>` : ''}
+    </div>`;
+  };
+  const sugerencias = [];
+  TECS.filter(t => !REP.filas.some(f => f.key === t.key)).forEach(t => sugerencias.push(t.nombre));
+  REPCFG.extras.forEach(x => sugerencias.push(x.nombre));
+  (REP_USUARIOS || []).forEach(u => sugerencias.push(u.nombre));
+  $('repEd').innerHTML = `
+    <div class="card"><div class="sec" style="margin-top:0">Datos de la hoja</div>
+      <div class="g2"><div><label class="f" for="repFecha">Fecha</label><input id="repFecha" type="date" value="${esc(REP.fecha)}"></div>
+      <div><label class="f" for="repDep">Departamento por defecto</label><input id="repDep" maxlength="40" value="${esc(REP.departamentoDefault)}"></div></div>
+      <label class="f" for="repFirma">Firma</label><input id="repFirma" maxlength="80" value="${esc(REP.firma)}">
+      <label class="f">Logo de la empresa</label>
+      <div class="rep-logo"><div class="rep-logo-v">${logoHtml()}</div><label class="btn2 btn-sm rep-file">🖼 ${LOGO && LOGO.data ? 'Cambiar logo' : 'Subir logo'}<input id="repLogo" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
+      <div class="nota">Se reduce a 300 px de ancho (máx. 150 KB) y se guarda para las próximas semanas.</div>
+    </div>
+    ${REP.grupos.map(g => `<div class="card">
+      <div class="sec" style="margin-top:0">${esc(g.nave || 'Personas')} · ${esc(usd(totalGrupo(g)))}</div>
+      <label class="f">Texto del total</label><input data-gk="${esc(nk(g.nave) || '_')}" value="${esc(g.etiqueta)}" maxlength="60">
+      ${filasDe(g).map(tarjeta).join('') || '<div class="nota">Sin personas en esta nave.</div>'}
+    </div>`).join('')}
+    <div class="card"><div class="sec" style="margin-top:0">＋ Agregar persona</div>
+      <div class="nota">Técnicos que faltan, o personas que no son técnicos (supervisor, administrador…) con su monto.</div>
+      <div class="rep-add"><input id="repNuevo" list="repSug" maxlength="80" placeholder="Nombre"><button class="btn btn-sm" id="repAdd">Agregar</button></div>
+      <datalist id="repSug">${[...new Set(sugerencias)].map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+      ${REP_USUARIOS ? `<select id="repUsr"><option value="">— Elegir de Usuarios —</option>${REP_USUARIOS.map(u => `<option value="${esc(u.id)}">${esc(u.nombre)}${u.rol ? ' · ' + esc(String(u.rol).toLowerCase()) : ''}</option>`).join('')}</select>`
+        : '<button class="btn2 btn-sm" id="repCargarUsr">👥 Elegir de Usuarios</button>'}
+    </div>
+    <div class="card"><div class="sec" style="margin-top:0">Trabajos realizados (uno por línea)</div>
+      <textarea id="repDesc" rows="5" maxlength="2000" placeholder="Mantenimiento preventivo de …">${esc(REP.descripciones)}</textarea>
+      <button class="btn2 btn-sm" id="repAuto">↺ Resumen automático de la semana</button>
+      ${DATOS.otFecha && !semanaAprobada() ? '' : '<div class="nota">Semana aprobada: sus OTs no se volvieron a leer, así que escribe los trabajos a mano.</div>'}
+    </div>
+    ${REP.sinHoras ? '<div class="nota" style="margin:0 2px 10px">🕐 Semana aprobada: las horas no se guardaron al aprobar; escríbelas a mano (se guardan con el reporte).</div>' : ''}
+    <button class="btn2" id="repRellenar">↺ Volver a llenar desde la semana</button>`;
+}
+function repFila(id) { return REP.filas.find(f => f.id === id); }
+function onRepInput(e) {
+  const t = e.target; if (!REP) return;
+  if (t.dataset.k && t.dataset.rid) {
+    const f = repFila(t.dataset.rid); if (!f) return;
+    const k = t.dataset.k;
+    if (k === 'horas' || k === 'monto') { f[k] = Math.max(0, r2(numIn(t.value))); }
+    else if (k === 'nave') { f.nave = t.value; normalizarGrupos(REP); pintarPapel(); pintarEditor(); return; }
+    else f[k] = t.value.replace(/\s+/g, ' ').trimStart();
+    if (k === 'nombre') { const b = t.closest('.rf').querySelector('.rf-top b'); if (b) b.textContent = f.nombre || '(sin nombre)'; }
+    pintarPapel();
+    if ((k === 'monto' || k === 'horas') && e.type === 'change') pintarEditor();
+    return;
+  }
+  if (t.dataset.gk) { const g = REP.grupos.find(x => (nk(x.nave) || '_') === t.dataset.gk); if (g) { g.etiqueta = t.value; pintarPapel(); } return; }
+  if (t.id === 'repFecha') { if (/^\d{4}-\d{2}-\d{2}$/.test(t.value)) { REP.fecha = t.value; pintarPapel(); } return; }
+  if (t.id === 'repFirma') { REP.firma = t.value; pintarPapel(); return; }
+  if (t.id === 'repDesc') { REP.descripciones = t.value; pintarPapel(); return; }
+  if (t.id === 'repDep') {
+    const viejo = REP.departamentoDefault, nuevo = t.value.trim();
+    REP.filas.forEach(f => { if (f.departamento === viejo) f.departamento = nuevo; });
+    REP.departamentoDefault = nuevo;
+    REP.filas.forEach(f => { const inp = $('repEd').querySelector(`input[data-k="departamento"][data-rid="${f.id}"]`); if (inp) inp.value = f.departamento; });
+    pintarPapel(); return;
+  }
+  if (t.id === 'repUsr' && t.value && e.type === 'change') { const u = REP_USUARIOS.find(x => x.id === t.value); if (u) agregarPersona(u.nombre, u); }
+  if (t.id === 'repLogo' && e.type === 'change') subirLogo(t.files && t.files[0]);
+}
+function onRepClick(e) {
+  const b = e.target.closest('button'); if (!b || !REP) return;
+  const id = b.dataset.rid, act = b.dataset.act;
+  if (act && id) {
+    const i = REP.filas.findIndex(f => f.id === id); if (i < 0) return;
+    const f = REP.filas[i];
+    if (act === 'del') REP.filas.splice(i, 1);
+    else if (act === 'up' || act === 'down') {
+      const mismos = REP.filas.map((x, j) => j).filter(j => nk(REP.filas[j].nave) === nk(f.nave));
+      const p = mismos.indexOf(i), q = act === 'up' ? p - 1 : p + 1;
+      if (q < 0 || q >= mismos.length) return;
+      const j = mismos[q]; REP.filas[i] = REP.filas[j]; REP.filas[j] = f;
+    } else if (act === 'mreset') f.monto = r2(f.montoCalc);
+    else if (act === 'hreset') f.horas = r2(f.horasCalc);
+    normalizarGrupos(REP); pintarPapel(); pintarEditor();
+    return;
+  }
+  if (b.id === 'repAdd') { const n = $('repNuevo').value.trim().replace(/\s+/g, ' '); if (!n) return toast('Escribe el nombre', 'error'); agregarPersona(n); return; }
+  if (b.id === 'repAuto') { REP.descripciones = resumenTrabajos(DATOS).join('\n'); $('repDesc').value = REP.descripciones; pintarPapel(); if (!REP.descripciones) toast('No hay trabajos de la semana para resumir', 'warn'); return; }
+  if (b.id === 'repCargarUsr') { cargarUsuariosRep(); return; }
+  if (b.id === 'repRellenar') { const g = REP.guardado; REP = reporteNuevo(); REP.guardado = g; pintarReporte(); toast('↺ Llenado otra vez desde la semana (pulsa 💾 Guardar para conservarlo)'); return; }
+}
+// Persona nueva: un técnico (con su monto calculado), alguien de /usuarios o texto libre.
+function agregarPersona(nombre, usuario) {
+  const v = semanaVista();
+  const nave = fbNaveActiva() || (REP.grupos[REP.grupos.length - 1] || {}).nave || '';
+  const t = !usuario && TECS.find(x => K(x.nombre) === K(nombre) || K(x.corto) === K(nombre));
+  if (t) {
+    if (REP.filas.some(f => f.key === t.key)) return toast('Ya está en el reporte', 'warn');
+    const f = v.filas.find(x => x.key === t.key) || { key: t.key, nombre: t.nombre, monto: 0 };
+    REP.filas.push(filaTec(f, semanaAprobada() ? null : horasPorTecnico(DATOS), naveDeTec(t.key) || nave));
+  } else {
+    const key = usuario ? 'u_' + usuario.id : 'x_' + tecKey(nombre);
+    if (REP.filas.some(f => f.key === key)) return toast('Ya está en el reporte', 'warn');
+    const prev = REPCFG.extras.find(x => x.key === key) || {};
+    REP.filas.push({ id: nid(), tipo: usuario ? 'usr' : 'libre', key, codigo: String(REPCFG.codigos[key] != null ? REPCFG.codigos[key] : (prev.codigo || '')), nombre: String(usuario ? usuario.nombre : nombre), departamento: String(REPCFG.departamentos[key] || prev.departamento || REP.departamentoDefault || REPCFG.departamentoDefault), horas: r2(prev.horas), horasCalc: null, monto: r2(prev.monto), montoCalc: null, nave });
+  }
+  normalizarGrupos(REP); pintarPapel(); pintarEditor();
+  toast('＋ ' + nombre + ' agregado');
+}
+// Solo si el Administrador lo pide: lee /usuarios (1 lectura por usuario), una vez.
+async function cargarUsuariosRep() {
+  const b = $('repCargarUsr'); if (b) { b.disabled = true; b.textContent = 'Cargando usuarios…'; }
+  try {
+    const s = await db.collection('usuarios').get();
+    REP_USUARIOS = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.activo === true && u.nombre).map(u => ({ id: u.id, nombre: String(u.nombre), rol: String(u.rol || '') }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    if (REP) pintarEditor();
+  } catch (e) { if (b) { b.disabled = false; b.textContent = '👥 Elegir de Usuarios'; } fail(e); }
+}
+
+// ── Guardar ──
+function reporteParaGuardar() {
+  REP.filas.forEach(f => { if (!f.key && f.nombre) f.key = 'x_' + tecKey(f.nombre); });
+  return {
+    version: 1, semana: SEM, titulo: 'INCENTIVO', fecha: REP.fecha, firma: String(REP.firma || ''),
+    grupos: REP.grupos.map(g => ({ nave: g.nave || '', etiqueta: String(g.etiqueta || ''), total: totalGrupo(g) })),
+    filas: REP.filas.map(f => ({ tipo: f.tipo, key: f.key || '', codigo: String(f.codigo || '').trim(), nombre: String(f.nombre || '').trim(), departamento: String(f.departamento || '').trim(), horas: r2(f.horas), horasCalc: f.horasCalc == null ? null : r2(f.horasCalc), monto: r2(f.monto), montoCalc: f.montoCalc == null ? null : r2(f.montoCalc), editado: montoEditado(f) || horasEditadas(f), nave: f.nave || '' })),
+    descripciones: descLineas(), total: totalRep(),
+    guardadoPor: quien(), guardadoPorUid: uidYo(), guardadoEn: fbTimestamp(),
+  };
+}
+// Códigos, nombres y departamentos para que la próxima semana salgan ya puestos.
+function cambiosCfgReporte() {
+  const FV = firebase.firestore.FieldValue;
+  const dep = String(REP.departamentoDefault || '').trim() || 'MANTENIMIENTO';
+  const codigos = {}, nombres = {}, deps = {}, local = { codigos: { ...REPCFG.codigos }, nombres: { ...REPCFG.nombres }, departamentos: { ...REPCFG.departamentos } };
+  let cambio = dep !== REPCFG.departamentoDefault;
+  REP.filas.forEach(f => {
+    if (!f.key) return;
+    const c = String(f.codigo || '').trim();
+    if (REPCFG.codigos[f.key] == null || String(REPCFG.codigos[f.key]) !== c) { codigos[f.key] = c; local.codigos[f.key] = c; cambio = true; }
+    if (f.tipo === 'tec') {
+      const n = String(f.nombre || '').trim(), quiere = n && n !== f.nombreDef ? n : null;
+      if ((REPCFG.nombres[f.key] || null) !== quiere) { nombres[f.key] = quiere || FV.delete(); if (quiere) local.nombres[f.key] = quiere; else delete local.nombres[f.key]; cambio = true; }
+    }
+    const d = String(f.departamento || '').trim(), qd = d && d !== dep ? d : null;
+    if ((REPCFG.departamentos[f.key] || null) !== qd) { deps[f.key] = qd || FV.delete(); if (qd) local.departamentos[f.key] = qd; else delete local.departamentos[f.key]; cambio = true; }
+  });
+  const extras = REP.filas.filter(f => f.tipo !== 'tec' && f.nombre).map(f => ({ tipo: f.tipo, key: f.key, nombre: String(f.nombre).trim(), codigo: String(f.codigo || '').trim(), departamento: String(f.departamento || '').trim(), nave: f.nave || '', monto: r2(f.monto), horas: r2(f.horas) }));
+  // Los de otras naves se conservan si este reporte es de una sola nave.
+  const act = fbNaveActiva();
+  const extrasTodos = act ? REPCFG.extras.filter(x => x.nave && nk(x.nave) !== nk(act) && !extras.some(y => y.key === x.key)).concat(extras) : extras;
+  if (JSON.stringify(extrasTodos) !== JSON.stringify(REPCFG.extras)) cambio = true;
+  if (!cambio) return null;
+  return { doc: { codigos, nombresReporte: nombres, departamentos: deps, departamentoDefault: dep, extrasReporte: extrasTodos, reporteActualizadoPor: quien(), reporteActualizadoEn: fbTimestamp() }, local: { ...local, departamentoDefault: dep, extras: extrasTodos } };
+}
+function guardarReporte(silencioso) {
+  if (!REP) return;
+  const rep = reporteParaGuardar();
+  // Solo se agrega el campo `reporte`: los demás campos de la semana quedan igual.
+  if (DATOS.semDoc) DATOS.semDoc.reporte = { ...rep, guardadoEn: firebase.firestore.Timestamp.now() };
+  else DATOS.semDoc = { reporte: { ...rep, guardadoEn: firebase.firestore.Timestamp.now() } };
+  REP.guardado = true;
+  const w = semRef().set({ reporte: rep }, { merge: true });
+  if (silencioso) w.catch(fail); else escribir(w, '💾 Reporte guardado');
+  const c = cambiosCfgReporte();
+  if (c) {
+    REPCFG = { ...REPCFG, ...c.local };
+    db.collection('incentivos_config').doc('general').set(c.doc, { merge: true }).catch(fail);
+  }
+  pintarReporte();
+}
+// Al descargar: se guarda solo si la semana ya tiene documento (si no, solo con 💾 Guardar).
+function autoguardar() {
+  if (DATOS.semDoc) { guardarReporte(true); return; }
+  const c = cambiosCfgReporte();
+  if (c) { REPCFG = { ...REPCFG, ...c.local }; db.collection('incentivos_config').doc('general').set(c.doc, { merge: true }).catch(fail); }
+}
+
+// ── Logo ──
+const LOGO_MAX_W = 300, LOGO_MAX_B = 150 * 1024;
+function cargarImagen(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo abrir la imagen')); };
+    img.src = url;
+  });
+}
+function reducirLogo(img) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  if (!iw || !ih) return null;
+  let w = Math.min(LOGO_MAX_W, iw);
+  const c = document.createElement('canvas'), ctx = c.getContext('2d');
+  for (let n = 0; n < 6 && w >= 40; n++) {
+    const h = Math.max(1, Math.round(w * ih / iw));
+    c.width = w; c.height = h;
+    ctx.clearRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    let data = c.toDataURL('image/png');
+    if (data.length <= LOGO_MAX_B) return { data, tipo: 'png', ancho: w, alto: h };
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    for (const q of [0.92, 0.85, 0.75, 0.6]) { data = c.toDataURL('image/jpeg', q); if (data.length <= LOGO_MAX_B) return { data, tipo: 'jpeg', ancho: w, alto: h }; }
+    w = Math.round(w * 0.75);
+  }
+  return null;
+}
+async function subirLogo(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type || '')) return toast('Elige una imagen PNG o JPG', 'error');
+  let r = null;
+  try { r = reducirLogo(await cargarImagen(file)); } catch (e) { return toast('❌ ' + e.message, 'error'); }
+  if (!r) return toast('La imagen es muy pesada aun reducida: prueba con otra más sencilla', 'error');
+  LOGO = { ...r };
+  const doc = { data: r.data, tipo: r.tipo, ancho: r.ancho, alto: r.alto, bytes: r.data.length, subidoPor: quien(), subidoPorUid: uidYo(), subidoEn: fbTimestamp() };
+  if (REP) { pintarPapel(); pintarEditor(); }
+  escribir(db.collection('incentivos_config').doc('logo').set(doc), '🖼 Logo guardado');
+}
+
+// ── Excel ──
+const BORDE = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+const BORDE_G = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
+const FMT_USD = '$ #,##0.00';
+function libroReporte() {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Mantenimiento 2026';
+  const ws = wb.addWorksheet(('Incentivo ' + SEM).slice(0, 31), {
+    pageSetup: { paperSize: 1, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
+    views: [{ showGridLines: false }],
+  });
+  [5, 9, 36, 20, 13, 17].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  const L = 'ABCDEF';
+  // Encabezado: logo (A1:C3), INCENTIVO (D1:F2), FECHAS (D3:F3)
+  ws.mergeCells('A1:C3');
+  if (LOGO && LOGO.data) {
+    const id = wb.addImage({ base64: LOGO.data, extension: LOGO.tipo === 'jpeg' ? 'jpeg' : 'png' });
+    const aw = LOGO.ancho || 200, ah = LOGO.alto || 60, s = Math.min(1, 200 / aw, 62 / ah);
+    ws.addImage(id, { tl: { col: 0.15, row: 0.15 }, ext: { width: Math.round(aw * s), height: Math.round(ah * s) } });
+  } else {
+    ws.getCell('A1').value = { richText: [{ text: 'Void', font: { bold: true, size: 20, color: { argb: 'FF000000' } } }, { text: 'Tech', font: { bold: true, size: 20, color: { argb: 'FFC00000' } } }] };
+    ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
+  }
+  ws.mergeCells('D1:F2');
+  Object.assign(ws.getCell('D1'), { value: 'INCENTIVO', font: { bold: true, size: 22 }, alignment: { vertical: 'middle', horizontal: 'right' } });
+  ws.mergeCells('D3:F3');
+  Object.assign(ws.getCell('D3'), { value: 'FECHAS: ' + ddmmaa(REP.fecha), font: { bold: true, size: 11 }, alignment: { vertical: 'middle', horizontal: 'right' } });
+  [1, 2, 3].forEach(r => { ws.getRow(r).height = 22; });
+  let r = 5;
+  REP.grupos.forEach(g => {
+    const ini = r + 1;
+    COLS_REP.forEach((t, i) => {
+      const c = ws.getCell(L[i] + r);
+      Object.assign(c, { value: t, font: { bold: true }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }, border: BORDE, alignment: { vertical: 'middle', horizontal: 'center', wrapText: true } });
+    });
+    ws.getRow(r).height = 30;
+    r++;
+    filasDe(g).forEach((f, n) => {
+      const cod = String(f.codigo || '').trim();
+      const vals = [n + 1, /^\d+$/.test(cod) ? Number(cod) : cod, f.nombre, f.departamento, r2(f.horas), r2(f.monto)];
+      vals.forEach((v, i) => {
+        const c = ws.getCell(L[i] + r);
+        c.value = v; c.border = BORDE;
+        c.alignment = { vertical: 'middle', horizontal: i === 2 ? 'left' : i === 5 ? 'right' : 'center' };
+        if (i === 2) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+        if (i === 4) c.numFmt = '0.00';
+        if (i === 5) c.numFmt = FMT_USD;
+      });
+      r++;
+    });
+    const fin = r - 1;
+    r++;
+    ws.mergeCells('D' + r + ':E' + r);
+    Object.assign(ws.getCell('D' + r), { value: g.etiqueta, font: { bold: true, size: 12 }, alignment: { vertical: 'middle', horizontal: 'center' }, border: BORDE_G });
+    ws.getCell('E' + r).border = BORDE_G;
+    Object.assign(ws.getCell('F' + r), { value: fin >= ini ? { formula: `SUM(F${ini}:F${fin})`, result: totalGrupo(g) } : 0, numFmt: '#,##0.00', font: { bold: true, size: 12 }, alignment: { vertical: 'middle', horizontal: 'right' }, border: BORDE_G });
+    ws.getRow(r).height = 24;
+    r += 2;
+  });
+  descLineas().forEach(l => {
+    ws.mergeCells('A' + r + ':F' + r);
+    Object.assign(ws.getCell('A' + r), { value: l, alignment: { vertical: 'middle', horizontal: 'left', wrapText: true } });
+    r++;
+  });
+  r += 3;
+  ws.mergeCells('C' + r + ':D' + r);
+  Object.assign(ws.getCell('C' + r), { value: REP.firma, font: { bold: true }, alignment: { horizontal: 'center', vertical: 'top' }, border: { top: { style: 'thin' } } });
+  ws.getCell('D' + r).border = { top: { style: 'thin' } };
+  ws.pageSetup.printArea = 'A1:F' + r;
+  return wb;
+}
+function csvReporte() {
+  const filas = [];
+  REP.grupos.forEach(g => {
+    filasDe(g).forEach((f, n) => filas.push([n + 1, String(f.codigo || ''), f.nombre, f.departamento, r2(f.horas), r2(f.monto)]));
+    filas.push(['', '', '', '', g.etiqueta, totalGrupo(g)]);
+    filas.push(['', '', '', '', '', '']);
+  });
+  descLineas().forEach(l => filas.push(['', '', l, '', '', '']));
+  filas.push(['', '', '', '', '', '']); filas.push(['', '', REP.firma, '', '', '']);
+  return fbCsv([{ nombre: 'Incentivo', titulo: 'INCENTIVO · FECHAS: ' + ddmmaa(REP.fecha), columnas: COLS_REP.map(t => ({ t })), filas }]);
+}
+async function descargarReporteExcel() {
+  if (!REP) return;
+  autoguardar();
+  const base = archivoRep();
+  window.__incRep = { archivo: base + '.xlsx', formato: null };
+  const b = $('repXls'); b.disabled = true;
+  try {
+    await fbCargarExcelJS();
+    const wb = libroReporte();
+    window.__incRep.wb = wb;
+    const buf = await wb.xlsx.writeBuffer();
+    fbDescargar(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), base + '.xlsx');
+    window.__incRep.formato = 'xlsx';
+    toast('⬇️ Excel descargado');
+  } catch (e) {
+    console.warn('Excel reporte:', e && e.message);
+    window.__incRep.formato = 'csv-ofrecido';
+    $('repCsvMsg').textContent = 'No se pudo preparar el Excel (' + ((e && e.message) || 'error') + '). Puedes descargar lo mismo en CSV, que también abre en Excel, o usar 🖨 PDF / Imprimir.';
+    $('repCsvDlg').classList.add('open');
+  } finally { b.disabled = false; }
+}
+function descargarReporteCsv() {
+  $('repCsvDlg').classList.remove('open');
+  const nombre = archivoRep() + '.csv';
+  fbDescargar(new Blob([csvReporte()], { type: 'text/csv;charset=utf-8' }), nombre);
+  window.__incRep = { ...(window.__incRep || {}), formato: 'csv', archivo: nombre };
+  toast('⬇️ CSV descargado — ábrelo con Excel');
+}
+function imprimirReporte() {
+  if (!REP) return;
+  autoguardar();
+  const p = $('repPaper'); p.style.transform = '';
+  try { window.print(); } finally { setTimeout(ajustarPapel, 300); }
+}
+$('repCerrar').onclick = cerrarReporte;
+$('repGuardar').onclick = () => guardarReporte(false);
+$('repXls').onclick = descargarReporteExcel;
+$('repPdf').onclick = imprimirReporte;
+$('repCsvOk').onclick = descargarReporteCsv;
+$('repCsvNo').onclick = () => $('repCsvDlg').classList.remove('open');
+$('repEd').addEventListener('input', onRepInput);
+$('repEd').addEventListener('change', onRepInput);
+$('repEd').addEventListener('click', onRepClick);
+$('repPaper').addEventListener('click', e => { const tr = e.target.closest('tr[data-rid]'); if (!tr) return; const c = $('repEd').querySelector(`.rf[data-rid="${tr.dataset.rid}"]`); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); const i = c.querySelector('input'); if (i) i.focus({ preventScroll: true }); } });
+window.addEventListener('beforeprint', () => { const p = $('repPaper'); if (p) p.style.transform = ''; });
+window.addEventListener('afterprint', () => { if (REP) ajustarPapel(); });
 </script>
 </body>
 </html>

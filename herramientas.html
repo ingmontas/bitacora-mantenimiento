@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <title>Herramientas — Mantenimiento</title>
@@ -13,6 +15,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        HERRAMIENTAS POR TÉCNICO (2 oct 2026)
@@ -26,33 +31,33 @@
        herramientas_movimientos (registro que no se puede editar ni borrar).
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444; --blue: #818CF8; --orange: #F97316;
-      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface);
+      --accent: var(--color-accent); --green: var(--color-success); --red: var(--color-danger); --blue: var(--color-primary); --orange: var(--color-warn);
+      --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; position: sticky; top: 0; z-index: 200; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; }
+    #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 14px 18px; position: sticky; top: 0; z-index: 200; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     #header h1 { font-size: 15px; font-weight: 800; }
-    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     .wrap { max-width: 860px; margin: 0 auto; padding: 14px 14px 60px; }
     .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
     .tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 11px 14px 9px; font: 700 13.5px inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
-    .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab.on { color: var(--color-accent-text); border-bottom-color: var(--accent); }
     .tab .n { background: var(--red); color: #fff; border-radius: 9px; font-size: 10px; padding: 1px 6px; margin-left: 4px; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
     .card-title { font-size: 16px; font-weight: 800; }
     .sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
-    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
+    input, select, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     textarea { min-height: 64px; resize: vertical; }
     input[type=checkbox] { width: auto; accent-color: var(--accent); }
-    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
+    label.f { display: block; font-size: 10.5px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 5px; }
     .btn { padding: 10px 14px; border-radius: 9px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
-    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-primary { background: var(--color-primary); color: var(--color-on-primary); }
     .btn-secondary { background: var(--border); color: var(--text); }
-    .btn-danger { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444455; }
-    .btn-green { background: var(--green); color: #052016; }
+    .btn-danger { background: #EF444422; color: var(--color-danger-text); border: 1px solid #EF444455; }
+    .btn-green { background: var(--green); color: #fff; }
     .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 7px; }
     .btn[disabled] { opacity: .45; cursor: default; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -69,16 +74,16 @@
     .item-s { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
     .money { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-    .t-ok { background: #10B98122; color: #4ade80; } .t-warn { background: #F59E0B22; color: var(--accent); }
-    .t-bad { background: #EF444422; color: #ff8a8a; } .t-info { background: #818CF822; color: #a5b4fc; } .t-mut { background: #94A3B822; color: var(--muted); }
+    .t-ok { background: #10B98122; color: var(--color-success-text); } .t-warn { background: #F59E0B22; color: var(--color-accent-text); }
+    .t-bad { background: #EF444422; color: var(--color-danger-text); } .t-info { background: #818CF822; color: var(--color-primary-text); } .t-mut { background: #94A3B822; color: var(--muted); }
     .section { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
     .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
     .banner { background: #F59E0B14; border: 1px solid #F59E0B44; border-radius: 10px; padding: 11px 13px; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
     .banner.red { background: #EF444414; border-color: #EF444455; }
     .seg { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
     .seg button { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 18px; padding: 6px 12px; font: 600 12px inherit; font-family: inherit; cursor: pointer; }
-    .seg button.on { border-color: var(--accent); color: var(--accent); background: #F59E0B14; }
-    .back { background: none; border: none; color: var(--accent); font: 700 13px inherit; font-family: inherit; cursor: pointer; padding: 0; margin-bottom: 10px; }
+    .seg button.on { border-color: var(--accent); color: var(--color-accent-text); background: #F59E0B14; }
+    .back { background: none; border: none; color: var(--color-accent-text); font: 700 13px inherit; font-family: inherit; cursor: pointer; padding: 0; margin-bottom: 10px; }
     /* arqueo */
     .aq-line { display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
     .aq-line input[type=number] { padding: 7px 8px; text-align: center; }
@@ -87,7 +92,7 @@
     .aq-res label { display: flex; align-items: center; gap: 5px; color: var(--text); }
     .total-bar { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border-radius: 10px; padding: 12px 14px; margin-top: 12px; font-size: 14px; }
     /* modal */
-    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: var(--color-overlay); z-index: 600; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; }
     .modal-bg.open { display: flex; }
     .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; width: 100%; max-width: 560px; }
     .modal h3 { font-size: 16px; margin-bottom: 4px; }
@@ -117,6 +122,7 @@
 
 <div id="header">
   <div><h1>🧰 Herramientas por técnico</h1><small id="header-sub">Cargando...</small></div>
+  <a href="guia.html" title="Guía de uso" style="color:inherit;text-decoration:none;font-size:13px;font-weight:700;margin-left:auto">📘 Guía</a>
 </div>
 
 <div class="wrap">
@@ -336,7 +342,7 @@ function tarjetaArqueo(a, conBotones) {
     <div class="item-s">Por ${esc(a.realizadoPor || '—')} · ${esc(a.unidadesRevisadas || 0)} revisadas · ${malos.length ? malos.map(i => `${esc(i.nombre)}: ${i.faltante ? esc(i.faltante) + ' faltante' : ''}${i.faltante && i.danada ? ', ' : ''}${i.danada ? esc(i.danada) + ' dañada' : ''}`).join(' · ') : 'todo completo'}</div>
     ${(a.conformidad || {}).nota ? `<div class="item-s" style="color:var(--text)">💬 Técnico: "${esc(a.conformidad.nota)}"</div>` : ''}
     ${(a.rrhh || {}).nota ? `<div class="item-s" style="color:var(--text)">💼 RR.HH.: "${esc(a.rrhh.nota)}"</div>` : ''}</div>
-    <div class="money" style="color:${a.totalCargo ? '#ff8a8a' : 'inherit'}">${money(a.totalCargo)}</div></div>
+    <div class="money" style="color:${a.totalCargo ? 'var(--color-danger-text)' : 'inherit'}">${money(a.totalCargo)}</div></div>
     <div class="row" style="margin-top:7px">${estadoConf(a)} ${estadoRRHH(a)}
     ${conBotones ? `<span class="grow"></span><button class="btn btn-secondary btn-sm" data-print="${a.id}">🖨️ Constancia</button>` : ''}</div></div>`;
 }
@@ -552,8 +558,8 @@ function renderRRHH() {
   const lista = conCargo.filter(a => rrhhFiltro === 'todos' || (a.rrhh || {}).estado === rrhhFiltro).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
   $('view').innerHTML = `
     <div class="kpis">
-      <div class="kpi"><div class="l">Por enviar a RR.HH.</div><div class="v" style="color:var(--accent)">${money(sum('pendiente'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'pendiente').length} cargo(s)</div></div>
-      <div class="kpi"><div class="l">En RR.HH. (por descontar)</div><div class="v" style="color:#a5b4fc">${money(sum('enviado'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'enviado').length} cargo(s)</div></div>
+      <div class="kpi"><div class="l">Por enviar a RR.HH.</div><div class="v" style="color:var(--color-accent-text)">${money(sum('pendiente'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'pendiente').length} cargo(s)</div></div>
+      <div class="kpi"><div class="l">En RR.HH. (por descontar)</div><div class="v" style="color:var(--color-primary-text)">${money(sum('enviado'))}</div><div class="s">${conCargo.filter(a => (a.rrhh || {}).estado === 'enviado').length} cargo(s)</div></div>
       <div class="kpi"><div class="l">Descontado</div><div class="v">${money(sum('descontado'))}</div><div class="s">${arqueosViejosCargados ? 'histórico' : 'últimos ' + DIAS_ARQUEOS + ' días'}</div></div>
     </div>
     <div class="banner">El cargo se calcula con el valor de reposición registrado. La decisión de descontar y la forma (monto, cuotas) corresponde a Recursos Humanos, según la política de la empresa y la ley laboral vigente. Cada cargo lleva la constancia del arqueo y la conformidad del técnico.</div>

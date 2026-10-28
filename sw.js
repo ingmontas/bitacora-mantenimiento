@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v51'; // (25 oct 2026) Etapa 3: reportes filtrables por áreas (filtros.js, comparativo entre naves, Excel)
+const CACHE = 'mantenimiento-v55'; // (28 oct 2026) Criticidad A/B/C y LOTO / permiso de trabajo
 const ASSETS = [
   './',
   'index.html',
@@ -22,10 +22,14 @@ const ASSETS = [
   'incentivos.html',
   'rentabilidad.html',
   'admin.html', // (25 oct 2026)
+  'guia.html', // (26 oct 2026, Etapa 5) guía de inicio por rol
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',
   'filtros.js', // (25 oct 2026, Etapa 3) barra de filtros y exportar a Excel
+  'tema.css', // (26 oct 2026, Etapa 4) colores comunes, claro y oscuro
+  'criticidad.js', // (28 oct 2026) criticidad A/B/C por equipo
+  'seguridad.js', // (28 oct 2026) LOTO y permiso de trabajo
   'login.html',
   'tecnicos.json',
   'icon-192.png',
@@ -101,7 +105,7 @@ self.addEventListener('fetch', e => {
   // Base de datos, inicio de sesión y demás servicios de Google: siempre red.
   if (url.origin !== self.location.origin) return;
 
-  const esCodigo = e.request.mode === 'navigate' || /\.(html|js|json)$/i.test(url.pathname) || url.pathname.endsWith('/');
+  const esCodigo = e.request.mode === 'navigate' || /\.(html|js|json|css)$/i.test(url.pathname) || url.pathname.endsWith('/');
   if (esCodigo) { e.respondWith(redConLimite(e.request, 4000)); return; }
 
   e.respondWith(

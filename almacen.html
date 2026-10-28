@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0B2545"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <title>Almacén — Solicitudes de repuestos</title>
@@ -15,6 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        ALMACÉN — SOLICITUDES DE REPUESTOS (7 oct 2026)
@@ -25,18 +28,18 @@
        stock de ese programa por el código.
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #F4F6FA; --card: #fff; --line: #DCE3EC; --navy: #0B2545; --blue: #2563EB;
-      --text: #0B1B2E; --label: #5B6B82; --muted: #7A8AA1; --soft: #F7F9FC;
+      --bg: var(--color-bg); --card: var(--color-surface); --line: var(--color-surface-2); --navy: var(--color-header-bg); --blue: var(--color-primary);
+      --text: var(--color-text); --label: var(--color-muted); --muted: var(--color-muted); --soft: var(--color-surface-2);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: 'Barlow', -apple-system, system-ui, sans-serif; font-size: 15px; min-height: 100vh; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 15px; min-height: 100vh; }
     .wrap { max-width: 560px; margin: 0 auto; }
-    #top { position: sticky; top: 0; z-index: 5; background: var(--navy); color: #fff; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
-    #top small { font-size: 11px; color: #A9C1E8; }
+    #top { position: sticky; top: 0; z-index: 5; background: var(--navy); color: var(--color-header-text); border-bottom: 2px solid var(--color-accent); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    #top small { font-size: 11px; color: var(--color-header-sub); }
     #top h1 { font-size: 19px; font-weight: 700; }
     .seg { display: flex; background: #16345F; border-radius: 12px; padding: 4px; gap: 4px; }
-    .seg button { flex: 1; font: inherit; font-weight: 700; font-size: 13.5px; height: 40px; border-radius: 9px; border: none; cursor: pointer; background: transparent; color: #A9C1E8; }
-    .seg button.on { background: #fff; color: var(--navy); }
+    .seg button { flex: 1; font: inherit; font-weight: 700; font-size: 13.5px; height: 40px; border-radius: 9px; border: none; cursor: pointer; background: transparent; color: var(--color-nav-text); }
+    .seg button.on { background: #fff; color: #0B2545; } /* sobre la barra oscura en los dos modos */
     .lista { padding: 10px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 40px; }
     .sol { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
     .sol .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
@@ -44,23 +47,23 @@
     .sol .sub { font-size: 13px; color: var(--label); }
     .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--label); }
     .item { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-    .item .cod { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); }
+    .item .cod { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--color-primary-text); }
     .item .desc { font-weight: 600; }
     .pide { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
     .pide span { font-size: 10.5px; color: var(--label); text-transform: uppercase; letter-spacing: .06em; }
     .pide b { font-size: 24px; }
     .acc { display: flex; gap: 8px; }
     .acc button { font: inherit; font-weight: 700; height: 46px; border-radius: 10px; cursor: pointer; }
-    .rech { flex: 1; border: 1px solid #DC2626; background: #fff; color: #B91C1C; }
-    .ent { flex: 2; border: none; background: #16A34A; color: #fff; }
+    .rech { flex: 1; border: 1px solid var(--color-danger); background: var(--color-surface); color: var(--color-danger-text); }
+    .ent { flex: 2; border: none; background: var(--color-success); color: #fff; }
     .acc button[disabled] { opacity: .5; }
     .estado { font-size: 13px; font-weight: 700; padding: 8px 10px; border-radius: 8px; text-align: center; }
-    .estado.entregado { background: #DCFCE7; color: #166534; }
-    .estado.rechazado { background: #FEE2E2; color: #991B1B; }
+    .estado.entregado { background: var(--color-success-soft); color: var(--color-success-text); }
+    .estado.rechazado { background: var(--color-danger-soft); color: var(--color-danger-text); }
     .vacio { text-align: center; color: var(--label); padding: 48px 12px; line-height: 1.6; }
     #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; width: 90%; max-width: 380px; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 99; }
     #toast.show { opacity: 1; }
-    #toast.err { background: #B91C1C; }
+    #toast.err { background: var(--color-danger); }
   </style>
 </head>
 <body>

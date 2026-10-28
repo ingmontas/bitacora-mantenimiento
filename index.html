@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Mantenimiento"/>
@@ -16,13 +18,16 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
 <style>
   :root{
-    --bg:#0F1923; --surface:#1A2535; --card:#202F42; --accent:#F59E0B;
-    --green:#10B981; --red:#EF4444; --blue:#818CF8; --text:#F1F5F9; --muted:#94A3B8; --border:#2D3F55;
+    --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface); --accent: var(--color-accent);
+    --green: var(--color-success); --red: var(--color-danger); --blue: var(--color-primary); --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,'Inter',system-ui,sans-serif;min-height:100vh;}
+  html,body{background:var(--bg);color:var(--text);font-family: var(--font-sans);min-height:100vh;}
   .wrap{max-width:520px;margin:0 auto;padding:32px 20px 60px;}
   .hero{text-align:center;margin-bottom:28px;}
   .hero .emoji{font-size:44px;margin-bottom:10px;}
@@ -37,11 +42,11 @@
   .tile .info p{font-size:12.5px;color:var(--muted);line-height:1.5;}
   /* (25 oct 2026) aviso de respaldo para el Administrador */
   .aviso{display:none;background:#F59E0B14;border:1px solid #F59E0B66;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.5;color:var(--text);text-decoration:none;}
-  .aviso b{color:var(--accent);}
+  .aviso b{color:var(--color-accent-text);}
   .status{margin-top:26px;text-align:center;font-size:12px;color:var(--muted);font-family:monospace;}
   .status b{color:var(--text);}
   footer{margin-top:40px;text-align:center;font-size:11px;color:var(--muted);line-height:1.7;}
-  footer a{color:var(--accent);text-decoration:none;}
+  footer a{color:var(--color-accent-text);text-decoration:none;}
 </style>
 </head>
 <body>
@@ -136,6 +141,14 @@
       <div class="info">
         <h2>Checklist</h2>
         <p>Inspecciones por equipo y generación automática de OT cuando algo falla.</p>
+      </div>
+    </a>
+    <!-- (26 oct 2026, Etapa 5) Guía de inicio por rol: visible para todos. -->
+    <a class="tile" href="guia.html" id="tile-guia">
+      <div class="icon">📘</div>
+      <div class="info">
+        <h2>Guía</h2>
+        <p>Cómo usar la app paso a paso según tu puesto, y la lista para abrir una nave nueva.</p>
       </div>
     </a>
   </div>

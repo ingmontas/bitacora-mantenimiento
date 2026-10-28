@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <title>Rentabilidad — Mantenimiento</title>
@@ -13,6 +15,9 @@
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        RENTABILIDAD DE EQUIPOS (22 oct 2026)
@@ -32,35 +37,35 @@
        memoria por mes mientras la página está abierta. Sin listeners.
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
-      --text: #F1F5F9; --muted: #94A3B8; --soft: #C3CCD8; --border: #2D3F55;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface);
+      --accent: var(--color-accent); --green: var(--color-success); --red: var(--color-danger);
+      --text: var(--color-text); --muted: var(--color-muted); --soft: var(--color-text-2); --border: var(--color-border);
       --c-tec: #3987e5; --c-op: #d95926; --c-arr: #199e70; --c-rep: #c98500;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { overflow-x: hidden; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; }
+    #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 14px 16px; }
     #header h1 { font-size: 17px; font-weight: 800; }
-    #header small { font-size: 11px; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
+    #header small { font-size: 11px; color: var(--color-header-sub); font-weight: 700; display: block; margin-top: 2px; }
     .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 60px; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; min-width: 0; }
     .ct { font-weight: 800; font-size: 14px; margin-bottom: 2px; }
     .cs { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
     .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
     .tabs button { flex: 1; min-width: 0; padding: 9px 4px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
-    .tabs button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .tabs button.on { background: #F59E0B18; color: var(--color-accent-text); border-color: var(--accent); }
     .bar-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .bar-tools select { flex: 1 1 100%; }
     .bar-tools button { flex: 1 1 0; min-width: 0; }
     .bar-tools #bAct { flex: 0 0 52px; }
-    select, input, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
+    select, input, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; color: var(--text); font-size: 15px; font-family: inherit; outline: none; min-width: 0; }
     select:focus, input:focus, textarea:focus { border-color: var(--accent); }
     textarea { min-height: 90px; resize: vertical; font-size: 12.5px; }
-    .btn { padding: 11px 10px; border-radius: 10px; border: 0; font-weight: 800; font-size: 14px; background: var(--accent); color: #0F1923; cursor: pointer; font-family: inherit; }
+    .btn { padding: 11px 10px; border-radius: 10px; border: 0; font-weight: 800; font-size: 14px; background: var(--color-primary); color: var(--color-on-primary); cursor: pointer; font-family: inherit; }
     .btn2 { padding: 10px 8px; border-radius: 10px; border: 0; font-weight: 700; font-size: 12.5px; background: var(--border); color: var(--text); cursor: pointer; font-family: inherit; }
     .btn[disabled] { opacity: .4; cursor: default; }
-    .lnk { background: none; border: 0; color: #7fb3f5; font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 0; font-family: inherit; }
+    .lnk { background: none; border: 0; color: var(--color-primary-text); font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 0; font-family: inherit; }
     .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
     .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; min-width: 0; }
     .kpi.w { grid-column: 1 / -1; }
@@ -92,28 +97,28 @@
     .tw { overflow-x: auto; max-width: 100%; }
     table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
     th { text-align: left; color: var(--muted); font-weight: 600; padding: 5px 3px; border-bottom: 1px solid var(--border); }
-    td { padding: 6px 3px; border-bottom: 1px solid #26364a; color: var(--soft); vertical-align: top; overflow-wrap: anywhere; }
+    td { padding: 6px 3px; border-bottom: 1px solid var(--color-surface-3); color: var(--soft); vertical-align: top; overflow-wrap: anywhere; }
     td b { color: var(--text); }
     .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 13.5px; line-height: 1.6; }
-    #tip { position: fixed; z-index: 900; pointer-events: none; background: #0B131C; border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 6px 9px; border-radius: 8px; max-width: 240px; line-height: 1.4; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+    #tip { position: fixed; z-index: 900; pointer-events: none; background: var(--color-surface); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 6px 9px; border-radius: 8px; max-width: 240px; line-height: 1.4; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
     /* modal */
-    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600; align-items: flex-start; justify-content: center; padding: 20px 8px; overflow-y: auto; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: var(--color-overlay); z-index: 600; align-items: flex-start; justify-content: center; padding: 20px 8px; overflow-y: auto; }
     .modal-bg.open { display: flex; }
     .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; width: 100%; max-width: 600px; min-width: 0; }
     .modal h3 { font-size: 16px; margin-bottom: 4px; overflow-wrap: anywhere; }
     .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
-    label.f { display: block; font-size: 10.5px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 9px 0 4px; }
+    label.f { display: block; font-size: 10.5px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 9px 0 4px; }
     .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
     .g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 8px; }
     .g3 label.f { font-size: 9.5px; letter-spacing: .02em; text-transform: none; }
     .sec { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 4px; }
     .blk { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px 10px; margin-top: 8px; }
     .blk b { font-size: 13.5px; overflow-wrap: anywhere; }
-    .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #F59E0B22; color: var(--accent); }
-    .tag.ok { background: #10B98122; color: #4ade80; } .tag.bad { background: #EF444422; color: #ff8a8a; } .tag.info { background: #818CF822; color: #a5b4fc; }
+    .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #F59E0B22; color: var(--color-accent-text); }
+    .tag.ok { background: #10B98122; color: var(--color-success-text); } .tag.bad { background: #EF444422; color: var(--color-danger-text); } .tag.info { background: #818CF822; color: var(--color-primary-text); }
     #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 600; max-width: 360px; width: 90%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none; }
-    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: #B45309; }
+    #toast.show { opacity: 1; } #toast.error { background: var(--red); } #toast.warn { background: var(--color-warn); }
   </style>
 </head>
 <body>
@@ -502,7 +507,7 @@ function svgBarras(cols, opts) {
   const H = 200, top = 14, bot = 22, left = 34, right = 4;
   const ch = H - top - bot, max = escala(Math.max(0, ...cols.map(x => sumaC(x.c))));
   let s = `<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria || 'Costo por mes')}">`;
-  for (let i = 0; i <= 4; i++) { const y = top + ch - ch * i / 4; s += `<line x1="${left}" x2="${W - right}" y1="${y}" y2="${y}" stroke="#2D3F55"/><text x="${left - 5}" y="${y + 3.5}" fill="#94A3B8" font-size="10" text-anchor="end">${esc(corto(max * i / 4))}</text>`; }
+  for (let i = 0; i <= 4; i++) { const y = top + ch - ch * i / 4; s += `<line x1="${left}" x2="${W - right}" y1="${y}" y2="${y}" style="stroke:var(--color-border)"/><text x="${left - 5}" y="${y + 3.5}" style="fill:var(--color-muted)" font-size="10" text-anchor="end">${esc(corto(max * i / 4))}</text>`; }
   const slot = (W - left - right) / Math.max(1, cols.length), bw = Math.min(34, slot * 0.72);
   cols.forEach((col, i) => {
     const x = left + slot * i + (slot - bw) / 2; let y = top + ch;
@@ -512,8 +517,8 @@ function svgBarras(cols, opts) {
       s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" rx="2" fill="${cp.c}" data-tip="${esc(col.tip + ' · ' + cp.n + ': ' + money(v))}"/>`;
     });
     const t = sumaC(col.c);
-    if (t > 0 && cols.length <= 7) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" fill="#C3CCD8" font-size="10" text-anchor="middle">${esc(corto(t))}</text>`;
-    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 7}" fill="#C3CCD8" font-size="${cols.length > 7 ? 10 : 11}" text-anchor="middle">${esc(col.label)}</text>`;
+    if (t > 0 && cols.length <= 7) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" style="fill:var(--color-text-2)" font-size="10" text-anchor="middle">${esc(corto(t))}</text>`;
+    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 7}" style="fill:var(--color-text-2)" font-size="${cols.length > 7 ? 10 : 11}" text-anchor="middle">${esc(col.label)}</text>`;
   });
   return s + '</svg>';
 }
@@ -536,7 +541,7 @@ function barraMezcla(c, aria) {
   return s + '</svg>';
 }
 const pctLinea = c => { const t = sumaC(c); return COMP.map(x => `${x.n} ${pctR(c[x.k], t)} %`).join(' · '); };
-function svgCmp(v, max, color, tip) { const w = max > 0 ? Math.max(1, v / max * 200) : 0; return `<svg viewBox="0 0 200 12" preserveAspectRatio="none"><rect x="0" y="0" width="${w.toFixed(1)}" height="12" rx="3" fill="${color}" data-tip="${esc(tip)}"/></svg>`; }
+function svgCmp(v, max, color, tip) { const w = max > 0 ? Math.max(1, v / max * 200) : 0; return `<svg viewBox="0 0 200 12" preserveAspectRatio="none"><rect x="0" y="0" width="${w.toFixed(1)}" height="12" rx="3" style="fill:${color}" data-tip="${esc(tip)}"/></svg>`; }
 
 // Tooltip: con mouse al pasar; con el dedo al tocar.
 (function () {
@@ -659,8 +664,8 @@ function publicar(R, extra) {
 function tarjetaEquipo(E, per) {
   const s = SEM[E.estado];
   const max = Math.max(E.mantener, E.nueva || 0);
-  const cmp = `<div class="cmp"><span>Mantenerla</span>${svgCmp(E.mantener, max, '#e6e5df', 'Mantenerla: ' + money(E.mantener) + ' por año')}<b>${esc(moneyK(E.mantener))}</b></div>`
-    + (E.nueva != null ? `<div class="cmp"><span>Una nueva</span>${svgCmp(E.nueva, max, '#6b6a64', 'Una nueva: ' + money(E.nueva) + ' por año')}<b>${esc(moneyK(E.nueva))}</b></div>` : `<div class="nota">Pon el precio de una nueva en ⚙️ Datos de costos para comparar.</div>`);
+  const cmp = `<div class="cmp"><span>Mantenerla</span>${svgCmp(E.mantener, max, 'var(--color-text-2)', 'Mantenerla: ' + money(E.mantener) + ' por año')}<b>${esc(moneyK(E.mantener))}</b></div>`
+    + (E.nueva != null ? `<div class="cmp"><span>Una nueva</span>${svgCmp(E.nueva, max, 'var(--color-border-strong)', 'Una nueva: ' + money(E.nueva) + ' por año')}<b>${esc(moneyK(E.nueva))}</b></div>` : `<div class="nota">Pon el precio de una nueva en ⚙️ Datos de costos para comparar.</div>`);
   return `<div class="card eq" data-eq="${esc(E.key)}" style="border-left:4px solid ${s.c}">
     <div class="eqh"><b>${esc(E.nombre)}</b><span class="sem">${s.i} ${esc(s.t)}</span></div>
     <div class="cs">${E.paradas} ${E.paradas === 1 ? 'parada' : 'paradas'} · ${esc(Math.round(E.minParo / 60))} h de paro · ${E.ots.length} trabajo${E.ots.length === 1 ? '' : 's'}${per.parcial ? ' · proyectado a 12 meses' : ''}</div>
@@ -724,9 +729,9 @@ function vistaMes(desde6, hasta) {
   let sv = `<svg class="ch" viewBox="0 0 ${W} ${top.length * 40 + 4}" role="img" aria-label="Equipos que más cuestan">`;
   top.forEach((e, i) => {
     const y = i * 40; let x = 0;
-    sv += `<text x="0" y="${y + 12}" fill="#F1F5F9" font-size="12">${esc(e.nombre.length > 44 ? e.nombre.slice(0, 43) + '…' : e.nombre)}</text>`;
+    sv += `<text x="0" y="${y + 12}" style="fill:var(--color-text)" font-size="12">${esc(e.nombre.length > 44 ? e.nombre.slice(0, 43) + '…' : e.nombre)}</text>`;
     COMP.forEach(cp => { const v = e.c[cp.k]; if (!(v > 0)) return; const w = v / maxE * (W - 50); sv += `<rect x="${x.toFixed(1)}" y="${y + 17}" width="${Math.max(0.5, w - 1.5).toFixed(1)}" height="14" rx="3" fill="${cp.c}" data-tip="${esc(e.nombre + ' · ' + cp.n + ': ' + money(v))}"/>`; x += w; });
-    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" fill="#C3CCD8" font-size="11">${esc(corto(e.real))}</text>`;
+    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" style="fill:var(--color-text-2)" font-size="11">${esc(corto(e.real))}</text>`;
   });
   sv += '</svg>';
   const colsEq = top.map(e => ({ label: e.nombre, tip: e.nombre, c: e.c }));
@@ -809,9 +814,9 @@ function vistaNave(per) {
   let sv = `<svg class="ch" viewBox="0 0 ${W} ${fil.length * 40 + 4}" role="img" aria-label="Costo de mantenimiento por nave">`;
   fil.forEach((f, i) => {
     const y = i * 40; let x = 0;
-    sv += `<text x="0" y="${y + 12}" fill="${f.key === act && act ? '#F59E0B' : '#F1F5F9'}" font-size="12" font-weight="${f.key === act && act ? 700 : 400}">${esc(f.nombre + (f.inactiva ? ' (inactiva)' : '') + ' · ' + f.R.ots.length + ' trabajos')}</text>`;
+    sv += `<text x="0" y="${y + 12}" style="fill:${f.key === act && act ? 'var(--color-accent-text)' : 'var(--color-text)'}" font-size="12" font-weight="${f.key === act && act ? 700 : 400}">${esc(f.nombre + (f.inactiva ? ' (inactiva)' : '') + ' · ' + f.R.ots.length + ' trabajos')}</text>`;
     COMP.forEach(cp => { const v = f.R.total[cp.k]; if (!(v > 0)) return; const w = v / maxN * (W - 50); sv += `<rect x="${x.toFixed(1)}" y="${y + 17}" width="${Math.max(0.5, w - 1.5).toFixed(1)}" height="14" rx="3" fill="${cp.c}" data-tip="${esc(f.nombre + ' · ' + cp.n + ': ' + money(v))}"/>`; x += w; });
-    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" fill="#C3CCD8" font-size="11">${esc(corto(f.R.totalN))}</text>`;
+    sv += `<text x="${(x + 5).toFixed(1)}" y="${y + 28}" style="fill:var(--color-text-2)" font-size="11">${esc(corto(f.R.totalN))}</text>`;
   });
   sv += '</svg>';
   const cols = fil.map(f => ({ label: f.nombre, tip: f.nombre, c: f.R.total }));

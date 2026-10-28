@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Reportar Falla"/>
@@ -15,6 +17,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
        ROL OPERADOR (29 sep 2026) — página NUEVA e INDEPENDIENTE.
@@ -36,16 +41,16 @@
        planta — igual estilo visual que el resto de la app.
        ══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg: #0F1923; --surface: #1A2535; --card: #202F42;
-      --accent: #F59E0B; --green: #10B981; --red: #EF4444;
-      --blue: #818CF8; --orange: #F97316;
-      --text: #F1F5F9; --muted: #94A3B8; --border: #2D3F55;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface);
+      --accent: var(--color-accent); --green: var(--color-success); --red: var(--color-danger);
+      --blue: var(--color-primary); --orange: var(--color-warn);
+      --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; }
-    #header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    #header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--accent); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; }
     #header h1 { font-size: 16px; font-weight: 800; }
-    #header small { font-size: 10px; color: var(--accent); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
+    #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
     #content { padding: 14px 14px 40px; }
     .screen { display: none; }
@@ -54,31 +59,31 @@
     .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
     .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
     .field { margin-bottom: 13px; }
-    label { font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
-    input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
+    label { font-size: 10px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
     textarea { resize: vertical; min-height: 90px; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
     .btn:active { opacity: .8; }
-    .btn-primary { background: var(--accent); color: #0F1923; }
+    .btn-primary { background: var(--color-primary); color: var(--color-on-primary); }
     .btn-secondary { background: var(--border); color: var(--text); }
     .btn-danger { background: var(--red); color: #fff; }
     .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto; }
     .btn[disabled] { opacity: .5; cursor: default; }
     .tag { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
-    .tag-prioridad-alta { background: #d03b3b22; color: #ff8a8a; border: 1px solid #d03b3b44; }
-    .tag-prioridad-media { background: #F59E0B22; color: var(--accent); border: 1px solid #F59E0B44; }
-    .tag-prioridad-baja { background: #199e7022; color: #35d0b0; border: 1px solid #199e7044; }
+    .tag-prioridad-alta { background: #d03b3b22; color: var(--color-danger-text); border: 1px solid #d03b3b44; }
+    .tag-prioridad-media { background: #F59E0B22; color: var(--color-accent-text); border: 1px solid #F59E0B44; }
+    .tag-prioridad-baja { background: #199e7022; color: var(--color-success-text); border: 1px solid #199e7044; }
     .toggle-row { display: flex; gap: 6px; }
     .toggle-btn { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-    .toggle-btn.sel-alta { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
-    .toggle-btn.sel-media { border-color: var(--accent); background: #F59E0B18; color: var(--accent); }
-    .toggle-btn.sel-baja { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .toggle-btn.sel-alta { border-color: var(--red); background: #EF444418; color: var(--color-danger-text); }
+    .toggle-btn.sel-media { border-color: var(--accent); background: #F59E0B18; color: var(--color-accent-text); }
+    .toggle-btn.sel-baja { border-color: var(--green); background: #10B98118; color: var(--color-success-text); }
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 20px; font-size: 14px; font-weight: 600; max-width: 340px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
     #toast.warn { background: var(--orange); }
-    #loading { position: fixed; inset: 0; background: #0F1923cc; display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading { position: fixed; inset: 0; background: var(--color-scrim); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
     #loading.show { display: flex; }
     .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -95,32 +100,32 @@
     .exito-wrap .emoji { font-size: 56px; display: block; margin-bottom: 14px; }
     .exito-wrap h2 { font-size: 19px; margin-bottom: 8px; }
     .exito-wrap p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 4px; }
-    .exito-wrap .folio { font-size: 22px; font-weight: 800; color: var(--accent); margin: 14px 0; }
+    .exito-wrap .folio { font-size: 22px; font-weight: 800; color: var(--color-accent-text); margin: 14px 0; }
     /* estado de los reportes (1 oct 2026) */
-    .toggle-btn.sel-si { border-color: var(--red); background: #EF444418; color: #ff8a8a; }
-    .toggle-btn.sel-no { border-color: var(--green); background: #10B98118; color: var(--green); }
+    .toggle-btn.sel-si { border-color: var(--red); background: #EF444418; color: var(--color-danger-text); }
+    .toggle-btn.sel-no { border-color: var(--green); background: #10B98118; color: var(--color-success-text); }
     .rep-row { background: var(--card); border-radius: 10px; padding: 12px 13px; margin-bottom: 10px; border-left: 4px solid var(--border); }
     .rep-row.pendiente { border-left-color: var(--red); }
     .rep-row.en_atencion { border-left-color: var(--accent); }
     .rep-row.completada { border-left-color: var(--green); }
     .rep-estado { font-size: 12.5px; font-weight: 700; margin-top: 6px; }
-    .rep-estado.pendiente { color: #ff8a8a; } .rep-estado.en_atencion { color: var(--accent); } .rep-estado.completada { color: var(--green); }
-    .rep-sol { font-size: 12px; color: #35d0b0; margin-top: 4px; line-height: 1.5; }
+    .rep-estado.pendiente { color: var(--color-danger-text); } .rep-estado.en_atencion { color: var(--color-accent-text); } .rep-estado.completada { color: var(--color-success-text); }
+    .rep-sol { font-size: 12px; color: var(--color-success-text); margin-top: 4px; line-height: 1.5; }
     .seg-dia { display: flex; gap: 6px; margin-bottom: 10px; }
     .seg-dia button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 600; font-size: 12.5px; cursor: pointer; }
-    .seg-dia button.on { border-color: var(--accent); color: var(--accent); background: #F59E0B18; }
+    .seg-dia button.on { border-color: var(--accent); color: var(--color-accent-text); background: #F59E0B18; }
     /* (20 oct 2026) Falla (se atiende ya) o Proyecto / mejora (se planifica) */
     .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .tipo-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 11px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; text-align: left; cursor: pointer; min-height: 88px; }
     .tipo-btn b { font-size: 14px; line-height: 1.25; }
     .tipo-btn span { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
     .tipo-btn.sel-falla { border-color: var(--red); background: #EF444418; }
-    .tipo-btn.sel-proyecto { border-color: #A78BFA; background: #A78BFA18; }
+    .tipo-btn.sel-proyecto { border-color: var(--color-purple); background: #A78BFA18; }
     #rf-tipo-field.falta .tipo-btn { border-color: var(--orange); }
-    .rep-row.proyecto { border-left-color: #A78BFA; }
-    .rep-estado.proyecto { color: #C4B5FD; }
-    .tag-tipo-falla { background: #EF444422; color: #ff8a8a; border: 1px solid #EF444444; }
-    .tag-tipo-proyecto { background: #A78BFA22; color: #C4B5FD; border: 1px solid #A78BFA44; }
+    .rep-row.proyecto { border-left-color: var(--color-purple); }
+    .rep-estado.proyecto { color: var(--color-purple-text); }
+    .tag-tipo-falla { background: #EF444422; color: var(--color-danger-text); border: 1px solid #EF444444; }
+    .tag-tipo-proyecto { background: #A78BFA22; color: var(--color-purple-text); border: 1px solid #A78BFA44; }
   </style>
 </head>
 <body>
@@ -133,7 +138,7 @@
     <small id="header-sub">2026 · Cargando...</small>
     <div id="nave-rep" style="margin-top:4px;font-size:11px;display:flex;"></div>
   </div>
-  <div id="sp-status" title="Estado de conexión">⚙️</div>
+  <div style="display:flex;align-items:center;gap:10px"><a href="guia.html" title="Guía de uso" style="color:inherit;text-decoration:none;font-size:13px;font-weight:700">📘 Guía</a><div id="sp-status" title="Estado de conexión">⚙️</div></div>
 </div>
 
 <div id="content">
@@ -266,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const avisoSesion = (texto) => {
     document.getElementById('header-sub').textContent = '2026 · Sin sesión';
     document.getElementById('lista-equipos').innerHTML = `<div class="empty"><span class="emoji">⚠️</span><p>${texto}</p>
-      <a class="btn btn-primary" style="display:block;margin-top:12px;text-decoration:none;text-align:center;background:#F59E0B;color:#0F1923;font-weight:800;padding:13px;border-radius:10px;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
+      <a class="btn btn-primary" style="display:block;margin-top:12px;text-decoration:none;text-align:center;background:var(--color-primary);color:var(--color-on-primary);font-weight:800;padding:13px;border-radius:10px;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
       <button class="btn btn-secondary" style="margin-top:8px;" onclick="location.reload()">🔄 Reintentar</button>
       <p style="margin-top:12px;font-size:12.5px;">Sin usuario también puedes reportar escaneando el código QR pegado en la máquina.</p></div>`;
   };
@@ -466,10 +471,9 @@ async function enviarReporte() {
     // (5 oct 2026) No se espera al servidor: sin señal la promesa no termina
     // hasta reconectar y el operador quedaba en "Enviando…" y reenviaba
     // (reportes duplicados). Firestore lo guarda en el celular y lo sube solo.
-    // (25 oct 2026, Etapa 2) Nave del equipo (campo nuevo). El rol Operador NO
-    // lo manda: la regla de /ots solo le acepta una lista cerrada de campos
-    // (ver propuesta de reglas); su reporte se ubica por el equipo.
-    const plantaEq = !userHasRole('OPERADOR') && typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(equipoSeleccionado) : '';
+    // (25 oct 2026, Etapa 2) Nave del equipo (campo nuevo). (26 oct 2026) La
+    // regla reporteValido ya acepta 'planta', así que el Operador también la manda.
+    const plantaEq = typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(equipoSeleccionado) : '';
     db.collection('ots').doc().set({
       origen: 'operador',
       estado: 'pendiente',

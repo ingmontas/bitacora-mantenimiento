@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0B2545"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Bitácora"/>
@@ -17,39 +19,39 @@
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
+  <!-- (28 oct 2026) Criticidad A/B/C y Seguridad (LOTO / permiso de trabajo) -->
+  <script src="criticidad.js"></script>
+  <script src="seguridad.js"></script>
   <!-- (7 oct 2026) Diseño claro "CMMS" aprobado (fuente Barlow; si no carga, usa la del sistema). -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
   <style>
     /* (7 oct 2026) Paleta clara aprobada (mockup "Registro de trabajo"):
        fondo #F4F6FA, tarjetas blancas, barra superior azul marino, azul
        #2563EB como color principal. Los nombres de variables se conservan
        para no tocar cada pantalla; --accent ahora es el azul principal. */
     :root {
-      --bg: #F4F6FA; --surface: #F1F4F9; --card: #FFFFFF; --navy: #0B2545;
-      --accent: #2563EB; --accent-dark: #1E40AF; --chip: #E8EFFD;
-      --green: #16A34A; --green-txt: #15803D; --red: #DC2626; --red-txt: #B91C1C;
-      --blue: #2563EB; --purple: #7C3AED; --orange: #C2410C;
-      --text: #0B1B2E; --text2: #24344B; --muted: #5B6B82; --muted2: #7A8AA1; --border: #DCE3EC; --line: #F1F4F9;
+      --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface); --navy: var(--color-header-bg);
+      --accent: var(--color-primary); --accent-dark: var(--color-primary-strong); --chip: var(--color-primary-soft);
+      --green: var(--color-success); --green-txt: var(--color-success-text); --red: var(--color-danger); --red-txt: var(--color-danger-text);
+      --blue: var(--color-primary); --purple: var(--color-purple); --orange: var(--color-warn);
+      --text: var(--color-text); --text2: var(--color-text-2); --muted: var(--color-muted); --muted2: var(--color-muted-2); --border: var(--color-border); --line: var(--color-surface-2);
       --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
       --nav-h: 58px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html { background: var(--bg); }
-    body { background: var(--bg); color: var(--text); font-family: 'Barlow', -apple-system, 'Inter', system-ui, sans-serif; font-size: 15px; max-width: 480px; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
-    /* Barra de páginas que pinta firebase-init.js (estilos en línea oscuros): se pasa a azul marino. */
-    #fbMiniNav { background: var(--navy) !important; border-bottom: 1px solid #16345F !important; }
-    #fbMiniNav a { color: #A9C1E8 !important; background: transparent !important; }
-    #fbMiniNav a[href="bitacora.html"] { color: #fff !important; background: #ffffff1f !important; }
-    #fbMiniNav span, #fbMiniNav button { color: #A9C1E8 !important; border-color: #2B4A75 !important; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 15px; max-width: 480px; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
+    /* (26 oct 2026, Etapa 4) La barra de páginas (#fbMiniNav) toma sus colores de tema.css. */
     /* (7 oct 2026) Ya no es sticky: la barra de páginas (#fbMiniNav) también lo es y se montaban una sobre otra. */
-    #header { background: var(--navy); color: #fff; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 200; }
+    #header { background: var(--navy); color: var(--color-header-text); border-bottom: 2px solid var(--color-accent); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 200; }
     #header h1 { font-size: 17px; font-weight: 700; }
-    #header small { font-size: 11px; color: #A9C1E8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: block; margin-top: 1px; }
+    #header small { font-size: 11px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
-    #nav { display: flex; background: #fff; border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; box-shadow: 0 -2px 10px rgba(11,37,69,.06); }
+    #nav { display: flex; background: var(--color-surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; box-shadow: 0 -2px 10px rgba(11,37,69,.06); }
     .nav-btn { flex: 1; min-height: 56px; padding: 8px 4px 9px; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 10px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
-    .nav-btn.active { color: var(--accent); }
+    .nav-btn.active { color: var(--color-primary-text); }
     .nav-btn span { font-size: 21px; }
     #content { padding: 12px 12px 84px; }
     .screen { display: none; }
@@ -59,7 +61,7 @@
     .card-sub { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
     .field { margin-bottom: 12px; }
     label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; display: block; margin-bottom: 5px; }
-    input, select, textarea { width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 15px; outline: none; font-family: inherit; appearance: none; -webkit-appearance: none; min-height: 44px; }
+    input, select, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 15px; outline: none; font-family: inherit; appearance: none; -webkit-appearance: none; min-height: 44px; }
     select { padding-right: 30px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A8AA1' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
     input::placeholder, textarea::placeholder { color: var(--muted2); }
     textarea { resize: vertical; min-height: 70px; line-height: 1.4; }
@@ -71,40 +73,40 @@
     .btn { width: 100%; min-height: 44px; padding: 12px; border-radius: 10px; border: none; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s, background .15s; }
     .btn:active { opacity: .85; }
     .btn-primary { background: var(--accent); color: #fff; }
-    .btn-secondary { background: #fff; color: var(--text2); border: 1px solid var(--border); }
+    .btn-secondary { background: var(--color-surface); color: var(--text2); border: 1px solid var(--border); }
     .btn-danger { background: var(--red); color: #fff; }
     .btn-sm { padding: 8px 14px; font-size: 13.5px; border-radius: 10px; width: auto; }
     .btn-row { display: flex; gap: 8px; }
     .tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
     /* (7 oct 2026) Colores de tipo de trabajo del diseño aprobado:
        Correctivo rojo, Preventivo verde, Proyecto morado (fondos claros). */
-    .tag-preventivo { background: #DCFCE7; color: #166534; }
-    .tag-correctivo { background: #FEE2E2; color: #991B1B; }
-    .tag-proyecto { background: #EDE9FE; color: #5B21B6; }
+    .tag-preventivo { background: var(--color-success-soft); color: var(--color-success-text); }
+    .tag-correctivo { background: var(--color-danger-soft); color: var(--color-danger-text); }
+    .tag-proyecto { background: var(--color-purple-soft); color: var(--color-purple-text); }
     /* (20 oct 2026) Predictivo = trabajo que sale de un checklist (cian) */
-    .tag-predictivo { background: #CFFAFE; color: #155E75; }
-    .tag-revision { background: #E0F2FE; color: #075985; }
-    .tag-local { background: #FEF3C7; color: #92400E; }
+    .tag-predictivo { background: var(--color-info-soft); color: var(--color-info-text); }
+    .tag-revision { background: var(--color-info-soft); color: var(--color-info-text); }
+    .tag-local { background: var(--color-accent-soft); color: var(--color-accent-text); }
     .tag-synced { background: var(--surface); color: var(--muted); }
-    .tag-paro { background: #FEE2E2; color: #991B1B; }
-    .tag-prioridad-alta { background: #FEE2E2; color: #991B1B; }
+    .tag-paro { background: var(--color-danger-soft); color: var(--color-danger-text); }
+    .tag-prioridad-alta { background: var(--color-danger-soft); color: var(--color-danger-text); }
     .tec-grid { display: flex; flex-wrap: wrap; gap: 7px; }
     /* Segmentados (antes botones sueltos) */
     .toggle-row { display: flex; gap: 3px; background: var(--surface); border-radius: 10px; padding: 3px; }
     .toggle-btn { flex: 1; min-width: 0; min-height: 44px; padding: 0 8px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
     .toggle-btn.sel { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(11,37,69,.15); }
-    #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: #DC2626; }
-    #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: #16A34A; }
-    #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: #7C3AED; }
-    #tipo-mto-group .toggle-btn.sel[data-val="Predictivo"] { background: #0891B2; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: var(--color-danger); }
+    #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: var(--color-success); }
+    #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: var(--color-purple); }
+    #tipo-mto-group .toggle-btn.sel[data-val="Predictivo"] { background: var(--color-info); }
     #tipo-mto-group .toggle-btn { padding: 0 3px; font-size: 13px; } /* 4 tipos en 390 px */
     #tipo-mto-group .toggle-btn:disabled { opacity: .35; cursor: default; }
-    #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: #DC2626; }
+    #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: var(--color-danger); }
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 18px; font-size: 14.5px; font-weight: 600; max-width: 360px; text-align: center; box-shadow: 0 6px 24px rgba(11,37,69,.25); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
     #toast.warn { background: var(--orange); }
-    #loading { position: fixed; inset: 0; background: rgba(244,246,250,.85); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
+    #loading { position: fixed; inset: 0; background: var(--color-scrim); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 12px; }
     #loading.show { display: flex; }
     .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -112,7 +114,7 @@
     .hist-item.preventivo { border-left-color: var(--green); }
     .hist-item.correctivo { border-left-color: var(--red); }
     .hist-item.proyecto { border-left-color: var(--purple); }
-    .hist-item.predictivo { border-left-color: #0891B2; }
+    .hist-item.predictivo { border-left-color: var(--color-info); }
     .hist-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7px; gap: 8px; }
     .hist-header > div:first-child { min-width: 0; }
     .hist-title { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
@@ -127,17 +129,17 @@
     .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 700; margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
     .bar-wrap { margin-bottom: 10px; }
     .bar-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px; }
-    .bar-track { background: #EEF2F7; border-radius: 4px; height: 8px; }
+    .bar-track { background: var(--color-surface-3); border-radius: 4px; height: 8px; }
     .bar-fill { background: var(--accent); border-radius: 4px; height: 8px; transition: width .6s; }
-    .info-box { background: #EFF4FF; border: 1px solid #C7D7FB; border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 13.5px; color: var(--text2); line-height: 1.6; }
+    .info-box { background: var(--color-primary-soft); border: 1px solid var(--color-primary); border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 13.5px; color: var(--text2); line-height: 1.6; }
     .code-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
     .code-chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--accent-dark); }
-    .sync-banner { background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .sync-banner p { font-size: 13.5px; color: #92400E; font-weight: 700; }
+    .sync-banner { background: var(--color-accent-soft); border: 1px solid var(--color-accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sync-banner p { font-size: 13.5px; color: var(--color-accent-text); font-weight: 700; }
     .sync-banner small { font-size: 12px; color: var(--muted); display: block; }
-    .sync-banner.sync-err { background: #FEF2F2; border-color: #FCA5A5; }
+    .sync-banner.sync-err { background: var(--color-danger-soft); border-color: var(--color-danger); }
     .sync-banner.sync-err p { color: var(--red-txt); }
-    .sync-banner.sync-edit { background: var(--chip); border-color: #BFD0F8; }
+    .sync-banner.sync-edit { background: var(--chip); border-color: var(--color-primary); }
     .sync-banner.sync-edit p { color: var(--accent-dark); }
     #search-box { margin-bottom: 10px; position: relative; }
     #search-box input { padding-left: 36px; }
@@ -149,13 +151,13 @@
     #offline-bar.show { display: block; }
     /* SP METHOD TABS */
     .method-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .method-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
+    .method-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--color-surface); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
     .method-tab.active { border-color: var(--accent); background: var(--chip); color: var(--accent-dark); }
     .method-panel { display: none; }
     .method-panel.active { display: block; }
     /* ══ Resumen del técnico ("Mi semana") — 1 oct 2026 ══ */
     .ms-weeknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
-    .ms-weeknav button { background: #fff; border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 44px; height: 44px; font-size: 20px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+    .ms-weeknav button { background: var(--color-surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 44px; height: 44px; font-size: 20px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
     .ms-weeknav button:disabled { opacity: .35; cursor: default; }
     .ms-weeknav .lbl { text-align: center; font-size: 14px; font-weight: 700; line-height: 1.3; }
     .ms-weeknav .lbl small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
@@ -165,8 +167,8 @@
     .ms-kpis .stat-foot { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
     .ms-day { display: grid; grid-template-columns: 46px 1fr 70px; gap: 8px; align-items: center; font-size: 12.5px; margin-bottom: 8px; }
     .ms-day .d { font-weight: 700; color: var(--muted); }
-    .ms-day .d.hoy { color: var(--accent); }
-    .ms-day .track { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: #EEF2F7; }
+    .ms-day .d.hoy { color: var(--color-primary-text); }
+    .ms-day .track { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: var(--color-surface-3); }
     .ms-day .w { background: var(--green); }
     .ms-day .i { background: repeating-linear-gradient(45deg, #DC262666 0 4px, #DC262626 4px 8px); }
     .ms-day .x { background: var(--purple); }
@@ -183,13 +185,13 @@
     .ms-metric .name { font-size: 13.5px; font-weight: 600; min-width: 0; }
     .ms-metric .name small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 2px; }
     .ms-spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
-    .ms-spark i { flex: 1; background: #C9D3E1; border-radius: 2px 2px 0 0; min-height: 2px; }
+    .ms-spark i { flex: 1; background: var(--color-border-strong); border-radius: 2px 2px 0 0; min-height: 2px; }
     .ms-spark i.cur { background: var(--accent); }
     .ms-delta { font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; }
     .ms-delta.bien { color: var(--green-txt); } .ms-delta.mal { color: var(--red-txt); } .ms-delta.neutro { color: var(--muted); }
     .ms-insight { background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; margin-bottom: 8px; color: var(--text2); }
-    .ms-ot { background: #F7F9FC; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid var(--border); font-size: 13px; }
-    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--purple); } .ms-ot.predictivo { border-left-color: #0891B2; }
+    .ms-ot { background: var(--color-surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid var(--border); font-size: 13px; }
+    .ms-ot.correctivo { border-left-color: var(--red); } .ms-ot.preventivo { border-left-color: var(--green); } .ms-ot.proyecto { border-left-color: var(--purple); } .ms-ot.predictivo { border-left-color: var(--color-info); }
     .ms-ot .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; margin-bottom: 3px; }
     .ms-ot .meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
     .ms-ot .sol { color: var(--green-txt); font-size: 12px; margin-top: 3px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -199,7 +201,7 @@
     .nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 6px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; padding: 0 5px; text-align: center; }
     .av-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
     .av-card.pendiente { border-left-color: var(--red); }
-    .av-card.pendiente.parada { box-shadow: 0 0 0 1px #FCA5A5; }
+    .av-card.pendiente.parada { box-shadow: 0 0 0 1px var(--color-danger); }
     .av-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
     .av-top > div:first-child { min-width: 0; }
     .av-eq { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
@@ -208,17 +210,17 @@
     .av-timer { text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
     .av-timer b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
     .av-timer.tarde b { color: var(--red-txt); }
-    .av-dup { display: inline-block; margin-top: 5px; background: #FFEDD5; color: #9A3412; border: 1px solid #FDBA74; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
+    .av-dup { display: inline-block; margin-top: 5px; background: var(--color-warn-soft); color: var(--color-warn-text); border: 1px solid var(--color-warn); border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
     /* (23 oct 2026) Trabajos asignados (OTs planificadas) mostrados como avisos */
     .av-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text2); margin: 6px 0 8px; }
     .av-sec small { font-size: 12px; font-weight: 600; color: var(--muted); }
-    .av-card.asig { border-left-color: #0891B2; }
+    .av-card.asig { border-left-color: var(--color-info); }
     .av-card.asig.proyecto { border-left-color: var(--purple); }
-    .av-card.asig.atrasada { border-left-color: var(--red); box-shadow: 0 0 0 1px #FCA5A5; }
+    .av-card.asig.atrasada { border-left-color: var(--red); box-shadow: 0 0 0 1px var(--color-danger); }
     .av-timer.asig b { font-size: 14px; }
-    .av-timer.asig.hoy b { color: var(--orange); }
+    .av-timer.asig.hoy b { color: var(--color-warn-text); }
     .av-timer.asig.tarde b { color: var(--red-txt); }
-    .av-rech { background: #FEF2F2; border: 1px solid #FECACA; color: var(--red-txt); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; margin: 6px 0 8px; overflow-wrap: anywhere; }
+    .av-rech { background: var(--color-danger-soft); border: 1px solid var(--color-danger); color: var(--red-txt); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; margin: 6px 0 8px; overflow-wrap: anywhere; }
     .av-sep { height: 1px; background: var(--border); margin: 14px 0 12px; }
     .asig-grupo { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; }
     .asig-grupo .g { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13.5px; margin-bottom: 4px; overflow-wrap: anywhere; }
@@ -227,14 +229,14 @@
     .asig-fila { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 5px 0 5px 8px; border-top: 1px solid var(--line); border-left: 3px solid transparent; line-height: 1.4; }
     .asig-fila > span:first-child { min-width: 0; overflow-wrap: anywhere; }
     .asig-fila .c { white-space: nowrap; color: var(--muted); font-weight: 700; }
-    .asig-fila.hoy .c { color: var(--orange); }
-    .asig-fila.tarde { border-left-color: var(--red); background: #FEF2F2; }
+    .asig-fila.hoy .c { color: var(--color-warn-text); }
+    .asig-fila.tarde { border-left-color: var(--red); background: var(--color-danger-soft); }
     .asig-fila.tarde .c { color: var(--red-txt); }
     .anu-item { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--muted2); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
     .anu-item b { font-size: 13.5px; }
     .anu-item .m { color: var(--muted); }
     /* (23 oct 2026) Ventana para pedir el motivo al anular (antes window.prompt) */
-    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(11,27,46,.55); z-index: 700; align-items: center; justify-content: center; padding: 16px; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: var(--color-overlay); z-index: 700; align-items: center; justify-content: center; padding: 16px; }
     .modal-bg.open { display: flex; }
     .modal-bg .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; max-width: 440px; width: 100%; max-height: 85vh; overflow-y: auto; }
     .modal-bg .modal h3 { font-size: 17px; margin-bottom: 4px; }
@@ -258,7 +260,7 @@
     .eq-sel { height: 50px; border: 2px solid var(--accent); font-size: 17px; font-weight: 700; padding: 0 36px 0 12px; background-position: right 12px center; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); text-overflow: ellipsis; }
     .eq-sel.vacio { color: var(--muted); font-weight: 600; }
     .pills { display: flex; flex-wrap: wrap; gap: 6px; }
-    .pill { position: relative; display: flex; align-items: center; gap: 5px; margin: 0; min-height: 44px; max-width: 100%; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: #F7F9FC; color: var(--text2); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
+    .pill { position: relative; display: flex; align-items: center; gap: 5px; margin: 0; min-height: 44px; max-width: 100%; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--color-surface-2); color: var(--text2); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
     .pill .pk { color: var(--muted2); font-weight: 500; }
     .pill .pv { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
     .pill .pv.vacio { color: var(--muted2); font-weight: 500; }
@@ -276,25 +278,25 @@
     /* (21 oct 2026) El icono del reloj ya no se esconde: en algunos celulares
        (y en computadora) era la única forma de abrir el reloj. */
     .tbox input::-webkit-calendar-picker-indicator { opacity: .55; width: 14px; height: 14px; margin-left: 2px; padding: 0; cursor: pointer; }
-    .tbox .ahora { font-size: 10px; font-weight: 700; color: var(--accent); background: none; border: none; padding: 0; margin-top: 1px; cursor: pointer; letter-spacing: 0; text-transform: none; }
+    .tbox .ahora { font-size: 10px; font-weight: 700; color: var(--color-primary-text); background: none; border: none; padding: 0; margin-top: 1px; cursor: pointer; letter-spacing: 0; text-transform: none; }
     .tbox { height: auto; min-height: 54px; padding: 4px 0; }
     .dur { font-size: 13.5px; color: var(--muted); text-align: center; min-height: 18px; }
     .dur b { color: var(--text); }
     details.mas { border-top: 1px solid var(--line); padding-top: 4px; }
-    details.mas summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--accent); white-space: nowrap; }
+    details.mas summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--color-primary-text); white-space: nowrap; }
     details.mas summary::-webkit-details-marker { display: none; }
     details.mas summary::before { content: '▸'; font-size: 13px; transition: transform .15s; }
     details.mas[open] summary::before { transform: rotate(90deg); }
     details.mas summary small { flex: 1 1 auto; font-weight: 500; color: var(--muted2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
     .mas-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 2px; }
     .mas-body .nf-lbl { margin-bottom: 4px; display: block; }
-    .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+    .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--color-surface); color: var(--muted); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer; }
     .dd-btn[aria-expanded="true"] { border-color: var(--accent); }
     .dd-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
     .dd-btn .chev { flex-shrink: 0; transition: transform .15s; }
     .dd-panel { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
     .dd-panel[hidden] { display: none; }
-    .chk-row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 12px; margin: 0; background: #fff; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
+    .chk-row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 12px; margin: 0; background: var(--color-surface); border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
     .chk-row:last-child { border-bottom: none; }
     .chk-row .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chk-row .n small { font-family: var(--mono); font-size: 11.5px; color: var(--muted2); font-weight: 500; margin-left: 6px; }
@@ -317,9 +319,9 @@
     .rep-item .t span { font-size: 12.5px; color: var(--muted2); }
     .rep-item .t code { font-family: var(--mono); }
     .est { font-size: 11.5px; font-weight: 700; padding: 4px 8px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
-    .est-pendiente { background: #FEF3C7; color: #92400E; }
-    .est-entregado { background: #DCFCE7; color: #166534; }
-    .est-rechazado { background: #FEE2E2; color: #991B1B; }
+    .est-pendiente { background: var(--color-accent-soft); color: var(--color-accent-text); }
+    .est-entregado { background: var(--color-success-soft); color: var(--color-success-text); }
+    .est-rechazado { background: var(--color-danger-soft); color: var(--color-danger-text); }
     .est-nuevo { background: var(--chip); color: var(--accent-dark); }
     .est-otro { background: var(--surface); color: var(--muted); }
     .rep-x { width: 44px; height: 44px; flex-shrink: 0; border: none; background: none; color: var(--muted); border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -327,27 +329,27 @@
     .rep-add input { padding: 0 8px; height: 44px; min-width: 0; }
     .rep-add #rep-codigo { font-family: var(--mono); font-size: 13px; }
     .rep-add #rep-cant { text-align: center; }
-    .btn-add { width: 100%; min-height: 44px; border-radius: 10px; border: 1px dashed var(--accent); background: #EFF4FF; color: var(--accent); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-add { width: 100%; min-height: 44px; border-radius: 10px; border: 1px dashed var(--accent); background: var(--color-primary-soft); color: var(--color-primary-text); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
     .rep-nota { font-size: 12.5px; color: var(--muted); }
-    .aviso-banner { background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .aviso-banner { background: var(--color-danger-soft); border: 1px solid var(--color-danger); border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
     .aviso-banner .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .aviso-banner .k { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #B91C1C; }
-    .aviso-banner .f { font-family: var(--mono); font-size: 12px; color: #B91C1C; overflow-wrap: anywhere; }
-    .aviso-banner .d { font-size: 14px; color: #7F1D1D; line-height: 1.45; overflow-wrap: anywhere; }
-    .aviso-banner .c { align-self: flex-end; background: none; border: none; color: #B91C1C; font-family: inherit; font-weight: 700; font-size: 13.5px; min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; }
+    .aviso-banner .k { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-danger-text); }
+    .aviso-banner .f { font-family: var(--mono); font-size: 12px; color: var(--color-danger-text); overflow-wrap: anywhere; }
+    .aviso-banner .d { font-size: 14px; color: var(--color-danger-text); line-height: 1.45; overflow-wrap: anywhere; }
+    .aviso-banner .c { align-self: flex-end; background: none; border: none; color: var(--color-danger-text); font-family: inherit; font-weight: 700; font-size: 13.5px; min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; }
     /* (20 oct 2026) Registrar en la Bitácora una OT planificada (checklist o proyecto) */
-    .aviso-banner.ot { background: #ECFEFF; border-color: #67E8F9; }
-    .aviso-banner.ot .k, .aviso-banner.ot .f, .aviso-banner.ot .c { color: #0E7490; }
-    .aviso-banner.ot .d { color: #164E63; }
-    .aviso-banner.ot.proy { background: #F5F3FF; border-color: #C4B5FD; }
-    .aviso-banner.ot.proy .k, .aviso-banner.ot.proy .f, .aviso-banner.ot.proy .c { color: #6D28D9; }
-    .aviso-banner.ot.proy .d { color: #4C1D95; }
-    .aviso-banner .d.rech { color: #B91C1C; font-weight: 600; }
+    .aviso-banner.ot { background: var(--color-info-soft); border-color: var(--color-info); }
+    .aviso-banner.ot .k, .aviso-banner.ot .f, .aviso-banner.ot .c { color: var(--color-info-text); }
+    .aviso-banner.ot .d { color: var(--color-info-text); }
+    .aviso-banner.ot.proy { background: var(--color-purple-soft); border-color: var(--color-purple); }
+    .aviso-banner.ot.proy .k, .aviso-banner.ot.proy .f, .aviso-banner.ot.proy .c { color: var(--color-purple-text); }
+    .aviso-banner.ot.proy .d { color: var(--color-purple-text); }
+    .aviso-banner .d.rech { color: var(--color-danger-text); font-weight: 600; }
     .aviso-banner .d.nota { font-size: 12.5px; opacity: .85; }
     #card-equipo.bloqueado .eq-sel, #card-equipo.bloqueado select:disabled { cursor: default; }
-    #card-equipo.bloqueado .eq-sel { border-color: var(--border); background-color: #F7F9FC; }
+    #card-equipo.bloqueado .eq-sel { border-color: var(--border); background-color: var(--color-surface-2); }
     .eq-lock { font-size: 12px; color: var(--muted); }
-    .mt-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; border-left: 4px solid #0891B2; }
+    .mt-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; border-left: 4px solid var(--color-info); }
     .mt-item.proyecto { border-left-color: var(--purple); }
     .mt-item.rechazada { border-left-color: var(--red); }
     .mt-item .t { flex: 1; min-width: 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -434,6 +436,13 @@
       </div>
       <input type="text" id="f-tipo-maq" placeholder="Escribe el tipo de máquina…" style="display:none" aria-label="Tipo de máquina (texto libre)"/>
       <div class="eq-lock" id="eq-lock" style="display:none">🔒 Equipo fijo: es el de la OT planificada.</div>
+      <div class="eq-lock" id="eq-crit" style="display:none"></div>
+    </section>
+
+    <!-- ── SEGURIDAD (28 oct 2026): LOTO y permiso de trabajo del trabajo actual ── -->
+    <section class="nf-card" id="card-seg" style="display:none" aria-live="polite">
+      <div class="nf-row"><span class="nf-lbl">🦺 Seguridad (LOTO)</span><span id="seg-crit"></span></div>
+      <div id="seg-body"></div>
     </section>
 
     <!-- ── TRABAJO ── -->
@@ -615,10 +624,10 @@
     <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 30 días</div>
     <div id="fUbicRes" style="margin:0 0 10px;"></div>
     <div class="stat-grid">
-      <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
-      <div class="stat-box"><div class="stat-num" style="color:var(--red)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
-      <div class="stat-box"><div class="stat-num" style="color:var(--green)" id="s-preventivo">—</div><div class="stat-lbl">Preventivos</div></div>
-      <div class="stat-box"><div class="stat-num" style="color:var(--orange)" id="s-paro">—</div><div class="stat-lbl">Paros Planta</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--color-primary-text)" id="s-total">—</div><div class="stat-lbl">Total</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--color-danger-text)" id="s-correctivo">—</div><div class="stat-lbl">Correctivos</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--color-success-text)" id="s-preventivo">—</div><div class="stat-lbl">Preventivos</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--color-warn-text)" id="s-paro">—</div><div class="stat-lbl">Paros Planta</div></div>
     </div>
     <div class="card" id="lineas-card" style="display:none">
       <div style="font-weight:700;margin-bottom:12px">🏭 Top Áreas</div>
@@ -636,6 +645,8 @@
     <div class="card-title" style="margin-bottom:4px">🚨 Avisos de producción</div>
     <div class="card-sub">Paradas y fallas reportadas desde planta. Se actualiza solo.</div>
     <button class="btn btn-secondary" id="avisos-activar" style="margin-bottom:12px;" onclick="activarAvisos()">🔔 Activar sonido y notificaciones en este celular</button>
+    <!-- (28 oct 2026) Permisos de trabajo: por autorizar (Supervisor+) y mis bloqueos abiertos -->
+    <div id="seg-avisos"></div>
     <!-- (23 oct 2026) OTs planificadas para mí (checklist / proyectos), como avisos -->
     <div id="asig-mios"></div>
     <div id="avisos-lista"></div>
@@ -690,7 +701,7 @@
     </div>
 
     <div class="card" style="border-color:var(--red)">
-      <div style="font-weight:700;margin-bottom:8px;color:var(--red)">🗑 Limpiar caché local del navegador</div>
+      <div style="font-weight:700;margin-bottom:8px;color:var(--color-danger-text)">🗑 Limpiar caché local del navegador</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Borra la copia local (caché) que este celular guarda para funcionar sin señal. <strong>No borra nada en la nube</strong> — es solo para este dispositivo, por si el caché se corrompe.</div>
       <button class="btn btn-danger" onclick="clearLocal()">Limpiar caché de este celular</button>
     </div>
@@ -834,6 +845,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // (20 oct 2026) Trabajos planificados del técnico y apertura desde
     // Checklist (bitacora.html#ot=<id>) en modo "registrar esta OT".
     escucharMisTrabajos();
+    // (28 oct 2026) Permisos de trabajo: repintar avisos, número rojo y el paso de seguridad del formulario.
+    if (typeof fbSegEscuchar === 'function') { fbSegEscuchar(); fbSegConfig(); }
+    if (typeof fbSegOnCambio === 'function') fbSegOnCambio(() => {
+      actualizarBadgeAvisos();
+      if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos();
+      renderSegForm();
+    });
     abrirOtDesdeHash();
     window.addEventListener('hashchange', abrirOtDesdeHash);
     const box = document.getElementById('fb-status-box');
@@ -1553,6 +1571,7 @@ function setModoForm(modo, aviso) {
   card.classList.toggle('aviso', modo === 'aviso' || modo === 'ot');
   card.classList.remove('falta');
   document.getElementById('rep-titulo').textContent = (modo === 'aviso' || modo === 'ot') ? '¿Repuestos? *' : 'Repuestos';
+  renderSegForm();
 }
 
 // ══════ OTs PLANIFICADAS → BITÁCORA (20 oct 2026) ══════
@@ -1638,6 +1657,9 @@ async function abrirRegistroOt(o) {
   goTo('nuevo', document.getElementById('nav-nuevo'));
   window.scrollTo(0, 0);
   setTimeout(() => { const s = document.getElementById('f-solucion'); if (s) s.focus(); }, 300);
+  // (28 oct 2026) Antes de empezar una OT planificada: paso de seguridad (si aún no hay permiso).
+  // (Una OT devuelta para corregir ya se trabajó: no se vuelve a preguntar al abrirla.)
+  if (o.estado === 'planificada' && segPuede() && !fbSegPermisoDeOt(o.id, true)) setTimeout(() => segAbrirPasoForm(), 350);
 }
 
 // ── Mis trabajos planificados ──
@@ -1693,7 +1715,7 @@ function renderMisTrabajos() {
   document.getElementById('mis-trabajos-lista').innerHTML = lista.map(o => {
     const proy = esProyectoOt(o), tarde = o.estado === 'planificada' && o.fechaPlanificada && o.fechaPlanificada < hoy;
     return `<div class="mt-item ${proy ? 'proyecto' : ''} ${o.estado === 'rechazada' ? 'rechazada' : ''}">
-      <div class="t"><b>${esc(avEquipo(o).nombre || '—')}</b> <span class="tag tag-${proy ? 'proyecto' : 'predictivo'}">${proy ? 'Proyecto' : 'Predictivo'}</span>
+      <div class="t"><b>${esc(avEquipo(o).nombre || '—')}</b> ${critBadge(critDeAviso(o))} <span class="tag tag-${proy ? 'proyecto' : 'predictivo'}">${proy ? 'Proyecto' : 'Predictivo'}</span>
         <div>${esc(o.descripcionFalla || '')}</div>
         <div class="m ${tarde ? 'tarde' : ''}">${esc(o.folio || '')} · ${o.estado === 'rechazada' ? '⚠️ Devuelta: ' + esc(o.notaRevision || 'corregir') : '📅 para el ' + esc(fmtDdMmB(o.fechaPlanificada)) + (tarde ? ' (atrasada)' : '')}</div></div>
       <button type="button" class="btn btn-primary btn-sm" onclick="abrirRegistroOtId('${esc(o.id)}')">${o.estado === 'rechazada' ? 'Corregir' : 'Registrar'}</button>
@@ -1749,7 +1771,7 @@ function renderAsignadosMios() {
     + lista.map(o => {
       const c = asigCuenta(o), eq = avEquipo(o), rech = o.estado === 'rechazada';
       return `<div class="av-card asig ${esProyectoOt(o) ? 'proyecto' : ''} ${c.cls === 'tarde' ? 'atrasada' : ''}" data-ot="${esc(o.id)}">
-      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')}</div>
+      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')} ${critBadge(critDeAviso(o))}</div>
         <div class="av-meta">${eq.localidad ? '📍 ' + esc(eq.localidad) + ' · ' : ''}${esc(o.folio || '')}</div>
         <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;">${asigTipoBadge(o)}${o.prioridad ? `<span class="tag ${o.prioridad === 'alta' ? 'tag-prioridad-alta' : 'tag-synced'}">Prioridad ${esc(o.prioridad)}</span>` : ''}</div></div>
         <div class="av-timer asig ${c.cls}">📅 Para el ${esc(fmtDdMmB(o.fechaPlanificada) || '—')}<b class="asig-cuenta">${esc(c.txt)}</b></div></div>
@@ -1922,11 +1944,12 @@ function renderEquipoOptions(valorId) {
   if (actual && !lista.includes(actual)) lista.push(actual);
   lista.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
   sel.innerHTML = '<option value="">Seleccionar equipo…</option>'
-    + lista.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}${!f.area && e.localidad ? ' — ' + esc(e.localidad) : ''}</option>`).join('')
+    + lista.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}${!f.area && e.localidad ? ' — ' + esc(e.localidad) : ''}${critSufijo(e)}</option>`).join('')
     + `<option value="${OTRO}">Otro (escribir)…</option>`;
   sel.value = valorId === OTRO ? OTRO : (actual ? actual.id : '');
   sel.classList.toggle('vacio', !sel.value);
   document.getElementById('f-equipo').style.display = sel.value === OTRO ? '' : 'none';
+  renderEqCrit();
 }
 // Muestra en cada pastilla (Planta / Área / Línea / Tipo) lo que está elegido.
 function actualizarPills() {
@@ -1943,6 +1966,8 @@ function actualizarPills() {
   pon('f-linea', 'pv-area');
   pon('f-sublinea', 'pv-linea');
   pon('f-tipo-sel', 'pv-tipo', (document.getElementById('f-tipo-maq') || {}).value);
+  renderEqCrit();
+  renderSegForm(); // (28 oct 2026) el paso de seguridad depende del equipo y del tipo
 }
 // nivel: 0 planta, 1 área, 2 línea, 3 tipo. Repinta los niveles de abajo
 // conservando lo elegido si todavía coincide; lo que ya no coincide se limpia.
@@ -2208,6 +2233,7 @@ function goTo(screen, btn) {
 function selectToggle(groupId, btn) {
   document.querySelectorAll('#' + groupId + ' .toggle-btn').forEach(b => b.classList.remove('sel'));
   btn.classList.add('sel');
+  if (groupId === 'tipo-mto-group') renderSegForm(); // (28 oct 2026) LOTO según el tipo de trabajo
 }
 function getToggle(groupId) {
   const sel = document.querySelector('#' + groupId + ' .toggle-btn.sel');
@@ -2383,6 +2409,12 @@ async function submitForm() {
     if (pendiente && !agregarRepuesto()) return;
     if (!_repItems.length) { showToast('⚠️ Agrega al menos un repuesto, o elige "Sin"', 'error'); return; }
   }
+  // (28 oct 2026) Seguridad: LOTO obligatorio que falte y retiro del bloqueo abierto.
+  _submitting = true;
+  let seg;
+  try { seg = await segAntesDeGuardar(); } catch (e) { console.warn('seguridad:', e); seg = { permiso: null, retiro: null }; }
+  _submitting = false;
+  if (!seg) return;
 
   _submitting = true;
   const btn = document.getElementById('submit-btn');
@@ -2449,6 +2481,7 @@ async function submitForm() {
     HERRAMIENTAS: [..._herrSel.values()].map(h => ({ asignacionId: h.asignacionId, herramientaId: h.herramientaId || '', codigo: h.codigo || '', nombre: h.nombre || '', tecnico: h.tecnico || '' })),
   };
   if (equipoId) record.equipoId = equipoId;
+  if (seg.permiso) record.permisoId = seg.permiso.id; // (28 oct 2026) permiso de trabajo (LOTO) de este trabajo
   const idsNuevasSol = nuevasSol.map(s => s.ref.id);
   const txtRep = nuevasSol.length ? ` · ${nuevasSol.length} repuesto${nuevasSol.length === 1 ? '' : 's'} solicitado${nuevasSol.length === 1 ? '' : 's'} a almacén` : '';
 
@@ -2498,6 +2531,7 @@ async function submitForm() {
         console.error('Error actualizando OT:', e);
         borradorMarcarFallido(editing.id, msgErrorFirestore(e, esCierreAviso ? 'aviso' : esRegistroOt ? 'ot' : ''));
       });
+    segTrasGuardar(seg, editing.id, editing.folio || record.Title);
     document.getElementById('loading').classList.remove('show');
     showToast((navigator.onLine ? (esCierreAviso ? '✅ Aviso cerrado' : esRegistroOt ? '✅ ' + (editing.folio || 'OT') + ' registrada — pasa a revisión' : '✅ Cambios guardados') : '💾 Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
     exitEditMode();
@@ -2515,7 +2549,8 @@ async function submitForm() {
   record.folio = folio;
   record.Title = folio;
   // Id generado aquí (en vez de .add) para poder guardar la copia local con él.
-  const ref = db.collection('ots').doc();
+  // (28 oct 2026) Si ya se hizo el paso de seguridad, la OT usa el id reservado para su permiso.
+  const ref = _otIdNuevo ? db.collection('ots').doc(_otIdNuevo) : db.collection('ots').doc();
   borradorAgregar({ id: ref.id, modo: 'crear', record: { ...record }, nuevasSolicitudes: idsNuevasSol, ts: Date.now() });
   publicarHojaTrasGuardar(record);
   const batch = db.batch();
@@ -2527,6 +2562,7 @@ async function submitForm() {
       console.error('Error guardando OT:', e);
       borradorMarcarFallido(ref.id, msgErrorFirestore(e));
     });
+  segTrasGuardar(seg, ref.id, folio);
 
   document.getElementById('loading').classList.remove('show');
   showToast((navigator.onLine ? '✅ Registrado en la bitácora compartida (' + folio + ')' : '📵 Sin conexión — guardado local, se subirá después') + txtRep, navigator.onLine ? 'success' : 'warn');
@@ -2578,7 +2614,7 @@ function renderBorradorBanner() {
     const titulo = [r.FECHA, r.LINEA_EQUIPO, r.EQUIPO].filter(Boolean).join(' · ') || 'Registro';
     // Solo el id del documento va dentro del onclick (es seguro).
     return `<div style="flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-      <div><p style="color:var(--red);">⚠️ No se subió: ${esc(titulo)}</p><small>${esc(b.error || 'Firebase rechazó el cambio')} · ${b.modo === 'editar' ? 'edición' : 'registro nuevo'}</small></div>
+      <div><p style="color:var(--color-danger-text);">⚠️ No se subió: ${esc(titulo)}</p><small>${esc(b.error || 'Firebase rechazó el cambio')} · ${b.modo === 'editar' ? 'edición' : 'registro nuevo'}</small></div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
         <button class="btn btn-primary btn-sm" onclick="borradorRecuperar('${esc(b.id)}')">Recuperar</button>
         <button class="btn btn-secondary btn-sm" onclick="borradorDescartar('${esc(b.id)}')">Descartar</button>
@@ -2735,6 +2771,8 @@ function resetForm() {
   renderRepUI();
   toggleDropdown(null);
   cargarHerramientasAsignadas();
+  _otIdNuevo = null; // (28 oct 2026) id reservado para el permiso de una entrada nueva
+  renderSegForm();
 }
 
 // ══════ HISTORY ══════
@@ -2967,7 +3005,7 @@ function renderMiSemana() {
     return `<div class="ms-day">
       <div class="d ${msKey(d.fecha) === hoyK ? 'hoy' : ''}">${MS_DIAS[(d.fecha.getDay() + 6) % 7]} ${d.fecha.getDate()}</div>
       <div class="track" title="${d.ots} OT(s)">${futuro ? '' : `<div class="w" style="width:${base / escala * 100}%"></div><div class="i" style="width:${d.inact / escala * 100}%"></div><div class="x" style="width:${d.extra / escala * 100}%"></div>`}</div>
-      <div class="v">${futuro ? '—' : `<b>${msHM(d.trab)}</b> · ${d.ots}`}${d.esHoy ? '<div style="font-size:10px;color:var(--accent)">en curso</div>' : ''}</div></div>`;
+      <div class="v">${futuro ? '—' : `<b>${msHM(d.trab)}</b> · ${d.ots}`}${d.esHoy ? '<div style="font-size:10px;color:var(--color-primary-text)">en curso</div>' : ''}</div></div>`;
   }).join('');
 
   const notas = [];
@@ -3036,7 +3074,7 @@ function renderMsOts(rows) {
     const resp = r.H_INICIO && r.H_TECNICO ? fbMinutosEntre(r.H_INICIO, r.H_TECNICO) : null; // (5 oct 2026) cruza medianoche
     return `<div class="ms-ot ${msEsc(tipo)}">
       <div class="top"><span>${d ? MS_DIAS[(d.getDay() + 6) % 7] + ' ' + d.getDate() : msEsc(r.FECHA)} · ${msEsc(eq)}</span><span style="color:var(--muted);font-weight:600;">${msEsc(r.TIPO_MANTENIMIENTO || '')}</span></div>
-      <div class="meta">📍 ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · 🕐 ' + horas : ''} · ⏱ ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--orange)">sin hora final</span>' : ''}</div>
+      <div class="meta">📍 ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · 🕐 ' + horas : ''} · ⏱ ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--color-warn-text)">sin hora final</span>' : ''}</div>
       <div class="meta" style="color:var(--text);margin-top:3px;">${r.CAUSA_FALLA ? '[' + msEsc(r.CAUSA_FALLA) + '] ' : ''}${msEsc(r.DESCRIPCION_FALLA || '')}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="sol">✓ ${msEsc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
     </div>`;
@@ -3113,7 +3151,8 @@ function procesarAvisos(docs) {
 function actualizarBadgeAvisos() {
   const badge = document.getElementById('avisos-badge');
   if (!badge) return;
-  const n = avisos.filter(r => r.estado === 'pendiente').length + _misTrabajosLista().length;
+  // (28 oct 2026) + permisos de trabajo por autorizar (Supervisor / Encargado / Admin)
+  const n = avisos.filter(r => r.estado === 'pendiente').length + _misTrabajosLista().length + (typeof fbSegPorAutorizar === 'function' && esSupervisorB() ? fbSegPorAutorizar().length : 0);
   badge.textContent = n;
   badge.style.display = n ? '' : 'none';
 }
@@ -3169,6 +3208,8 @@ function renderAvisos() {
   const permiso = 'Notification' in window ? Notification.permission : 'unsupported';
   document.getElementById('avisos-activar').style.display = permiso === 'granted' ? 'none' : '';
   // (23 oct 2026) Arriba mis trabajos asignados; abajo (supervisión) los de todos.
+  const segBox = document.getElementById('seg-avisos');
+  if (segBox) segBox.innerHTML = typeof fbSegSeccionHtml === 'function' ? fbSegSeccionHtml() : '';
   const nMios = renderAsignadosMios();
   renderAsignadosTodos();
   renderAnuladasWrap();
@@ -3176,6 +3217,8 @@ function renderAvisos() {
   const orden = { pendiente: 0, en_atencion: 1 };
   const lista = [...avisos].sort((a, b) => (orden[a.estado] - orden[b.estado]) || ((b.maquinaParada ? 1 : 0) - (a.maquinaParada ? 1 : 0))
     || ({ alta: 0, media: 1, baja: 2 }[a.prioridad] ?? 1) - ({ alta: 0, media: 1, baja: 2 }[b.prioridad] ?? 1)
+    // (28 oct 2026) Con la misma prioridad, primero los equipos críticos (A, luego B, C, sin evaluar).
+    || (critOrden(critDeAviso(a)) - critOrden(critDeAviso(b)))
     || ((a.fechaReporte || '') + (a.horaParada || '')).localeCompare((b.fechaReporte || '') + (b.horaParada || '')));
   if (!lista.length) { wrap.innerHTML = cab + `<div class="empty" style="padding:${nMios ? '16px' : '40px'} 10px;"><span class="emoji" style="font-size:${nMios ? '28px' : '40px'};display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>`; return; }
   const esSup = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
@@ -3200,11 +3243,12 @@ function renderAvisos() {
         ? `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${esc(r.id)}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${esc(r.id)}')">↩ Soltar</button>` : ''}</div>`
         : `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:8px;">🔧 Lo está atendiendo ${esc(r.asignadoA || 'otro técnico')}</div>`;
     const badgeDup = previo ? `<div class="av-dup">⚠️ Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
-    return `<div class="av-card ${r.estado === 'pendiente' ? 'pendiente' : 'en_atencion'} ${r.maquinaParada ? 'parada' : ''}">
-      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')}</div><div class="av-meta">📍 ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
+    return `<div class="av-card ${r.estado === 'pendiente' ? 'pendiente' : 'en_atencion'} ${r.maquinaParada ? 'parada' : ''}" data-aviso="${esc(r.id)}">
+      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')} ${critBadge(critDeAviso(r))}</div><div class="av-meta">📍 ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
         <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '⛔ parada' : '⚠️ falla'}<b>${avFmt(min)}</b></div></div>
       <div class="av-desc">${esc(r.descripcionFalla || '')}</div>
-      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + esc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + esc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--accent)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + esc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + esc(r.horaLlegada) : ''}</b>` : ''}</div>
+      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + esc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + esc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--color-primary-text)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + esc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + esc(r.horaLlegada) : ''}</b>` : ''}</div>
+      ${r.estado === 'en_atencion' && mio ? segLineaAviso(r) : ''}
       ${acciones}
       ${btnAnular}
     </div>`;
@@ -3234,6 +3278,8 @@ function atenderAviso(id) {
       ? '⚠️ Este aviso ya lo tomó otro técnico — revisa la lista'
       : '❌ No se pudo tomar el aviso: ' + e.message, 'error', 8000));
   showToast('🏃 Aviso tomado — producción ya ve que vas en camino');
+  // (28 oct 2026) Antes de empezar: paso de seguridad (LOTO / permiso de trabajo).
+  if (r) segPasoAviso(r.id);
 }
 function soltarAviso(id) {
   db.collection('ots').doc(id).update({
@@ -3311,6 +3357,119 @@ function cerrarAviso(id) {
   goTo('nuevo', document.getElementById('nav-nuevo'));
   window.scrollTo(0, 0);
   setTimeout(() => { const s = document.getElementById('f-solucion'); if (s) s.focus(); }, 300);
+}
+
+// ══════ CRITICIDAD Y SEGURIDAD (28 oct 2026) ══════
+// Criticidad A/B/C del equipo (criticidad.js, 0 lecturas: catálogo de 12 h) y
+// el paso "Antes de empezar — Seguridad" (seguridad.js): al tomar un aviso, al
+// abrir una OT planificada y en una entrada nueva. Al guardar: si el equipo
+// exige LOTO y no se hizo, se pide; si hay un bloqueo abierto, se pide el
+// retiro (o "Guardar y retirar después": nunca se le impide guardar al técnico).
+const critDeEq = e => (typeof fbCritNivel === 'function' && e) ? fbCritNivel(e) : '';
+const critBadge = (n, o) => typeof fbCritBadge === 'function' ? fbCritBadge(n, o) : '';
+const critOrden = n => ({ A: 0, B: 1, C: 2 }[n] ?? 3);
+function critDeAviso(r) {
+  if (!r || !r.equipoId) return '';
+  const e = _equiposCanonicos.find(x => x.id === r.equipoId);
+  return critDeEq(e || r.equipoId);
+}
+const critSufijo = e => { const n = critDeEq(e); return n === 'A' ? ' · 🔴 A · Crítico' : n === 'B' ? ' · B · Importante' : ''; };
+function renderEqCrit() {
+  const el = document.getElementById('eq-crit');
+  if (!el) return;
+  const e = equipoPorId(document.getElementById('f-equipo-sel').value);
+  const n = critDeEq(e);
+  el.innerHTML = e ? 'Criticidad: ' + critBadge(n, { vacio: true }) : '';
+  el.style.display = e ? '' : 'none';
+}
+let _otIdNuevo = null; // id reservado de la OT nueva (el permiso se crea antes de guardarla)
+const segPuede = () => typeof fbSegAbrirPaso === 'function' && typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+function segJob(reservar) {
+  if (_modoForm === 'aviso' || _modoForm === 'ot') return window.editingRecord ? { id: window.editingRecord.id, folio: window.editingRecord.folio || '' } : null;
+  if (_modoForm !== 'nuevo') return null;
+  if (!_otIdNuevo && reservar) _otIdNuevo = db.collection('ots').doc().id;
+  return _otIdNuevo ? { id: _otIdNuevo, folio: '' } : null;
+}
+function segEquipoForm() {
+  const v = document.getElementById('f-equipo-sel').value;
+  const e = equipoPorId(v);
+  if (e) return e;
+  const ed = window.editingRecord;
+  if (ed && ed.equipoId && (_modoForm === 'aviso' || _modoForm === 'ot')) return { id: ed.equipoId, nombre: avEquipo(ed).nombre, localidad: avEquipo(ed).localidad };
+  if (v === OTRO) { const t = document.getElementById('f-equipo').value.trim(); return t ? { id: '', nombre: t } : null; }
+  return null;
+}
+const segTipo = () => getToggle('tipo-mto-group') || 'Correctivo';
+function segObligatorio() {
+  return typeof fbSegLotoObligatorio === 'function' ? fbSegLotoObligatorio(critDeEq(segEquipoForm()), segTipo()) : { si: false, motivo: '' };
+}
+function renderSegForm() {
+  const card = document.getElementById('card-seg');
+  if (!card) return;
+  const e = (segPuede() && _modoForm !== 'editar') ? segEquipoForm() : null;
+  if (!e) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const job = segJob(false);
+  const p = job && fbSegPermisoDeOt(job.id, true);
+  const ob = segObligatorio();
+  document.getElementById('seg-crit').innerHTML = critBadge(critDeEq(e));
+  let h;
+  if (p) h = fbSegTarjetaHtml(p, { acciones: false }) + (p.estado !== 'cerrado' ? '<div class="nf-count">Al guardar te pedimos retirar el bloqueo.</div>' : '');
+  else if (ob.si) h = `<div class="fbs-card falta" id="seg-falta"><div class="t">⚠️ Falta el bloqueo (LOTO)</div><div class="m">Obligatorio: ${esc(ob.motivo)}. Hazlo antes de meter las manos.</div><div class="acc"><button type="button" class="fbsh-btn ok sm" onclick="segAbrirPasoForm()">🦺 Hacer LOTO ahora</button></div></div>`;
+  else h = `<div class="nf-row"><span class="nf-count">¿Vas a meter las manos o hay un riesgo especial?</span><button type="button" class="btn btn-secondary btn-sm" onclick="segAbrirPasoForm()">🦺 Antes de empezar</button></div>`;
+  document.getElementById('seg-body').innerHTML = h;
+}
+function segAbrirPasoForm() {
+  if (!segPuede()) return;
+  const e = segEquipoForm();
+  if (!e) { showToast('⚠️ Elige primero el equipo', 'error'); return; }
+  fbSegAbrirPaso({ equipo: e, ot: segJob(true), tipo: segTipo(), onListo: () => renderSegForm(), onCancelar: () => renderSegForm() });
+}
+function segPasoAviso(id) {
+  const r = avisos.find(x => x.id === id);
+  if (!r || !segPuede()) return;
+  const eq = avEquipo(r);
+  const inv = r.equipoId ? _equiposCanonicos.find(x => x.id === r.equipoId) : null;
+  fbSegAbrirPaso({ equipo: inv || { id: r.equipoId || '', nombre: eq.nombre, localidad: eq.localidad }, ot: { id: r.id, folio: r.folio || '' }, tipo: 'Correctivo',
+    onListo: () => renderAvisos(), onCancelar: () => renderAvisos() });
+}
+// Línea de seguridad en el aviso que estoy atendiendo.
+function segLineaAviso(r) {
+  if (!segPuede()) return '';
+  const p = fbSegPermisoDeOt(r.id, true);
+  if (p) return fbSegTarjetaHtml(p, { acciones: false });
+  const ob = fbSegLotoObligatorio(critDeAviso(r), 'Correctivo');
+  return `<div class="fbs-card ${ob.si ? 'falta' : ''}"><div class="t">${ob.si ? '⚠️ Falta el bloqueo (LOTO)' : '🦺 Seguridad'}</div><div class="m">${ob.si ? 'Obligatorio: ' + esc(ob.motivo) + '.' : 'Bloqueo y riesgos especiales antes de empezar.'}</div>
+    <div class="acc"><button type="button" class="fbsh-btn ${ob.si ? 'ok' : 'sec'} sm" onclick="segPasoAviso('${esc(r.id)}')">🦺 Antes de empezar</button></div></div>`;
+}
+// Antes de guardar: { permiso, retiro } (o null = el técnico no completó el LOTO obligatorio).
+function segAntesDeGuardar() {
+  const nada = { permiso: null, retiro: null };
+  if (!segPuede() || _modoForm === 'editar') return Promise.resolve(nada);
+  const job = segJob(false);
+  const ob = segObligatorio();
+  const buscar = job ? (ob.si ? fbSegBuscarDeOt(job.id) : Promise.resolve(fbSegPermisoDeOt(job.id, true))) : Promise.resolve(null);
+  return buscar.then(p => new Promise(res => {
+    const conRetiro = permiso => {
+      if (!permiso) return res(nada);
+      if (permiso.estado === 'cerrado') return res({ permiso, retiro: null });
+      fbSegAbrirRetiro(permiso, { saltar: 'Guardar y retirar después', onListo: r => res({ permiso, retiro: r }), onSaltar: () => res({ permiso, retiro: null }) });
+    };
+    if (p) return conRetiro(p);
+    if (!ob.si) return res(nada);
+    showToast('🦺 Este trabajo necesita bloqueo (LOTO): ' + ob.motivo, 'warn');
+    fbSegAbrirPaso({ equipo: segEquipoForm(), ot: segJob(true), tipo: segTipo(),
+      onListo: permiso => { renderSegForm(); conRetiro(permiso); },
+      onCancelar: () => { renderSegForm(); showToast('⚠️ El LOTO es obligatorio en este equipo: complétalo para guardar', 'error'); res(null); } });
+  }));
+}
+// Después de mandar la OT: cierra el permiso (retiro) o lo enlaza con la OT. Aparte de la OT:
+// si el permiso ya cambió en otro celular, la OT se guarda igual.
+function segTrasGuardar(seg, otId, folio) {
+  if (!seg || !seg.permiso || typeof fbSegCerrar !== 'function') return;
+  if (seg.retiro) fbSegCerrar(seg.permiso, seg.retiro, { otId, otFolio: folio || '' }, true);
+  else if (seg.permiso.estado !== 'cerrado') fbSegEnlazarOt(seg.permiso, otId, folio);
+  renderSegForm();
 }
 
 // ══════ STATS ══════

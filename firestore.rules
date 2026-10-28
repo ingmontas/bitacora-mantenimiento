@@ -80,9 +80,17 @@ service cloud.firestore {
     match /plantas/{id} { allow read: if esTecnicoOMas(); allow write: if esAdmin(); }
     match /areas/{id}   { allow read: if esTecnicoOMas() || esAlmacenOMas(); allow write: if esEncargado(); }
     match /lineas/{id}  { allow read: if esTecnicoOMas(); allow write: if esEncargado(); }
+    // (28 oct 2026) Criticidad A/B/C (criticidad, criticidadDetalle,
+    // criticidadPor, criticidadEn): solo la pone o cambia el Encargado de
+    // mantenimiento o el Administrador. Todo lo demás del equipo sigue igual
+    // (técnicos y Almacén lo pueden crear y editar como antes).
+    function camposCriticidad() { return ['criticidad', 'criticidadDetalle', 'criticidadPor', 'criticidadEn']; }
     match /equipos/{id} {
       allow read: if esOperadorOMas() || esAlmacenOMas();
-      allow create, update: if esTecnicoOMas() || esAlmacenOMas();
+      allow create: if (esTecnicoOMas() || esAlmacenOMas())
+        && (!request.resource.data.keys().hasAny(camposCriticidad()) || esEncargado());
+      allow update: if (esTecnicoOMas() || esAlmacenOMas())
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(camposCriticidad()) || esEncargado());
       allow delete: if esAdmin();
     }
 
@@ -96,7 +104,9 @@ service cloud.firestore {
       return d.origen == origen && d.estado == 'pendiente'
         && d.keys().hasOnly(['origen','estado','folio','equipoId','equipoNombre','equipoLocalidad',
              'descripcionFalla','prioridad','creadoPor','creadoPorUid','maquinaParada','fechaReporte',
-             'horaParada','checklistId','asignadoA','fechaPlanificada','createdAt','tipoReporte'])
+             'horaParada','checklistId','asignadoA','fechaPlanificada','createdAt','tipoReporte','planta'])
+        // (26 oct 2026) Nave del equipo (opcional; el QR no la manda).
+        && (!('planta' in d) || (d.planta is string && d.planta.size() <= 80))
         && d.equipoId is string && d.equipoId.size() > 0 && d.equipoId.size() <= 100
         && exists(/databases/$(database)/documents/equipos/$(d.equipoId))
         && d.descripcionFalla is string && d.descripcionFalla.size() > 0 && d.descripcionFalla.size() <= 1000
@@ -177,10 +187,13 @@ service cloud.firestore {
         && request.resource.data.cantidad is number && request.resource.data.cantidad > 0
         && request.resource.data.descripcion is string && request.resource.data.descripcion.size() > 0
         && request.resource.data.tecnicoUid == request.auth.uid;
-      allow update: if esAlmacenOMas()
+      allow update: if (esAlmacenOMas()
         && resource.data.estado == 'pendiente'
         && request.resource.data.estado in ['entregado', 'rechazado']
-        && soloCambia(['estado', 'atendidoPor', 'atendidoPorUid', 'atendidoEn', 'nota']);
+        && soloCambia(['estado', 'atendidoPor', 'atendidoPorUid', 'atendidoEn', 'nota']))
+        // (26 oct 2026) El admin solo puede AGREGAR la nave (Completar nave).
+        || (esAdmin() && soloCambia(['planta']) && !('planta' in resource.data)
+            && request.resource.data.planta is string && request.resource.data.planta.size() <= 80);
       allow delete: if false;
     }
     // Movimientos de stock: quién y cuándo los pone Firebase, no el celular.
@@ -209,6 +222,48 @@ service cloud.firestore {
         && request.resource.data.quienUid == request.auth.uid
         && request.resource.data.fecha == request.time;
       allow update, delete: if false;
+    }
+
+    // ══════ Permisos de trabajo / LOTO (28 oct 2026) ══════
+    // El técnico crea SU permiso al empezar (hora del servidor; 'por_autorizar'
+    // si marcó un riesgo especial, si no 'abierto'). Mientras no esté cerrado
+    // puede completar su LOTO y enlazar la OT; al terminar lo cierra con el
+    // retiro del bloqueo. Supervisor / Encargado / Admin autorizan o rechazan
+    // los 'por_autorizar' (nunca el suyo propio). Nadie los borra.
+    function riesgoEspecial(r) {
+      return r.get('altura', false) == true || r.get('confinado', false) == true
+        || r.get('caliente', false) == true || r.get('electricoEnergizado', false) == true;
+    }
+    function permisoNuevoValido() {
+      let d = request.resource.data;
+      return d.tecnicoUid == request.auth.uid
+        && d.creadoEn == request.time
+        && d.estado in ['abierto', 'por_autorizar']
+        && d.loto is map && d.riesgos is map
+        && d.estado == (riesgoEspecial(d.riesgos) ? 'por_autorizar' : 'abierto')
+        && d.equipoId is string && d.equipoId.size() <= 100
+        && d.otId is string && d.otId.size() <= 100
+        && d.get('tecnico', '') is string && d.get('tecnico', '').size() <= 100
+        && !('autorizadoPorUid' in d) && !('autorizadoEn' in d) && !('retiro' in d) && !('cerradoEn' in d);
+    }
+    function esDuenoPermiso() { return resource.data.tecnicoUid == request.auth.uid && estadoViejo() != 'cerrado'; }
+    match /permisos_trabajo/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas() && permisoNuevoValido();
+      allow update: if esTecnicoOMas() && (
+        // el técnico dueño completa su LOTO o enlaza la OT (sin cambiar el estado)
+        (esDuenoPermiso() && estadoNuevo() == estadoViejo() && soloCambia(['loto', 'otId', 'otFolio']))
+        // el técnico dueño retira el bloqueo y cierra
+        || (esDuenoPermiso() && estadoNuevo() == 'cerrado'
+            && soloCambia(['estado', 'retiro', 'cerradoEn', 'otId', 'otFolio'])
+            && request.resource.data.retiro is map && request.resource.data.cerradoEn == request.time)
+        // Supervisor+ autoriza o rechaza (no el suyo)
+        || (esSupervisorOMas() && estadoViejo() == 'por_autorizar' && estadoNuevo() in ['autorizado', 'rechazado']
+            && resource.data.tecnicoUid != request.auth.uid
+            && soloCambia(['estado', 'autorizadoPor', 'autorizadoPorUid', 'autorizadoEn', 'notaAutorizacion'])
+            && request.resource.data.autorizadoPorUid == request.auth.uid
+            && request.resource.data.autorizadoEn == request.time));
+      allow delete: if false;
     }
 
     // ══════ Incentivos por cumplimiento (20 oct 2026) ══════

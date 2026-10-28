@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="theme-color" content="#0d1117"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>Inventario de Repuestos</title>
@@ -13,26 +15,29 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
+<script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C por equipo -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
   :root{
-    --bg:#0d1117; --panel:#141a22; --panel-2:#1b2330; --line:#262f3d;
-    --text:#e6ebf1; --muted:#8b98ab;
-    --amber:#f0a930; --amber-dim:#4a3419;
-    --red:#ef4b4b; --red-dim:#3a2020;
-    --teal:#35d0b0; --teal-dim:#1a3a33;
-    --blue:#5b9bf0;
+    --bg: var(--color-bg); --panel: var(--color-surface); --panel-2: var(--color-surface-2); --line: var(--color-border);
+    --text: var(--color-text); --muted: var(--color-muted);
+    --amber: var(--color-accent); --amber-dim: var(--color-accent-soft);
+    --red: var(--color-danger); --red-dim: var(--color-danger-soft);
+    --teal: var(--color-success); --teal-dim: var(--color-success-soft);
+    --blue: var(--color-primary);
     /* Paleta de estado validada (accesible, ver dataviz skill) — reservada
        para semáforo de riesgo/stock, nunca reutilizada para otra cosa */
-    --st-good:#0ca30c; --st-good-dim:#0f2e14;
-    --st-warning:#fab219; --st-warning-dim:#3a2f10;
-    --st-serious:#ec835a; --st-serious-dim:#3a2318;
-    --st-critical:#d03b3b; --st-critical-dim:#3a1c1c;
+    --st-good:#0ca30c; --st-good-dim: var(--color-success-soft);
+    --st-warning:#fab219; --st-warning-dim: var(--color-accent-soft);
+    --st-serious:#ec835a; --st-serious-dim: var(--color-warn-soft);
+    --st-critical:#d03b3b; --st-critical-dim: var(--color-danger-soft);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
-  .mono{font-family:'IBM Plex Mono',monospace;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);}
+  .mono{font-family:var(--font-mono);}
   ::-webkit-scrollbar{height:8px;width:8px;} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
 
   .wrap{max-width:1360px;margin:0 auto;padding:26px 22px 80px;}
@@ -42,18 +47,18 @@
   .hdr-left{display:flex;align-items:center;gap:12px;}
   .hdr-icon{width:38px;height:38px;border-radius:9px;background:linear-gradient(145deg,var(--amber),#c97f1a);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
   h1{font-size:20px;margin:0;font-weight:700;}
-  .hdr-sub{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+  .hdr-sub{font-size:11.5px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;}
   .search-box{position:relative;flex:1;max-width:420px;min-width:220px;}
-  .search-box input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px 14px 10px 36px;border-radius:9px;font-size:13px;font-family:'Space Grotesk';}
+  .search-box input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px 14px 10px 36px;border-radius:9px;font-size:13px;font-family:var(--font-sans);}
   .search-box input:focus{outline:1px solid var(--amber);}
   .search-box .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
 
   /* KPI row */
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px;}
-  .kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
+  .kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);}
   .kpi .val{font-size:26px;font-weight:700;margin-top:5px;}
-  .kpi.red .val{color:var(--red);} .kpi.amber .val{color:var(--amber);} .kpi.teal .val{color:var(--teal);}
+  .kpi.red .val{color:var(--color-danger-text);} .kpi.amber .val{color:var(--color-accent-text);} .kpi.teal .val{color:var(--color-success-text);}
 
   /* equipo cards grid */
   .section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
@@ -62,45 +67,45 @@
   .eq-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
   .eq-toolbar input,.eq-toolbar select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}
   .eq-toolbar input{flex:1;min-width:180px;}
-  .eq-toolbar .cnt{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .eq-toolbar .cnt{font-size:12px;color:var(--muted);font-family:var(--font-mono);}
   .area-hdr{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:10px 0 -2px;padding-bottom:6px;border-bottom:1px solid var(--line);}
-  .area-hdr h4{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--amber);}
-  .area-hdr span{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .area-hdr h4{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-accent-text);}
+  .area-hdr span{font-size:11.5px;color:var(--muted);font-family:var(--font-mono);}
 
   .equipo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:10px;}
   .equipo-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;cursor:pointer;transition:border-color .15s;position:relative;overflow:hidden;}
   .equipo-card:hover{border-color:var(--amber-dim);}
-  .equipo-card .badge-loc{position:absolute;top:14px;right:14px;font-size:10px;font-family:'IBM Plex Mono';color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:20px;}
+  .equipo-card .badge-loc{position:absolute;top:14px;right:14px;font-size:10px;font-family:var(--font-mono);color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:20px;}
   .equipo-card h3{margin:0 0 4px;font-size:16px;padding-right:70px;}
-  .equipo-card .meta{font-size:11.5px;color:var(--muted);font-family:'IBM Plex Mono';margin-bottom:14px;}
+  .equipo-card .meta{font-size:11.5px;color:var(--muted);font-family:var(--font-mono);margin-bottom:14px;}
   .equipo-card .stats-row{display:flex;gap:16px;}
-  .equipo-card .stat{font-size:11px;font-family:'IBM Plex Mono';}
-  .equipo-card .stat b{display:block;font-size:17px;font-family:'Space Grotesk';font-weight:700;}
-  .equipo-card .stat.ok b{color:var(--teal);} .equipo-card .stat.sinstock b{color:var(--red);} .equipo-card .stat.bajo b{color:var(--amber);}
+  .equipo-card .stat{font-size:11px;font-family:var(--font-mono);}
+  .equipo-card .stat b{display:block;font-size:17px;font-family:var(--font-sans);font-weight:700;}
+  .equipo-card .stat.ok b{color:var(--color-success-text);} .equipo-card .stat.sinstock b{color:var(--color-danger-text);} .equipo-card .stat.bajo b{color:var(--color-accent-text);}
 
   .add-card{background:transparent;border:1.5px dashed var(--line);border-radius:12px;padding:18px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--muted);min-height:130px;}
-  .add-card:hover{border-color:var(--amber);color:var(--amber);}
+  .add-card:hover{border-color:var(--amber);color:var(--color-accent-text);}
   .add-card .plus{font-size:26px;}
 
-  button{font-family:'Space Grotesk';cursor:pointer;}
-  .btn{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;}
+  button{font-family:var(--font-sans);cursor:pointer;}
+  .btn{background:var(--amber);color:var(--color-on-accent);border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;}
   .btn:hover{filter:brightness(1.08);}
   .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
-  .btn.danger{background:var(--red-dim);color:#ff9494;border:1px solid #5a2a2a;}
+  .btn.danger{background:var(--red-dim);color:var(--color-danger-text);border:1px solid #EF444466;}
   .btn.sm{padding:6px 11px;font-size:11.5px;}
   .btn.icon-only{padding:6px 9px;}
 
   /* detail view */
-  .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;cursor:pointer;margin-bottom:16px;font-family:'IBM Plex Mono';}
+  .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;cursor:pointer;margin-bottom:16px;font-family:var(--font-mono);}
   .back-link:hover{color:var(--text);}
   .detail-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:18px;}
   .detail-hdr h2{margin:0 0 4px;font-size:22px;}
-  .detail-hdr .sub{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono';}
+  .detail-hdr .sub{font-size:12px;color:var(--muted);font-family:var(--font-mono);}
 
   .specs-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
   .specs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
   .spec{}
-  .spec .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';margin-bottom:3px;}
+  .spec .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);margin-bottom:3px;}
   .spec .v{font-size:13.5px;font-weight:500;}
   .spec .v.empty{color:var(--muted);font-style:italic;font-weight:400;}
   .spec.full{grid-column:1/-1;} .spec.full .v{font-weight:400;line-height:1.55;}
@@ -110,27 +115,27 @@
   .ficha-antes{font-size:11.5px;color:var(--muted);margin:6px 0 8px;line-height:1.5;}
   .ficha-antes span{font-weight:700;}
   .ficha-despues{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px;font-size:12.5px;}
-  .ficha-despues div span{display:block;font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono';}
-  .ficha-notas{font-size:11px;color:var(--amber);margin-top:8px;line-height:1.5;}
-  .spec input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;width:100%;font-family:'Space Grotesk';}
+  .ficha-despues div span{display:block;font-size:10px;color:var(--color-success-text);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);}
+  .ficha-notas{font-size:11px;color:var(--color-accent-text);margin-top:8px;line-height:1.5;}
+  .spec input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;width:100%;font-family:var(--font-sans);}
 
   /* parts table */
   .table-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;}
   .table-toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;}
   .filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
-  .fchip{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:'IBM Plex Mono';cursor:pointer;}
-  .fchip.active{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
+  .fchip{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:var(--font-mono);cursor:pointer;}
+  .fchip.active{background:var(--amber-dim);color:var(--color-accent-text);border-color:var(--amber);}
 
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  thead th{text-align:left;font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;}
-  tbody td{padding:10px 10px;border-bottom:1px solid #1b212b;vertical-align:middle;}
-  tbody tr:hover{background:#171e28;}
+  thead th{text-align:left;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;}
+  tbody td{padding:10px 10px;border-bottom:1px solid var(--color-surface-2);vertical-align:middle;}
+  tbody tr:hover{background:var(--color-surface-2);}
   .part-name{font-weight:600;}
-  .part-modelo{font-family:'IBM Plex Mono';color:var(--muted);font-size:11.5px;}
+  .part-modelo{font-family:var(--font-mono);color:var(--muted);font-size:11.5px;}
   .part-desc{color:var(--muted);font-size:11.5px;max-width:260px;}
 
   .gauge-wrap{display:flex;align-items:center;gap:8px;min-width:120px;}
-  .gauge{flex:1;height:7px;background:#1b212b;border-radius:4px;overflow:visible;position:relative;}
+  .gauge{flex:1;height:7px;background:var(--color-surface-2);border-radius:4px;overflow:visible;position:relative;}
   .gauge-min-mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text);opacity:.55;}
 
   .thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;border:1px solid var(--line);cursor:pointer;display:block;}
@@ -138,28 +143,28 @@
   .thumb-placeholder{width:34px;height:34px;border-radius:6px;background:var(--panel-2);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted);}
   .gauge-fill{height:100%;border-radius:4px;}
   .gauge-fill.ok{background:var(--st-good);} .gauge-fill.bajo{background:var(--st-warning);} .gauge-fill.sin{background:var(--st-critical);}
-  .gauge-fill.nodata{background:repeating-linear-gradient(45deg,#3a4252,#3a4252 4px,#2a3140 4px,#2a3140 8px);}
-  .qty-num{font-family:'IBM Plex Mono';font-weight:600;font-size:12px;min-width:22px;text-align:right;}
+  .gauge-fill.nodata{background:repeating-linear-gradient(45deg,var(--color-border-strong),var(--color-border-strong) 4px,var(--color-border) 4px,var(--color-border) 8px);}
+  .qty-num{font-family:var(--font-mono);font-weight:600;font-size:12px;min-width:22px;text-align:right;}
 
-  .stock-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono';white-space:nowrap;}
-  .stock-badge.ok{background:var(--st-good-dim);color:#5fd35f;}
-  .stock-badge.bajo{background:var(--st-warning-dim);color:var(--st-warning);}
-  .stock-badge.sin{background:var(--st-critical-dim);color:#ff8a8a;}
-  .stock-badge.nodata{background:#252c38;color:var(--muted);}
-  .stock-badge.revisar{background:var(--st-serious-dim);color:var(--st-serious);}
+  .stock-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:var(--font-mono);white-space:nowrap;}
+  .stock-badge.ok{background:var(--st-good-dim);color:var(--color-success-text);}
+  .stock-badge.bajo{background:var(--st-warning-dim);color:var(--color-accent-text);}
+  .stock-badge.sin{background:var(--st-critical-dim);color:var(--color-danger-text);}
+  .stock-badge.nodata{background:var(--color-surface-3);color:var(--muted);}
+  .stock-badge.revisar{background:var(--st-serious-dim);color:var(--color-warn-text);}
 
   .row-actions{display:flex;gap:5px;opacity:.4;transition:opacity .12s;}
   tr:hover .row-actions{opacity:1;}
   .icon-btn{background:none;border:none;color:var(--muted);font-size:13px;padding:3px 5px;border-radius:5px;}
   .icon-btn:hover{background:var(--panel-2);color:var(--text);}
 
-  input.cell-edit{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:5px;width:52px;font-family:'IBM Plex Mono';font-size:12px;text-align:center;}
+  input.cell-edit{background:var(--color-input-bg);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:5px;width:52px;font-family:var(--font-mono);font-size:12px;text-align:center;}
 
   .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
   .empty-state .big{font-size:34px;margin-bottom:10px;}
 
   /* modal */
-  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center;padding:20px;}
+  .modal-bg{display:none;position:fixed;inset:0;background:var(--color-overlay);z-index:50;align-items:center;justify-content:center;padding:20px;}
   .modal-bg.open{display:flex;}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:560px;width:100%;max-height:85vh;overflow-y:auto;}
   .modal h3{margin:0 0 4px;font-size:16px;}
@@ -167,8 +172,8 @@
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .form-field{display:flex;flex-direction:column;gap:5px;}
   .form-field.full{grid-column:1/-1;}
-  .form-field label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-family:'IBM Plex Mono';}
-  .form-field input,.form-field textarea,.form-field select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:'Space Grotesk';width:100%;}
+  .form-field label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-family:var(--font-mono);}
+  .form-field input,.form-field textarea,.form-field select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:7px;font-size:13px;font-family:var(--font-sans);width:100%;}
   .form-field textarea{resize:vertical;min-height:50px;}
   .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
 
@@ -223,6 +228,7 @@
     <div class="section-hdr">
       <h2>Equipos / Máquinas</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="btn secondary sm" id="btnCritInv" style="display:none;" onclick="fbCritAbrirLista({ onClose: () => renderHome() })">🎯 Evaluar criticidad</span>
         <span class="btn secondary sm" onclick="abrirOrdenarFichas()">🧹 Ordenar fichas técnicas</span>
         <span class="btn secondary sm" onclick="openBulkEquiposModal()">📋 Carga masiva de equipos</span>
       </div>
@@ -276,7 +282,7 @@
       <div class="form-field"><label>Localidad (Área)</label><select id="eq-localidad" onchange="onEqAreaChange()"><option value="">Seleccionar área...</option></select></div>
       <div class="form-field"><label>Línea</label><select id="eq-linea" onchange="avisarLineaArea()"><option value="">Sin línea</option></select></div>
       <div class="form-field"><label>Tipo de máquina</label><input id="eq-tipo" list="eq-tipo-list" placeholder="Ej: Telar circular" autocomplete="off"><datalist id="eq-tipo-list"></datalist></div>
-      <div class="form-field full" id="eq-linea-aviso" style="display:none;font-size:12px;color:var(--amber);margin-top:-4px;"></div>
+      <div class="form-field full" id="eq-linea-aviso" style="display:none;font-size:12px;color:var(--color-accent-text);margin-top:-4px;"></div>
       <div class="form-field"><label>Fecha fabricación</label><input id="eq-fabricacion" type="date"></div>
       <div class="form-field"><label>Fecha instalación</label><input id="eq-instalacion" type="date"></div>
       <!-- Comparación con Maximo/SAP (28 sep 2026): rastrear compra/garantía por
@@ -443,7 +449,7 @@
     <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel), una por repuesto. Si un repuesto ya existe en este equipo (mismo nombre + tipo + modelo), no se duplica: se suma o se reemplaza su conteo según lo que elijas abajo.</div>
     <div class="form-field full">
       <label>Formato de columnas: Repuesto · Tipo · Modelo · Descripción · Uso · Qty · Cant.Máquina · Mínimo · Máximo</label>
-      <textarea id="bulkPasteArea" style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="RELE	OMRON	MY2N-GS-C1	Relé 24VDC 8 pines		4	5	2	10"></textarea>
+      <textarea id="bulkPasteArea" style="min-height:220px;font-family:var(--font-mono);font-size:11.5px;" placeholder="RELE	OMRON	MY2N-GS-C1	Relé 24VDC 8 pines		4	5	2	10"></textarea>
     </div>
     <!-- (5 oct 2026) Antes la carga masiva SIEMPRE sumaba la Qty al stock que
          ya había, sin decirlo: pegar el conteo físico de la bodega duplicaba
@@ -474,7 +480,7 @@
     </div>
     <div class="form-field full">
       <label>O pega aquí las filas (con o sin encabezados). Sin encabezados el orden es: Nombre* · Marca · Modelo · Serie · Área · Frecuencia de checklist (días)</label>
-      <textarea id="bulkEquiposPasteArea" style="min-height:150px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;" placeholder="Nombre	Marca	Modelo	Serie	Área	Frecuencia&#10;COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Compresor de Aire	7&#10;TELAR 10	STARLINGER	SL-6	A-8812	Weaving	"></textarea>
+      <textarea id="bulkEquiposPasteArea" style="min-height:150px;font-family:var(--font-mono);font-size:11.5px;" placeholder="Nombre	Marca	Modelo	Serie	Área	Frecuencia&#10;COMPRESOR 2	INGERSOLL RAND	R11i	SN-4521	Compresor de Aire	7&#10;TELAR 10	STARLINGER	SL-6	A-8812	Weaving	"></textarea>
     </div>
     <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin:8px 0;cursor:pointer;">
       <input type="checkbox" id="bulkEquiposSobrescribir" style="width:auto;" onchange="previsualizarEquipos()"> Si el equipo ya existe, reemplazar sus datos con los del archivo (si no se marca, solo se completan los datos vacíos)
@@ -502,9 +508,9 @@
 </div>
 
 <!-- Overlay de carga durante sincronización -->
-<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(13,17,23,.72);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
-  <div style="width:34px;height:34px;border:3px solid #2a3140;border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-  <div id="loadingText" style="color:var(--amber);font-family:'IBM Plex Mono',monospace;font-size:12.5px;">Sincronizando…</div>
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:var(--color-scrim);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+  <div style="width:34px;height:34px;border:3px solid var(--color-border);border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div id="loadingText" style="color:var(--color-accent-text);font-family:var(--font-mono);font-size:12.5px;">Sincronizando…</div>
 </div>
 <style>@keyframes spin{to{transform:rotate(360deg);}}</style>
 
@@ -955,7 +961,7 @@ function renderHome(){
     return hdr + `
       <div class="equipo-card" onclick="openEquipo('${idJs(e.id)}')">
         ${e.localidad && orden !== 'area' ? `<span class="badge-loc">${escInv(e.localidad)}</span>` : ''}
-        <h3>${escInv(e.nombre)}</h3>
+        <h3>${escInv(e.nombre)} ${typeof fbCritBadge === 'function' ? fbCritBadge(fbCritNivel(e)) : ''}</h3>
         <div class="meta">${fbEsc([e.marca,e.modelo].filter(Boolean).join(' · ')) || 'Sin datos de marca/modelo'}</div>
         <div class="stats-row">
           <div class="stat ok"><b>${ok}</b>OK</div>
@@ -1043,11 +1049,12 @@ function renderDetail(){
     <div class="back-link" onclick="backHome()">← Volver a todos los equipos</div>
     <div class="detail-hdr">
       <div>
-        <h2>${fbEsc(e.nombre)}</h2>
+        <h2>${fbEsc(e.nombre)} ${typeof fbCritBadge === 'function' ? fbCritBadge(fbCritNivel(e), { vacio: true }) : ''}</h2>
         <div class="sub">${parts.length} repuestos registrados · ${sin} sin stock · ${baj} con stock bajo${noData?` · ${noData} sin contar`:''}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary sm" onclick="openEditEquipoModal()">✏️ Editar datos</button>
+        ${typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar() ? `<button class="btn secondary sm" onclick="fbCritAbrirAsistente('${idJs(e.id)}', { onGuardado: () => renderDetail() })">🎯 Criticidad</button>` : ''}
         ${necesitaOrden(e) ? `<button class="btn secondary sm" onclick="abrirOrdenarFichas('${idJs(e.id)}')">🧹 Ordenar ficha</button>` : ''}
         <button class="btn secondary sm" onclick="showMovimientos()">🕒 Historial</button>
         <button class="btn secondary sm" onclick="showReubicaciones()">🧭 Reubicaciones</button>
@@ -1133,7 +1140,7 @@ function renderPartsTable(){
     return `
       <tr>
         <td>${(img || fotoId) ? `<img src="${fbEsc(img)}" ${fotoId ? `data-foto="${fbEsc(fotoId)}"` : ''} ${img ? '' : 'style="visibility:hidden"'} class="thumb" onclick="openLightboxRep(${p._idx})">` : `<div class="thumb-placeholder">📦</div>`}</td>
-        <td class="part-name">${fbEsc(p.r)}${(p.pu!==null && p.pu!==undefined && p.pu!=='' && !isNaN(Number(p.pu))) ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
+        <td class="part-name">${fbEsc(p.r)}${(p.pu!==null && p.pu!==undefined && p.pu!=='' && !isNaN(Number(p.pu))) ? `<div style="font-size:10.5px;color:var(--color-success-text);font-weight:600;">$${Number(p.pu).toFixed(2)} c/u</div>` : ''}</td>
         <td class="part-modelo">${fbEsc(p.t||'—')}</td>
         <td class="part-modelo">${fbEsc(p.m||'—')}</td>
         <td class="part-desc">${fbEsc(p.d||'—')}</td>
@@ -1648,7 +1655,7 @@ async function showMovimientos(){
       <td><span class="stock-badge ${tm[0]}">${tm[1]}</span></td>
       <td class="mono">${fbEsc(cant)}</td>
       <td class="mono">${fbEsc(m.quedaEn)}</td>
-      <td class="part-desc">${fbEsc(m.motivo||'—')}${m.otFolio ? `<div style="font-size:10.5px;color:var(--teal);font-weight:600;">${fbEsc(m.otFolio)}${m.costoTotal!=null && !isNaN(Number(m.costoTotal))?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
+      <td class="part-desc">${fbEsc(m.motivo||'—')}${m.otFolio ? `<div style="font-size:10.5px;color:var(--color-success-text);font-weight:600;">${fbEsc(m.otFolio)}${m.costoTotal!=null && !isNaN(Number(m.costoTotal))?' · $'+Number(m.costoTotal).toFixed(2):''}</div>` : ''}</td>
     </tr>`; }).join('') : `<tr><td colspan="7"><div class="empty-state"><div class="big">📭</div>Sin movimientos registrados todavía.</div></td></tr>`;
 }
 
@@ -1803,7 +1810,7 @@ async function bulkImportRepuestos(){
     else filas.push(obj);
   });
   if(errores.length){
-    status.innerHTML = `<b style="color:var(--red);">${errores.length} fila(s) con error — no se cargan:</b><br>` + errores.map(fbEsc).join('<br>');
+    status.innerHTML = `<b style="color:var(--color-danger-text);">${errores.length} fila(s) con error — no se cargan:</b><br>` + errores.map(fbEsc).join('<br>');
     if(!filas.length){ showToast('⚠️ Ninguna fila válida para cargar'); return; }
     if(!confirm(`${errores.length} fila(s) tienen números que no se entienden y NO se cargarán (la lista está debajo del cuadro).\n\n¿Cargar las otras ${filas.length}?`)) return;
   } else status.textContent = '';
@@ -2109,7 +2116,7 @@ function previsualizarEquipos(){
   prev.innerHTML = `
     <div style="font-size:12.5px;margin:6px 0 8px;line-height:1.6;">
       ${conEncabezado ? `✅ Columnas reconocidas: <b>${columnas.map(c => LBL_EQ[c]).join(', ')}</b>${ignoradas.length ? `<br>ℹ️ Columnas que no se usan: ${ignoradas.map(escInv).join(', ')}` : ''}` : 'ℹ️ Sin encabezados: se usó el orden Nombre · Marca · Modelo · Serie · Área · Frecuencia. Para cargar también planta, línea, tipo de máquina, tensión, potencia, fechas, etc., agrega una fila de encabezados (descarga la plantilla).'}<br>
-      <b style="color:var(--teal)">${n('nuevo')} nuevos</b> · <b style="color:var(--amber)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--red)">${n('error')} con error (no se cargan)</b>` : ''}
+      <b style="color:var(--color-success-text)">${n('nuevo')} nuevos</b> · <b style="color:var(--color-accent-text)">${n('actualiza')} se actualizan</b> · ${n('igual')} sin cambios${n('error') ? ` · <b style="color:var(--color-danger-text)">${n('error')} con error (no se cargan)</b>` : ''}
     </div>
     <div class="table-card" style="max-height:300px;overflow:auto;margin:0;">
       <table><thead><tr><th>Fila</th><th>Estado</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Área</th><th>Frec.</th>${extras.length ? '<th>Ficha técnica</th>' : ''}<th>Notas</th></tr></thead>
@@ -3095,6 +3102,8 @@ async function initApp(){
     // firestore.rules (esEncargado() para /auditoria).
     const btnHist = document.getElementById('btnExportHistorial');
     if (btnHist) btnHist.style.display = esEncargadoOMas ? '' : 'none';
+    const btnCrit = document.getElementById('btnCritInv'); // (28 oct 2026)
+    if (btnCrit) btnCrit.style.display = esEncargadoOMas ? '' : 'none';
   }).catch(()=>{});
   await loadDB(); // deja el listener en vivo corriendo; DB se sigue actualizando sola
 }

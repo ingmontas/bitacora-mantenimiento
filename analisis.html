@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="theme-color" content="#0d1117"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>Panel de Mantenimiento Predictivo</title>
@@ -14,13 +16,17 @@
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
 <script src="filtros.js"></script>
+<script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C -->
+<script src="seguridad.js"></script><!-- (28 oct 2026) permisos de trabajo / LOTO (reporte) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-:root{--bg:#0d1117;--panel:#141a22;--panel-2:#1b2330;--line:#262f3d;--text:#e6ebf1;--muted:#8b98ab;--amber:#f0a930;--amber-dim:#7a5a1f;--red:#ef4b4b;--red-dim:#4a2323;--teal:#35d0b0;--teal-dim:#1f4b42;--cat-aqua:#199e70;--st-good-dim:#0f2e14;--st-warning:#fab219;--st-warning-dim:#3a2f10;--st-serious:#ec835a;--st-serious-dim:#3a2318;--st-critical-dim:#3a1c1c;--nav-h:0px;}
+:root{--bg: var(--color-bg);--panel: var(--color-surface);--panel-2: var(--color-surface-2);--line: var(--color-border);--text: var(--color-text);--muted: var(--color-muted);--amber: var(--color-accent);--amber-dim: var(--color-accent-soft);--red: var(--color-danger);--red-dim: var(--color-danger-soft);--teal: var(--color-success);--teal-dim: var(--color-success-soft);--cat-aqua:#199e70;--st-good-dim: var(--color-success-soft);--st-warning:#fab219;--st-warning-dim: var(--color-accent-soft);--st-serious:#ec835a;--st-serious-dim: var(--color-warn-soft);--st-critical-dim: var(--color-danger-soft);--nav-h:0px;}
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);}
 .wrap{max-width:1320px;margin:0 auto;padding:22px 24px 80px;}
 
 /* encabezado */
@@ -29,16 +35,16 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:
 .dot{width:11px;height:11px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 2.4s infinite;flex-shrink:0;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 h1{font-size:21px;font-weight:700;margin:0;}
-.sub{color:var(--muted);font-size:12px;margin-top:3px;font-family:'IBM Plex Mono',monospace;}
-.clock{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);text-align:right;}
+.sub{color:var(--muted);font-size:12px;margin-top:3px;font-family:var(--font-mono);}
+.clock{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);text-align:right;}
 .clock b{color:var(--text);font-size:14px;display:block;}
 
 /* barra de filtros fija */
-.filterbar{position:sticky;top:var(--nav-h);z-index:200;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:rgba(13,17,23,.95);backdrop-filter:blur(6px);padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
-.filterbar .flbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;margin-right:2px;}
+.filterbar{position:sticky;top:var(--nav-h);z-index:200;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--color-bg);backdrop-filter:blur(6px);padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+.filterbar .flbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--font-mono);margin-right:2px;}
 .chips{display:flex;gap:6px;flex-wrap:wrap;}
-.chip{display:inline-flex;gap:6px;align-items:center;background:#2a2410;border:1px solid var(--amber-dim);color:var(--amber);border-radius:20px;padding:4px 6px 4px 11px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;}
-.chip button{background:none;color:var(--amber);padding:0 4px;font-size:13px;line-height:1;}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--color-accent-soft);border:1px solid var(--amber-dim);color:var(--color-accent-text);border-radius:20px;padding:4px 6px 4px 11px;font-size:11.5px;font-family:var(--font-mono);}
+.chip button{background:none;color:var(--color-accent-text);padding:0 4px;font-size:13px;line-height:1;}
 #clearSelBtn{margin-left:auto;}
 
 /* pestañas */
@@ -46,8 +52,8 @@ h1{font-size:21px;font-weight:700;margin:0;}
 .tabs::-webkit-scrollbar{display:none;}
 .tab{background:none;color:var(--muted);border:none;border-bottom:2px solid transparent;border-radius:0;padding:12px 16px 10px;font-size:13px;font-weight:600;white-space:nowrap;display:flex;gap:7px;align-items:center;}
 .tab:hover{color:var(--text);filter:none;}
-.tab.active{color:var(--amber);border-bottom-color:var(--amber);}
-.tab .cnt{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--red-dim);color:#ff8a8a;border-radius:20px;padding:1px 7px;}
+.tab.active{color:var(--color-accent-text);border-bottom-color:var(--amber);}
+.tab .cnt{font-family:var(--font-mono);font-size:10.5px;background:var(--red-dim);color:var(--color-danger-text);border-radius:20px;padding:1px 7px;}
 .tabpanel{display:none;}
 .tabpanel.active{display:block;}
 .section-intro{font-size:12.5px;color:var(--muted);margin:-6px 0 16px;line-height:1.5;}
@@ -55,62 +61,62 @@ h1{font-size:21px;font-weight:700;margin:0;}
 /* tarjetas y KPIs */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px 13px;}
-.kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
+.kpi .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--font-mono);}
 .kpi .val{font-size:27px;font-weight:700;margin-top:6px;line-height:1.1;}
 .kpi .foot{font-size:11.5px;color:var(--muted);margin-top:5px;}
-.kpi.accent-amber{border-color:var(--amber-dim);} .kpi.accent-amber .val{color:var(--amber);}
-.kpi.accent-red{border-color:var(--red-dim);} .kpi.accent-red .val{color:var(--red);}
-.kpi.accent-teal .val{color:var(--teal);}
+.kpi.accent-amber{border-color:var(--amber-dim);} .kpi.accent-amber .val{color:var(--color-accent-text);}
+.kpi.accent-red{border-color:var(--red-dim);} .kpi.accent-red .val{color:var(--color-danger-text);}
+.kpi.accent-teal .val{color:var(--color-success-text);}
 .kpi.clickable{cursor:pointer;} .kpi.clickable:hover{border-color:var(--muted);}
 .grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;margin-bottom:16px;}
 .grid2.even{grid-template-columns:1fr 1fr;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0;}
 .card.mb{margin-bottom:16px;}
 .card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
-.cardsub{font-size:11.5px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;line-height:1.45;}
+.cardsub{font-size:11.5px;color:var(--muted);margin-bottom:14px;font-family:var(--font-mono);line-height:1.45;}
 .chart-box{position:relative;width:100%;}
 canvas{max-width:100%;}
 
 /* riesgo */
-.risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-.risk.critico{background:var(--st-critical-dim);color:#ff8a8a;}
-.risk.alto{background:var(--st-serious-dim);color:var(--st-serious);}
-.risk.medio{background:var(--st-warning-dim);color:var(--st-warning);}
-.risk.bajo{background:var(--st-good-dim);color:#5fd35f;}
-.risk.inactivo{background:#17253a;color:#86aee0;}
-.risk.na{background:#2a2f3a;color:var(--muted);}
+.risk{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:var(--font-mono);white-space:nowrap;}
+.risk.critico{background:var(--st-critical-dim);color:var(--color-danger-text);}
+.risk.alto{background:var(--st-serious-dim);color:var(--color-warn-text);}
+.risk.medio{background:var(--st-warning-dim);color:var(--color-accent-text);}
+.risk.bajo{background:var(--st-good-dim);color:var(--color-success-text);}
+.risk.inactivo{background:var(--color-primary-soft);color:var(--color-primary-text);}
+.risk.na{background:var(--color-border);color:var(--muted);}
 
 /* tablas */
 table{width:100%;border-collapse:collapse;font-size:12.5px;}
-thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;user-select:none;white-space:nowrap;}
+thead th{text-align:left;font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;user-select:none;white-space:nowrap;}
 thead th:hover{color:var(--text);}
-thead th.sorted{color:var(--amber);}
-tbody td{padding:9px 10px;border-bottom:1px solid #1b212b;vertical-align:top;}
-tbody tr:hover{background:#171e28;}
+thead th.sorted{color:var(--color-accent-text);}
+tbody td{padding:9px 10px;border-bottom:1px solid var(--color-surface-2);vertical-align:top;}
+tbody tr:hover{background:var(--color-surface-2);}
 tbody tr[data-key],tbody tr[data-area],tbody tr[data-tec]{cursor:pointer;}
 .tec-link{cursor:pointer;text-decoration:underline dotted;text-decoration-color:var(--muted);}
-.tec-link:hover{color:var(--amber);}
-tbody tr.selected-row{background:#241d0c;box-shadow:inset 3px 0 0 var(--amber);}
+.tec-link:hover{color:var(--color-accent-text);}
+tbody tr.selected-row{background:var(--color-accent-soft);box-shadow:inset 3px 0 0 var(--amber);}
 .eqname{font-weight:600;}
 .areaname{color:var(--muted);font-size:11px;}
-.numcell{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-.numcell .sub-txt{white-space:normal;color:var(--muted);font-size:11px;margin-top:3px;max-width:220px;min-width:160px;font-family:'Space Grotesk',sans-serif;}
+.numcell{font-family:var(--font-mono);white-space:nowrap;}
+.numcell .sub-txt{white-space:normal;color:var(--muted);font-size:11px;margin-top:3px;max-width:220px;min-width:160px;font-family:var(--font-sans);}
 #predTable td:last-child{min-width:280px;}
 .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
 .toolbar .grow{flex:1;min-width:200px;}
-select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:7px;font-size:12.5px;font-family:'Space Grotesk',sans-serif;}
+select,input[type=text]{background:var(--color-input-bg);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:7px;font-size:12.5px;font-family:var(--font-sans);}
 select:focus,input:focus{outline:1px solid var(--amber);}
 .empty{color:var(--muted);font-size:12.5px;padding:20px 0;text-align:center;}
 
 /* prioridades */
 .prio-item{display:grid;grid-template-columns:86px 1fr auto;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:6px;}
 .prio-item:last-child{border-bottom:none;}
-.prio-item:hover{background:#171e28;}
+.prio-item:hover{background:var(--color-surface-2);}
 .prio-eq{font-weight:600;font-size:13px;}
-.prio-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
-.prio-when{font-family:'IBM Plex Mono',monospace;font-size:11.5px;text-align:right;white-space:nowrap;}
+.prio-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;}
+.prio-when{font-family:var(--font-mono);font-size:11.5px;text-align:right;white-space:nowrap;}
 .prio-foot{font-size:11.5px;color:var(--muted);margin-top:10px;}
-.linkbtn{background:none;color:var(--amber);padding:0;font-size:12px;font-weight:600;}
+.linkbtn{background:none;color:var(--color-accent-text);padding:0;font-size:12px;font-weight:600;}
 
 /* conclusiones */
 .concl-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.55;}
@@ -120,62 +126,62 @@ select:focus,input:focus{outline:1px solid var(--amber);}
 .risk-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
 .risk-cell{border-radius:9px;padding:13px 14px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:transform .1s,border-color .15s;position:relative;min-height:78px;}
 .risk-cell:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);}
-.risk-cell.selected{border-color:#fff;border-width:2px;}
+.risk-cell.selected{border-color:var(--color-text);border-width:2px;}
 .rc-area{font-weight:600;font-size:12.5px;color:#fff;margin-bottom:6px;line-height:1.25;padding-right:34px;}
-.rc-meta{font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.82);}
-.rc-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:2px 7px;border-radius:20px;}
+.rc-meta{font-size:10.5px;font-family:var(--font-mono);color:rgba(255,255,255,.82);}
+.rc-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:20px;}
 
 /* kaizen */
 .kaizen-item{border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-bottom:10px;background:var(--panel-2);}
 .kz-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
 .kz-title{font-weight:600;font-size:13px;}
-.kz-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;}
-.kz-action{font-size:12px;line-height:1.5;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:7px;padding:9px 11px;}
-.trend-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;font-family:'IBM Plex Mono',monospace;}
-.trend-tag.empeorando{background:var(--st-critical-dim);color:#ff8a8a;}
-.trend-tag.mejorando{background:var(--st-good-dim);color:#5fd35f;}
-.trend-tag.estable{background:#16302c;color:var(--cat-aqua);}
-.trend-tag.insuficiente{background:#2a2f3a;color:var(--muted);}
+.kz-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:8px;}
+.kz-action{font-size:12px;line-height:1.5;background:var(--color-success-soft);border:1px solid var(--teal-dim);border-radius:7px;padding:9px 11px;}
+.trend-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;font-family:var(--font-mono);}
+.trend-tag.empeorando{background:var(--st-critical-dim);color:var(--color-danger-text);}
+.trend-tag.mejorando{background:var(--st-good-dim);color:var(--color-success-text);}
+.trend-tag.estable{background:var(--color-success-soft);color:var(--cat-aqua);}
+.trend-tag.insuficiente{background:var(--color-border);color:var(--muted);}
 
 /* ficha lateral */
-.drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:none;}
+.drawer-bg{position:fixed;inset:0;background:var(--color-overlay);z-index:400;display:none;}
 .drawer-bg.open{display:block;}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(780px,100%);background:var(--bg);border-left:1px solid var(--line);z-index:401;overflow-y:auto;transform:translateX(105%);transition:transform .2s ease;padding:0 22px 40px;}
 .drawer.open{transform:none;}
 .drawer-head{position:sticky;top:0;background:var(--bg);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 0 12px;border-bottom:1px solid var(--line);margin-bottom:14px;z-index:2;}
-.drawer-kind{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'IBM Plex Mono',monospace;}
+.drawer-kind{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--font-mono);}
 .drawer-title{font-size:17px;font-weight:700;margin-top:3px;}
 .drawer-actions{display:flex;gap:8px;flex-shrink:0;}
 .history-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:0 0 18px;}
 .hs{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;}
-.hs .hlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace;}
+.hs .hlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);}
 .hs .hval{font-size:18px;font-weight:700;margin-top:4px;}
-.reco-box{margin:0 0 20px;background:#0f1d1a;border:1px solid var(--teal-dim);border-radius:9px;padding:16px 18px;}
-.reco-box h3{margin:0 0 8px;font-size:13px;color:var(--teal);}
+.reco-box{margin:0 0 20px;background:var(--color-success-soft);border:1px solid var(--teal-dim);border-radius:9px;padding:16px 18px;}
+.reco-box h3{margin:0 0 8px;font-size:13px;color:var(--color-success-text);}
 .reco-box p{margin:0 0 8px;font-size:12.5px;line-height:1.55;}
 .reco-box p:last-child{margin-bottom:0;}
-.std-tag{display:inline-block;background:#123832;color:var(--teal);border-radius:4px;padding:1px 7px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;margin-right:5px;}
+.std-tag{display:inline-block;background:var(--color-success-soft);color:var(--color-success-text);border-radius:4px;padding:1px 7px;font-size:10.5px;font-family:var(--font-mono);margin-right:5px;}
 .drawer h3.sec{font-size:13px;margin:4px 0 10px;}
 
 /* datos */
-textarea{width:100%;min-height:140px;background:#0a0e14;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;resize:vertical;}
+textarea{width:100%;min-height:140px;background:var(--color-bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:12px;font-family:var(--font-mono);font-size:11.5px;resize:vertical;}
 .feed-actions{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;}
-.feed-status{font-size:12px;color:var(--teal);font-family:'IBM Plex Mono',monospace;}
+.feed-status{font-size:12px;color:var(--color-success-text);font-family:var(--font-mono);}
 .hint{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.5;}
 
-button{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;cursor:pointer;font-family:'Space Grotesk',sans-serif;}
+button{background:var(--amber);color:var(--color-on-accent);border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:12.5px;cursor:pointer;font-family:var(--font-sans);}
 button.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
 button.small{padding:6px 12px;font-size:11.5px;}
 button:hover{filter:brightness(1.08);}
-footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:'IBM Plex Mono',monospace;}
+footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-family:var(--font-mono);}
 /* (14 oct 2026) indicadores de gestión (estilo SAP PM): cumplimiento preventivo, órdenes vencidas, reincidencia */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;}
 .gl-item{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:12.5px;}
 .gl-item:last-child{border-bottom:none;}
 .gl-item .gl-name{font-weight:600;overflow-wrap:anywhere;}
-.gl-item .gl-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;overflow-wrap:anywhere;}
-.gl-item .gl-val{font-family:'IBM Plex Mono',monospace;font-size:11.5px;white-space:nowrap;text-align:right;color:#ff8a8a;}
-.gl-item .gl-val.amber{color:var(--amber);}
+.gl-item .gl-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;overflow-wrap:anywhere;}
+.gl-item .gl-val{font-family:var(--font-mono);font-size:11.5px;white-space:nowrap;text-align:right;color:var(--color-danger-text);}
+.gl-item .gl-val.amber{color:var(--color-accent-text);}
 @media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even,.grid3{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
 </style>
 </head>
@@ -207,6 +213,8 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <div id="fUbic" style="flex:1 1 100%;"></div>
     <select id="fTecnico" aria-label="Técnico"><option value="">Todos los técnicos</option></select>
     <select id="fTipo" aria-label="Tipo"><option value="">Todos los tipos</option></select>
+    <!-- (28 oct 2026) Criticidad del equipo (catálogo, 0 lecturas). "Todas" = no quita nada. -->
+    <select id="fCrit" aria-label="Criticidad"><option value="">Todas las criticidades</option><option value="A">A · Crítico</option><option value="B">B · Importante</option><option value="C">C · Normal</option><option value="N">Sin evaluar</option></select>
     <div class="chips" id="chipBox"></div>
     <button class="secondary small" id="clearSelBtn">Limpiar filtros</button>
   </div>
@@ -217,6 +225,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <button class="tab" data-tab="areas">Áreas</button>
     <button class="tab" data-tab="tecnicos">Técnicos</button>
     <button class="tab" data-tab="naves" id="tabNavesBtn" style="display:none;">🏭 Naves</button>
+    <button class="tab" data-tab="seguridad">🦺 Seguridad</button>
     <button class="tab" data-tab="datos">Datos</button>
   </nav>
 
@@ -272,6 +281,12 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
         <div class="chart-box" id="chartCausaBox" style="height:250px"><canvas id="chartCausa"></canvas></div>
         <div class="empty" id="causaEmpty" style="display:none;">Ninguna OT de este alcance tiene causa registrada.</div>
       </div>
+    </div>
+    <!-- (28 oct 2026) Mismos indicadores del Resumen, separados por criticidad del equipo -->
+    <div class="card mb" id="cardCritKpis" style="margin-top:16px;">
+      <h2>Indicadores por criticidad</h2>
+      <div class="cardsub" id="critKpisSub">Mismas fórmulas del Resumen para los equipos A · Crítico, B · Importante, C · Normal y sin evaluar. Aplica todos los filtros menos el de criticidad. Clic en una fila para filtrar.</div>
+      <div style="overflow-x:auto;"><table id="critKpisTable"><thead><tr><th>Criticidad</th><th>Equipos</th><th>OTs</th><th>Correctivos</th><th>Paro por fallas</th><th>MTBF prom.</th><th>MTTR</th><th>Disponibilidad</th></tr></thead><tbody id="critKpisBody"></tbody></table></div>
     </div>
   </section>
 
@@ -370,6 +385,35 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     </div>
   </section>
 
+  <!-- ═════════ SEGURIDAD (28 oct 2026) ═════════ -->
+  <section class="tabpanel" id="tab-seguridad">
+    <p class="section-intro">Permisos de trabajo y bloqueo (LOTO) que registran los técnicos en la Bitácora. Se leen solo al abrir esta pestaña: los permisos creados en la ventana (30 días si el período es "13 meses"; si no, el período elegido) y los que siguen abiertos. Aplican la nave, el área, la línea, el equipo y la criticidad.</p>
+    <div class="kpis" id="segKpis"><div class="empty">Abre esta pestaña para cargar…</div></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Bloqueos abiertos más de 12 h</h2>
+        <div class="cardsub">Posibles candados olvidados: el técnico no marcó "Retirar bloqueo".</div>
+        <div id="segAbiertos"></div>
+      </div>
+      <div class="card">
+        <h2>Permisos por autorizar</h2>
+        <div class="cardsub">Trabajos con riesgo especial esperando al Supervisor o Encargado (se autorizan en Bitácora → Avisos).</div>
+        <div id="segPorAut"></div>
+      </div>
+    </div>
+    <div class="card mb" style="margin-top:16px;">
+      <h2>Trabajos en equipos A sin LOTO</h2>
+      <div class="cardsub">OTs de la ventana en equipos A · Crítico sin permiso de trabajo con bloqueo.</div>
+      <div id="segSinLoto"></div>
+    </div>
+    <div class="card">
+      <h2>Permisos de la ventana</h2>
+      <div class="cardsub" id="segSub"></div>
+      <div class="feed-actions" style="margin-bottom:10px;"><button onclick="exportSeguridadExcel()">📊 Exportar permisos a Excel</button><span class="feed-status" id="segStatus"></span></div>
+      <div style="overflow-x:auto;"><table id="segTable"><thead><tr><th>Fecha</th><th>Equipo</th><th>Técnico</th><th>LOTO</th><th>Riesgos</th><th>Estado</th></tr></thead><tbody id="segBody"></tbody></table></div>
+    </div>
+  </section>
+
   <!-- ═════════ DATOS ═════════ -->
   <section class="tabpanel" id="tab-datos">
     <div class="card mb">
@@ -432,6 +476,14 @@ const esc = typeof fbEsc === 'function' ? fbEsc : (s => String(s ?? '').replace(
 // script se caía aquí y la página quedaba en blanco. Ahora los KPIs y tablas
 // se dibujan igual y cada gráfica muestra un aviso en su lugar.
 const HAS_CHART = typeof Chart !== 'undefined';
+// (26 oct 2026, Etapa 4) Colores de ejes, rejilla y etiquetas desde tema.css (claro u oscuro según
+// el celular). Se leen al dibujar; si el celular cambia de modo, se vuelven a dibujar las gráficas.
+function CT(v){ try { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || '#8b98ab'; } catch(e){ return '#8b98ab'; } }
+try {
+  const _mqTema = matchMedia('(prefers-color-scheme: dark)');
+  const _reTema = () => { try { if (window._rowsAll && typeof render === 'function') render(); } catch(e){} };
+  _mqTema.addEventListener ? _mqTema.addEventListener('change', _reTema) : _mqTema.addListener(_reTema);
+} catch(e) {}
 if (HAS_CHART) {
   if (typeof ChartDataLabels !== 'undefined') {
     Chart.register(ChartDataLabels);
@@ -558,7 +610,7 @@ const paroDe = r => r.minMaquina;
 const paroTecnicoDe = r => isProy(r) ? 0 : r.minMaquina;
 
 /* ---------- estado de filtros y ficha ---------- */
-const F = { periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'' };
+const F = { periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'', crit:'' };
 let ficha = null; // {mode:'equipo'|'area'|'tecnico', val}
 // (25 oct 2026, Etapa 3) Barra Nave → Área → Línea → Equipo (filtros.js). F.area
 // es el área elegida en ella (las gráficas y tablas la siguen usando igual).
@@ -576,8 +628,13 @@ function predsAlcance(){
     tipo: r=>!F.tipo || (r.tipoMant||'Sin clasificar')===F.tipo,
     semana: r=>!F.semana || weekOf(r)===F.semana,
     causa: r=>!F.causa || r.causa===F.causa,
+    crit: r=>!F.crit || (critDeFila(r) || 'N')===F.crit, // (28 oct 2026)
   };
 }
+// (28 oct 2026) Criticidad del equipo de una OT (catálogo de 12 h, 0 lecturas). '' = sin evaluar.
+let _critPorId = {};
+function idEquipoFila(r){ return r.equipoId || _equiposPorNombre[fbEquipoKey(r.equipo || r.tipoMaquina)] || ''; }
+function critDeFila(r){ const id = idEquipoFila(r); return (id && (_critPorId[id] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(id) : ''))) || ''; }
 const enPeriodo = (r, ref) => F.periodo==='todo' || daysBetween(parseFecha(r.fecha), ref) <= +F.periodo;
 // KPIs del Resumen para un conjunto de OTs (mismas fórmulas para el panel,
 // el comparativo entre naves y la tabla por área).
@@ -682,6 +739,7 @@ function render(){
   fillSelect('fTecnico', [...new Set(rowsAll.flatMap(r=>splitTecnicos(r.tecnicos)))].sort(), 'Todos los técnicos', F.tecnico);
   fillSelect('fTipo', [...new Set(rowsAll.map(r=>r.tipoMant||'Sin clasificar'))].sort(), 'Todos los tipos', F.tipo);
   $('fPeriodo').value = F.periodo;
+  $('fCrit').value = F.crit;
 
   /* filtros: cada gráfica que filtra se dibuja SIN su propio filtro, y resalta lo elegido */
   const periodRows = F.periodo==='todo' ? rowsAll : rowsAll.filter(r=>enPeriodo(r, ref));
@@ -689,7 +747,7 @@ function render(){
   const rowsExcept = k => periodRows.filter(r=>Object.entries(preds).every(([kk,f])=>kk===k || f(r)));
   const scopeRows = rowsExcept(null);
   window._scopeRows = scopeRows;
-  window._hasFilter = F.periodo!=='todo' || ['area','tecnico','tipo','semana','causa'].some(k=>F[k]) || ubicActiva();
+  window._hasFilter = F.periodo!=='todo' || ['area','tecnico','tipo','semana','causa','crit'].some(k=>F[k]) || ubicActiva();
 
   /* chips para filtros que no tienen selector propio */
   const chips = [];
@@ -704,7 +762,7 @@ function render(){
   // área, con TODO su historial (la clave de equipo ya no depende del área).
   // (Etapa 3) igual con línea o equipo: los equipos que entran en la barra de ubicación.
   const keysArea = ubicActiva() ? new Set(rowsAll.filter(preds.area).map(eqKey)) : null;
-  const predScope = (ubicActiva()||F.tecnico) ? computePredictive(rowsAll.filter(r=>(!keysArea||keysArea.has(eqKey(r)))&&preds.tecnico(r)), ref) : predAll;
+  const predScope = (ubicActiva()||F.tecnico||F.crit) ? computePredictive(rowsAll.filter(r=>(!keysArea||keysArea.has(eqKey(r)))&&preds.tecnico(r)&&preds.crit(r)), ref) : predAll;
   window._predictive = predScope; window._predAll = predAll;
 
   /* KPIs */
@@ -761,8 +819,8 @@ function render(){
     options:{
       onClick:(e,els)=>{ if(!els.length) return; const s=weeksSorted[els[0].index]; F.semana=(F.semana===s)?'':s; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{display:false}, datalabels:{display:weeksSorted.length<=26,align:'top',offset:5,color:'#f0a930',font:{family:'IBM Plex Mono',size:10,weight:'600'},formatter:v=>v}},
-      scales:{x:{ticks:{color:'#8b98ab',maxRotation:0,autoSkip:true},grid:{display:false}}, y:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},beginAtZero:true}}}
+      plugins:{legend:{display:false}, datalabels:{display:weeksSorted.length<=26,align:'top',offset:5,color:CT('--color-accent-text'),font:{family:'JetBrains Mono',size:10,weight:'600'},formatter:v=>v}},
+      scales:{x:{ticks:{color:CT('--chart-muted'),maxRotation:0,autoSkip:true},grid:{display:false}}, y:{ticks:{color:CT('--chart-muted'),precision:0},grid:{color:CT('--chart-grid')},beginAtZero:true}}}
   });
 
   /* gráfica: tipo */
@@ -773,12 +831,12 @@ function render(){
   mkChart('tipo', 'chartTipo', {
     type:'doughnut',
     data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(k=>tipoCounts[k]),
-      backgroundColor:tipoLabels.map(k=>{ const c=TIPO_COLORS[k.toLowerCase()]||'#8b98ab'; return (!F.tipo||F.tipo===k)?c:c+'40'; }), borderColor:'#141a22', borderWidth:2}]},
+      backgroundColor:tipoLabels.map(k=>{ const c=TIPO_COLORS[k.toLowerCase()]||CT('--chart-muted'); return (!F.tipo||F.tipo===k)?c:c+'40'; }), borderColor:CT('--chart-surface'), borderWidth:2}]},
     options:{cutout:'58%',
       onClick:(e,els)=>{ if(!els.length) return; const t=tipoLabels[els[0].index]; F.tipo=(F.tipo===t)?'':t; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{position:'right',labels:{color:'#e6ebf1',font:{family:'Space Grotesk',size:11.5},boxWidth:12}},
-        datalabels:{display:true,color:'#0d1117',font:{family:'IBM Plex Mono',size:11,weight:'700'},
+      plugins:{legend:{position:'right',labels:{color:CT('--chart-text'),font:{family:'Barlow',size:11.5},boxWidth:12}},
+        datalabels:{display:true,color:'#0d1117',font:{family:'JetBrains Mono',size:11,weight:'700'},
           formatter:(v,ctx)=>{ const tot=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); const p=tot?Math.round(v/tot*100):0; return p>=6?p+'%':''; }}}}
   });
 
@@ -797,8 +855,8 @@ function render(){
       options:{indexAxis:'y',
         onClick:(e,els)=>{ if(!els.length) return; const c=causaSorted[els[0].index][0]; F.causa=(F.causa===c)?'':c; render(); },
         onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-        plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
-        scales:{x:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},grace:'10%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
+        plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11,weight:'600'},formatter:v=>v}},
+        scales:{x:{ticks:{color:CT('--chart-muted'),precision:0},grid:{color:CT('--chart-grid')},grace:'10%'}, y:{ticks:{color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11}},grid:{display:false}}}}
     });
   }
 
@@ -814,8 +872,8 @@ function render(){
     options:{indexAxis:'y',
       onClick:(e,els)=>{ if(!els.length) return; const a=areaSorted[els[0].index][0]; setUbicArea(F.area===a?'':a); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:v=>v}},
-      scales:{x:{ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},grace:'10%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
+      plugins:{legend:{display:false}, datalabels:{display:true,anchor:'end',align:'end',color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11,weight:'600'},formatter:v=>v}},
+      scales:{x:{ticks:{color:CT('--chart-muted'),precision:0},grid:{color:CT('--chart-grid')},grace:'10%'}, y:{ticks:{color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11}},grid:{display:false}}}}
   });
   computeAreaStats(areaRows, predAll);
 
@@ -824,7 +882,92 @@ function render(){
   renderKaizen(scopeRows);
   renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, areaSorted, weeksSorted, weekCounts});
   renderGestion(); // (14 oct 2026) indicadores de gestión
+  renderCritKpis(rowsExcept('crit'), ref); // (28 oct 2026)
+  if ($('tab-seguridad').classList.contains('active')) renderSeguridadAn();
   if (ficha) renderFicha();
+}
+
+/* ══════ (28 oct 2026) INDICADORES POR CRITICIDAD ══════
+   Las MISMAS fórmulas del Resumen (calcKpis) sobre las OTs de los equipos de
+   cada nivel. Equipos = los del catálogo en la nave/área/línea elegida. */
+const CRIT_NIVELES = [['A','A · Crítico'],['B','B · Importante'],['C','C · Normal'],['N','Sin evaluar']];
+function renderCritKpis(rows, ref){
+  const body = $('critKpisBody'); if (!body) return;
+  const eqs = (_equiposDocs||[]).filter(e=>e.nombre && e.activo!==false && fbEquipoEnNave(e) && (!ubic || ubic.coincideEquipo(e)));
+  window._critKpis = CRIT_NIVELES.map(([n,t])=>{
+    const sub = rows.filter(r=>(critDeFila(r)||'N')===n);
+    const k = calcKpis(sub, ref);
+    return { n, t, equipos: eqs.filter(e=>((typeof fbCritNivel==='function'?fbCritNivel(e):e.criticidad)||'N')===n).length, ots: sub.length, correctivos: k.correctivos.length, paroH: k.totalDowntime/60, mtbf: k.mtbfAvg, mttr: k.mttrAvg, disp: k.disp };
+  });
+  body.innerHTML = window._critKpis.map(x=>`<tr data-crit="${x.n}" style="cursor:pointer;${F.crit===x.n?'background:var(--color-primary-soft);':''}"><td style="white-space:nowrap;">${x.n==='N'?'<span class="fbc fbc-N">Sin evaluar</span>':(typeof fbCritBadge==='function'?fbCritBadge(x.n):esc(x.t))}</td><td class="numcell">${x.equipos}</td><td class="numcell">${x.ots}</td><td class="numcell">${x.correctivos}</td><td class="numcell">${x.paroH.toFixed(0)}h</td><td class="numcell">${x.mtbf!=null?x.mtbf.toFixed(1)+' d':'—'}</td><td class="numcell">${x.mttr!=null?fmtHM(x.mttr):'—'}</td><td class="numcell">${x.disp!=null?x.disp.toFixed(1)+'%':'—'}</td></tr>`).join('');
+}
+
+/* ══════ (28 oct 2026) SEGURIDAD: permisos de trabajo / LOTO ══════
+   Lecturas SOLO al abrir la pestaña: los permisos creados desde el inicio de
+   la ventana (creadoEn >=, un solo campo) + los que siguen abiertos (estado
+   'in', un solo campo). Sin índices compuestos. Se guarda en memoria y solo se
+   vuelve a leer si se pide una ventana más larga. */
+const _segAn = { desdeMs: 0, permisos: null, cargando: false, err: '' };
+function segVentanaDias(){ return ['30','90','180','365'].includes(F.periodo) ? +F.periodo : 30; }
+function cargarSeguridadAn(){
+  const desdeMs = today0().getTime() - (segVentanaDias()-1)*86400000;
+  if (_segAn.cargando || (_segAn.permisos && _segAn.desdeMs <= desdeMs)) { renderSeguridadAn(); return; }
+  if (typeof fbSegCargarReporte !== 'function' || typeof db === 'undefined') return;
+  _segAn.cargando = true; _segAn.err = '';
+  renderSeguridadAn();
+  window.fbReady.then(()=>fbSegCargarReporte(desdeMs)).then(r=>{ _segAn.permisos = r.permisos; _segAn.desdeMs = desdeMs; })
+    .catch(e=>{ _segAn.err = e && e.code==='permission-denied' ? 'Tu usuario no puede ver los permisos de trabajo (solo técnicos, supervisores, encargado y administrador).' : ((e && e.message) || String(e)); })
+    .finally(()=>{ _segAn.cargando = false; renderSeguridadAn(); });
+}
+const accPermiso = p => ({ area:'', linea:'', equipoId: p.equipoId||'', equipo: p.equipoNombre||'' });
+function datosSeguridadAn(){
+  const desdeMs = today0().getTime() - (segVentanaDias()-1)*86400000;
+  const desde = fbFechaLocal(new Date(desdeMs));
+  const critP = p => (p.equipoId && (_critPorId[p.equipoId] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(p.equipoId) : ''))) || p.criticidad || '';
+  const permisos = (_segAn.permisos||[]).filter(p=>fbEnNave(p) && (!ubic || ubic.coincide(p, accPermiso)) && (!F.crit || (critP(p)||'N')===F.crit));
+  const ots = (window._rowsAll||[]).filter(r=>r.fecha>=desde && enUbic(r) && (!F.crit || (critDeFila(r)||'N')===F.crit));
+  const R = fbSegCalcularReporte({ permisos, ots: ots.map(r=>({ ...r, id: r._id })), critDe: critDeFila, desdeMs });
+  return { R, permisos, desde, desdeMs };
+}
+function renderSeguridadAn(){
+  const k = $('segKpis'); if (!k) return;
+  if (_segAn.err){ k.innerHTML = `<div class="empty">⚠️ ${esc(_segAn.err)}</div>`; return; }
+  if (!_segAn.permisos){ k.innerHTML = '<div class="empty">⏳ Cargando permisos de trabajo…</div>'; return; }
+  const { R, desde } = datosSeguridadAn();
+  window._segReporte = R;
+  const pct = R.pctLotoA;
+  k.innerHTML = `
+    <div class="kpi ${pct==null?'':pct>=95?'accent-teal':pct>=80?'accent-amber':'accent-red'}" id="segKpiLoto" title="OTs de la ventana en equipos A · Crítico con permiso de trabajo y bloqueo (LOTO) hecho ÷ OTs en equipos A."><div class="lbl">Trabajos en equipos A con LOTO</div><div class="val">${pct!=null?pct+'%':'—'}</div><div class="foot">${R.otsAConLoto} de ${R.otsA} OT(s) en equipos A</div></div>
+    <div class="kpi ${R.abiertos12h.length?'accent-red':'accent-teal'}" id="segKpiAbiertos"><div class="lbl">Bloqueos abiertos &gt; 12 h</div><div class="val">${R.abiertos12h.length}</div><div class="foot">candados posiblemente olvidados</div></div>
+    <div class="kpi ${R.porAutorizar.length?'accent-amber':''}" id="segKpiPorAut"><div class="lbl">Permisos por autorizar</div><div class="val">${R.porAutorizar.length}</div><div class="foot">con riesgo especial</div></div>
+    <div class="kpi" id="segKpiTotal"><div class="lbl">Permisos en la ventana</div><div class="val">${R.total}</div><div class="foot">${R.conLotoTotal} con LOTO · ${R.especiales} con riesgo especial · ${R.rechazados} rechazado(s)${R.cerradosSinAutorizacion?' · '+R.cerradosSinAutorizacion+' cerrado(s) sin autorización':''}</div></div>`;
+  const hace = p => { const ms = fbSegMs(p); if (!ms) return '—'; const h = (Date.now()-ms)/3600000; return h>=48 ? Math.floor(h/24)+' días' : Math.floor(h)+' h'; };
+  const fila = (p, extra) => `<div class="prio-item" style="display:block;padding:8px 0;border-bottom:1px dashed var(--line);" data-permiso="${esc(p.id)}"><b>${esc(p.equipoNombre||'—')}</b> ${typeof fbCritBadge==='function'?fbCritBadge(critDeFila({equipoId:p.equipoId, equipo:p.equipoNombre})):''} <span style="color:var(--muted)">· ${esc(p.tecnico||'—')}${p.otFolio?' · '+esc(p.otFolio):''}</span><div style="font-size:12px;color:var(--muted);">${extra}</div></div>`;
+  $('segAbiertos').innerHTML = R.abiertos12h.length ? R.abiertos12h.map(p=>fila(p, '🔒 abierto hace <b>'+esc(hace(p))+'</b>'+(p.loto&&p.loto.candado?' · candado '+esc(p.loto.candado):'')+' · '+fbSegEstadoHtml(p))).join('') : '<div class="empty">✅ Ningún bloqueo abierto por más de 12 horas.</div>';
+  $('segPorAut').innerHTML = R.porAutorizar.length ? R.porAutorizar.map(p=>fila(p, '⚠️ '+esc(fbSegRiesgosTxt(p.riesgos).join(', '))+' · esperando hace '+esc(hace(p)))).join('') : '<div class="empty">✅ Nada por autorizar.</div>';
+  $('segSinLoto').innerHTML = R.otsASinLoto.length ? `<div style="overflow-x:auto;"><table><thead><tr><th>OT</th><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Técnico</th></tr></thead><tbody>${R.otsASinLoto.slice(0,100).map(r=>`<tr><td>${esc(r.ot||r._id||'')}</td><td>${esc(r.fecha)}</td><td class="eqname">${esc(canonEquipo(r))}</td><td>${esc(r.tipoMant)}</td><td>${esc(r.tecnicos)}</td></tr>`).join('')}</tbody></table></div>` : (R.otsA ? '<div class="empty">✅ Todos los trabajos en equipos A tienen LOTO.</div>' : '<div class="empty">No hay OTs en equipos A en esta ventana (o los equipos no tienen criticidad todavía).</div>');
+  const lista = R.enPeriodo;
+  $('segSub').textContent = `Desde el ${desde} · ${lista.length} permiso(s)${(_segAn.permisos||[]).length!==lista.length?' (de '+(_segAn.permisos||[]).length+' leídos, con los filtros)':''}`;
+  $('segBody').innerHTML = lista.length ? lista.slice(0,300).map(p=>{ const ms = fbSegMs(p); const d = ms?new Date(ms):null; return `<tr data-permiso="${esc(p.id)}"><td style="white-space:nowrap;">${d?esc(fbFechaLocal(d))+' '+esc(p.horaInicio||''):esc(p.fecha||'')}</td><td class="eqname">${esc(p.equipoNombre||'')}</td><td>${esc(p.tecnico||'')}</td><td>${fbSegLotoHecho(p)?'🔒 Sí'+(p.loto.candado?' ('+esc(p.loto.candado)+')':''):'No'}</td><td>${esc(fbSegRiesgosTxt(p.riesgos).join(', ')||'—')}</td><td>${fbSegEstadoHtml(p)}</td></tr>`; }).join('') : '<tr><td colspan="6" class="empty">No hay permisos en esta ventana.</td></tr>';
+}
+function exportSeguridadExcel(){
+  if (!_segAn.permisos){ $('segStatus').textContent = 'Primero se tienen que cargar los permisos.'; return; }
+  const { R, desde } = datosSeguridadAn();
+  const lista = R.enPeriodo.concat(R.abiertos12h.filter(p=>!R.enPeriodo.includes(p)));
+  const ubTxt = (ubic && ubic.texto()) || fbNaveTexto();
+  const titulo = 'Permisos de trabajo / LOTO · ' + ubTxt + ' · desde ' + desde + (F.crit ? ' · criticidad ' + F.crit : '') + ' · generado ' + fbHoy();
+  const hojas = [
+    { nombre: 'Permisos', titulo, columnas: FB_SEG.COLUMNAS_EXCEL, filas: fbSegFilasExcel(lista) },
+    { nombre: 'Resumen', titulo, columnas: [{t:'Indicador', w:40},{t:'Valor', w:14},{t:'Detalle', w:50}], filas: [
+      ['Trabajos en equipos A con LOTO (%)', R.pctLotoA!=null?R.pctLotoA:'', R.otsAConLoto+' de '+R.otsA+' OT(s) en equipos A'],
+      ['Bloqueos abiertos > 12 h', R.abiertos12h.length, R.abiertos12h.map(p=>(p.equipoNombre||'')+' ('+(p.tecnico||'')+')').join('; ')],
+      ['Permisos por autorizar', R.porAutorizar.length, ''],
+      ['Permisos en la ventana', R.total, R.conLotoTotal+' con LOTO · '+R.especiales+' con riesgo especial'],
+      ['Rechazados', R.rechazados, ''],
+      ['Cerrados sin autorización', R.cerradosSinAutorizacion, 'tenían riesgo especial y se cerraron antes de autorizar'],
+    ]},
+  ];
+  fbExportar({ nombre: fbNombreArchivo('seguridad', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas, aviso: m=>{ $('segStatus').textContent = m; } });
 }
 
 /* ══════ INDICADORES DE GESTIÓN (14 oct 2026 — inspirados en SAP PM) ══════
@@ -1152,8 +1295,8 @@ function renderComparativo(){
     type:'bar',
     data:{labels:lbl, datasets:[{data:filas.map(f=>valCmp[m](f)==null?0:valCmp[m](f)), backgroundColor:filas.map(f=>!act||f.key===act?'#f0a930':'#f0a93066'), borderRadius:4}]},
     options:{indexAxis:'y',
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtCmp[m==='paroH'?'paroH':m](filas[c.dataIndex])}}, datalabels:{display:true,anchor:'end',align:'end',color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11,weight:'600'},formatter:(v,c)=>fmtCmp[m](filas[c.dataIndex])}},
-      scales:{x:{ticks:{color:'#8b98ab'},grid:{color:'#1e2733'},beginAtZero:true,grace:'15%'}, y:{ticks:{color:'#e6ebf1',font:{family:'IBM Plex Mono',size:11}},grid:{display:false}}}}
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtCmp[m==='paroH'?'paroH':m](filas[c.dataIndex])}}, datalabels:{display:true,anchor:'end',align:'end',color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11,weight:'600'},formatter:(v,c)=>fmtCmp[m](filas[c.dataIndex])}},
+      scales:{x:{ticks:{color:CT('--chart-muted')},grid:{color:CT('--chart-grid')},beginAtZero:true,grace:'15%'}, y:{ticks:{color:CT('--chart-text'),font:{family:'JetBrains Mono',size:11}},grid:{display:false}}}}
   });
 }
 
@@ -1211,7 +1354,7 @@ function renderPrioridades(pred){
     <div class="prio-item" data-key="${esc(p.key)}">
       <span class="risk ${p.risk}">${riskLabel(p.risk)}</span>
       <div><div class="prio-eq">${esc(p.equipo)}</div><div class="prio-meta">${esc(p.area)} · MTBF ${p.mtbf.toFixed(1)} d · ${p.fallas} correctivos</div></div>
-      <div class="prio-when" style="color:${p.risk==='critico'?'#ff8a8a':'var(--st-serious)'}">${p.daysUntil<0?'vencido hace '+Math.abs(p.daysUntil)+'d':p.daysUntil===0?'hoy':'en '+p.daysUntil+'d'}<div class="prio-meta">${fmtDate(p.nextDate)}</div></div>
+      <div class="prio-when" style="color:${p.risk==='critico'?'var(--color-danger-text)':'var(--color-warn-text)'}">${p.daysUntil<0?'vencido hace '+Math.abs(p.daysUntil)+'d':p.daysUntil===0?'hoy':'en '+p.daysUntil+'d'}<div class="prio-meta">${fmtDate(p.nextDate)}</div></div>
     </div>`).join('')
     + `<div class="prio-foot">${list.length>top.length?`y ${list.length-top.length} más · `:''}<button class="linkbtn" data-goto="equipos">Ver tabla completa →</button>${inact?` · ${inact} sin fallas recientes`:''}</div>`;
 }
@@ -1343,8 +1486,8 @@ function renderTecnicos(rows){
     options:{
       onClick:(e,els)=>{ if(!els.length) return; const t=top[els[0].index].tecnico; F.tecnico=(F.tecnico===t)?'':t; render(); },
       onHover:(e,els)=>{ e.native.target.style.cursor = els.length?'pointer':'default'; },
-      plugins:{legend:{position:'top',align:'end',labels:{color:'#e6ebf1',font:{family:'Space Grotesk',size:11},boxWidth:12}}},
-      scales:{x:{stacked:true,ticks:{color:'#8b98ab',font:{family:'IBM Plex Mono',size:10}},grid:{display:false}}, y:{stacked:true,ticks:{color:'#8b98ab',precision:0},grid:{color:'#1e2733'},beginAtZero:true}}}
+      plugins:{legend:{position:'top',align:'end',labels:{color:CT('--chart-text'),font:{family:'Barlow',size:11},boxWidth:12}}},
+      scales:{x:{stacked:true,ticks:{color:CT('--chart-muted'),font:{family:'JetBrains Mono',size:10}},grid:{display:false}}, y:{stacked:true,ticks:{color:CT('--chart-muted'),precision:0},grid:{color:CT('--chart-grid')},beginAtZero:true}}}
   });
   renderTecTable();
 }
@@ -1575,6 +1718,7 @@ function switchTab(id){
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+id));
   try { history.replaceState(null, '', '#'+id); } catch(e) {}
   if (id==='naves' && typeof renderComparativo==='function') renderComparativo(); // (Etapa 3)
+  if (id==='seguridad' && typeof cargarSeguridadAn==='function' && window.fbReady) window.fbReady.then(cargarSeguridadAn).catch(()=>{}); // (28 oct 2026)
   // las gráficas creadas con la pestaña oculta necesitan medir de nuevo su tamaño
   requestAnimationFrame(()=>Object.values(charts).forEach(c=>{ if (c) c.resize(); }));
 }
@@ -1597,8 +1741,10 @@ $('fPeriodo').addEventListener('change', e=>{
 });
 $('fTecnico').addEventListener('change', e=>{ F.tecnico = e.target.value; render(); });
 $('fTipo').addEventListener('change', e=>{ F.tipo = e.target.value; render(); });
+$('fCrit').addEventListener('change', e=>{ F.crit = e.target.value; render(); });
+$('critKpisBody').addEventListener('click', e=>{ const tr = e.target.closest('tr[data-crit]'); if (tr){ F.crit = F.crit===tr.dataset.crit ? '' : tr.dataset.crit; render(); } });
 $('chipBox').addEventListener('click', e=>{ const b=e.target.closest('[data-chip]'); if (b){ F[b.dataset.chip]=''; render(); } });
-$('clearSelBtn').addEventListener('click',()=>{ Object.assign(F, {periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:''}); if (ubic) ubic.limpiar(); render(); });
+$('clearSelBtn').addEventListener('click',()=>{ Object.assign(F, {periodo:'todo', area:'', tecnico:'', tipo:'', semana:'', causa:'', crit:''}); if (ubic) ubic.limpiar(); render(); });
 
 $('searchBox').addEventListener('input', renderTable);
 $('cmpMetrica').addEventListener('change', renderComparativo);
@@ -1630,7 +1776,7 @@ $('drawerFilterBtn').addEventListener('click', ()=>{
 
 $('appendBtn').addEventListener('click', async ()=>{
   const st = $('feedStatus'), newRows = parseRaw($('feedArea').value);
-  if (!newRows.length){ st.textContent='No se detectaron filas válidas.'; st.style.color='#ef4b4b'; return; }
+  if (!newRows.length){ st.textContent='No se detectaron filas válidas.'; st.style.color='var(--color-danger-text)'; return; }
   // (5 oct 2026) Las filas con fecha no válida YA NO se suben (antes se subían
   // con un aviso y quedaban en la base sin aparecer nunca en el análisis).
   // Se listan y se dejan en el cuadro para corregirlas y volver a subirlas.
@@ -1639,9 +1785,9 @@ $('appendBtn').addEventListener('click', async ()=>{
   const listaMalas = malas.slice(0,10).map(r=>`${r.ot} (fecha: "${r.fecha||'vacía'}")`).join(', ') + (malas.length>10?` y ${malas.length-10} más`:'');
   if (!buenas.length){
     st.textContent = `❌ Ninguna fila subida: ${malas.length} con fecha no válida (usa AAAA-MM-DD): ${listaMalas}`;
-    st.style.color = '#ef4b4b'; return;
+    st.style.color = 'var(--color-danger-text)'; return;
   }
-  st.textContent = `Subiendo ${buenas.length} OT(s)…`; st.style.color='#8b98ab';
+  st.textContent = `Subiendo ${buenas.length} OT(s)…`; st.style.color='var(--color-muted)';
   await window.fbReady;
   let ok = 0;
   for (let i=0; i<buenas.length; i+=400){
@@ -1650,7 +1796,7 @@ $('appendBtn').addEventListener('click', async ()=>{
     try { await batch.commit(); ok += chunk.length; } catch(err){ console.error(err); }
   }
   st.textContent = `✅ ${ok} de ${buenas.length} OT(s) subidas a la base de datos compartida` + (malas.length?` · ⚠ ${malas.length} rechazada(s) por fecha no válida (usa AAAA-MM-DD), quedan en el cuadro: ${listaMalas}`:'');
-  st.style.color = malas.length ? '#fab219' : '#35d0b0';
+  st.style.color = malas.length ? 'var(--color-accent-text)' : 'var(--color-success-text)';
   // (5 oct 2026) Las OTs subidas con fecha de hace más de 13 meses no entran al
   // listener en vivo: si ya se había cargado todo el historial, se relee esa parte.
   if (_anCompleto && buenas.some(r=>r.fecha < _desdeAn)){
@@ -1678,6 +1824,7 @@ function rowToOtRecord(r){
 function otRecordToRow(doc){
   return {
     equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'', proyecto:doc.tipoReporte==='proyecto',
+    permisoId:doc.permisoId||'', // (28 oct 2026) permiso de trabajo / LOTO (no entra en ningún indicador del Resumen)
     ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:fbNombreActual('areas', doc.LINEA_EQUIPO)||'Sin área', // (25 oct 2026) área renombrada → nombre vigente (sin renombrar: igual que antes)
     linea:doc.LINEA||doc.linea||'', // (25 oct 2026, Etapa 3) para el filtro por línea
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',
@@ -1848,6 +1995,7 @@ window.fbReady.then(()=>{
     _equiposCat = cat; _equiposPorNombre = porNombre;
     // (14 oct 2026) docs completos para el cumplimiento preventivo (frecuencias y próximas fechas)
     _equiposDocs = s.docs.map(d=>({id:d.id, ...(d.data()||{})}));
+    _critPorId = {}; _equiposDocs.forEach(e=>{ if (['A','B','C'].includes(e.criticidad)) _critPorId[e.id] = e.criticidad; }); // (28 oct 2026)
     if ((fbNavesFiltro() || puedeComparar()) && (_docsAnRecientes.length || _docsAnViejos.length)) combinarOtsAn(); // (Etapa 3) también para el comparativo // (25 oct 2026) la nave de las OTs viejas sale del catálogo
     else if (allRows.length) render(); else renderGestion();
   }).catch(err=>{

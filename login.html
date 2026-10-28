@@ -3,26 +3,31 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="theme-color" content="#0F1923"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>Iniciar sesión — Mantenimiento</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
 <style>
-  :root{--bg:#0F1923;--card:#202F42;--accent:#F59E0B;--text:#F1F5F9;--muted:#94A3B8;--border:#2D3F55;--red:#EF4444;}
+  :root{--bg: var(--color-bg);--card: var(--color-surface);--accent: var(--color-accent);--text: var(--color-text);--muted: var(--color-muted);--border: var(--color-border);--red: var(--color-danger);}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,'Inter',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  body{background:var(--bg);color:var(--text);font-family: var(--font-sans);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
   .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:30px 24px;max-width:360px;width:100%;}
   .emoji{font-size:34px;margin-bottom:10px;text-align:center;}
   h1{font-size:19px;margin-bottom:6px;text-align:center;}
   p.sub{font-size:12.5px;color:var(--muted);margin-bottom:22px;text-align:center;line-height:1.5;}
-  label{font-size:10.5px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px;margin-top:14px;}
-  input{width:100%;background:#1A2535;border:1px solid var(--border);border-radius:8px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit;}
+  label{font-size:10.5px;color:var(--color-accent-text);font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px;margin-top:14px;}
+  input{width:100%;background:var(--color-input-bg);border:1px solid var(--border);border-radius:8px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit;}
   input:focus{outline:1px solid var(--accent);}
-  button{width:100%;margin-top:22px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#1a1305;font-weight:700;font-size:15px;cursor:pointer;}
+  button{width:100%;margin-top:22px;padding:13px;border:none;border-radius:10px;background:var(--color-primary);color:var(--color-on-primary);font-weight:700;font-size:15px;cursor:pointer;}
   button:disabled{opacity:.6;}
-  #msg{margin-top:14px;font-size:13px;color:var(--red);min-height:18px;line-height:1.4;}
+  #msg{margin-top:14px;font-size:13px;color:var(--color-danger-text);min-height:18px;line-height:1.4;}
 </style>
 </head>
 <body>
@@ -101,7 +106,7 @@ document.getElementById('olvide').addEventListener('click', async (e) => {
   if (!email) { msg.textContent = 'Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'; return; }
   try {
     await auth.sendPasswordResetEmail(email);
-    msg.style.color = '#10B981';
+    msg.style.color = 'var(--color-success-text)';
     msg.textContent = 'Si ese correo tiene cuenta, te llegó un enlace para crear una contraseña nueva (revisa también spam).';
   } catch (err) {
     msg.style.color = '';
