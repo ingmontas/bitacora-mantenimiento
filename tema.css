@@ -1,0 +1,287 @@
+/* ══════════════════════════════════════════════════════════════════════
+   TEMA COMÚN — Mantenimiento 2026 (26 oct 2026, Etapa 4 "Diseño uniforme")
+   Tema claro y modo oscuro automático: sigue la configuración del celular
+   (prefers-color-scheme). Todas las pantallas leen estos colores; cada
+   página conserva su distribución y solo cambia de dónde salen los colores.
+   NO lo cargan equipo.html ni etiquetas-qr.html (diseño del QR intacto).
+   Los rellenos de estado (verde/rojo/azul…) son iguales en los dos modos;
+   cambian los fondos, los textos y las versiones "-text"/"-soft".
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light dark;
+
+  /* Tipografía, medidas */
+  --font-sans: 'Barlow', -apple-system, 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Fondos y texto */
+  --color-bg: #f4f6fa;
+  --color-surface: #ffffff;        /* tarjetas */
+  --color-surface-2: #eef2f7;      /* cajas internas, pestañas, segmentados */
+  --color-surface-3: #e3e9f1;      /* pistas de barras, hover */
+  --color-border: #d6dee8;
+  --color-border-strong: #b9c5d4;
+  --color-text: #0b1b2e;
+  --color-text-2: #24344b;
+  --color-muted: #52627a;
+  --color-muted-2: #66758b;
+  --color-input-bg: #ffffff;
+  --color-overlay: rgba(11, 27, 46, .55);
+  --color-scrim: rgba(244, 246, 250, .85);
+  --shadow: 0 1px 2px rgba(11, 37, 69, .06), 0 1px 3px rgba(11, 37, 69, .08);
+  --shadow-lg: 0 6px 24px rgba(11, 37, 69, .22);
+
+  /* Principal (botones, enlaces) y acento (lo activo/seleccionado) */
+  --color-primary: #2563eb;
+  --color-primary-strong: #1e40af;
+  --color-primary-text: #1d4ed8;
+  --color-primary-soft: #e8effd;
+  --color-on-primary: #ffffff;
+  --color-accent: #f59e0b;
+  --color-accent-text: #a14a07;
+  --color-accent-soft: #fef3c7;
+  --color-on-accent: #1a1305;
+
+  /* Estados (rojo = parada/vencida, verde = bien, …) */
+  --color-success: #16a34a;
+  --color-success-text: #157a3a;
+  --color-success-soft: #dcfce7;
+  --color-warn: #c2410c;
+  --color-warn-text: #9a3412;
+  --color-warn-soft: #ffedd5;
+  --color-danger: #dc2626;
+  --color-danger-text: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-info: #0891b2;
+  --color-info-text: #0e7490;
+  --color-info-soft: #cffafe;
+  --color-purple: #7c3aed;
+  --color-purple-text: #6d28d9;
+  --color-purple-soft: #ede9fe;
+
+  /* Barras superiores */
+  --color-nav-bg: #08203d;
+  --color-nav-text: #c3d3ee;
+  --color-nav-border: #16345f;
+  --color-header-bg: #0b2545;
+  --color-header-text: #ffffff;
+  --color-header-sub: #fbbf24;
+
+  /* Gráficas (Chart.js los lee al dibujar) */
+  --chart-grid: #e3e8ef;
+  --chart-text: #24344b;
+  --chart-muted: #52627a;
+  --chart-surface: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1923;
+    --color-surface: #1a2535;
+    --color-surface-2: #223146;
+    --color-surface-3: #2a3b52;
+    --color-border: #2d3f55;
+    --color-border-strong: #41566f;
+    --color-text: #f1f5f9;
+    --color-text-2: #cbd5e1;
+    --color-muted: #9aa8bb;
+    --color-muted-2: #8c9ab0;
+    --color-input-bg: #142030;
+    --color-overlay: rgba(0, 0, 0, .6);
+    --color-scrim: rgba(15, 25, 35, .85);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 6px 24px rgba(0, 0, 0, .5);
+
+    --color-primary: #2563eb;
+    --color-primary-strong: #1d4ed8;
+    --color-primary-text: #8ab8f7;
+    --color-primary-soft: rgba(59, 130, 246, .18);
+    --color-on-primary: #ffffff;
+    --color-accent: #f59e0b;
+    --color-accent-text: #fbbf24;
+    --color-accent-soft: rgba(245, 158, 11, .14);
+    --color-on-accent: #1a1305;
+
+    --color-success-text: #4ade80;
+    --color-success-soft: rgba(16, 185, 129, .16);
+    --color-warn-text: #fdba74;
+    --color-warn-soft: rgba(249, 115, 22, .16);
+    --color-danger-text: #ff8a8a;
+    --color-danger-soft: rgba(239, 68, 68, .16);
+    --color-info-text: #67d4ea;
+    --color-info-soft: rgba(8, 145, 178, .2);
+    --color-purple-text: #c4b5fd;
+    --color-purple-soft: rgba(167, 139, 250, .18);
+
+    --color-nav-bg: #0b131c;
+    --color-nav-text: #a3b1c4;
+    --color-nav-border: #2d3f55;
+    --color-header-bg: #1a2535;
+    --color-header-text: #f1f5f9;
+    --color-header-sub: #fbbf24;
+
+    --chart-grid: #263447;
+    --chart-text: #e2e8f0;
+    --chart-muted: #9aa8bb;
+    --chart-surface: #1a2535;
+  }
+}
+
+html { background: var(--color-bg); }
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/* ── Barra de páginas y selector de nave (los pinta firebase-init.js) ── */
+#fbMiniNav {
+  background: var(--color-nav-bg) !important;
+  border-bottom: 1px solid var(--color-nav-border) !important;
+  scrollbar-width: none;
+}
+#fbMiniNav::-webkit-scrollbar { display: none; }
+#fbMiniNav a { color: var(--color-nav-text) !important; background: transparent !important; }
+#fbMiniNav a.fbActivo { color: var(--color-accent) !important; background: rgba(245, 158, 11, .14) !important; }
+#fbMiniNav > span:not([data-fb-nave]), #fbMiniNav button { color: var(--color-nav-text) !important; border-color: var(--color-nav-border) !important; }
+#fbNaveSel {
+  background: var(--color-surface) !important;
+  color: var(--color-accent-text) !important;
+  border: 1px solid var(--color-accent) !important;
+  border-radius: var(--radius-sm) !important;
+}
+#fbMiniNav #fbNaveSel { background: rgba(245, 158, 11, .12) !important; color: var(--color-accent) !important; }
+#fbMiniNav #fbNaveSel option, #fbNaveSel option { background: var(--color-surface); color: var(--color-text); }
+.fbNaveTxt { color: var(--color-accent-text) !important; }
+#fbMiniNav .fbNaveTxt { color: var(--color-accent) !important; }
+
+/* ── Aviso de arranque y diálogo de exportar (firebase-init.js / filtros.js) ── */
+#fbErrArranque { background: var(--color-overlay) !important; }
+#fbErrArranque > div { background: var(--color-surface) !important; border-color: var(--color-border) !important; color: var(--color-text) !important; }
+#fbErrArranque button { background: var(--color-primary) !important; color: var(--color-on-primary) !important; }
+#fbErrArranque a { background: var(--color-surface-2) !important; color: var(--color-text) !important; border: 1px solid var(--color-border); }
+
+/* ── Componentes comunes (especificidad 0 con :where(): la página manda) ── */
+:where(.card) {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+:where(input, select, textarea) {
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+:where(input, textarea)::placeholder { color: var(--color-muted-2); }
+:where(a) { color: var(--color-primary-text); }
+:where(.tabla-scroll, .table-wrap, .tblwrap) { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+:where(table) { border-color: var(--color-border); }
+:where(.btn-primary) { background: var(--color-primary); color: var(--color-on-primary); }
+:where(.btn-secondary) { background: var(--color-surface); color: var(--color-text-2); border: 1px solid var(--color-border); }
+:where(.btn-danger) { background: var(--color-danger); color: #fff; }
+:where(.badge, .pill, .tag) { border-radius: var(--radius-pill); }
+:where(.modal) { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+:where(.modal-bg) { background: var(--color-overlay); }
+:where(#toast) { box-shadow: var(--shadow-lg); }
+
+/* Selects nativos del sistema en modo oscuro */
+@media (prefers-color-scheme: dark) {
+  :where(select option) { background: var(--color-surface); color: var(--color-text); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   (28 oct 2026) CRITICIDAD A/B/C y SEGURIDAD (LOTO / permiso de trabajo)
+   Insignias y ventanas que pintan criticidad.js y seguridad.js en todas las
+   pantallas. Solo usan los colores de arriba (claro y oscuro).
+   ══════════════════════════════════════════════════════════════════════ */
+.fbc { display: inline-flex; align-items: center; gap: 3px; border-radius: var(--radius-pill); padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 1.6; white-space: nowrap; letter-spacing: 0; text-transform: none; vertical-align: middle; border: 1px solid transparent; }
+.fbc-A { background: var(--color-danger); color: #fff; }
+.fbc-B { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.fbc-C { background: var(--color-surface-2); color: var(--color-text-2); border-color: var(--color-border-strong); }
+.fbc-N { background: transparent; color: var(--color-muted); border: 1px dashed var(--color-border-strong); font-weight: 700; }
+.fbs-est { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-pill); padding: 1px 8px; font-size: 11.5px; font-weight: 800; line-height: 1.6; white-space: nowrap; border: 1px solid transparent; }
+.fbs-abierto { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
+.fbs-por_autorizar { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.fbs-autorizado { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.fbs-cerrado { background: var(--color-surface-2); color: var(--color-muted); border-color: var(--color-border); }
+.fbs-rechazado { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+
+/* Ventana inferior (asistente de criticidad, LOTO, retiro, autorizar) */
+.fbsh-bg { position: fixed; inset: 0; z-index: 1100; background: var(--color-overlay); display: flex; align-items: flex-end; justify-content: center; }
+.fbsh { position: relative; background: var(--color-surface); color: var(--color-text); width: 100%; max-width: 520px; max-height: 94vh; overflow-y: auto; overscroll-behavior: contain; border-radius: 16px 16px 0 0; border: 1px solid var(--color-border); border-bottom: 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); font-family: var(--font-sans); font-size: 14.5px; line-height: 1.45; box-shadow: var(--shadow-lg); min-width: 0; }
+.fbsh * { box-sizing: border-box; }
+.fbsh-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.fbsh-head h3 { font-size: 17px; font-weight: 800; margin: 0; overflow-wrap: anywhere; }
+.fbsh-head small { display: block; font-size: 12.5px; color: var(--color-muted); font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+.fbsh-x { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-size: 18px; cursor: pointer; font-family: inherit; }
+.fbsh-sec { border-top: 1px solid var(--color-border); padding-top: 10px; margin-top: 10px; }
+.fbsh-sec > b, .fbsh-t { display: block; font-size: 14.5px; font-weight: 800; margin-bottom: 6px; }
+.fbsh-nota { font-size: 12.5px; color: var(--color-muted); margin: 4px 0 6px; overflow-wrap: anywhere; }
+.fbsh-caja { border-radius: 10px; padding: 9px 11px; margin: 6px 0; font-size: 13px; border: 1px solid var(--color-border); background: var(--color-surface-2); overflow-wrap: anywhere; }
+.fbsh-caja.warn { background: var(--color-warn-soft); border-color: var(--color-warn); color: var(--color-warn-text); }
+.fbsh-caja.err { background: var(--color-danger-soft); border-color: var(--color-danger); color: var(--color-danger-text); }
+.fbsh-caja.ok { background: var(--color-success-soft); border-color: var(--color-success); color: var(--color-success-text); }
+.fbsh-caja.info { background: var(--color-info-soft); border-color: var(--color-info); color: var(--color-info-text); }
+.fbsh-op { display: block; width: 100%; min-height: 52px; text-align: left; padding: 10px 12px; margin: 6px 0; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; line-height: 1.35; }
+.fbsh-op small { display: block; font-size: 12px; color: var(--color-muted); font-weight: 600; margin-top: 2px; }
+.fbsh-op.sel { border: 2px solid var(--color-primary); background: var(--color-primary-soft); }
+.fbsh-op .pt { float: right; font-size: 12px; font-weight: 800; color: var(--color-primary-text); margin-left: 8px; }
+.fbsh label.fbsh-ck { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; padding: 4px 2px; font-size: 14.5px; font-weight: 600; color: var(--color-text); text-transform: none; letter-spacing: 0; cursor: pointer; overflow-wrap: anywhere; }
+.fbsh label.fbsh-ck.paso { align-items: flex-start; padding-top: 10px; }
+.fbsh label.fbsh-ck.paso > span { min-width: 0; }
+.fbsh label.fbsh-ck small { display: block; font-size: 12px; color: var(--color-muted); font-weight: 500; }
+.fbsh input[type=checkbox], .fbsh input[type=radio] { appearance: auto; -webkit-appearance: checkbox; width: 22px; height: 22px; min-height: 0; min-width: 22px; flex: 0 0 auto; padding: 0; margin: 0; accent-color: var(--color-primary); box-shadow: none; }
+.fbsh input[type=radio] { -webkit-appearance: radio; }
+.fbsh input[type=text], .fbsh input[type=time], .fbsh input[type=search], .fbsh textarea, .fbsh select { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-input-bg); color: var(--color-text); font-family: inherit; font-size: 15px; margin: 4px 0; }
+.fbsh textarea { min-height: 70px; resize: vertical; }
+.fbsh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px 32px; }
+.fbsh-chips label.fbsh-ck { min-height: 40px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-2); font-size: 13.5px; gap: 6px; }
+.fbsh-chips input[type=checkbox] { width: 18px; height: 18px; min-width: 18px; }
+.fbsh-seg { display: flex; gap: 6px; }
+.fbsh-seg button { flex: 1; min-height: 48px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-weight: 800; font-size: 15px; font-family: inherit; cursor: pointer; }
+.fbsh-seg button.sel { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.fbsh-seg button:disabled { opacity: .5; cursor: default; }
+.fbsh-acc { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.fbsh-btn { flex: 1 1 140px; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 0; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; background: var(--color-primary); color: var(--color-on-primary); }
+.fbsh-btn.sec { background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-border); }
+.fbsh-btn.ok { background: var(--color-success); color: #fff; }
+.fbsh-btn.mal { background: var(--color-danger); color: #fff; }
+.fbsh-btn.sm { flex: 0 0 auto; min-height: 40px; font-size: 13.5px; padding: 8px 12px; }
+.fbsh-btn:disabled { opacity: .5; cursor: default; }
+.fbsh-err { color: var(--color-danger-text); font-weight: 700; font-size: 13px; min-height: 0; margin-top: 6px; }
+.fbsh-err:empty { display: none; }
+.fbsh-prog { height: 8px; border-radius: 6px; background: var(--color-surface-3); overflow: hidden; margin: 6px 0; }
+.fbsh-prog i { display: block; height: 100%; background: var(--color-success); }
+.fbsh-dots { display: flex; gap: 5px; margin: 2px 0 8px; }
+.fbsh-dots i { flex: 1; height: 5px; border-radius: 3px; background: var(--color-surface-3); }
+.fbsh-dots i.on { background: var(--color-primary); }
+.fbsh-res { text-align: center; padding: 10px 0 4px; }
+.fbsh-res .fbc { font-size: 18px; padding: 4px 16px; }
+.fbsh-res .pts { font-size: 13px; color: var(--color-muted); margin-top: 6px; font-weight: 700; }
+.fbsh table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fbsh td { padding: 6px 4px; border-bottom: 1px dashed var(--color-border); vertical-align: top; overflow-wrap: anywhere; }
+.fbsh td.n { text-align: right; white-space: nowrap; font-weight: 800; }
+.fbsh-fila { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-border); min-width: 0; }
+.fbsh-fila > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fbsh-fila small { display: block; color: var(--color-muted); font-size: 12px; }
+.fbsh-filtros { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.fbsh-filtros button { min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text-2); font-weight: 700; font-size: 13px; font-family: inherit; cursor: pointer; }
+.fbsh-filtros button.sel { border-color: var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary-text); }
+/* Tarjeta de estado del permiso dentro de las pantallas */
+.fbs-card { border: 1px solid var(--color-border); border-left: 4px solid var(--color-info); border-radius: 12px; background: var(--color-surface); padding: 10px 12px; margin-bottom: 8px; font-size: 13.5px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
+.fbs-card.por_autorizar { border-left-color: var(--color-warn); }
+.fbs-card.autorizado { border-left-color: var(--color-success); }
+.fbs-card.rechazado { border-left-color: var(--color-danger); }
+.fbs-card.falta { border-left-color: var(--color-danger); background: var(--color-danger-soft); }
+.fbs-card .t { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; flex-wrap: wrap; }
+.fbs-card .m { color: var(--color-muted); font-size: 12.5px; margin-top: 3px; }
+.fbs-card .acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
