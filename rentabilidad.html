@@ -469,6 +469,45 @@ function evaluar(G, per) {
   out.deficit = deficit(out);
   return out;
 }
+// ══════ (28 oct 2026) RAV: costo de mantenimiento ÷ valor de reposición ══════
+// Indicador de clase mundial. Usa EXACTAMENTE los resultados de arriba (sin
+// recalcular nada): costo anual de mantener = E.mantener (costo del período ×
+// factor a 12 meses) y valor de reposición = precio de la máquina nueva
+// (/costos_config, equipo > tipo > general). Solo equipos con precio. 0
+// lecturas extra: todo ya está leído en esta pantalla (solo Administrador).
+// Referencia: clase mundial < 2–3 %, típico 3–6 %, alto > 6 %.
+const RAV_NIVEL = p => p == null ? '' : p < 3 ? 'clase' : p <= 6 ? 'tipico' : 'alto';
+const RAV_TXT = { clase: '🟢 Clase mundial (menos de 3 %)', tipico: '🟡 Típico (3 a 6 %)', alto: '🔴 Alto (más de 6 %)' };
+function calcRav(R) {
+  const con = R.equipos.filter(E => (Number(E.d.precioNuevo) || 0) > 0);
+  const costo = con.reduce((s, E) => s + E.mantener, 0), valor = con.reduce((s, E) => s + Number(E.d.precioNuevo), 0);
+  const pct = valor > 0 ? costo / valor * 100 : null;
+  const equipos = con.map(E => { const p = E.mantener / Number(E.d.precioNuevo) * 100; return { key: E.key, nombre: E.nombre, costo: r2(E.mantener), precio: Number(E.d.precioNuevo), pct: Math.round(p * 100) / 100, nivel: RAV_NIVEL(p) }; })
+    .sort((a, b) => b.pct - a.pct || a.nombre.localeCompare(b.nombre));
+  return { pct: pct == null ? null : Math.round(pct * 100) / 100, nivel: RAV_NIVEL(pct), costo: r2(costo), valor: r2(valor), nCon: con.length, nSin: R.equipos.length - con.length, equipos, factor: R.per.factor, parcial: R.per.parcial };
+}
+function ravHtml(V) {
+  const pctTx = p => p == null ? '—' : p.toLocaleString('es-DO', { maximumFractionDigits: 2 }) + ' %';
+  return `<div class="card" id="ravCard"><div class="chead"><div><div class="ct">🏆 Costo de mantenimiento / valor de reposición (RAV)</div><div class="cs">Costo de mantener al año ÷ precio de las máquinas nuevas${V.parcial ? ' · costo proyectado a 12 meses' : ''}</div></div></div>
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 6px"><b style="font-size:26px" id="ravPct">${esc(pctTx(V.pct))}</b><span id="ravNivel">${esc(V.nivel ? RAV_TXT[V.nivel] : 'Falta el precio de las máquinas nuevas')}</span></div>
+    <div class="nota">${esc(moneyK(V.costo))} al año ÷ ${esc(moneyK(V.valor))} de valor de reposición · ${V.nCon} equipo(s) con precio${V.nSin ? ' · ' + V.nSin + ' sin precio (no cuentan)' : ''}.</div>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:700;min-height:36px;display:inline-flex;align-items:center">¿Qué significa?</summary><div class="nota">Lo que cuesta mantener las máquinas en un año comparado con lo que costaría comprarlas nuevas. Clase mundial: menos de 2–3 %; típico 3–6 %; más de 6 % es alto: esas máquinas se están comiendo su valor en reparaciones.</div></details>
+    ${V.equipos.length ? `<div class="tw" style="margin-top:8px"><table><tr><th>Equipo</th><th class="r">Costo/año</th><th class="r">Precio nueva</th><th class="r">RAV</th></tr>${V.equipos.slice(0, 15).map(x => `<tr data-rav="${esc(x.key)}"><td>${esc(x.nombre)}</td><td class="r">${esc(corto(x.costo))}</td><td class="r">${esc(corto(x.precio))}</td><td class="r"><b>${esc(pctTx(x.pct))}</b> ${x.nivel === 'alto' ? '🔴' : x.nivel === 'tipico' ? '🟡' : '🟢'}</td></tr>`).join('')}</table></div>` : ''}
+    <button class="btn2" id="bXlsRav" style="width:100%;margin-top:8px">⬇️ Excel del RAV</button></div>`;
+}
+function excelRav(V, R) {
+  const titulo = 'RAV (costo de mantenimiento ÷ valor de reposición) · ' + ((ubic && ubic.texto()) || fbNaveTexto()) + ' · ' + R.per.label + ' · generado ' + fbHoy();
+  fbExportar({ nombre: fbNombreArchivo('rav', ubic ? ubic.partes() : [], R.per.id.replace(':', '-')), aviso: m => toast(m), hojas: [
+    { nombre: 'RAV', titulo, columnas: [{ t: 'Indicador', w: 34 }, { t: 'Valor', w: 16 }, { t: 'Detalle', w: 60 }], filas: [
+      ['RAV total (%)', V.pct == null ? '' : V.pct, V.nivel ? RAV_TXT[V.nivel].replace(/^\S+\s/, '') : 'sin precios'],
+      ['Costo de mantener al año', V.costo, V.parcial ? 'proyectado a 12 meses' : ''],
+      ['Valor de reposición', V.valor, V.nCon + ' equipo(s) con precio de máquina nueva'],
+      ['Equipos sin precio', V.nSin, 'no cuentan en el RAV'],
+      ['Referencia', '', 'Clase mundial < 2–3 % · típico 3–6 % · alto > 6 %']] },
+    { nombre: 'Por equipo', titulo, columnas: [{ t: 'Equipo', w: 28 }, { t: 'Costo al año', w: 14 }, { t: 'Precio máquina nueva', w: 18 }, { t: 'RAV (%)', w: 10 }], filas: V.equipos.map(x => [x.nombre, x.costo, x.precio, x.pct]) },
+  ] });
+}
+
 // 💡 Déficit: el componente que más pesa, la causa de falla más cara entre
 // los correctivos (sin proyectos) y repuestos que se repiten 3 veces o más.
 function deficit(E) {
@@ -657,6 +696,14 @@ async function pintar() {
 function publicar(R, extra) {
   const eq = E => ({ key: E.key, nombre: E.nombre, tipo: E.tipo, c: { tec: r2(E.c.tec), op: r2(E.c.op), arr: r2(E.c.arr), rep: r2(E.c.rep) }, total: r2(E.real), mantener: r2(E.mantener), nueva: E.nueva == null ? null : r2(E.nueva), estado: E.estado, tendencia: E.tendencia, ult3: r2(E.ult3), prev3: r2(E.prev3), paradas: E.paradas, deficit: E.deficit, d: E.d,
     ots: E.ots.map(x => ({ id: x.o.id, folio: folioDe(x.o), tec: r2(x.c.tec), op: r2(x.c.op), arr: r2(x.c.arr), rep: r2(x.c.rep), total: r2(x.total), sinCosto: x.sinCosto })) });
+  // (29 oct 2026) 💼 CAPEX: copia en ESTE celular del costo por año de cada equipo, para sugerir el
+  // ahorro al armar un CAPEX (solo la usa el Administrador; 0 lecturas; no cambia ningún cálculo).
+  if (UI.tab === 'anio' || UI.tab === 'equipo') try {
+    let prev = null; try { prev = JSON.parse(localStorage.getItem('capexRentSug') || 'null'); } catch (e) {}
+    const sug = prev && prev.periodo === R.per.label && prev.equipos ? prev.equipos : {}; // con filtro de área: no se pierden los demás equipos
+    R.equipos.forEach(E => { if (!E.id) return; const f = R.per.factor || 1; sug[E.id] = { nombre: E.nombre, paro: r2((E.c.op + E.c.arr) * f), rep: r2(E.c.rep * f), mo: r2(E.c.tec * f), mantener: r2(E.mantener), precio: Number(E.d.precioNuevo) || 0, mantNuevaPct: Number(E.d.mantNuevaPct) || 0, estado: E.estado }; });
+    localStorage.setItem('capexRentSug', JSON.stringify({ fecha: fbHoy(), periodo: R.per.label, equipos: sug }));
+  } catch (e) {}
   window.__rent = { tab: UI.tab, periodo: R.per, total: r2(R.totalN), c: { tec: r2(R.total.tec), op: r2(R.total.op), arr: r2(R.total.arr), rep: r2(R.total.rep) }, paradas: R.paradas, sinCostoRep: R.sinCostoRep, faltanSal: R.faltanSal, equipos: R.equipos.map(eq), lecturas: LECTURAS, ...(extra || {}) };
 }
 
@@ -672,7 +719,7 @@ function tarjetaEquipo(E, per) {
     ${cmp}
     <div class="lbl">En qué se fue el dinero (${esc(moneyK(E.real))} en el período)</div>${barraMezcla(E.c, 'Costo de ' + E.nombre + ' por componente')}
     <div class="pct">${esc(pctLinea(E.c))}</div>
-    <div class="def">💡 ${esc(E.deficit)}</div></div>`;
+    <div class="def">💡 ${esc(E.deficit)}</div>${E.estado === 'rojo' && E.id ? `<a class="btn2" data-capex href="capex.html#nuevo&equipo=${encodeURIComponent(E.id)}" style="display:block;text-align:center;text-decoration:none;margin-top:8px">💼 Crear CAPEX de reemplazo</a>` : ''}</div>`;
 }
 function columnasMes(meses, porMes, ancho) {
   return meses.map(m => ({ label: ancho ? mesCorto(m).charAt(0).toUpperCase() + mesCorto(m).slice(1) : mesCorto(m).charAt(0).toUpperCase(), tip: nombreMes(m), c: porMes[m] || cero() }));
@@ -691,14 +738,16 @@ function vistaAnio(R) {
   const graf = cardGrafica('Costo de mantenimiento por mes', (ubic && ubic.activo() ? ubic.texto() : fbNavesFiltro() ? fbNaveTexto() : 'Toda la planta') + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
   const lim = UI.verTodos ? R.equipos.length : 15;
   const cards = R.equipos.slice(0, lim).map(E => tarjetaEquipo(E, per)).join('');
-  $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + graf
+  const V = calcRav(R); window.__rav = V; // (28 oct 2026)
+  $('view').innerHTML = cabecera() + avisosHtml(R) + kpis + ravHtml(V) + graf
     + `<div class="ct" style="margin:6px 2px 8px">¿Seguir o reemplazar? <span style="font-weight:400;color:var(--muted);font-size:12px">· costo por año${per.parcial ? ', proyectado a 12 meses' : ''}</span></div>`
     + (nEq ? legendHtml() + cards + (nEq > lim ? `<button class="btn2" style="width:100%;margin-bottom:10px" id="bTodos">Ver los ${nEq} equipos</button>` : '') : '<div class="card empty">No hay trabajos registrados en este período.</div>')
     + btnExcel()
     + `<div class="nota" style="margin-top:6px">«Una nueva» = precio de la máquina nueva ÷ años de vida útil + su mantenimiento esperado (% del precio). 🔴 cuando mantenerla cuesta igual o más que una nueva; 🟡 cuando llega al 70 % o el costo de los últimos 3 meses sube más de 25 %; 🟢 cuando cuesta mucho menos; ⚪ cuando falta el precio de la nueva. Los proyectos cuentan en el costo pero no en el análisis de fallas. Toca un equipo para ver su detalle.</div>`;
   bindCabecera(); bindExcel(R);
+  if ($('bXlsRav')) $('bXlsRav').onclick = () => excelRav(V, R);
   if ($('bTodos')) $('bTodos').onclick = () => { UI.verTodos = true; vistaAnio(R); };
-  document.querySelectorAll('[data-eq]').forEach(el => el.onclick = e => { if (e.target.closest('[data-tip]')) return; UI.eq = el.dataset.eq; UI.tab = 'equipo'; pintar(); window.scrollTo(0, 0); });
+  document.querySelectorAll('[data-eq]').forEach(el => el.onclick = e => { if (e.target.closest('[data-tip]') || e.target.closest('[data-capex]')) return; UI.eq = el.dataset.eq; UI.tab = 'equipo'; pintar(); window.scrollTo(0, 0); });
 }
 
 // ══════ PESTAÑA MES ══════

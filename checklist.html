@@ -20,6 +20,8 @@
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
   <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C por equipo -->
+  <script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz (validar OT con RCA) -->
+  <script src="tendencias.js"></script><!-- (28 oct 2026) tendencias de mediciones -->
   <!-- Comparación con Maximo/SAP (28 sep 2026): QR por equipo para abrir su
        checklist directo desde el celular, sin buscarlo en la lista — con 26
        máquinas de Weaving casi idénticas entre sí, el riesgo de llenar el
@@ -822,7 +824,7 @@ function renderPuntosForm() {
           <input type="number" inputmode="decimal" step="any" placeholder="Lectura" value="${fbEsc(it.valor)}" onchange="setItemValor(${idx}, this.value)"/>
           <span class="med-rango">${fbEsc(rangoTxt(m))}</span>
         </div>
-        ${fuera ? `<div class="med-fuera">Fuera del rango permitido</div>` : ''}` : ''}
+        ${fuera ? `<div class="med-fuera">Fuera del rango permitido</div>` : ''}${tendPuntoHtml(it, idx, fuera)}` : ''}
       <div class="res-grid">
         ${Object.keys(RESULTADOS).map(k => `<button type="button" class="toggle-btn${it.resultado === k ? ' ' + RESULTADOS[k].cls : ''}" onclick="setItemResultado(${idx},'${k}')">${RESULTADOS[k].ico} ${RESULTADOS[k].txt}</button>`).join('')}
       </div>
@@ -882,6 +884,33 @@ function setItemValor(idx, v) {
   // La lectura decide sola Conforme / No conforme (si no se marcó No aplica / No inspeccionado).
   if (numOk(v) && it.resultado !== 'na' && it.resultado !== 'ni') it.resultado = fueraDeRango(it.med, v) ? 'falla' : 'ok';
   renderPuntosForm();
+}
+
+// ══════ (28 oct 2026) TENDENCIA DEL PUNTO (tendencias.js) ══════
+// Con los checklists que esta pantalla ya tiene en memoria (los últimos 30
+// guardados, 0 lecturas extra) + la lectura que se está anotando. Si va hacia
+// un límite se avisa y se puede pedir la OT predictiva: marca el punto "No
+// conforme" y la OT sale al guardar, por el camino de siempre (sin repetidas).
+function tendPunto(it) {
+  if (!it || !it.med || !equipoSeleccionado || typeof fbTendAgrupar !== 'function') return null;
+  const eq = equipoSeleccionado;
+  const cks = currentChecklists.filter(c => c.equipoId === eq.id);
+  if (numOk(it.valor)) cks.push({ id: '__ahora', equipoId: eq.id, fecha: todayStr(), createdAt: { toMillis: () => Date.now() },
+    items: [{ punto: it.punto, valor: Number(it.valor), unidad: it.med.unidad, ...(it.med.min !== null ? { min: it.med.min } : {}), ...(it.med.max !== null ? { max: it.med.max } : {}) }] });
+  const g = fbTendAgrupar(cks).get(eq.id + '|' + fbEquipoKey(it.punto));
+  return g ? fbTendEvaluar(g.lecturas, { intervaloDias: Number(eq.checklistFrecuenciaDias) || null }) : null;
+}
+function tendPuntoHtml(it, idx, fuera) {
+  const a = tendPunto(it);
+  if (!a || (fuera && a.nivel === 'fuera')) return '';
+  return `<div class="tend-aviso tend-${a.nivel}" data-tend-punto="${idx}">${fbTendBadge(a)} ${fbEsc(a.texto)}${it.resultado !== 'falla' ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="pedirOtTendencia(${idx})">🧾 Pedir OT predictiva</button>` : ''}</div>`;
+}
+function pedirOtTendencia(idx) {
+  const it = itemsFormState[idx]; const a = tendPunto(it); if (!a) return;
+  it.resultado = 'falla'; it.tendencia = a.nivel;
+  if (!(it.nota || '').trim()) it.nota = 'Tendencia: ' + a.texto;
+  renderPuntosForm();
+  showToast('🧾 Punto marcado: la OT predictiva sale al guardar el checklist');
 }
 
 function quitarFotoItem(idx) { itemsFormState[idx].fotoData = ''; renderPuntosForm(); }
@@ -1031,10 +1060,10 @@ async function submitChecklist() {
   const hoy = todayStr();
   // (14 oct 2026) Si ese punto del equipo ya tiene una OT abierta, no se
   // crea otra: el checklist queda ligado a la que ya existe.
-  const abiertas = (currentOts || []).filter(o => o.equipoId === equipo.id && o.origen === 'checklist'); // (20 oct 2026) no los proyectos
+  // (28 oct 2026) Mismo control que las OTs creadas desde una alerta de tendencia (tendencias.js).
   items.forEach(it => {
     if (it.resultado !== 'falla') return;
-    const ya = abiertas.find(o => o.puntoChecklist === it.punto || (o.descripcionFalla || '').startsWith(it.punto));
+    const ya = fbOtChecklistAbierta(currentOts, equipo.id, it.punto); // (20 oct 2026) solo OTs de checklist, no los proyectos
     if (ya) it.otExistente = ya.folio || ya.id;
   });
   const fallas = items.filter(it => it.resultado === 'falla' && !it.otExistente);
@@ -1124,27 +1153,15 @@ async function submitChecklist() {
     batch.set(db.collection('equipos').doc(equipo.id), actualizacionEquipo, { merge: true });
 
     // Por cada punto en "Falla", crea una OT pendiente para planificar
+    // (28 oct 2026) El documento lo arma fbOtChecklistDoc (tendencias.js): mismos campos de siempre,
+    // y el mismo que usan las OTs predictivas creadas desde una alerta de tendencia.
     fallas.forEach((f, i) => {
-      batch.set(db.collection('ots').doc(), {
-        origen: 'checklist',
-        estado: 'pendiente',
-        folio: folios[i],
-        equipoId: equipo.id,
-        ...(plantaEq ? { planta: plantaEq } : {}),
-        equipoNombre: equipo.nombre || '',
-        equipoLocalidad: equipo.localidad || '',
+      batch.set(db.collection('ots').doc(), fbOtChecklistDoc({
+        folio: folios[i], equipo, planta: plantaEq,
         descripcionFalla: f.punto + (f.med && numOk(f.valor) ? ` (lectura ${f.valor}${f.med.unidad ? ' ' + f.med.unidad : ''}, rango ${rangoTxt(f.med)})` : '') + (f.nota ? ' — ' + f.nota : ''),
-        puntoChecklist: f.punto,
-        ...(f.foto ? { foto: f.foto } : {}),
-        causaFalla: f.causa || '',
-        prioridad: f.prioridad || 'media',
-        checklistId: checklistRef.id,
-        asignadoA: null,
-        fechaPlanificada: null,
-        creadoPor: creador,
-        creadoPorUid: (window.currentUser && window.currentUser.uid) || '',
-        createdAt: fbTimestamp(),
-      });
+        punto: f.punto, foto: f.foto, causa: f.causa, prioridad: f.prioridad, checklistId: checklistRef.id, creador,
+        ...(f.tendencia ? { extra: { origenAlerta: 'tendencia', alertaNivel: f.tendencia } } : {}),
+      }));
     });
 
     // 3) Se manda sin esperar al servidor.
@@ -1426,7 +1443,7 @@ function renderOts() {
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
             ${tagOrigen}
             ${o.prioridad ? `<span class="tag tag-prioridad-${fbEsc(o.prioridad)}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${fbEsc(o.prioridad)}</span>` : ''}
-            <span class="tag ${tag.clase}">${tag.texto}</span>
+            <span class="tag ${tag.clase}">${tag.texto}</span>${typeof fbRcaBadge === 'function' ? fbRcaBadge(o) : ''}
           </div>
         </div>
         <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>${esProyectoOt(o) && o.creadoPor ? `<div class="item-sub">Pidió: ${fbEsc(o.creadoPor)}${o.fechaReporte ? ' · ' + fbEsc(fmtDdMm(o.fechaReporte)) : ''}</div>` : ''}${o.foto ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(o.foto)}', this)">📷 Ver foto</button>` : ''}
@@ -1464,6 +1481,12 @@ async function planificarOt(otId) {
 
 async function validarOt(otId) {
   const nota = (document.getElementById('ot-nota-rev-' + otId) || {}).value || '';
+  // (28 oct 2026) Una OT con análisis de causa raíz pendiente no se valida (también en firestore.rules).
+  const otV = (currentOts || []).find(o => o.id === otId);
+  if (otV && otV.rcaRequerido === true && !(typeof fbRcaLleno === 'function' && fbRcaLleno(otV.rca))) {
+    showToast('🔍 Falta el análisis de causa raíz (RCA) de esta OT. Se llena en la Bitácora (Historial); después se puede validar.', 'warn');
+    return;
+  }
   try {
     await db.collection('ots').doc(otId).update({
       estado: 'validada',

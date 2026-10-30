@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v55'; // (28 oct 2026) Criticidad A/B/C y LOTO / permiso de trabajo
+const CACHE = 'mantenimiento-v57'; // (29 oct 2026) 💼 CAPEX: proyectos de inversión
 const ASSETS = [
   './',
   'index.html',
@@ -23,6 +23,9 @@ const ASSETS = [
   'rentabilidad.html',
   'admin.html', // (25 oct 2026)
   'guia.html', // (26 oct 2026, Etapa 5) guía de inicio por rol
+  'capex.html', // (29 oct 2026) 💼 CAPEX (Admin y Encargado)
+  'capex-i18n.js', // (29 oct 2026) textos de CAPEX en español, inglés y turco
+  'capex-calc.js', // (29 oct 2026) cálculos de CAPEX (totales, finanzas, cronograma, gasto)
   'manifest.json',
   'firebase-config.js',
   'firebase-init.js',
@@ -30,6 +33,8 @@ const ASSETS = [
   'tema.css', // (26 oct 2026, Etapa 4) colores comunes, claro y oscuro
   'criticidad.js', // (28 oct 2026) criticidad A/B/C por equipo
   'seguridad.js', // (28 oct 2026) LOTO y permiso de trabajo
+  'rca.js', // (28 oct 2026) análisis de causa raíz y ajustes de indicadores
+  'tendencias.js', // (28 oct 2026) tendencias de mediciones de checklist
   'login.html',
   'tecnicos.json',
   'icon-192.png',

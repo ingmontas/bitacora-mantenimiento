@@ -137,11 +137,20 @@ service cloud.firestore {
     // como las OTs de checklist (no es un aviso urgente) y solo el
     // Administrador lo cierra.
     function esProyecto() { return resource.data.get('tipoReporte', 'falla') == 'proyecto'; }
+    // (28 oct 2026) Análisis de causa raíz (RCA): campos nuevos rcaRequerido / rcaMotivo / rca.
+    // Una OT con rcaRequerido == true no pasa a 'validada' sin el análisis lleno
+    // (rca.causa escrita), el análisis solo lo valida Supervisor+ y rcaRequerido
+    // no se puede quitar. El técnico lo llena (update normal).
+    function rcaLleno() {
+      let r = request.resource.data.get('rca', null);
+      return r is map && r.get('causa', '') is string && r.get('causa', '').size() > 0;
+    }
+    function rcaValidadaNueva() { return request.resource.data.get('rca', {}).get('validada', false); }
     match /ots/{id} {
       allow read: if esTecnicoOMas() || (esOperador() && resource.data.origen in ['operador', 'qr']);
       allow create: if (reporteValido('qr') && request.resource.data.folio.matches('QR-[A-Z0-9]{6,12}'))
         || (esOperador() && reporteValido('operador'))
-        || esTecnicoOMas();
+        || (esTecnicoOMas() && (rcaValidadaNueva() != true || esSupervisorOMas()));
       // Cada paso del flujo lo da quien corresponde (antes cualquier técnico
       // podía cerrar, validar o planificar). — 5 oct 2026
       allow update: if esTecnicoOMas()
@@ -155,7 +164,11 @@ service cloud.firestore {
         // producción y OTs, desde cualquier estado abierto; nunca una completada.
         && (!cambiaA('anulada') || (esAdmin() && estadoViejo() in ['pendiente', 'en_atencion', 'planificada', 'rechazada', 'en_revision', 'validada']))
         && (estadoViejo() != 'en_atencion' || puedeSoltarAviso())
-        && (estadoViejo() != 'anulada' || esSupervisorOMas());
+        && (estadoViejo() != 'anulada' || esSupervisorOMas())
+        // (28 oct 2026) RCA
+        && (!cambiaA('validada') || request.resource.data.get('rcaRequerido', false) != true || rcaLleno())
+        && (rcaValidadaNueva() != true || resource.data.get('rca', {}).get('validada', false) == true || (esSupervisorOMas() && rcaLleno()))
+        && (resource.data.get('rcaRequerido', false) != true || request.resource.data.get('rcaRequerido', false) == true);
       allow delete: if esAdmin();
     }
     // Copia pública de cada equipo para el QR (ficha + historial resumido,
@@ -341,6 +354,79 @@ service cloud.firestore {
       allow create: if (esAlmacenOMas() || (esRRHH() && request.resource.data.tipo == 'arqueo_anulado'))
         && request.resource.data.get('porUid', '') == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // ══════ 💼 CAPEX — proyectos de inversión (29 oct 2026) ══════
+    // Los crean y editan el Encargado de mantenimiento y el Administrador.
+    // Solo el Administrador aprueba, rechaza, pone en espera, toca la
+    // aprobación y reabre. Desde la aprobación los montos quedan congelados
+    // para los demás. El historial y el gasto real solo crecen (un registro a
+    // la vez, a nombre de quien escribe). Nadie borra un proyecto: se cancela.
+    // Supervisor, técnicos y los demás roles no lo leen (lleva costos).
+    // Congelados desde la aprobación (salvo Admin): los montos y a qué año / nave se cargan.
+    function camposCongeladosCapex() { return ['trabajos', 'repuestos', 'otrosCostos', 'contingenciaPct', 'itbisAplica', 'itbisPct', 'moneda', 'tasaCambio', 'totales', 'anioFiscal', 'planta']; }
+    function capexListaCrece(campo, campoUid) {
+      let ant = resource.data.get(campo, []);
+      let nue = request.resource.data.get(campo, []);
+      return nue == ant
+        || (nue.size() == ant.size() + 1 && nue[0:ant.size()] == ant && nue[ant.size()].get(campoUid, '') == miUid());
+    }
+    function capexTransicionOk() {
+      let a = estadoViejo();
+      let n = estadoNuevo();
+      return a == n
+        || (a in ['borrador', 'rechazado', 'en_espera'] && n == 'enviado')
+        || (a == 'enviado' && n == 'borrador')
+        || (a in ['enviado', 'en_espera'] && n in ['aprobado', 'rechazado', 'en_espera'] && esAdmin())
+        || (a == 'aprobado' && n == 'en_ejecucion')
+        || (a == 'en_ejecucion' && n == 'cerrado')
+        || (a == 'borrador' && n == 'cancelado')
+        || (esAdmin() && n == 'cancelado' && a != 'cerrado')
+        || (esAdmin() && n == 'borrador');
+    }
+    function capexNuevoValido() {
+      let d = request.resource.data;
+      return d.get('estado', '') == 'borrador'
+        && d.get('codigo', '') is string && d.get('codigo', '').matches('CAPEX-[0-9]{4}-[A-Z0-9]{1,12}')
+        && d.get('creadoPorUid', '') == miUid() && d.get('solicitanteUid', '') == miUid()
+        && d.get('anioFiscal', 0) is int
+        && d.get('historial', []) is list && d.get('historial', []).size() == 1
+        && d.get('historial', [])[0].get('uid', '') == miUid()
+        && d.get('gastoReal', []).size() == 0
+        && !('aprobacion' in d) && !('aprobacionAnterior' in d);
+    }
+    function capexCambioValido() {
+      let d = request.resource.data;
+      let ch = d.diff(resource.data).affectedKeys();
+      let h = d.get('historial', []);
+      return !ch.hasAny(['codigo', 'creadoPorUid', 'createdAt', 'solicitante', 'solicitanteUid', 'fechaSolicitud'])
+        && capexTransicionOk()
+        && (!ch.hasAny(['aprobacion', 'aprobacionAnterior']) || esAdmin())
+        && (esAdmin() || !(estadoViejo() in ['aprobado', 'en_ejecucion', 'cerrado']) || !ch.hasAny(camposCongeladosCapex()))
+        && capexListaCrece('historial', 'uid')
+        && (estadoNuevo() == estadoViejo() || h.size() == resource.data.get('historial', []).size() + 1)
+        && (!ch.hasAny(['historial']) || h[h.size() - 1].get('estado', '') == estadoNuevo())
+        && (!ch.hasAny(['gastoReal']) || (estadoViejo() in ['aprobado', 'en_ejecucion']
+            && capexListaCrece('gastoReal', 'porUid') && d.gastoReal[d.gastoReal.size() - 1].get('monto', '') is number))
+        && (!cambiaA('aprobado') || (d.get('aprobacion', {}).get('uid', '') == miUid()
+            && d.get('aprobacion', {}).get('montoAprobado', 0) is number && d.get('aprobacion', {}).get('montoAprobado', 0) > 0));
+    }
+    match /capex/{id} {
+      allow read: if esEncargado();
+      allow create: if esEncargado() && capexNuevoValido();
+      allow update: if esEncargado() && capexCambioValido();
+      allow delete: if false;
+    }
+    // Presupuesto anual (por año y por nave): SOLO Administrador (no va en /config, que leen los técnicos).
+    match /capex_config/{id} { allow read, write: if esAdmin(); }
+    // Contador de folios CAPEX-AAAA-001…: como el de las OTs, solo se le suma 1.
+    match /config/capexFolio {
+      allow read: if esEncargado();
+      allow create: if esEncargado() && request.resource.data.ultimo == 1 && request.resource.data.keys().hasOnly(['ultimo']);
+      allow update: if esEncargado() && request.resource.data.ultimo is int
+        && request.resource.data.ultimo == resource.data.ultimo + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimo']);
+      allow delete: if false;
     }
   }
 }

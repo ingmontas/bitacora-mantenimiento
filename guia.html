@@ -286,6 +286,20 @@
         <a class="ir" href="bitacora.html#avisos">Abrir Avisos →</a>
       </div>
       <div class="it">
+        <h3>🔍 Cuando una falla se repite (causa raíz)</h3>
+        <p>Si registras un <b>correctivo</b> del mismo equipo y con la misma <b>causa</b> que otro de hace 15 días o menos (o un equipo <span class="fbc fbc-A">A · Crítico</span> estuvo parado más de 2 horas), al guardar sale <b>“🔍 Análisis de causa raíz”</b>.</p>
+        <ol>
+          <li>Contesta <b>¿por qué?</b> al menos 3 veces, hasta llegar al origen.</li>
+          <li>Elige el tipo de causa: Máquina, Método, Material, Mano de obra, Medición o Medio ambiente.</li>
+          <li>Escribe la causa raíz, la acción para que no vuelva a pasar, el responsable y la fecha compromiso. Toca <span class="k">💾 Guardar análisis</span>.</li>
+        </ol>
+        <p>¿No tienes tiempo? Toca <span class="k">Guardar y llenar después</span>: el trabajo se guarda igual y queda <b>🔍 RCA pendiente</b> en el Historial (botón <span class="k">🔍 Llenar análisis</span>). El supervisor no lo puede validar hasta que lo llenes.</p>
+      </div>
+      <div class="it">
+        <h3>📈 Tendencias en el checklist</h3>
+        <p>En los puntos con medición (mín / máx), si las últimas lecturas van subiendo o bajando hacia el límite sale <b>⚠️ Tendencia</b> (o <b>🟡 Cerca del límite</b>) antes de que se salga del rango. Toca <span class="k">🧾 Pedir OT predictiva</span> y la OT sale al guardar el checklist.</p>
+      </div>
+      <div class="it">
         <h3>🎯 ¿Qué es A, B y C?</h3>
         <p>Es la <b>criticidad</b> del equipo: <span class="fbc fbc-A">A · Crítico</span>, <span class="fbc fbc-B">B · Importante</span> y <span class="fbc fbc-C">C · Normal</span>. Sale junto al nombre del equipo en Avisos, Bitácora, Checklist y Hoja de vida. Con la misma prioridad, los avisos de equipos A salen primero.</p>
       </div>
@@ -365,8 +379,34 @@
         <p>Muchos a la vez: <span class="k">📥 Cargar desde Excel o pegar</span> con las columnas <b>Equipo · Criticidad</b> (A, B o C). El Administrador puede cambiar el nivel calculado escribiendo el motivo. En <b>📊 Análisis</b> puedes filtrar por criticidad y ver los indicadores de cada nivel.</p>
       </div>
       <div class="it">
+        <h3>🔍 Causa raíz (RCA)</h3>
+        <p>En <b>📊 Análisis → 🔍 Causa raíz</b> ves los <b>RCA pendientes</b> (el técnico guardó sin llenarlo), los que están <b>por validar</b> y las <b>acciones abiertas</b> con su fecha compromiso (en rojo las vencidas).</p>
+        <ul>
+          <li><span class="k">✅ Validar</span> solo funciona cuando el análisis está lleno.</li>
+          <li><span class="k">✅ Marcar cumplida</span> cuando la acción ya se hizo.</li>
+          <li>El <b>Pareto</b> muestra qué tipo de causa y qué equipos se repiten más. También sale en la Hoja de vida de cada equipo.</li>
+        </ul>
+      </div>
+      <div class="it">
+        <h3>🏆 Clase mundial y 📈 Tendencias</h3>
+        <p><b>🏆 Clase mundial</b>: % de trabajo planificado (meta 80 % o más), backlog en OTs, horas y <b>semanas</b> (meta 2 a 4), MTBF, MTTR y disponibilidad. Toca <b>¿Qué significa?</b> en cada uno. <b>📈 Tendencias</b>: las mediciones de checklist que van hacia su límite, las más urgentes primero; toca una para ver su gráfica y <span class="k">🧾 Crear OT predictiva</span> (no se repite si ya hay una abierta). Las dos se exportan a Excel.</p>
+        <a class="ir" href="analisis.html">Abrir Análisis →</a>
+      </div>
+      <div class="it">
+        <h3>💼 CAPEX: proyectos de inversión (Encargado)</h3>
+        <p>En <b>💼 CAPEX</b> armas cada proyecto: título, nave, área, equipos, el problema y el beneficio, los <b>trabajos</b> (responsable, horas o días, costo y de cuál depende), los <b>repuestos y materiales</b> (cantidad, costo, proveedor y días de entrega; si el código está en el inventario dice <b>Hay N</b>) y otros costos (flete, aduana, permisos…). Cada línea puede ir en RD$ o US$. Para un equipo en particular: <b>🗂️ Hoja de Vida</b> → <span class="k">💼 Crear CAPEX</span>.</p>
+        <ul>
+          <li>La app suma todo, le pone la <b>contingencia</b> y el <b>ITBIS</b>, lo muestra en RD$ y US$ con la tasa del proyecto y calcula <b>recuperación, ROI, VPN y TIR</b> con el ahorro por año.</li>
+          <li>El <b>cronograma</b> sale solo: la instalación y la puesta en marcha esperan la llegada de los materiales.</li>
+          <li><span class="k">📤 Enviar a aprobación</span> revisa que no falte nada. Mientras está enviado no se edita (<span class="k">↩️ Retirar para corregir</span>).</li>
+          <li>Ya aprobado: <span class="k">▶️ Iniciar ejecución</span>, <span class="k">+ Registrar gasto</span> (factura u orden de compra) y el avance de cada trabajo. Avisa al pasar el 90 % y el 100 % de lo aprobado. Los gastos no se borran: para corregir, un monto negativo con su nota.</li>
+          <li><span class="k">🖨 Ficha PDF</span>, <span class="k">⬇ Excel</span> y <span class="k">🛒 Lista para Compras</span> salen en el idioma elegido arriba (ES, EN o TR).</li>
+        </ul>
+        <a class="ir" href="capex.html">Abrir CAPEX →</a>
+      </div>
+      <div class="it">
         <h3>📊 Análisis</h3>
-        <p>Pestañas: <b>Resumen</b> (checklists y órdenes vencidas, fallas que se repiten), <b>Equipos y predicción</b> (riesgo por equipo), <b>Áreas</b>, <b>Técnicos</b>, <b>🏭 Naves</b> (si ves más de una) y <b>Datos</b> (📊 Exportar a Excel).</p>
+        <p>Pestañas: <b>Resumen</b> (checklists y órdenes vencidas, fallas que se repiten), <b>Equipos y predicción</b> (riesgo por equipo), <b>Áreas</b>, <b>Técnicos</b>, <b>🏭 Naves</b> (si ves más de una), <b>🏆 Clase mundial</b>, <b>🔍 Causa raíz</b>, <b>📈 Tendencias</b>, <b>🦺 Seguridad</b> y <b>Datos</b> (📊 Exportar a Excel).</p>
         <a class="ir" href="analisis.html">Abrir Análisis →</a> <a class="ir" href="analisis.html#equipos">Equipos en riesgo →</a>
       </div>
       <div class="it">
@@ -487,6 +527,18 @@
       <div class="it">
         <h3>📊 Rentabilidad de equipos</h3>
         <p>Cuánto cuesta mantener cada máquina (técnico, operador detenido, arranques y repuestos) y si conviene seguir con ella o comprar una nueva.</p>
+        <a class="ir" href="rentabilidad.html">Abrir Rentabilidad →</a>
+      </div>
+      <div class="it">
+        <h3>💼 CAPEX: aprobar y presupuesto</h3>
+        <p>Solo tú <span class="k">✅ Revisar y aprobar</span>: pones el monto aprobado, la tasa y la fecha de inicio (queda el cronograma), o rechazas / pones en espera con una nota. Desde la aprobación los montos quedan congelados; <span class="k">🔓 Reabrir</span> (con nota) lo devuelve a borrador.</p>
+        <p><span class="k">💰 Presupuesto</span>: el presupuesto anual (total y por nave) contra lo solicitado, aprobado y ejecutado; solo lo ves tú. <span class="k">⚙️ Ajustes</span>: tasa de cambio, contingencia e ITBIS por defecto, empresa y logo de la ficha. En <b>📊 Rentabilidad</b> los equipos 🔴 traen <span class="k">💼 Crear CAPEX de reemplazo</span> con el ahorro sugerido.</p>
+        <a class="ir" href="capex.html">Abrir CAPEX →</a>
+      </div>
+      <div class="it">
+        <h3>🏆 RAV y ajustes de indicadores</h3>
+        <p>En <b>📊 Rentabilidad → Año</b> está el <b>RAV</b>: lo que cuesta mantener las máquinas al año ÷ el precio de las máquinas nuevas (clase mundial: menos de 2–3 %). Solo tú lo ves.</p>
+        <p>En <b>📊 Análisis → 🏆 Clase mundial → ⚙️ Ajustes</b> pones las horas por semana de cada técnico (44), los días para contar una falla como repetida (15) y los minutos de paro en equipos A que piden causa raíz (120).</p>
         <a class="ir" href="rentabilidad.html">Abrir Rentabilidad →</a>
       </div>
       <div class="it">

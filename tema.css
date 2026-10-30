@@ -285,3 +285,39 @@ body {
 .fbs-card .t { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; flex-wrap: wrap; }
 .fbs-card .m { color: var(--color-muted); font-size: 12.5px; margin-top: 3px; }
 .fbs-card .acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   (28 oct 2026) CLASE MUNDIAL, CAUSA RAÍZ (RCA) y TENDENCIAS
+   Insignias y bloques que pintan rca.js, tendencias.js y Análisis.
+   ══════════════════════════════════════════════════════════════════════ */
+.fbsh input[type=date] { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-input-bg); color: var(--color-text); font-family: inherit; font-size: 15px; margin: 4px 0; }
+.rca-badge, .tend-badge { display: inline-flex; align-items: center; gap: 3px; border-radius: var(--radius-pill); padding: 1px 8px; font-size: 11.5px; font-weight: 800; line-height: 1.6; white-space: nowrap; border: 1px solid transparent; vertical-align: middle; }
+.rca-pend { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.rca-val { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.rca-ok { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.rca-cats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.rca-cats .fbsh-op { margin: 0; min-height: 64px; font-size: 14px; }
+.rca-det { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.rca-det > div { margin-top: 3px; }
+.rca-pq { margin: 4px 0 4px 18px; padding: 0; }
+.rca-meta { color: var(--color-muted); font-size: 12px; }
+.rca-acc { font-weight: 800; }
+.rca-acc-vencida { color: var(--color-danger-text); }
+.rca-acc-cumplida { color: var(--color-success-text); }
+.rca-acc-abierta { color: var(--color-text-2); }
+.hist-rca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.tend-fuera { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.tend-tendencia { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.tend-cerca { background: var(--color-accent-soft); color: var(--color-accent-text); border-color: var(--color-accent); }
+.tend-aviso { margin-top: 6px; padding: 8px 10px; border-radius: 10px; font-size: 13px; line-height: 1.45; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); overflow-wrap: anywhere; }
+.tend-aviso.tend-fuera { border-color: var(--color-danger); }
+.tend-aviso.tend-tendencia { border-color: var(--color-warn); }
+.tend-aviso.tend-cerca { border-color: var(--color-accent); }
+.tend-aviso .tend-badge { margin-right: 4px; }
+.tend-chart { position: relative; height: 210px; width: 100%; }
+.tend-tabla { overflow-x: auto; max-width: 100%; }
+.tend-tabla table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tend-tabla th, .tend-tabla td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--color-border); }
+.que-sig { margin-top: 6px; font-size: 12.5px; }
+.que-sig summary { cursor: pointer; color: var(--color-primary-text); font-weight: 700; min-height: 32px; display: inline-flex; align-items: center; }
+.que-sig p { margin: 4px 0 0; color: var(--color-text-2); line-height: 1.5; }

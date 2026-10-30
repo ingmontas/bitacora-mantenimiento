@@ -22,6 +22,8 @@
   <!-- (28 oct 2026) Criticidad A/B/C y permisos de trabajo (LOTO) del equipo -->
   <script src="criticidad.js"></script>
   <script src="seguridad.js"></script>
+  <script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz del equipo -->
+  <script src="tendencias.js"></script><!-- (28 oct 2026) tendencias de mediciones -->
   <!-- QR por equipo, mismo patrón que checklist.html: solo dibuja el QR,
        cualquier cámara de celular ya lo reconoce y ofrece abrir la URL. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -236,10 +238,24 @@
         <h3>🎯 Criticidad</h3>
         <div id="critBox"></div>
         <button class="btn btn-secondary btn-sm" id="btnCritEval" style="display:none;margin-top:10px;" onclick="evaluarCritActual()">🎯 Evaluar</button>
+        <!-- (29 oct 2026) 💼 CAPEX de este equipo (Administrador y Encargado) -->
+        <a class="btn btn-secondary btn-sm" id="btnCapexEq" style="display:none;margin-top:10px;text-decoration:none;" href="capex.html">💼 Crear CAPEX</a>
       </div>
       <div class="card" id="cardPermisos">
         <h3>🦺 Permisos de trabajo (LOTO)</h3>
         <div id="permisosBox"><div class="note">Cargando…</div></div>
+      </div>
+    </div>
+
+    <!-- (28 oct 2026) Análisis de causa raíz y tendencias de mediciones de este equipo -->
+    <div class="dash-grid">
+      <div class="card" id="cardRca">
+        <h3>🔍 Causa raíz (RCA)</h3>
+        <div id="rcaBox"><div class="note">Cargando…</div></div>
+      </div>
+      <div class="card" id="cardTend">
+        <h3>📈 Tendencias de mediciones</h3>
+        <div id="tendBox"><div class="note">Cargando…</div></div>
       </div>
     </div>
 
@@ -540,7 +556,7 @@ function mostrarHojaDeVida(equipoOrId) {
 // Antes renderMes iba de tercera y, si fallaba, el historial quedaba en blanco.
 function renderTodo() {
   hvLimite = PAGINA;
-  [renderCrit, renderPermisos, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
+  [renderCrit, renderPermisos, renderRcaHv, renderTendHv, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
     .forEach(fn => { try { fn(); } catch (err) { console.error('Hoja de vida — ' + fn.name + ':', err); } });
 }
 
@@ -552,6 +568,8 @@ function renderCrit() {
   box.innerHTML = typeof fbCritDetalleHtml === 'function' ? fbCritDetalleHtml(equipoActual) : '';
   const b = document.getElementById('btnCritEval');
   if (b) { b.style.display = (typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar()) ? '' : 'none'; b.textContent = fbCritNivel(equipoActual) ? '🎯 Volver a evaluar' : '🎯 Evaluar'; }
+  const cx = document.getElementById('btnCapexEq'); // (29 oct 2026) 💼 CAPEX
+  if (cx) { const puede = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'); cx.style.display = puede ? 'inline-block' : 'none'; cx.href = 'capex.html#nuevo&equipo=' + encodeURIComponent(equipoActual.id); }
 }
 function evaluarCritActual() { if (equipoActual) fbCritAbrirAsistente(equipoActual, { onGuardado: () => renderCrit() }); }
 const _permisosPorEquipo = new Map();
@@ -575,6 +593,59 @@ function renderPermisos() {
       return `<div class="fbs-card ${esc(p.estado)}" data-permiso="${esc(p.id)}"><div class="t"><span>${d ? esc(fmtFechaHV(fbFechaLocal(d))) + ' ' + esc(p.horaInicio || '') : esc(p.fecha || '')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''}</span>${fbSegEstadoHtml(p)}</div>
         <div class="m">👤 ${esc(p.tecnico || '—')} · ${fbSegLotoHecho(p) ? '🔒 LOTO' + (p.loto.candado ? ' (candado ' + esc(p.loto.candado) + ')' : '') : 'sin LOTO'}${r.length ? ' · ⚠️ ' + esc(r.join(', ')) : ''}${p.autorizadoPor ? ' · ' + (p.estado === 'rechazado' ? 'rechazó ' : 'autorizó ') + esc(p.autorizadoPor) : ''}${p.retiro && p.retiro.hora ? ' · retiro ' + esc(p.retiro.hora) : ''}</div></div>`; }).join('')
     + (lista.length > 30 ? `<div class="note">Se muestran los 30 más recientes.</div>` : '');
+}
+
+// ══════ (28 oct 2026) Causa raíz y tendencias del equipo ══════
+// RCA: de las OTs del equipo que ya se leyeron (0 lecturas). Tendencias: 1
+// consulta de un solo campo (checklists.equipoId ==) la primera vez que se
+// abre el equipo; queda en memoria mientras la página esté abierta.
+function renderRcaHv() {
+  const box = document.getElementById('rcaBox'); if (!box || !equipoActual) return;
+  if (!_otsPorEquipo.has(equipoActual.id)) { box.innerHTML = '<div class="note">Cargando…</div>'; return; }
+  const lista = otsDeEquipo(equipoActual).filter(o => o.rcaRequerido === true || fbRcaLleno(o.rca)).sort((a, b) => String(b.FECHA || '').localeCompare(String(a.FECHA || '')));
+  if (!lista.length) { box.innerHTML = '<div class="note">Este equipo no tiene análisis de causa raíz. Se piden cuando una falla se repite o un equipo A para mucho tiempo.</div>'; return; }
+  const pend = lista.filter(o => fbRcaEstado(o) === 'pendiente').length;
+  box.innerHTML = `<div class="note" style="margin:0 0 8px;">${lista.length} análisis${pend ? ' · <b style="color:var(--color-danger-text)">' + pend + ' pendiente(s)</b>' : ''}</div>`
+    + lista.slice(0, 20).map(o => `<div class="pend-row" data-rca-hv="${esc(o.id)}" style="display:block;"><div>${fbRcaBadge(o)} <b>${esc(o.folio || o.Title || '')}</b> · ${fmtFechaHV(o.FECHA)}${o.CAUSA_FALLA ? ' · ' + esc(o.CAUSA_FALLA) : ''}</div>${fbRcaDetalleHtml(o)}</div>`).join('');
+}
+const _ckPorEquipo = new Map();
+const _tendCharts = [];
+function renderTendHv() {
+  const box = document.getElementById('tendBox'); if (!box || !equipoActual) return;
+  const e = equipoActual;
+  const cks = _ckPorEquipo.get(e.id);
+  if (cks === undefined) {
+    _ckPorEquipo.set(e.id, null);
+    box.innerHTML = '<div class="note">Cargando lecturas…</div>';
+    db.collection('checklists').where('equipoId', '==', e.id).get()
+      .then(sn => { _ckPorEquipo.set(e.id, sn.docs.map(d => ({ id: d.id, ...d.data() }))); if (equipoActual && equipoActual.id === e.id) renderTendHv(); })
+      .catch(err => { _ckPorEquipo.set(e.id, { err: err.code === 'permission-denied' ? 'Tu usuario no puede ver los checklists.' : err.message }); if (equipoActual && equipoActual.id === e.id) renderTendHv(); });
+    return;
+  }
+  if (cks === null) return;
+  if (cks.err) { box.innerHTML = `<div class="note">⚠️ ${esc(cks.err)}</div>`; return; }
+  _tendCharts.splice(0).forEach(c => { try { c.destroy(); } catch (x) {} });
+  const grupos = [...fbTendAgrupar(cks).values()];
+  if (!grupos.length) { box.innerHTML = '<div class="note">Este equipo no tiene puntos de checklist con medición (mín / máx) todavía.</div>'; return; }
+  grupos.forEach(g => { g.alerta = fbTendEvaluar(g.lecturas, { intervaloDias: Number(e.checklistFrecuenciaDias) || null }); g.crit = fbCritNivel(e); if (!g.equipoNombre) g.equipoNombre = e.nombre; });
+  const R = { fuera: 0, tendencia: 1, cerca: 2 };
+  grupos.sort((a, b) => (a.alerta ? R[a.alerta.nivel] : 9) - (b.alerta ? R[b.alerta.nivel] : 9) || a.punto.localeCompare(b.punto, 'es'));
+  window._tendHv = grupos;
+  box.innerHTML = grupos.map((g, i) => {
+    const u = g.lecturas[g.lecturas.length - 1];
+    return `<div class="pend-row" style="display:block;" data-tend-hv="${i}"><div><b>${esc(g.punto)}</b> ${g.alerta ? fbTendBadge(g.alerta) : '<span class="tend-badge rca-ok">✅ Normal</span>'}</div>
+      <div class="note" style="margin-top:2px;">Última ${esc(fbTendFmt(u.valor))} ${esc(u.unidad)} el ${fmtFechaHV(u.fecha)} · ${g.lecturas.length} lectura(s)${g.alerta ? ' · ' + esc(g.alerta.texto) : ''}</div>
+      ${typeof Chart !== 'undefined' ? `<div class="tend-chart"><canvas id="tendHv${i}"></canvas></div>` : fbTendTablaHtml(g)}
+      ${g.alerta ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="otDesdeTendHv(${i}, this)">🧾 Crear OT predictiva</button>` : ''}</div>`;
+  }).join('');
+  grupos.forEach((g, i) => { const c = fbTendDibujar(document.getElementById('tendHv' + i), g); if (c) _tendCharts.push(c); });
+}
+function otDesdeTendHv(i, btn) {
+  const g = (window._tendHv || [])[i]; if (!g || !g.alerta) return;
+  btn.disabled = true;
+  fbTendCrearOt(g, currentOts, { equipo: equipoActual }).then(r => {
+    showToast(r.existente ? 'ℹ️ Ya hay una OT abierta para ese punto: ' + r.existente : '✅ OT predictiva ' + r.creada.folio + ' creada');
+  }).catch(err => showToast('❌ ' + ((err && err.message) || err), 'error')).finally(() => { btn.disabled = false; });
 }
 
 // (5 oct 2026) Devuelve texto ya escapado (la fecha viene de Firestore y se

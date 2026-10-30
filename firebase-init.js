@@ -156,6 +156,8 @@ function fbRenderMiniNav(active) {
       { id: 'incentivos', href: 'incentivos.html', label: '💰 Incentivos', roles: ['ADMINISTRADOR'] },
       // (22 oct 2026) Rentabilidad de equipos: solo Administrador (costos y salarios).
       { id: 'rentabilidad', href: 'rentabilidad.html', label: '📊 Rentabilidad', roles: ['ADMINISTRADOR'] },
+      // (29 oct 2026) CAPEX (proyectos de inversión): Administrador y Encargado de mantenimiento.
+      { id: 'capex', href: 'capex.html', label: '💼 CAPEX', roles: ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'] },
       // (25 oct 2026) Administración (usuarios, respaldo, uso del plan gratis): solo Administrador.
       { id: 'admin', href: 'admin.html', label: '⚙️ Administración', roles: ['ADMINISTRADOR'] },
     ].filter(p => !p.roles || userHasRole(...p.roles));

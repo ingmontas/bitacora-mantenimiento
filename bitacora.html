@@ -22,6 +22,7 @@
   <!-- (28 oct 2026) Criticidad A/B/C y Seguridad (LOTO / permiso de trabajo) -->
   <script src="criticidad.js"></script>
   <script src="seguridad.js"></script>
+  <script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz (RCA) -->
   <!-- (7 oct 2026) Diseño claro "CMMS" aprobado (fuente Barlow; si no carga, usa la del sistema). -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
@@ -2482,6 +2483,16 @@ async function submitForm() {
   };
   if (equipoId) record.equipoId = equipoId;
   if (seg.permiso) record.permisoId = seg.permiso.id; // (28 oct 2026) permiso de trabajo (LOTO) de este trabajo
+  // (28 oct 2026) Análisis de causa raíz: si la falla se repite (o equipo A con paro largo) se pide
+  // el RCA. Se puede dejar para después (nunca se bloquea el trabajo): queda "RCA pendiente".
+  let rcaRes = null;
+  try { rcaRes = await rcaAntesDeGuardar(record); } catch (e) { console.warn('rca:', e); rcaRes = null; }
+  if (rcaRes === false) { _submitting = false; btn.disabled = false; btn.style.opacity = ''; return; } // "← Volver" al formulario
+  if (rcaRes && rcaRes.requerido) {
+    record.rcaRequerido = true;
+    record.rcaMotivo = rcaRes.motivo;
+    if (rcaRes.rca) record.rca = rcaRes.rca;
+  }
   const idsNuevasSol = nuevasSol.map(s => s.ref.id);
   const txtRep = nuevasSol.length ? ` · ${nuevasSol.length} repuesto${nuevasSol.length === 1 ? '' : 's'} solicitado${nuevasSol.length === 1 ? '' : 's'} a almacén` : '';
 
@@ -2571,6 +2582,38 @@ async function submitForm() {
   window.scrollTo(0, 0);
   _submitting = false;
   btn.disabled = false; btn.style.opacity = ''; btn.textContent = btnTextoOriginal;
+}
+
+// ══════ ANÁLISIS DE CAUSA RAÍZ (28 oct 2026, rca.js) ══════
+// La reincidencia se busca en las OTs que la Bitácora ya tiene en memoria
+// (últimos 30 días o más si se amplió el historial): 0 lecturas. La regla
+// es la de Incentivos (mismo equipo y causa en N días, 15 por defecto).
+// Devuelve null (no hace falta), false (el técnico tocó "Volver") o
+// { requerido, motivo, rca|null }.
+function rcaAntesDeGuardar(record) {
+  if (typeof fbRcaEvaluar !== 'function') return Promise.resolve(null);
+  const ed = window.editingRecord;
+  if (ed && ed.rcaRequerido === true && fbRcaLleno(ed.rca)) return Promise.resolve(null); // ya tiene su análisis
+  // Solo al registrar o cerrar (nuevo, aviso, OT planificada); editar un registro viejo no pide RCA
+  // (si ya lo tenía pendiente, se pregunta otra vez).
+  if (_modoForm === 'editar' && !(ed && ed.rcaRequerido === true)) return Promise.resolve(null);
+  return fbKpiConfig().then(cfg => {
+    const nuevo = { ...record, id: ed ? ed.id : '__nuevo', equipoId: record.equipoId || (ed && ed.equipoId) || '' };
+    const otras = [..._docsRecientes, ..._docsAvisosAbiertos];
+    const ev = fbRcaEvaluar(nuevo, otras, cfg);
+    if (!ev.requerido) return (ed && ed.rcaRequerido === true) ? { requerido: true, motivo: ed.rcaMotivo || '', rca: null } : null;
+    window.__rcaUltimo = ev;
+    return new Promise(res => {
+      fbRcaAbrirForm(nuevo, { motivo: ev.motivo + '. Llénalo ahora o después desde el Historial: el supervisor no lo puede validar sin él.', despues: 'Guardar y llenar después',
+        onGuardar: rca => res({ requerido: true, motivo: ev.motivo, rca }),
+        onDespues: () => res({ requerido: true, motivo: ev.motivo, rca: null }),
+        onVolver: () => res(false) });
+    });
+  });
+}
+function rcaLlenarHist(idx) {
+  const r = (window._historyCache || [])[idx]; if (!r) return;
+  fbRcaAbrirForm(r, { motivo: r.rcaMotivo || '', onGuardar: rca => { fbRcaGuardar(r, rca); renderHistory(); } });
 }
 
 // ══════ COPIA LOCAL DE LO GUARDADO (5 oct 2026) ══════
@@ -2820,6 +2863,7 @@ function renderHistory() {
       <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+esc(r.CAUSA_FALLA)+'] ' : ''}${esc(r.DESCRIPCION_FALLA||'—')}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
       ${uso ? `<div class="hist-uso">${uso}</div>` : ''}
+      ${typeof fbRcaEstado === 'function' && fbRcaEstado(r) ? `<div class="hist-rca">${fbRcaBadge(r)}${fbRcaEstado(r) === 'pendiente' ? ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})">🔍 Llenar análisis</button>` : ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})">Ver / corregir</button>`}</div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
         ${minMaq > 0 ? `<div style="font-size:12px;color:var(--muted);">⏱ ${minMaq} min máquina</div>` : '<div></div>'}
         <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})">✏️ Editar</button>

@@ -107,6 +107,14 @@
         <p>Cuánto cuesta mantener cada máquina y si conviene comprar una nueva (solo Administrador).</p>
       </div>
     </a>
+    <!-- (29 oct 2026) CAPEX: proyectos de inversión (Administrador y Encargado de mantenimiento). -->
+    <a class="tile" href="capex.html" id="tile-capex" style="display:none">
+      <div class="icon">💼</div>
+      <div class="info">
+        <h2>CAPEX</h2>
+        <p>Proyectos de inversión: trabajos, repuestos, presupuesto vs gasto real y cronograma (Administrador y Encargado).</p>
+      </div>
+    </a>
     <!-- (25 oct 2026) Administración: usuarios, respaldo y uso del plan gratis (solo Administrador). -->
     <a class="tile" href="admin.html" id="tile-admin" style="display:none">
       <div class="icon">⚙️</div>
@@ -171,6 +179,7 @@ window.fbReady.then(()=>{
   fbRenderSelectorNave(document.getElementById('nave-ini'));
   fbOnNaveCambio(() => {}); // aquí no hay listas que filtrar: no hace falta recargar
   if (userHasRole('ADMINISTRADOR')) { document.getElementById('tile-incentivos').style.display = ''; document.getElementById('tile-rentabilidad').style.display = ''; } // (22 oct 2026) + Rentabilidad
+  if (userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO')) document.getElementById('tile-capex').style.display = ''; // (29 oct 2026) CAPEX
   if (userHasRole('ADMINISTRADOR')) {
     // (25 oct 2026) Administración + aviso de respaldo (1 lectura: /config/respaldo).
     document.getElementById('tile-admin').style.display = '';

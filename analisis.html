@@ -18,6 +18,8 @@
 <script src="filtros.js"></script>
 <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C -->
 <script src="seguridad.js"></script><!-- (28 oct 2026) permisos de trabajo / LOTO (reporte) -->
+<script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz + ajustes de indicadores (/config/kpis) -->
+<script src="tendencias.js"></script><!-- (28 oct 2026) tendencias de mediciones de checklist -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -182,6 +184,27 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
 .gl-item .gl-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;overflow-wrap:anywhere;}
 .gl-item .gl-val{font-family:var(--font-mono);font-size:11.5px;white-space:nowrap;text-align:right;color:var(--color-danger-text);}
 .gl-item .gl-val.amber{color:var(--color-accent-text);}
+/* (28 oct 2026) clase mundial, causa raíz y tendencias */
+.mund-gauge{margin:6px 0 2px;}
+.mg-track{position:relative;height:16px;border-radius:8px;background:var(--color-surface-3);overflow:visible;}
+.mg-track.sm{height:8px;border-radius:4px;margin-top:4px;overflow:hidden;}
+.mg-fill{height:100%;border-radius:inherit;}
+.mg-meta{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px dashed var(--color-text);}
+.mg-lbl{position:relative;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;height:16px;}
+.mg-meta-lbl{position:absolute;transform:translateX(-50%);color:var(--color-text);font-weight:700;white-space:nowrap;}
+.rca-item{border-bottom:1px solid var(--line);padding:10px 0;font-size:12.5px;min-width:0;overflow-wrap:anywhere;}
+.rca-item:last-child{border-bottom:none;}
+.rca-item.vencida{box-shadow:inset 3px 0 0 var(--red);padding-left:8px;}
+.rca-item .gl-name{font-weight:700;font-size:13px;}
+.rca-item .gl-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;}
+.rca-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.rca-btns button{min-height:40px;}
+.rca-btns button:disabled{opacity:.5;cursor:default;}
+.tend-item{border-bottom:1px solid var(--line);padding:10px 0;min-width:0;}
+.tend-cab{display:block;width:100%;text-align:left;background:none;border:0;color:var(--text);padding:4px 0;font-size:13px;line-height:1.5;min-height:44px;overflow-wrap:anywhere;font-weight:500;}
+.tend-cab span{color:var(--muted);font-size:12px;}
+.tend-item .tend-chart{margin-top:8px;}
+.tend-item .gl-meta{font-size:12px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere;}
 @media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even,.grid3{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
 </style>
 </head>
@@ -225,6 +248,9 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <button class="tab" data-tab="areas">Áreas</button>
     <button class="tab" data-tab="tecnicos">Técnicos</button>
     <button class="tab" data-tab="naves" id="tabNavesBtn" style="display:none;">🏭 Naves</button>
+    <button class="tab" data-tab="mundial">🏆 Clase mundial</button>
+    <button class="tab" data-tab="rca" id="tabRcaBtn" style="display:none;">🔍 Causa raíz <span class="cnt" id="tabRcaCnt" style="display:none;"></span></button>
+    <button class="tab" data-tab="tend">📈 Tendencias <span class="cnt" id="tabTendCnt" style="display:none;"></span></button>
     <button class="tab" data-tab="seguridad">🦺 Seguridad</button>
     <button class="tab" data-tab="datos">Datos</button>
   </nav>
@@ -383,6 +409,81 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <div class="cardsub" id="cmpAreaSub"></div>
       <div style="overflow-x:auto;"><table id="cmpAreaTable"><thead id="cmpAreaHead"></thead><tbody id="cmpAreaBody"></tbody></table></div>
     </div>
+  </section>
+
+  <!-- ═════════ CLASE MUNDIAL (28 oct 2026) ═════════ -->
+  <section class="tabpanel" id="tab-mundial">
+    <p class="section-intro">Indicadores de mantenimiento de clase mundial. Se calculan con lo que el panel ya cargó (sin lecturas extra de OTs) y respetan la nave, el área, la línea, el equipo y la criticidad. El trabajo planificado usa el período; el backlog es la foto de HOY (no usa el período).</p>
+    <div class="kpis" id="mundKpis"></div>
+    <div class="grid2 even">
+      <div class="card">
+        <h2>Trabajo planificado vs. reactivo</h2>
+        <div class="cardsub" id="mundPlanSub"></div>
+        <div id="mundPlanGauge"></div>
+        <details class="que-sig"><summary>¿Qué significa?</summary><p>De cada 10 trabajos, cuántos se hicieron porque estaban en el plan (preventivo, checklist, proyecto u OT con fecha planificada) y no porque algo se rompió. Clase mundial: 8 de cada 10 o más.</p></details>
+        <div class="chart-box" style="height:220px;margin-top:10px;"><canvas id="chartPlanMes"></canvas></div>
+        <div class="cardsub" style="margin-top:6px;">% planificado por mes. La línea punteada es la meta de 80 %.</div>
+      </div>
+      <div class="card">
+        <h2>Backlog (trabajo pendiente)</h2>
+        <div class="cardsub" id="mundBackSub"></div>
+        <div id="mundBack"></div>
+        <details class="que-sig"><summary>¿Qué significa?</summary><p>Cuántas semanas tardaría el equipo de técnicos en terminar todo lo pendiente si no entrara nada nuevo. Lo sano es de 2 a 4 semanas: menos es poco trabajo planificado, más es que no se da abasto.</p></details>
+      </div>
+    </div>
+    <div class="grid2 even">
+      <div class="card">
+        <h2>Backlog por edad</h2>
+        <div class="cardsub">Días desde que se creó la OT.</div>
+        <div id="mundEdad"></div>
+      </div>
+      <div class="card">
+        <h2>Backlog por criticidad</h2>
+        <div class="cardsub">Las OTs de equipos A · Crítico deberían ser las primeras en salir.</div>
+        <div id="mundCrit"></div>
+      </div>
+    </div>
+    <div class="card mb">
+      <h2>Confiabilidad (mismas fórmulas del Resumen)</h2>
+      <div class="cardsub">MTBF, MTTR y disponibilidad no cambian: son los del Resumen con los mismos filtros.</div>
+      <div class="kpis" id="mundConf" style="margin-bottom:0;"></div>
+    </div>
+    <div class="card mb" id="mundRavCard" style="display:none;">
+      <h2>Costo de mantenimiento / valor de reposición (RAV)</h2>
+      <div class="cardsub">Solo Administrador. Se calcula en 💰 Rentabilidad, donde ya se leen los costos y el precio de la máquina nueva (así nadie más gasta lecturas en costos).</div>
+      <a href="rentabilidad.html#anio" class="linkbtn" id="mundRavLink">Ver RAV en Rentabilidad →</a>
+      <details class="que-sig"><summary>¿Qué significa?</summary><p>Lo que cuesta mantener las máquinas en un año comparado con lo que costaría comprarlas nuevas. Clase mundial: menos de 2–3 %; típico 3–6 %; más de 6 % es alto.</p></details>
+    </div>
+    <div class="feed-actions"><button onclick="exportMundialExcel()">📊 Exportar a Excel</button><button class="secondary" id="mundCfgBtn" style="display:none;" onclick="abrirAjustesKpi()">⚙️ Ajustes</button><span class="feed-status" id="mundStatus"></span></div>
+  </section>
+
+  <!-- ═════════ CAUSA RAÍZ (28 oct 2026) ═════════ -->
+  <section class="tabpanel" id="tab-rca">
+    <p class="section-intro">Análisis de causa raíz (RCA) de las fallas que se repiten (mismo equipo y misma causa en pocos días) y de los paros largos en equipos A · Crítico. Sale de las OTs que el panel ya cargó (últimos 13 meses, sin lecturas extra). Aplican la nave, el área, la línea, el equipo y la criticidad; no el período (lo pendiente no se esconde).</p>
+    <div class="kpis" id="rcaKpis"></div>
+    <div class="grid2 even">
+      <div class="card"><h2>RCA pendientes</h2><div class="cardsub">El técnico guardó el trabajo sin el análisis. Mientras falte no se puede validar.</div><div id="rcaPend"></div></div>
+      <div class="card"><h2>Por validar</h2><div class="cardsub">Análisis lleno, falta que el Supervisor o Encargado lo revise.</div><div id="rcaVal"></div></div>
+    </div>
+    <div class="card mb" style="margin-top:16px;"><h2>Acciones abiertas</h2><div class="cardsub">Lo que se prometió hacer para que la falla no vuelva. En rojo, las que ya pasaron su fecha compromiso.</div><div id="rcaAcc"></div></div>
+    <div class="grid2 even">
+      <div class="card"><h2>Pareto por tipo de causa (Ishikawa)</h2><div class="cardsub">De mayor a menor; el % acumulado muestra dónde está el 80 %.</div><div id="rcaParCat"></div></div>
+      <div class="card"><h2>Pareto por equipo y causa de falla</h2><div class="cardsub">Equipos con más análisis de causa raíz.</div><div id="rcaParEq"></div></div>
+    </div>
+    <div class="feed-actions" style="margin-top:12px;"><button onclick="exportRcaExcel()">📊 Exportar a Excel</button><span class="feed-status" id="rcaStatus"></span></div>
+  </section>
+
+  <!-- ═════════ TENDENCIAS (28 oct 2026) ═════════ -->
+  <section class="tabpanel" id="tab-tend">
+    <p class="section-intro">Lecturas de los puntos de checklist con medición (mín / máx). Avisa antes de que una lectura se salga del rango. Usa los checklists que el panel ya leyó; al abrir esta pestaña se lee una sola vez lo que falte de la ventana (90 días, o el período si es de 6 o 12 meses). Aplican la nave, el área, el equipo y la criticidad.</p>
+    <div class="kpis" id="tendKpis"></div>
+    <div class="card mb">
+      <h2>Alertas de tendencia</h2>
+      <div class="cardsub" id="tendSub"></div>
+      <details class="que-sig" style="margin-bottom:8px;"><summary>¿Qué significa?</summary><p>⚠️ Tendencia: las últimas 3 lecturas van hacia el límite y, si siguen igual, lo pasan antes de 2 checklists más. 🟡 Cerca: la última lectura está a 10 % o menos del límite. ⛔ Fuera: ya se salió del rango. Toca una alerta para ver su gráfica.</p></details>
+      <div id="tendList"></div>
+    </div>
+    <div class="feed-actions"><button onclick="exportTendExcel()">📊 Exportar a Excel</button><span class="feed-status" id="tendStatus"></span></div>
   </section>
 
   <!-- ═════════ SEGURIDAD (28 oct 2026) ═════════ -->
@@ -884,6 +985,7 @@ function render(){
   renderGestion(); // (14 oct 2026) indicadores de gestión
   renderCritKpis(rowsExcept('crit'), ref); // (28 oct 2026)
   if ($('tab-seguridad').classList.contains('active')) renderSeguridadAn();
+  renderMundial(); renderRcaAn(); renderTendAn(); // (28 oct 2026) solo dibujan si su pestaña está abierta
   if (ficha) renderFicha();
 }
 
@@ -970,6 +1072,337 @@ function exportSeguridadExcel(){
   fbExportar({ nombre: fbNombreArchivo('seguridad', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas, aviso: m=>{ $('segStatus').textContent = m; } });
 }
 
+/* ══════ (28 oct 2026) KPIs DE CLASE MUNDIAL ══════
+   0 lecturas de OTs: todo sale de lo que el panel ya tiene en memoria.
+   1) % trabajo PLANIFICADO = OTs planificadas ÷ (planificadas + reactivas),
+      con las OTs hechas del alcance (período + todos los filtros, igual que el
+      Resumen). Planificada = tiene fecha planificada (se asignó con fecha), o
+      es Preventivo / Predictivo, o viene de un checklist, o es un Proyecto
+      (los proyectos siempre pasan por planificar). Reactiva = Correctivo sin
+      fecha planificada (avisos de producción / QR y fallas registradas en la
+      Bitácora). Otros tipos ("Sin clasificar") no cuentan en ninguno.
+      Meta clase mundial ≥ 80 %. Semáforo: verde ≥ 80, amarillo 60–79, rojo < 60.
+   2) BACKLOG = OTs abiertas HOY (listener de OTs abiertas que ya usa "Órdenes
+      vencidas"): pendiente, planificada, en atención, rechazada (devuelta) y en
+      revisión. No entran validada (ya revisada, solo falta el cierre del
+      Administrador), completada ni anulada. En revisión cuenta en el número
+      pero con 0 horas: el técnico ya hizo el trabajo y su tiempo ya está
+      anotado. Horas estimadas por OT (no hay campo de estimado en las OTs):
+      promedio de minutos de técnico de ese equipo y ese tipo en los últimos 13
+      meses; si no hay, promedio general de todas las OTs con tiempo.
+      Semanas de backlog = horas ÷ (técnicos activos de la nave × horas por
+      semana, 44 por defecto en /config/kpis). Clase mundial: 2 a 4 semanas.
+      Técnicos: fbTecnicos() (1 lectura de /config/tecnicos por sesión, con copia).
+   3) MTBF, MTTR y disponibilidad: calcKpis() del Resumen, sin cambios.
+   4) RAV (costo / valor de reposición): en Rentabilidad (solo Administrador).
+   Ajustes: /config/kpis (1 lectura por celular cada 6 h, rca.js). */
+const META_PLAN = 80;
+const BACKLOG_ESTADOS = ['pendiente','planificada','en_atencion','rechazada','en_revision'];
+const BACKLOG_LBL = {pendiente:'Pendiente', planificada:'Planificada', en_atencion:'En atención', rechazada:'Devuelta', en_revision:'En revisión'};
+function clasePlan(r){
+  if (r.fechaPlanificada) return 'plan';
+  if (isPrev(r) || r.origen==='checklist' || isProy(r)) return 'plan';
+  if (isCorr(r)) return 'reac';
+  return '';
+}
+const semPlan = p => p==null ? '' : p>=META_PLAN ? 'verde' : p>=60 ? 'amarillo' : 'rojo';
+function calcPlanificado(rows){
+  let plan=0, reac=0, sin=0, hPlan=0, hReac=0;
+  const meses = {};
+  rows.forEach(r=>{
+    const c = clasePlan(r);
+    if (!c){ sin++; return; }
+    const m = String(r.fecha||'').slice(0,7), g = meses[m] = meses[m] || {mes:m, plan:0, reac:0};
+    if (c==='plan'){ plan++; hPlan += r.minTecnico/60; g.plan++; } else { reac++; hReac += r.minTecnico/60; g.reac++; }
+  });
+  const pct = (plan+reac) ? plan/(plan+reac)*100 : null;
+  const porMes = Object.values(meses).sort((a,b)=>a.mes.localeCompare(b.mes)).map(g=>({...g, pct: (g.plan+g.reac) ? g.plan/(g.plan+g.reac)*100 : null}));
+  const pctH = (hPlan+hReac)>0 ? hPlan/(hPlan+hReac)*100 : null;
+  return {plan, reac, sin, pct, sem: semPlan(pct), hPlan, hReac, pctH, porMes};
+}
+const tipoOtAbierta = o => o.TIPO_MANTENIMIENTO ? String(o.TIPO_MANTENIMIENTO) : o.tipoReporte==='proyecto' ? 'Proyecto' : o.origen==='checklist' ? 'Predictivo' : 'Correctivo';
+const keyOtAbierta = o => eqKey({equipoId:o.equipoId||'', equipo:o.equipoNombre||o.EQUIPO||'', tipoMaquina:o.TIPO_MAQUINA||''});
+// ots: OTs abiertas ya filtradas; hist: OTs hechas (13 meses) para el promedio; nTec, horasSemana: capacidad.
+function calcBacklog(ots, hist, nTec, horasSemana, ref){
+  ref = ref || today0();
+  const prom = {}; let sumG=0, nG=0;
+  hist.filter(r=>r.minTecnico>0).forEach(r=>{ const k = eqKey(r)+'|'+String(r.tipoMant||'').toLowerCase(); const p = prom[k] = prom[k] || {s:0,n:0}; p.s += r.minTecnico; p.n++; sumG += r.minTecnico; nG++; });
+  const promG = nG ? sumG/nG : 0;
+  const lista = ots.filter(o=>BACKLOG_ESTADOS.includes(o.estado)).map(o=>{
+    const tipo = tipoOtAbierta(o), k = keyOtAbierta(o)+'|'+tipo.toLowerCase();
+    let min, fuente;
+    if (o.estado==='en_revision'){ min = 0; fuente = 'ya hecho (en revisión)'; }
+    else if (prom[k]){ min = prom[k].s/prom[k].n; fuente = 'promedio del equipo ('+prom[k].n+')'; }
+    else { min = promG; fuente = nG ? 'promedio general' : 'sin historial'; }
+    const c = fechaCreacionAn(o); const edad = c ? Math.max(0, daysBetween(c, ref)) : null;
+    const id = o.equipoId || _equiposPorNombre[fbEquipoKey(o.equipoNombre||o.EQUIPO)] || '';
+    const crit = (id && (_critPorId[id] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(id) : ''))) || '';
+    return {id:o.id, folio:o.folio||o.Title||o.id, equipo:o.equipoNombre||o.EQUIPO||'Equipo', estado:o.estado, tipo, min, fuente, edad, crit};
+  });
+  const horas = lista.reduce((s,x)=>s+x.min,0)/60;
+  const capacidad = nTec>0 ? nTec*horasSemana : 0;
+  const semanas = capacidad>0 ? horas/capacidad : null;
+  const edad = {a:0,b:0,c:0,sin:0};
+  lista.forEach(x=>{ if (x.edad==null) edad.sin++; else if (x.edad<=7) edad.a++; else if (x.edad<=30) edad.b++; else edad.c++; });
+  const porCrit = {A:{n:0,h:0},B:{n:0,h:0},C:{n:0,h:0},N:{n:0,h:0}};
+  lista.forEach(x=>{ const g = porCrit[x.crit||'N']; g.n++; g.h += x.min/60; });
+  const porEstado = {}; lista.forEach(x=>{ porEstado[x.estado] = (porEstado[x.estado]||0)+1; });
+  const sem = semanas==null ? '' : (semanas>=2 && semanas<=4) ? 'verde' : (semanas<2 || semanas<=8) ? 'amarillo' : 'rojo';
+  return {lista, n:lista.length, horas, nTec, horasSemana, capacidad, semanas, sem, edad, porCrit, porEstado, promG};
+}
+const _mund = { tecs:null, cfg:null, cargando:false };
+function cargarMundial(){
+  if (_mund.cargando || (_mund.tecs && _mund.cfg)) return;
+  _mund.cargando = true;
+  Promise.all([ (typeof fbTecnicos==='function' ? fbTecnicos() : Promise.resolve([])).catch(()=>[]), fbKpiConfig().catch(()=>FB_KPI_CFG_DEF) ])
+    .then(([t,c])=>{ _mund.tecs = t||[]; _mund.cfg = c; }).finally(()=>{ _mund.cargando = false; renderMundial(); });
+}
+const enCritF = id => !F.crit || ((id && (_critPorId[id] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(id) : ''))) || 'N')===F.crit;
+function otsAbiertasAlcance(){
+  return (_otsAbiertasAn||[]).filter(o=>{
+    if (!fbEnNave(o)) return false;
+    const eqDoc = o.equipoId && _equiposDocs ? _equiposDocs.find(e=>e.id===o.equipoId) : null;
+    const area = o.equipoLocalidad || (eqDoc && eqDoc.localidad) || 'Sin área';
+    if (!enUbicOtAbierta(o, area, eqDoc)) return false;
+    if (F.tecnico && !splitTecnicos(o.asignadoA||'').includes(F.tecnico)) return false;
+    return enCritF(o.equipoId || _equiposPorNombre[fbEquipoKey(o.equipoNombre||o.EQUIPO)] || '');
+  });
+}
+function datosMundial(){
+  const ref = today0();
+  const P = calcPlanificado(window._scopeRows||[]);
+  const tecs = (_mund.tecs||[]).filter(t=>fbTecnicoEnNave(t));
+  const cfg = _mund.cfg || fbKpiConfigSync();
+  const hist = (window._rowsAll||[]);
+  const B = calcBacklog(otsAbiertasAlcance(), hist, tecs.length, cfg.horasSemanaTecnico, ref);
+  const K = calcKpis(window._scopeRows||[], ref);
+  return {P, B, K, cfg, listo: !!(_mund.tecs && _otsAbiertasAn)};
+}
+const SEM_TXT = {verde:'🟢 Clase mundial', amarillo:'🟡 Mejorable', rojo:'🔴 Bajo'};
+const semCls = s => s==='verde' ? 'accent-teal' : s==='amarillo' ? 'accent-amber' : s==='rojo' ? 'accent-red' : '';
+const r1 = n => n==null ? null : Math.round(n*10)/10;
+function barraMeta(pct){
+  const v = pct==null ? 0 : Math.max(0, Math.min(100, pct));
+  const col = pct==null ? 'var(--color-border-strong)' : pct>=META_PLAN ? 'var(--color-success)' : pct>=60 ? 'var(--color-accent)' : 'var(--color-danger)';
+  return `<div class="mund-gauge" role="img" aria-label="${pct==null?'Sin datos':pctTxt(pct)+' planificado, meta '+META_PLAN+' %'}">
+    <div class="mg-track"><div class="mg-fill" style="width:${v}%;background:${col};"></div><div class="mg-meta" style="left:${META_PLAN}%;"></div></div>
+    <div class="mg-lbl"><span>0 %</span><span class="mg-meta-lbl" style="left:${META_PLAN}%;">meta ${META_PLAN} %</span><span>100 %</span></div></div>`;
+}
+function renderMundial(){
+  if (!$('tab-mundial') || !$('tab-mundial').classList.contains('active')) return;
+  cargarMundial();
+  const {P, B, K, cfg, listo} = datosMundial();
+  window._mundial = {P, B, K, cfg};
+  const esAdm = typeof userHasRole==='function' && userHasRole('ADMINISTRADOR');
+  $('mundRavCard').style.display = esAdm ? '' : 'none';
+  $('mundCfgBtn').style.display = esAdm ? '' : 'none';
+  const semB = B.semanas==null ? '—' : B.semanas.toLocaleString('es-DO',{maximumFractionDigits:1});
+  $('mundKpis').innerHTML = `
+    <div class="kpi ${semCls(P.sem)}" id="mkPlan"><div class="lbl">Trabajo planificado</div><div class="val">${P.pct==null?'—':pctTxt(P.pct)}</div><div class="foot">${P.plan} planificadas · ${P.reac} reactivas · meta ≥ ${META_PLAN} %${P.sem?' · '+SEM_TXT[P.sem]:''}</div></div>
+    <div class="kpi" id="mkBackN"><div class="lbl">Backlog (OTs abiertas)</div><div class="val">${_otsAbiertasAn==null?'…':B.n}</div><div class="foot">${Math.round(B.horas).toLocaleString('es-DO')} h estimadas de técnico</div></div>
+    <div class="kpi ${semCls(B.sem)}" id="mkBackS"><div class="lbl">Semanas de backlog</div><div class="val">${listo?semB:'…'}</div><div class="foot">${B.nTec} técnico(s) × ${cfg.horasSemanaTecnico} h/semana · meta 2–4</div></div>`;
+  $('mundPlanSub').textContent = 'OTs hechas del alcance ('+(F.periodo==='todo'?'últimos '+MESES_AN+' meses':'últimos '+F.periodo+' días')+'). Por horas de técnico: '+(P.pctH==null?'—':pctTxt(P.pctH))+' planificado.'+(P.sin?' '+P.sin+' OT(s) sin tipo no cuentan.':'');
+  $('mundPlanGauge').innerHTML = barraMeta(P.pct);
+  const meses = P.porMes.slice(-12);
+  mkChart('planMes', 'chartPlanMes', {
+    type:'bar',
+    data:{labels:meses.map(m=>MESES_CORTO[+m.mes.slice(5,7)-1]+' '+m.mes.slice(2,4)), datasets:[
+      {label:'% planificado', data:meses.map(m=>m.pct==null?null:r1(m.pct)), backgroundColor:'#3987e5', borderRadius:4, maxBarThickness:34},
+      {type:'line', label:'Meta', data:meses.map(()=>META_PLAN), borderColor:CT('--color-success'), borderDash:[5,4], borderWidth:1.5, pointRadius:0, fill:false}]},
+    options:{plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.dataset.label==='Meta'?'Meta '+META_PLAN+' %':(c.raw==null?'—':c.raw+' % ('+meses[c.dataIndex].plan+' de '+(meses[c.dataIndex].plan+meses[c.dataIndex].reac)+')')}},
+      datalabels:{display:ctx=>ctx.datasetIndex===0 && meses.length<=12, anchor:'end', align:'end', color:CT('--chart-text'), font:{family:'JetBrains Mono',size:10,weight:'600'}, formatter:v=>v==null?'':Math.round(v)+'%'}},
+      scales:{x:{ticks:{color:CT('--chart-muted'),maxRotation:0,autoSkip:true},grid:{display:false}}, y:{min:0,max:100,ticks:{color:CT('--chart-muted'),callback:v=>v+'%'},grid:{color:CT('--chart-grid')}}}}
+  });
+  $('mundBackSub').textContent = 'Foto de hoy: '+BACKLOG_ESTADOS.map(e=>BACKLOG_LBL[e].toLowerCase()).join(', ')+'. En revisión no suma horas (el trabajo ya se hizo).';
+  $('mundBack').innerHTML = _otsAbiertasAn==null ? '<div class="empty">Cargando OTs abiertas…</div>' : `
+    <table><tbody>${BACKLOG_ESTADOS.map(e=>`<tr><td>${esc(BACKLOG_LBL[e])}</td><td class="numcell">${B.porEstado[e]||0}</td></tr>`).join('')}
+    <tr style="font-weight:700;"><td>Total</td><td class="numcell">${B.n} OTs · ${Math.round(B.horas)} h</td></tr>
+    <tr><td>Capacidad semanal</td><td class="numcell">${Math.round(B.capacidad)} h (${B.nTec} × ${cfg.horasSemanaTecnico} h)</td></tr></tbody></table>
+    <div class="cardsub" style="margin-top:8px;">Horas estimadas: promedio de minutos de técnico del mismo equipo y tipo (13 meses); si no hay, promedio general (${fmtHM(B.promG)}).</div>`;
+  const filaBar = (t, n, tot, extra) => `<div class="gl-item"><div style="flex:1;min-width:0;"><div class="gl-name">${t}</div><div class="mg-track sm"><div class="mg-fill" style="width:${tot?Math.round(n/tot*100):0}%;background:#3987e5;"></div></div></div><div class="gl-val" style="color:var(--color-text);">${n}${extra?'<br><span class="gl-meta">'+extra+'</span>':''}</div></div>`;
+  $('mundEdad').innerHTML = [['0 a 7 días',B.edad.a],['8 a 30 días',B.edad.b],['Más de 30 días',B.edad.c]].map(([t,n])=>filaBar(esc(t), n, B.n)).join('') + (B.edad.sin?`<div class="prio-foot">${B.edad.sin} sin fecha de creación</div>`:'');
+  $('mundCrit').innerHTML = [['A','A · Crítico'],['B','B · Importante'],['C','C · Normal'],['N','Sin evaluar']].map(([k,t])=>filaBar(k==='N'?'<span class="fbc fbc-N">Sin evaluar</span>':(typeof fbCritBadge==='function'?fbCritBadge(k):esc(t)), B.porCrit[k].n, B.n, Math.round(B.porCrit[k].h)+' h')).join('');
+  $('mundConf').innerHTML = `
+    <div class="kpi"><div class="lbl">MTBF prom.</div><div class="val">${K.mtbfAvg!=null?K.mtbfAvg.toFixed(1)+' d':'—'}</div><div class="foot">días promedio entre fallas</div><details class="que-sig"><summary>¿Qué significa?</summary><p>Cuántos días pasan, en promedio, entre una falla y la siguiente de la misma máquina. Más es mejor.</p></details></div>
+    <div class="kpi"><div class="lbl">MTTR</div><div class="val">${K.mttrAvg!=null?fmtHM(K.mttrAvg):'—'}</div><div class="foot">paro promedio por correctivo</div><details class="que-sig"><summary>¿Qué significa?</summary><p>Cuánto tiempo, en promedio, se queda parada la máquina cuando falla. Menos es mejor.</p></details></div>
+    <div class="kpi ${K.disp==null?'':K.disp>=95?'accent-teal':K.disp>=85?'accent-amber':'accent-red'}"><div class="lbl">Disponibilidad</div><div class="val">${K.disp!=null?K.disp.toFixed(1)+'%':'—'}</div><div class="foot">MTBF ÷ (MTBF + MTTR)</div><details class="que-sig"><summary>¿Qué significa?</summary><p>De todo el tiempo, qué parte la máquina está lista para trabajar y no parada por fallas.</p></details></div>`;
+}
+const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function exportMundialExcel(){
+  const {P, B, K, cfg} = datosMundial();
+  const ubTxt = (ubic && ubic.texto()) || fbNaveTexto();
+  const titulo = 'Clase mundial · ' + ubTxt + (F.crit?' · criticidad '+F.crit:'') + ' · ' + (F.periodo==='todo'?'últimos '+MESES_AN+' meses':'últimos '+F.periodo+' días') + ' · generado ' + fbHoy();
+  const hojas = [
+    { nombre:'Clase mundial', titulo, columnas:[{t:'Indicador',w:34},{t:'Valor',w:14},{t:'Meta clase mundial',w:20},{t:'Estado',w:16},{t:'Detalle',w:50},{t:'¿Qué significa?',w:70}], filas:[
+      ['Trabajo planificado (%)', r1(P.pct)??'', '≥ 80 %', P.sem?SEM_TXT[P.sem].replace(/^\S+\s/,''):'', P.plan+' planificadas · '+P.reac+' reactivas · por horas '+(P.pctH==null?'—':r1(P.pctH)+' %'), 'De cada 10 trabajos, cuántos estaban en el plan y no salieron porque algo se rompió.'],
+      ['Backlog (OTs abiertas)', B.n, '', '', Math.round(B.horas)+' h estimadas', 'Trabajo pendiente hoy.'],
+      ['Semanas de backlog', B.semanas==null?'':r1(B.semanas), '2 a 4', B.sem?{verde:'Clase mundial',amarillo:'Mejorable',rojo:'Alto'}[B.sem]:'', B.nTec+' técnico(s) × '+cfg.horasSemanaTecnico+' h/semana', 'Semanas que tardaría el equipo en terminar lo pendiente.'],
+      ['MTBF prom. (días)', K.mtbfAvg!=null?r1(K.mtbfAvg):'', '', '', K.mtbfs.length+' equipo(s)', 'Días promedio entre fallas.'],
+      ['MTTR (min)', K.mttrAvg!=null?Math.round(K.mttrAvg):'', '', '', K.corrM.length+' correctivo(s) con paro', 'Tiempo promedio que la máquina está parada por falla.'],
+      ['Disponibilidad (%)', K.disp!=null?r1(K.disp):'', '', '', 'MTBF ÷ (MTBF + MTTR)', 'Parte del tiempo que la máquina está lista para trabajar.'],
+      ['Backlog 0–7 días', B.edad.a, '', '', '', ''], ['Backlog 8–30 días', B.edad.b, '', '', '', ''], ['Backlog más de 30 días', B.edad.c, '', '', '', ''],
+      ...['A','B','C','N'].map(k=>['Backlog criticidad '+(k==='N'?'sin evaluar':k), B.porCrit[k].n, '', '', Math.round(B.porCrit[k].h)+' h', '']),
+    ]},
+    { nombre:'Planificado por mes', titulo, columnas:[{t:'Mes',w:10},{t:'Planificadas',w:14},{t:'Reactivas',w:12},{t:'% planificado',w:14}], filas: P.porMes.map(m=>[m.mes, m.plan, m.reac, m.pct==null?'':r1(m.pct)]) },
+    { nombre:'Backlog', titulo, columnas:[{t:'OT',w:12},{t:'Equipo',w:26},{t:'Estado',w:14},{t:'Tipo',w:12},{t:'Criticidad',w:11},{t:'Edad (días)',w:11},{t:'Horas estimadas',w:14},{t:'Cómo se estimó',w:30}],
+      filas: B.lista.map(x=>[x.folio, x.equipo, BACKLOG_LBL[x.estado]||x.estado, x.tipo, x.crit||'Sin evaluar', x.edad==null?'':x.edad, r1(x.min/60), x.fuente]) },
+  ];
+  fbExportar({ nombre: fbNombreArchivo('clase-mundial', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas, aviso: m=>{ $('mundStatus').textContent = m; } });
+}
+function abrirAjustesKpi(){
+  if (!(typeof userHasRole==='function' && userHasRole('ADMINISTRADOR'))) return;
+  const c = _mund.cfg || fbKpiConfigSync();
+  const s = fbSheet(`<div class="fbsh-head"><div><h3>⚙️ Ajustes de indicadores</h3><small>Solo Administrador · /config/kpis</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar">✕</button></div>
+    <label class="fbsh-t" for="kcHoras">Horas por semana de cada técnico</label><input type="text" inputmode="decimal" id="kcHoras" value="${esc(c.horasSemanaTecnico)}"/>
+    <label class="fbsh-t" for="kcDias">Días para contar una falla como repetida (pide RCA)</label><input type="text" inputmode="numeric" id="kcDias" value="${esc(c.rcaDiasReincidencia)}"/>
+    <label class="fbsh-t" for="kcParo">Minutos de paro en equipo A que piden RCA</label><input type="text" inputmode="numeric" id="kcParo" value="${esc(c.rcaParoMinA)}"/>
+    <div class="fbsh-err" id="kcErr"></div>
+    <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="x">Cancelar</button><button type="button" class="fbsh-btn ok" data-a="ok">💾 Guardar</button></div>`, { id: 'fbKpiCfgSheet' });
+  s.el.addEventListener('click', ev=>{
+    const b = ev.target.closest('[data-a]'); if (!b) return;
+    if (b.dataset.a==='x') return fbSheetCerrar();
+    const h = Number(s.el.querySelector('#kcHoras').value), d = Number(s.el.querySelector('#kcDias').value), p = Number(s.el.querySelector('#kcParo').value);
+    if (!(h>=1 && h<=84) || !(Number.isInteger(d) && d>=0 && d<=90) || !(Number.isInteger(p) && p>=0 && p<=10080)){ s.el.querySelector('#kcErr').textContent = 'Revisa: horas de 1 a 84, días enteros de 0 a 90, minutos enteros.'; return; }
+    fbSheetCerrar(true);
+    fbKpiGuardarConfig({horasSemanaTecnico:h, rcaDiasReincidencia:d, rcaParoMinA:p}).then(()=>{ $('mundStatus').textContent = '✅ Ajustes guardados'; }).catch(e=>{ $('mundStatus').textContent = '❌ No se guardaron: '+(e.code==='permission-denied'?'solo el Administrador':e.message); });
+    _mund.cfg = fbKpiConfigSync(); renderMundial();
+  });
+}
+
+/* ══════ (28 oct 2026) CAUSA RAÍZ (RCA) — Supervisor, Encargado y Administrador ══════
+   0 lecturas: las OTs con rcaRequerido (o con rca) que ya están en memoria
+   (últimos 13 meses). Aplica nave, área, línea, equipo y criticidad. */
+const esSupAn = () => typeof userHasRole==='function' && userHasRole('ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR');
+function otDeFilaRca(r){ return {id:r._id, rca:r.rca, rcaRequerido:r.rcaRequerido, rcaMotivo:r.rcaMotivo, EQUIPO:canonEquipo(r), folio:r.folio||r.ot, FECHA:r.fecha}; }
+function datosRca(){
+  const filas = (window._rowsAll||[]).filter(r=>(r.rcaRequerido || (r.rca && fbRcaLleno(r.rca))) && enUbic(r) && (!F.crit || (critDeFila(r)||'N')===F.crit));
+  const est = r => fbRcaEstado(r), hoy = fbHoy();
+  const pend = filas.filter(r=>est(r)==='pendiente').sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const val = filas.filter(r=>est(r)==='por_validar').sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const acc = filas.filter(r=>['abierta','vencida'].includes(fbRcaEstadoAccion(r, hoy))).sort((a,b)=>String(a.rca.fechaCompromiso).localeCompare(String(b.rca.fechaCompromiso)));
+  const llenos = filas.filter(r=>fbRcaLleno(r.rca));
+  const parCat = fbRcaPareto(llenos, r=>r.rca.categoria, r=>fbRcaCatTexto(r.rca.categoria));
+  const parEq = fbRcaPareto(filas, r=>eqKey(r)+'|'+(r.causa||'sin causa'), r=>canonEquipo(r)+' · '+(r.causa||'sin causa'));
+  return {filas, pend, val, acc, vencidas: acc.filter(r=>fbRcaEstadoAccion(r, hoy)==='vencida'), parCat, parEq};
+}
+function paretoHtml(par){
+  if (!par.length) return '<div class="empty">Sin análisis todavía.</div>';
+  const max = par[0].n;
+  return `<table><thead><tr><th>Causa</th><th>N°</th><th>% acum.</th></tr></thead><tbody>${par.slice(0,10).map(x=>`<tr${x.acum<=80?' style="font-weight:600;"':''}><td style="min-width:0;overflow-wrap:anywhere;">${esc(x.t)}<div class="mg-track sm"><div class="mg-fill" style="width:${Math.round(x.n/max*100)}%;background:#3987e5;"></div></div></td><td class="numcell">${x.n}</td><td class="numcell">${x.acum}%</td></tr>`).join('')}</tbody></table>`;
+}
+function renderRcaAn(){
+  const btn = $('tabRcaBtn'); if (!btn) return;
+  const ok = esSupAn(); btn.style.display = ok ? '' : 'none';
+  if (!ok) return;
+  const D = datosRca(); window._rcaAn = D;
+  const cnt = $('tabRcaCnt'); const nCnt = D.pend.length + D.vencidas.length; cnt.textContent = nCnt; cnt.style.display = nCnt ? '' : 'none';
+  if (!$('tab-rca').classList.contains('active')) return;
+  $('rcaKpis').innerHTML = `
+    <div class="kpi ${D.pend.length?'accent-red':'accent-teal'}" id="rcaKpiPend"><div class="lbl">RCA pendientes</div><div class="val">${D.pend.length}</div><div class="foot">sin análisis todavía</div></div>
+    <div class="kpi ${D.val.length?'accent-amber':''}" id="rcaKpiVal"><div class="lbl">Por validar</div><div class="val">${D.val.length}</div><div class="foot">análisis lleno</div></div>
+    <div class="kpi" id="rcaKpiAcc"><div class="lbl">Acciones abiertas</div><div class="val">${D.acc.length}</div><div class="foot">${D.vencidas.length} vencida(s)</div></div>
+    <div class="kpi" id="rcaKpiTot"><div class="lbl">Análisis en 13 meses</div><div class="val">${D.filas.length}</div><div class="foot">${D.filas.filter(r=>fbRcaLleno(r.rca)).length} llenos</div></div>`;
+  const cab = r => `<div class="gl-name">${esc(canonEquipo(r))} ${typeof fbCritBadge==='function'?fbCritBadge(critDeFila(r)):''}</div><div class="gl-meta">${esc(r.folio||r.ot)} · ${esc(r.fecha)}${r.causa?' · '+esc(r.causa):''}</div>`;
+  $('rcaPend').innerHTML = D.pend.length ? D.pend.map(r=>`<div class="rca-item" data-rca="${esc(r._id)}">${cab(r)}<div class="gl-meta">${esc(r.rcaMotivo||'')}</div>
+      <div class="rca-btns"><button class="small" data-rca-a="llenar" data-id="${esc(r._id)}">🔍 Llenar análisis</button><button class="small secondary" disabled title="Falta el análisis">✅ Validar</button></div></div>`).join('') : '<div class="empty">✅ Ningún RCA pendiente.</div>';
+  $('rcaVal').innerHTML = D.val.length ? D.val.map(r=>`<div class="rca-item" data-rca="${esc(r._id)}">${cab(r)}${fbRcaDetalleHtml(r)}
+      <div class="rca-btns"><button class="small" data-rca-a="validar" data-id="${esc(r._id)}">✅ Validar</button><button class="small secondary" data-rca-a="llenar" data-id="${esc(r._id)}">Corregir</button></div></div>`).join('') : '<div class="empty">Nada por validar.</div>';
+  $('rcaAcc').innerHTML = D.acc.length ? D.acc.map(r=>{ const v = fbRcaEstadoAccion(r)==='vencida';
+    return `<div class="rca-item ${v?'vencida':''}" data-rca-acc="${esc(r._id)}">${cab(r)}<div><b>Acción:</b> ${esc(r.rca.accion)}</div>
+      <div class="gl-meta">👤 ${esc(r.rca.responsable||'—')} · <span class="${v?'rca-acc-vencida':''}" style="font-weight:800;">📅 ${esc(r.rca.fechaCompromiso)}${v?' · vencida':''}</span></div>
+      <div class="rca-btns"><button class="small" data-rca-a="cumplida" data-id="${esc(r._id)}">✅ Marcar cumplida</button></div></div>`; }).join('') : '<div class="empty">✅ No hay acciones abiertas.</div>';
+  $('rcaParCat').innerHTML = paretoHtml(D.parCat);
+  $('rcaParEq').innerHTML = paretoHtml(D.parEq);
+}
+$('tab-rca').addEventListener('click', e=>{
+  const b = e.target.closest('[data-rca-a]'); if (!b || b.disabled) return;
+  const r = (window._rowsAll||[]).find(x=>x._id===b.dataset.id); if (!r) return;
+  const ot = otDeFilaRca(r);
+  if (b.dataset.rcaA==='llenar') fbRcaAbrirForm(ot, { motivo: r.rcaMotivo, onGuardar: rca=>{ fbRcaGuardar(ot, rca); r.rca = ot.rca; renderRcaAn(); } });
+  if (b.dataset.rcaA==='validar') fbRcaValidar(ot).then(()=>{ r.rca = ot.rca; renderRcaAn(); });
+  if (b.dataset.rcaA==='cumplida') fbRcaMarcarCumplida(ot).then(()=>{ r.rca = ot.rca; renderRcaAn(); });
+});
+function exportRcaExcel(){
+  const D = datosRca();
+  const titulo = 'Causa raíz (RCA) · ' + ((ubic && ubic.texto()) || fbNaveTexto()) + ' · generado ' + fbHoy();
+  const ESTX = {pendiente:'RCA pendiente', por_validar:'Por validar', validada:'Validado'};
+  const hojas = [
+    { nombre:'RCA', titulo, columnas:['OT','Fecha','Equipo','Criticidad','Causa de falla','Motivo','Estado','Por qué 1','Por qué 2','Por qué 3','Por qué 4','Por qué 5','Tipo (Ishikawa)','Causa raíz','Acción','Responsable','Fecha compromiso','Acción','Validó'].map(t=>({t, w:/Por qué|Causa raíz|Acción|Motivo/.test(t)?30:14})),
+      filas: D.filas.map(r=>{ const x = r.rca||{}, pq = x.porques||[]; return [r.folio||r.ot, r.fecha, canonEquipo(r), critDeFila(r)||'Sin evaluar', r.causa, r.rcaMotivo, ESTX[fbRcaEstado(r)]||'', pq[0]||'', pq[1]||'', pq[2]||'', pq[3]||'', pq[4]||'', x.categoria?fbRcaCatTexto(x.categoria):'', x.causa||'', x.accion||'', x.responsable||'', x.fechaCompromiso||'', ({cumplida:'Cumplida',vencida:'Vencida',abierta:'Abierta'})[fbRcaEstadoAccion(r)]||'', x.validadaPor||'']; }) },
+    { nombre:'Pareto Ishikawa', titulo, columnas:[{t:'Tipo de causa',w:20},{t:'N°',w:8},{t:'%',w:8},{t:'% acumulado',w:12}], filas: D.parCat.map(x=>[x.t, x.n, x.pct, x.acum]) },
+    { nombre:'Pareto equipo', titulo, columnas:[{t:'Equipo · causa',w:40},{t:'N°',w:8},{t:'%',w:8},{t:'% acumulado',w:12}], filas: D.parEq.map(x=>[x.t, x.n, x.pct, x.acum]) },
+  ];
+  fbExportar({ nombre: fbNombreArchivo('causa-raiz', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas, aviso: m=>{ $('rcaStatus').textContent = m; } });
+}
+
+/* ══════ (28 oct 2026) TENDENCIAS DE MEDICIONES (tendencias.js) ══════
+   Usa la ventana de /checklists que ya lee el cumplimiento preventivo (30
+   días; los documentos ya traen las lecturas). Al abrir la pestaña se pide la
+   ventana de tendencias (90 días, o 180 / 365 si ese es el período): la
+   misma consulta de un solo campo (fecha >=, < lo ya leído), solo el tramo
+   que falta y una sola vez. */
+const diasTend = () => ['180','365'].includes(F.periodo) ? +F.periodo : 90;
+const accCk = c => ({area: c.equipoLocalidad||'', linea:'', equipoId: c.equipoId||'', equipo: c.equipoNombre||''});
+let _tendAbierta = '';
+function datosTend(){
+  const desde = desdeDias(diasTend());
+  const cks = _ckAn.docs.filter(c=>c.fecha>=desde && fbEnNave(c) && (!ubic || ubic.coincide(c, accCk)) && enCritF(c.equipoId));
+  const frec = id => { const e = (_equiposDocs||[]).find(x=>x.id===id); return e ? Number(e.checklistFrecuenciaDias)||null : null; };
+  const critId = id => (id && (_critPorId[id] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(id) : ''))) || '';
+  const alertas = fbTendAlertas(cks, { frecDe: frec, critDe: critId });
+  alertas.forEach(a=>{ if (!a.equipoNombre) a.equipoNombre = _equiposCat[a.equipoId] || 'Equipo'; });
+  const puntos = fbTendAgrupar(cks).size;
+  return {alertas, puntos, desde, cks};
+}
+function renderTendAn(){
+  if (!$('tab-tend')) return;
+  const listoCk = !!_ckAn.desde && _ckAn.desde <= desdeDias(diasTend()) && !_ckAn.err;
+  if (!$('tab-tend').classList.contains('active')) { if (listoCk){ const n = datosTend().alertas.filter(a=>a.alerta.nivel!=='cerca').length; const c = $('tabTendCnt'); c.textContent = n; c.style.display = n?'':'none'; } return; }
+  if (!listoCk && !_ckAn.err) { cargarChecklistsAn(diasTend()); $('tendList').innerHTML = '<div class="empty">⏳ Cargando lecturas de checklist…</div>'; $('tendKpis').innerHTML=''; return; }
+  if (_ckAn.err){ $('tendList').innerHTML = '<div class="empty">⚠️ No se pudieron leer los checklists.</div>'; return; }
+  const D = datosTend(); window._tendAn = D;
+  const n = k => D.alertas.filter(a=>a.alerta.nivel===k).length;
+  const c = $('tabTendCnt'); const nn = n('fuera')+n('tendencia'); c.textContent = nn; c.style.display = nn?'':'none';
+  $('tendKpis').innerHTML = `<div class="kpi ${n('fuera')?'accent-red':''}"><div class="lbl">Fuera de rango</div><div class="val">${n('fuera')}</div><div class="foot">última lectura</div></div>
+    <div class="kpi ${n('tendencia')?'accent-amber':''}"><div class="lbl">Tendencia</div><div class="val">${n('tendencia')}</div><div class="foot">van hacia el límite</div></div>
+    <div class="kpi"><div class="lbl">Cerca del límite</div><div class="val">${n('cerca')}</div><div class="foot">a 10 % o menos</div></div>
+    <div class="kpi"><div class="lbl">Puntos medidos</div><div class="val">${D.puntos}</div><div class="foot">desde el ${esc(D.desde)}</div></div>`;
+  $('tendSub').textContent = D.alertas.length+' alerta(s) · primero las más urgentes y de equipos más críticos · '+D.cks.length+' checklist(s) desde el '+D.desde+'.';
+  $('tendList').innerHTML = D.alertas.length ? D.alertas.map((g,i)=>{
+    const a = g.alerta, uni = a.unidad ? ' '+a.unidad : '';
+    return `<div class="tend-item" data-tend-key="${esc(g.key)}">
+      <button type="button" class="tend-cab" data-tend-i="${i}" aria-expanded="${_tendAbierta===g.key}">${fbTendBadge(a)} <b>${esc(g.equipoNombre)}</b> ${typeof fbCritBadge==='function'?fbCritBadge(g.crit):''}<br><span>${esc(g.punto)} · última ${esc(fbTendFmt(a.ultimo))}${esc(uni)} (${esc(a.fecha)})</span></button>
+      <div class="gl-meta" style="margin:2px 0 0;">${esc(a.texto)}</div>
+      ${_tendAbierta===g.key ? `<div class="tend-chart"><canvas id="tendCanvas"></canvas></div>${fbTendTablaHtml(g)}<div class="rca-btns"><button class="small" data-tend-ot="${i}">🧾 Crear OT predictiva</button></div>` : ''}
+    </div>`; }).join('') : '<div class="empty">✅ Ninguna medición va hacia sus límites.</div>';
+  if (_tendAbierta){ const g = D.alertas.find(x=>x.key===_tendAbierta); if (g){ if (charts.tend){ try{charts.tend.destroy();}catch(e){} } charts.tend = HAS_CHART ? fbTendDibujar($('tendCanvas'), g) : null; if (!HAS_CHART) mkChart('tend','tendCanvas',{}); } }
+}
+$('tab-tend').addEventListener('click', e=>{
+  const cab = e.target.closest('[data-tend-i]');
+  const D = window._tendAn; if (!D) return;
+  if (cab){ const g = D.alertas[+cab.dataset.tendI]; _tendAbierta = _tendAbierta===g.key ? '' : g.key; renderTendAn(); return; }
+  const b = e.target.closest('[data-tend-ot]');
+  if (b){
+    const g = D.alertas[+b.dataset.tendOt]; b.disabled = true;
+    const abiertas = _otsAbiertasAn || (window._tendOtsLocal = window._tendOtsLocal || []);
+    fbTendCrearOt(g, abiertas).then(r=>{
+      $('tendStatus').textContent = r.existente ? 'ℹ️ Ya hay una OT abierta para ese punto: '+r.existente+' (no se repitió).' : '✅ OT predictiva '+r.creada.folio+' creada: el Encargado la planifica en Checklist.';
+    }).catch(err=>{ $('tendStatus').textContent = '❌ '+((err&&err.message)||err); }).finally(()=>{ b.disabled = false; });
+  }
+});
+function exportTendExcel(){
+  const D = datosTend();
+  const titulo = 'Tendencias de mediciones · ' + ((ubic && ubic.texto()) || fbNaveTexto()) + ' · desde ' + D.desde + ' · generado ' + fbHoy();
+  const NIV = {fuera:'Fuera de rango', tendencia:'Tendencia', cerca:'Cerca del límite'};
+  const hojas = [
+    { nombre:'Alertas', titulo, columnas:[{t:'Alerta',w:16},{t:'Equipo',w:24},{t:'Criticidad',w:11},{t:'Punto',w:30},{t:'Última lectura',w:12},{t:'Unidad',w:8},{t:'Mínimo',w:9},{t:'Máximo',w:9},{t:'Fecha',w:11},{t:'Días al límite',w:12},{t:'Proyección',w:11},{t:'Detalle',w:60}],
+      filas: D.alertas.map(g=>{ const a = g.alerta; return [NIV[a.nivel], g.equipoNombre, g.crit||'Sin evaluar', g.punto, a.ultimo, a.unidad, a.min??'', a.max??'', a.fecha, a.diasAlLimite??'', a.proyectado!=null?Math.round(a.proyectado*100)/100:'', a.texto]; }) },
+    { nombre:'Lecturas', titulo, columnas:[{t:'Equipo',w:24},{t:'Punto',w:30},{t:'Fecha',w:11},{t:'Lectura',w:10},{t:'Unidad',w:8},{t:'Mínimo',w:9},{t:'Máximo',w:9}],
+      filas: D.alertas.flatMap(g=>g.lecturas.map(l=>[g.equipoNombre, g.punto, l.fecha, l.valor, l.unidad, l.min??'', l.max??''])) },
+  ];
+  fbExportar({ nombre: fbNombreArchivo('tendencias', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas, aviso: m=>{ $('tendStatus').textContent = m; } });
+}
+
 /* ══════ INDICADORES DE GESTIÓN (14 oct 2026 — inspirados en SAP PM) ══════
    1) Cumplimiento preventivo (%):
       a) valor principal = "equipos al día": equipos con frecuencia de checklist
@@ -1025,7 +1458,10 @@ function cargarChecklistsAn(dias){
   let q = db.collection('checklists').where('fecha', '>=', desde);
   if (_ckAn.desde) q = q.where('fecha', '<', _ckAn.desde);
   q.get().then(snap=>{
-    snap.docs.forEach(d=>{ const c = d.data()||{}; if (c.equipoId && c.fecha) _ckAn.docs.push({equipoId:c.equipoId, fecha:String(c.fecha), ...(c.planta ? {planta:c.planta} : {})}); });
+    // (28 oct 2026) + lecturas de los puntos con medición (Tendencias; mismos documentos, 0 lecturas extra)
+    snap.docs.forEach(d=>{ const c = d.data()||{}; if (c.equipoId && c.fecha){
+      const med = (Array.isArray(c.items)?c.items:[]).filter(i=>i && i.punto && i.valor!=null && i.valor!=='' && !isNaN(Number(i.valor))).map(i=>({punto:String(i.punto), valor:Number(i.valor), ...(i.min!=null&&i.min!==''?{min:Number(i.min)}:{}), ...(i.max!=null&&i.max!==''?{max:Number(i.max)}:{}), unidad:String(i.unidad||'')}));
+      _ckAn.docs.push({equipoId:c.equipoId, fecha:String(c.fecha), ...(c.planta ? {planta:c.planta} : {}), ...(med.length ? {id:d.id, items:med, equipoNombre:c.equipoNombre||'', equipoLocalidad:c.equipoLocalidad||'', createdAt:c.createdAt||null} : {})}); } });
     _ckAn.desde = desde;
   }).catch(err=>{
     console.warn('No se pudieron leer los checklists para el cumplimiento preventivo:', err);
@@ -1209,6 +1645,7 @@ function renderGestion(){
     <div class="kpi clickable ${vCls}" data-gscroll="gdVenc" title="OTs abiertas (no completadas ni anuladas) con fecha planificada anterior a hoy, o pendientes sin planificar creadas hace más de ${DIAS_SIN_PLAN_AN} días. Situación de HOY: aplica área y técnico asignado; no el período."><div class="lbl">Órdenes vencidas</div><div class="val">${_otsAbiertasErr?'—':_otsAbiertasAn==null?'…':nV}</div><div class="foot">${_otsAbiertasErr?'no se pudieron leer las OTs abiertas':_otsAbiertasAn==null?'cargando OTs abiertas…':`de ${(_otsAbiertasAn||[]).length} OT(s) abiertas en total`}</div></div>
     <div class="kpi clickable ${rCls}" data-gscroll="gdReinc" title="Correctivos del alcance filtrado cuyo mismo equipo tuvo otro correctivo con la misma causa de falla entre 1 y ${DIAS_REINC_AN} días antes ÷ total de correctivos del alcance. Los correctivos sin causa registrada cuentan en el total pero no pueden ser reincidentes."><div class="lbl">Reincidencia de fallas</div><div class="val">${pctTxt(pReinc)}</div><div class="foot">${corrScope.length?`${nReinc} de ${corrScope.length} correctivos${sinCausa?` · ${sinCausa} sin causa`:''}`:'sin correctivos en el alcance'}</div></div>`;
   renderComparativo();
+  if (typeof renderMundial==='function'){ renderMundial(); renderTendAn(); } // (28 oct 2026) llegan OTs abiertas / checklists
 }
 
 /* ══════ COMPARATIVO ENTRE NAVES Y POR ÁREA (25 oct 2026, Etapa 3) ══════
@@ -1719,6 +2156,10 @@ function switchTab(id){
   try { history.replaceState(null, '', '#'+id); } catch(e) {}
   if (id==='naves' && typeof renderComparativo==='function') renderComparativo(); // (Etapa 3)
   if (id==='seguridad' && typeof cargarSeguridadAn==='function' && window.fbReady) window.fbReady.then(cargarSeguridadAn).catch(()=>{}); // (28 oct 2026)
+  // (28 oct 2026) después de que termine de cargar el script (al abrir con #mundial, etc.)
+  if (id==='mundial') setTimeout(()=>renderMundial(), 0);
+  if (id==='rca') setTimeout(()=>renderRcaAn(), 0);
+  if (id==='tend' && typeof renderTendAn==='function' && window.fbReady) window.fbReady.then(renderTendAn).catch(()=>{});
   // las gráficas creadas con la pestaña oculta necesitan medir de nuevo su tamaño
   requestAnimationFrame(()=>Object.values(charts).forEach(c=>{ if (c) c.resize(); }));
 }
@@ -1825,6 +2266,8 @@ function otRecordToRow(doc){
   return {
     equipoId:doc.equipoId||'', estado:doc.estado||'', origen:doc.origen||'', proyecto:doc.tipoReporte==='proyecto',
     permisoId:doc.permisoId||'', // (28 oct 2026) permiso de trabajo / LOTO (no entra en ningún indicador del Resumen)
+    // (28 oct 2026) Clase mundial y causa raíz (no entran en ningún indicador del Resumen)
+    fechaPlanificada:doc.fechaPlanificada||'', rcaRequerido:doc.rcaRequerido===true, rcaMotivo:doc.rcaMotivo||'', rca:(doc.rca && typeof doc.rca==='object')?doc.rca:null, folio:doc.folio||'',
     ot:doc.Title||doc.id, semana:String(doc.SEMANA??''), fecha:doc.FECHA||'', area:fbNombreActual('areas', doc.LINEA_EQUIPO)||'Sin área', // (25 oct 2026) área renombrada → nombre vigente (sin renombrar: igual que antes)
     linea:doc.LINEA||doc.linea||'', // (25 oct 2026, Etapa 3) para el filtro por línea
     tipoMaquina:doc.TIPO_MAQUINA||'', equipo:doc.EQUIPO||'', pieza:doc.PIEZA||'', me:doc.ME||'',

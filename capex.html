@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>CAPEX — Mantenimiento</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="filtros.js"></script>
+<script src="capex-i18n.js"></script>
+<script src="capex-calc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   💼 CAPEX — proyectos de inversión (29 oct 2026)
+   Solo Administrador y Encargado de mantenimiento (también en firestore.rules).
+   Datos:  /capex/{id}            un proyecto (ver "MODELO" en el script)
+           /config/capex          tasa de cambio por defecto, contingencia, ITBIS, empresa (sin montos)
+           /config/capexFolio     contador CAPEX-AAAA-001 (solo se le suma 1)
+           /config/capexLogo      logo de la ficha (opcional; si no, el de Incentivos para el Admin)
+           /capex_config/general  presupuesto anual por año y por nave (SOLO Administrador)
+   Lecturas: 1 consulta por año fiscal (where anioFiscal ==, un solo campo: sin
+   índices compuestos) + 1–3 documentos de configuración. Catálogo de equipos
+   con la caché de 12 h de siempre. Sin listeners.
+   ══════════════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; overflow-x: hidden; }
+body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); font-size: 14.5px; line-height: 1.45; min-height: 100vh; }
+button, input, select, textarea { font-family: inherit; }
+#header { background: var(--color-header-bg); color: var(--color-header-text); border-bottom: 2px solid var(--color-accent); padding: 12px 16px; }
+.hrow { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+#header h1 { font-size: 18px; font-weight: 800; margin: 0; letter-spacing: .01em; }
+#header small { display: block; font-size: 11.5px; color: var(--color-header-sub); font-weight: 700; margin-top: 2px; }
+.hctl { display: flex; gap: 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid rgba(255,255,255,.28); border-radius: 9px; overflow: hidden; }
+.seg button { background: transparent; color: var(--color-header-text); border: 0; min-height: 34px; padding: 4px 11px; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.seg button + button { border-left: 1px solid rgba(255,255,255,.2); }
+.seg button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 12px 16px 70px; min-width: 0; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; min-width: 0; box-shadow: var(--shadow); }
+.ct { font-size: 15px; font-weight: 800; margin: 0 0 2px; overflow-wrap: anywhere; }
+.cs { font-size: 12px; color: var(--color-muted); margin-bottom: 10px; overflow-wrap: anywhere; }
+.chead { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.nota { font-size: 12px; color: var(--color-muted); line-height: 1.5; overflow-wrap: anywhere; }
+.formula { background: var(--color-surface-2); border-radius: 10px; padding: 9px 11px; font-size: 12px; color: var(--color-text-2); line-height: 1.6; margin-top: 10px; overflow-wrap: anywhere; }
+.empty { text-align: center; color: var(--color-muted); padding: 30px 12px; }
+.ut { overflow-wrap: anywhere; }
+/* barra de herramientas del portafolio */
+.tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.tools .full { grid-column: 1 / -1; }
+.tools select, .tools input, .fbFiltros select { min-height: 42px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 9px 14px; border-radius: 10px; border: 0; background: var(--color-primary); color: var(--color-on-primary); font-weight: 800; font-size: 14px; cursor: pointer; text-decoration: none; line-height: 1.2; text-align: center; }
+.btn.sec { background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-border); }
+.btn.ok { background: #15803d; color: #fff; }
+.btn.mal { background: var(--color-danger); color: #fff; }
+.btn.warn { background: var(--color-warn); color: #fff; }
+.btn.sm { min-height: 38px; padding: 6px 11px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.lnk { background: none; border: 0; color: var(--color-primary-text); font-weight: 800; font-size: 12.5px; cursor: pointer; padding: 4px 0; min-height: 32px; }
+label.f { display: block; font-size: 11.5px; font-weight: 800; color: var(--color-text-2); margin: 10px 0 4px; letter-spacing: .02em; }
+input, select, textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 42px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--color-border); background: var(--color-input-bg); color: var(--color-text); font-size: 15px; }
+input[type=checkbox] { width: 22px; height: 22px; min-height: 0; accent-color: var(--color-primary); flex: none; }
+textarea { min-height: 76px; resize: vertical; }
+input:focus, select:focus, textarea:focus, .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+input:disabled, select:disabled, textarea:disabled { opacity: .65; }
+.g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+.g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 10px; }
+.g4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.span2 { grid-column: span 2; } .spanAll { grid-column: 1 / -1; }
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 11px 12px; min-width: 0; box-shadow: var(--shadow); }
+.kpi > span { display: block; font-size: 11px; font-weight: 800; color: var(--color-muted); text-transform: uppercase; letter-spacing: .05em; }
+.kpi b { display: block; font-size: clamp(13.5px, 3.6vw, 20px); font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+.kpi small { display: block; font-size: 12px; color: var(--color-text-2); margin-top: 2px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.kpi.acc { border-left: 4px solid var(--color-accent); }
+.meter { height: 12px; border-radius: 7px; background: var(--color-surface-3); overflow: hidden; position: relative; margin: 8px 0 4px; }
+.meter i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 7px; }
+.meter i.a { background: #3987e5; } .meter i.r { background: #199e70; } .meter i.over { background: var(--color-danger); }
+.leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--color-text-2); }
+.leg span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+/* insignias */
+.bdg { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 9px; font-size: 11.5px; font-weight: 800; white-space: nowrap; border: 1px solid transparent; line-height: 1.7; vertical-align: middle; }
+.st-borrador, .st-cancelado { background: var(--color-surface-2); color: var(--color-muted); border-color: var(--color-border-strong); }
+.st-enviado { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
+.st-en_espera { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.st-aprobado { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.st-rechazado { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.st-en_ejecucion { background: var(--color-primary-soft); color: var(--color-primary-text); border-color: var(--color-primary); }
+.st-cerrado { background: var(--color-purple-soft); color: var(--color-purple-text); border-color: var(--color-purple); }
+.cr-A { background: var(--color-danger); color: #fff; } .cr-B { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.cr-C { background: var(--color-surface-2); color: var(--color-text-2); border-color: var(--color-border-strong); } .cr-N { color: var(--color-muted); border: 1px dashed var(--color-border-strong); }
+.pr-alta { color: var(--color-danger-text); border-color: var(--color-danger); } .pr-media { color: var(--color-warn-text); border-color: var(--color-warn); } .pr-baja { color: var(--color-muted); border-color: var(--color-border-strong); }
+.sem-ok { color: var(--color-success-text); } .sem-warn { color: var(--color-warn-text); } .sem-bad { color: var(--color-danger-text); } .sem-na { color: var(--color-muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip { min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-2); font-weight: 700; font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip b { font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary-text); }
+/* tablas: se desplazan dentro de su caja, nunca la página */
+.tw { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--color-muted); font-weight: 800; font-size: 11.5px; padding: 7px 6px; border-bottom: 1px solid var(--color-border-strong); white-space: nowrap; }
+td { padding: 7px 6px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.tot td { font-weight: 800; border-top: 2px solid var(--color-border-strong); }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--color-surface-2); }
+.tw table { min-width: 560px; } .tw table.sm { min-width: 0; }
+.rk td.cod, .rk td.nav, .rk td.bd { white-space: nowrap; } .rk td.tit { min-width: 190px; }
+.nstk { display: none; }
+td.vacio { color: var(--color-muted); } td.nw { white-space: nowrap; }
+/* En el celular las tablas del proyecto se apilan: una tarjeta por fila con "etiqueta: valor" */
+@media (max-width: 639px) {
+  .tw table.stk { min-width: 0; }
+  table.stk thead { display: none; }
+  table.stk, table.stk tbody, table.stk tr { display: block; width: 100%; }
+  table.stk tr { padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+  table.stk td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: 0; padding: 2px 0; text-align: right; white-space: normal; overflow-wrap: anywhere; }
+  table.stk td::before { content: attr(data-l); flex: 0 0 auto; max-width: 48%; text-align: left; color: var(--color-muted); font-size: 12px; font-weight: 700; }
+  table.stk td.lead { display: block; text-align: left; font-weight: 800; font-size: 14px; padding-bottom: 4px; }
+  table.stk td.lead::before, table.stk td:not([data-l])::before { content: none; }
+  table.stk td.hs, table.stk td.vacio { display: none; }
+  table.stk .nstk { display: inline; }
+  table.stk tr.tot { border-top: 2px solid var(--color-border-strong); border-bottom: 0; }
+  table.stk tr.tot td { font-weight: 800; }
+  .dtot { text-align: left !important; }
+  table.tt { font-size: 12px; } table.tt td, table.tt th { padding: 6px 3px; }
+  .card .fin .kpi b { font-size: 14px; }
+  .tools .tipo { grid-column: 1 / -1; }
+}
+/* tarjetas de proyecto */
+.plist { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.pcard { display: block; text-decoration: none; color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 4px solid var(--color-border-strong); border-radius: var(--radius); padding: 12px; min-width: 0; box-shadow: var(--shadow); }
+.pcard:hover { border-color: var(--color-primary); }
+.pcard .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pcard .code { font-family: var(--font-mono); font-size: 12px; color: var(--color-muted); }
+.pcard h3 { font-size: 15.5px; margin: 5px 0 3px; overflow-wrap: anywhere; }
+.pcard .meta { font-size: 12px; color: var(--color-muted); overflow-wrap: anywhere; }
+.pcard .nums { display: flex; gap: 6px 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pcard .nums b { font-size: 14px; }
+.chart { position: relative; height: 260px; width: 100%; }
+.chart.h-auto { height: auto; }
+/* detalle */
+.dhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.dhead h2 { font-size: 20px; margin: 4px 0; overflow-wrap: anywhere; }
+.dmeta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 16px; font-size: 13px; margin-top: 8px; }
+.facts div { min-width: 0; overflow-wrap: anywhere; } .facts .fl { color: var(--color-muted); font-weight: 700; margin-right: 4px; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.alert { border-radius: 10px; padding: 10px 12px; font-size: 13.5px; font-weight: 700; margin-bottom: 12px; border: 1px solid; overflow-wrap: anywhere; }
+.alert.warn { background: var(--color-warn-soft); border-color: var(--color-warn); color: var(--color-warn-text); }
+.alert.bad { background: var(--color-danger-soft); border-color: var(--color-danger); color: var(--color-danger-text); }
+.alert.info { background: var(--color-info-soft); border-color: var(--color-info); color: var(--color-info-text); }
+.fin { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.fin .kpi b { font-size: 16px; }
+.fin.f2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fin .kpi { box-shadow: none; background: var(--color-surface-2); }
+.dual { font-variant-numeric: tabular-nums; }
+.dual small { display: block; color: var(--color-muted); font-size: 11.5px; font-weight: 600; }
+.hist { list-style: none; margin: 0; padding: 0; }
+.hist li { border-left: 3px solid var(--color-border-strong); padding: 4px 0 8px 12px; position: relative; font-size: 13px; overflow-wrap: anywhere; }
+.hist li::before { content: ''; position: absolute; left: -7px; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: var(--color-surface); border: 2px solid var(--color-primary); }
+.hist small { display: block; color: var(--color-muted); }
+/* Gantt (HTML: se ve igual en pantalla, en la ficha impresa y sin conexión) */
+.gantt { font-size: 12px; }
+.gantt .gr { display: grid; grid-template-columns: minmax(92px, 34%) minmax(0, 1fr); gap: 8px; align-items: center; min-height: 30px; border-bottom: 1px dashed var(--color-border); }
+.gantt .gl { overflow-wrap: anywhere; padding: 3px 0; line-height: 1.25; }
+.gantt .gl small { display: block; color: var(--color-muted); font-size: 11px; }
+.gantt .gt { position: relative; height: 26px; }
+.gantt .gb { position: absolute; top: 5px; height: 14px; border-radius: 4px; background: #3987e5; min-width: 3px; }
+.gantt .gb.mat { background: repeating-linear-gradient(45deg, #c98500, #c98500 4px, #e0a83a 4px, #e0a83a 8px); }
+.gantt .gb.real { top: 18px; height: 6px; background: #199e70; }
+.gantt .gb.late { background: #d95926; }
+.gantt .gb .pv { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0,0,0,.28); border-radius: 4px; }
+.gantt .today { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--color-danger); z-index: 2; }
+.gantt .gx { display: grid; grid-template-columns: minmax(92px, 34%) minmax(0, 1fr); gap: 8px; }
+.gantt .ticks { position: relative; height: 20px; color: var(--color-muted); font-size: 10.5px; }
+.gantt .ticks span { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; }
+/* editor */
+.ed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.rowc { border: 1px solid var(--color-border); background: var(--color-surface-2); border-radius: 10px; padding: 4px 10px 10px; margin-top: 8px; min-width: 0; }
+.rowc .rh { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 6px; font-weight: 800; font-size: 13px; }
+.rowc .stock { font-size: 12px; font-weight: 800; }
+.eqchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.eqchips > span { display: inline-flex; align-items: center; gap: 6px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.eqchips button { width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--color-surface-3); color: var(--color-text); cursor: pointer; font-weight: 800; }
+.ck { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 700; font-size: 14px; }
+.errbox { background: var(--color-danger-soft); border: 1px solid var(--color-danger); color: var(--color-danger-text); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-top: 10px; }
+.errbox:empty { display: none; }
+.errbox ul { margin: 4px 0 0 18px; padding: 0; }
+.sug { background: var(--color-accent-soft); border: 1px solid var(--color-accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-top: 10px; overflow-wrap: anywhere; }
+.sticky { position: static; }
+/* ventanas */
+.mbg { display: none; position: fixed; inset: 0; z-index: 900; background: var(--color-overlay); align-items: flex-end; justify-content: center; }
+.mbg.open { display: flex; }
+.modal { background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 16px 16px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--shadow-lg); }
+.modal h3 { margin: 0 0 4px; font-size: 17px; overflow-wrap: anywhere; }
+.macts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.macts .btn { flex: 1 1 140px; }
+#toast { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 1300; background: var(--color-success); color: #fff; border-radius: 10px; padding: 11px 16px; font-size: 14px; font-weight: 700; max-width: 380px; width: calc(100% - 32px); text-align: center; opacity: 0; pointer-events: none; transition: opacity .25s; box-shadow: var(--shadow-lg); }
+#toast.show { opacity: 1; } #toast.error { background: var(--color-danger); } #toast.warn { background: var(--color-warn); }
+/* ficha (papel blanco) */
+.ficha-bg { display: none; position: fixed; inset: 0; z-index: 1000; background: var(--color-bg); overflow-y: auto; overflow-x: hidden; }
+.ficha-bg.open { display: block; }
+html.ficha-abierta, html.ficha-abierta body { overflow: hidden; }
+.fbar { position: sticky; top: 0; z-index: 2; background: var(--color-header-bg); color: var(--color-header-text); padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-bottom: 2px solid var(--color-accent); }
+.fbar b { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.fin-wrap { max-width: 860px; margin: 0 auto; padding: 14px 16px 60px; }
+.pwrap { overflow: hidden; background: #fff; border-radius: 6px; box-shadow: var(--shadow-lg); border: 1px solid var(--color-border); }
+.paper { width: 780px; transform-origin: top left; background: #fff; color: #111; color-scheme: light; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 11.5px; line-height: 1.4; padding: 30px 34px 36px; }
+.paper .ph { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 3px solid #0b2545; padding-bottom: 10px; margin-bottom: 12px; }
+.paper .plogo img { max-width: 200px; max-height: 64px; display: block; }
+.paper .plogo .emp { font-size: 20px; font-weight: 900; color: #0b2545; }
+.paper .ptit { text-align: right; }
+.paper .ptit .t1 { font-size: 16px; font-weight: 800; color: #0b2545; }
+.paper .ptit .t2 { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; margin-top: 3px; }
+.paper .ptit .t3 { color: #555; margin-top: 3px; }
+.paper h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #0b2545; margin: 12px 0 5px; border-bottom: 1px solid #c9d3e0; padding-bottom: 2px; }
+.paper .pt { font-size: 17px; font-weight: 800; margin: 2px 0 6px; }
+.paper .pinfo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 14px; }
+.paper .pinfo span { display: block; color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.paper table { font-size: 10.5px; min-width: 0; }
+.paper th { color: #0b2545; background: #e8eef6; border-bottom: 1px solid #9fb1c8; padding: 4px 5px; white-space: normal; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.paper td { border-bottom: 1px solid #d9e0ea; padding: 4px 5px; color: #111; }
+.paper tr.tot td { border-top: 2px solid #0b2545; }
+.paper .pcols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.paper .pbox { border: 1px solid #c9d3e0; border-radius: 6px; padding: 8px 10px; }
+.paper .pkpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.paper .pkpi div { border: 1px solid #c9d3e0; border-radius: 6px; padding: 6px; }
+.paper .pkpi span { display: block; color: #555; font-size: 9.5px; text-transform: uppercase; }
+.paper .pkpi b { font-size: 13px; white-space: nowrap; }
+.paper .bdg { font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.paper .gantt { font-size: 10px; } .paper .gantt .gr { min-height: 20px; border-bottom-color: #e1e6ee; } .paper .gantt .gl { padding: 1px 0; } .paper .gantt .gt { height: 20px; }
+.paper .gantt .gb { top: 4px; height: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .paper .gantt .gb.real { top: 15px; height: 4px; }
+.paper .gantt .today { background: #c0262d; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.paper .gantt .ticks, .paper .gantt .gl small { color: #555; }
+.paper .firmas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 30px; }
+.paper .firmas div { border-top: 1px solid #111; padding-top: 4px; text-align: center; font-weight: 700; }
+.paper .firmas small { display: block; font-weight: 400; color: #555; }
+.paper .pfoot { margin-top: 12px; color: #666; font-size: 9.5px; display: flex; justify-content: space-between; gap: 10px; }
+.paper .formula { background: #f1f4f8; color: #333; font-size: 9.5px; padding: 6px 8px; }
+.paper .keep { break-inside: avoid; page-break-inside: avoid; }
+.paper .bdg { background: #eef2f7 !important; color: #0b2545 !important; border-color: #9fb1c8 !important; }
+.paper .sem-bad { color: #b91c1c !important; } .paper .nota { color: #555 !important; }
+@media (min-width: 640px) {
+  .tools { grid-template-columns: 150px 1fr 1fr 1.4fr; } .tools .full { grid-column: auto; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .plist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mbg { align-items: center; padding: 16px; } .modal { border-radius: 16px; }
+}
+@media (min-width: 1000px) {
+  .plist { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+  .cols2 > div { min-width: 0; }
+  .cols2.eq { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cols2.eq table { font-size: 12.5px; }
+  .ed { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
+  .sticky { position: sticky; top: 56px; }
+  .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media print {
+  @page { size: letter portrait; margin: 11mm; }
+  html.ficha-abierta body > *:not(#fichaBg) { display: none !important; }
+  html.ficha-abierta, html.ficha-abierta body { overflow: visible !important; background: #fff !important; }
+  #fichaBg { position: static !important; overflow: visible !important; background: #fff !important; display: block !important; }
+  #fichaBg .fbar { display: none !important; }
+  #fichaBg .fin-wrap { padding: 0 !important; max-width: none !important; }
+  .pwrap { height: auto !important; box-shadow: none !important; border: 0 !important; overflow: visible !important; }
+  .paper { transform: none !important; width: auto !important; padding: 0 !important; }
+}
+</style>
+</head>
+<body>
+<div id="header"><div class="hrow">
+  <div><h1 id="hTitle">💼 CAPEX</h1><small id="hSub"></small></div>
+  <div class="hctl">
+    <div class="seg" id="segLang" role="group"><button type="button" data-lang="es" lang="es">ES</button><button type="button" data-lang="en" lang="en">EN</button><button type="button" data-lang="tr" lang="tr">TR</button></div>
+    <div class="seg" id="segCur" role="group"><button type="button" data-cur="DOP">RD$</button><button type="button" data-cur="USD">US$</button><button type="button" data-cur="both">RD$ + US$</button></div>
+  </div>
+</div></div>
+<div class="wrap" id="portWrap" style="display:none;padding-bottom:0">
+  <div id="portTools"></div>
+  <div class="card" style="padding:10px;margin-bottom:12px"><div id="fUbic"></div></div>
+</div>
+<main class="wrap" id="app"><div class="card empty">…</div></main>
+<div class="mbg" id="mbg"><div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle"></div></div>
+<div class="ficha-bg" id="fichaBg">
+  <div class="fbar"><button type="button" class="btn sec sm" id="fClose"></button><b id="fTit"></b><button type="button" class="btn sm" id="fPrint"></button><button type="button" class="btn sec sm" id="fXls"></button></div>
+  <div class="fin-wrap"><div class="pwrap" id="pWrap"><div class="paper" id="paper"></div></div></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// 💼 CAPEX — pantalla (vistas, ventanas, lecturas/escrituras y exportes). El modelo de datos y
+// todos los cálculos de dinero y de tiempo están en capex-calc.js; los textos en capex-i18n.js.
+const $ = id => document.getElementById(id);
+const esc = s => fbEsc(s);
+const quien = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
+const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
+const esAdmin = () => userHasRole('ADMINISTRADOR');
+const esEnc = () => userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+
+const PALETA = { sol: '#3987e5', apr: '#d95926', real: '#199e70', comp: '#c98500' };
+
+// ══════ IDIOMA Y FORMATO (Intl) ══════
+const I18N = window.CAPEX_I18N;
+const LOCALES = { es: 'es-DO', en: 'en-US', tr: 'tr-TR' };
+let LANG = 'es', CUR = 'both';
+try { const v = localStorage.getItem('capexLang'); if (LOCALES[v]) LANG = v; } catch (e) {}
+try { const v = localStorage.getItem('capexMoneda'); if (['DOP', 'USD', 'both'].includes(v)) CUR = v; } catch (e) {}
+window.__i18nFaltan = [];
+function t(k, p) {
+  let s = I18N[LANG] && I18N[LANG][k];
+  if (s == null) { window.__i18nFaltan.push(LANG + ':' + k); s = I18N.es[k] != null ? I18N.es[k] : k; }
+  return p ? s.replace(/\{(\w+)\}/g, (m, x) => (p[x] != null ? p[x] : m)) : s;
+}
+const loc = () => LOCALES[LANG];
+const _nf = {};
+function fmtNum(v, d) { d = d == null ? 2 : d; const k = loc() + d; if (!_nf[k]) _nf[k] = new Intl.NumberFormat(loc(), { minimumFractionDigits: d, maximumFractionDigits: d }); return _nf[k].format(Number(v) || 0); }
+const SIM = { DOP: 'RD$', USD: 'US$' };
+function fmtMoney(v, cur) { v = Number(v) || 0; return (v < -0.004 ? '−' : '') + SIM[cur === 'USD' ? 'USD' : 'DOP'] + '\u00a0' + fmtNum(Math.abs(v), 2); }
+function fmtPct(v, d) { if (v == null || !isFinite(v)) return '—'; return new Intl.NumberFormat(loc(), { style: 'percent', minimumFractionDigits: 0, maximumFractionDigits: d == null ? 1 : d }).format(v / 100); }
+function fmtCompact(v) { return new Intl.NumberFormat(loc(), { notation: 'compact', maximumFractionDigits: 1 }).format(Number(v) || 0); }
+function fmtDate(f) { const d = fbParseFecha(f); return d ? new Intl.DateTimeFormat(loc(), { day: '2-digit', month: 'short', year: 'numeric' }).format(d) : '—'; }
+function fmtDateCorta(f) { const d = fbParseFecha(f); return d ? new Intl.DateTimeFormat(loc(), { day: '2-digit', month: 'short' }).format(d) : '—'; }
+function fmtDateTime(iso) { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? new Intl.DateTimeFormat(loc(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d) : '—'; }
+const fmtYears = v => v == null || !isFinite(v) ? '—' : t('years', { n: fmtNum(v, 1) });
+const fmtDays = n => n === 1 ? t('day1') : t('days', { n: fmtNum(n, 0) });
+const lbl = (pre, k) => k ? t(pre + k) : '—';
+// Monto en la moneda elegida arriba (RD$ / US$ / las dos). v en la moneda base B del proyecto.
+function dinero(v, B, tasa, corto) {
+  const dop = conv(v, B, 'DOP', tasa), usd = conv(v, B, 'USD', tasa);
+  return dineroPar(dop, usd, corto);
+}
+function dineroPar(dop, usd, corto) {
+  if (CUR === 'DOP') return esc(fmtMoney(dop, 'DOP'));
+  if (CUR === 'USD') return esc(fmtMoney(usd, 'USD'));
+  return corto ? esc(fmtMoney(dop, 'DOP')) + ' <small>· ' + esc(fmtMoney(usd, 'USD')) + '</small>' : `<span class="dual">${esc(fmtMoney(dop, 'DOP'))}<small>${esc(fmtMoney(usd, 'USD'))}</small></span>`;
+}
+const monVista = () => (CUR === 'USD' ? 'USD' : 'DOP');
+
+// ══════ ESTADO DE LA PANTALLA ══════
+let CFG = { tasaCambio: 63, contingenciaPct: 10, itbisPct: 18, empresa: '' };
+let PRES = null;              // /capex_config/general (solo Administrador)
+let LOGO;                     // undefined = sin leer; null = no hay
+let ubic = null;
+const CACHE_ANIO = new Map(); // año → [proyectos]
+const UI = { vista: 'port', id: null, anio: new Date().getFullYear(), estado: '', tipo: '', q: '' };
+let EDIT = null;              // { id, d, dirty, orig }
+let STOCK = { cod: new Map(), desc: new Map() };
+let EQ_DOCS = [];
+const charts = {};
+window.__capexLecturas = 0;
+
+let _toastT;
+function toast(msg, tipo) { const el = $('toast'); el.textContent = msg; el.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => { el.className = ''; }, 3600); }
+const fallo = e => { console.warn(e); toast('❌ ' + (e && e.code === 'permission-denied' ? t('err_perm') : e && e.code === 'aborted' ? t('err_conflict') : (e && e.message) || 'Error'), 'error'); };
+function abrirModal(html) { $('modal').innerHTML = html; $('mbg').classList.add('open'); const f = $('modal').querySelector('input,select,textarea,button'); if (f) setTimeout(() => f.focus({ preventScroll: true }), 30); }
+function cerrarModal() { $('mbg').classList.remove('open'); $('modal').innerHTML = ''; }
+$('mbg').addEventListener('click', e => { if (e.target.id === 'mbg') cerrarModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('mbg').classList.contains('open')) cerrarModal(); else if ($('fichaBg').classList.contains('open')) cerrarFicha(); } });
+// Escritura que no deja la pantalla esperando sin señal (Firestore la sube sola después).
+function conLimite(prom, ms) { return Promise.race([prom, new Promise(r => setTimeout(() => r('pendiente'), ms || 4000))]); }
+
+// ══════ CABECERA, IDIOMA Y MONEDA ══════
+function pintarCabecera() {
+  document.documentElement.lang = LANG === 'es' ? 'es-DO' : LANG === 'en' ? 'en' : 'tr';
+  document.title = 'CAPEX — ' + t('appTitle').split('·').pop().trim();
+  $('hTitle').textContent = '💼 ' + t('appTitle');
+  const u = window.currentUserRole || {};
+  $('hSub').innerHTML = esc(t('appSub')) + (u.nombre ? ' · <span class="ut">' + esc(u.nombre) + '</span>' : '');
+  $('segLang').setAttribute('aria-label', t('lang')); $('segCur').setAttribute('aria-label', t('currency'));
+  $('segLang').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === LANG)));
+  $('segCur').querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.cur === CUR)); if (b.dataset.cur === 'both') b.title = t('both'); });
+  $('fClose').textContent = '← ' + t('a_closeWin'); $('fPrint').textContent = '🖨 ' + t('a_print'); $('fXls').textContent = '⬇ ' + t('a_xls');
+}
+$('segLang').addEventListener('click', e => { const b = e.target.closest('[data-lang]'); if (!b) return; setLang(b.dataset.lang); });
+$('segCur').addEventListener('click', e => { const b = e.target.closest('[data-cur]'); if (!b) return; CUR = b.dataset.cur; try { localStorage.setItem('capexMoneda', CUR); } catch (er) {} pintarCabecera(); repintar(); });
+function setLang(l) {
+  if (!LOCALES[l]) return; LANG = l;
+  if ($('mbg').classList.contains('open')) cerrarModal();
+  try { localStorage.setItem('capexLang', l); } catch (e) {}
+  pintarCabecera(); traducirFiltro(); repintar();
+}
+// La barra de filtros compartida (filtros.js) escribe "Todas las naves/áreas": se traduce aquí.
+function traducirFiltro() {
+  const el = $('fUbic'); if (!el) return;
+  el.querySelectorAll('select[data-fbf]').forEach(s => {
+    const o = s.querySelector('option[value=""]'), nv = s.dataset.fbf;
+    if (o && nv === 'nave') o.textContent = fbMisNaves() ? t('myNaves') : t('allNaves');
+    if (o && nv === 'area') o.textContent = t('allAreas');
+    s.setAttribute('aria-label', nv === 'nave' ? t('f_nave') : t('f_area'));
+    s.querySelectorAll('optgroup').forEach(g => { g.label = t('inactive'); });
+  });
+}
+function repintar() {
+  if (UI.vista === 'edit' && EDIT) { pintarEditor(); return; }
+  if ($('fichaBg').classList.contains('open') && FICHA) pintarFicha(FICHA);
+  pintar();
+}
+
+// ══════ LECTURAS ══════
+async function cargarConfig() {
+  try { const s = await db.collection('config').doc('capex').get(); window.__capexLecturas++; if (s.exists) CFG = { ...CFG, ...s.data() }; }
+  catch (e) { console.warn('config/capex:', e.message); }
+  if (esAdmin()) {
+    try { const s = await db.collection('capex_config').doc('general').get(); window.__capexLecturas++; PRES = s.exists ? s.data() : {}; }
+    catch (e) { console.warn('capex_config:', e.message); PRES = {}; }
+  }
+}
+async function cargarAnio(y, fresco) {
+  if (!fresco && CACHE_ANIO.has(y)) return CACHE_ANIO.get(y);
+  const s = await db.collection('capex').where('anioFiscal', '==', y).get();
+  window.__capexLecturas += Math.max(1, s.size);
+  const l = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  CACHE_ANIO.set(y, l);
+  return l;
+}
+function enCache(id) { for (const l of CACHE_ANIO.values()) { const p = l.find(x => x.id === id); if (p) return p; } return null; }
+function guardarEnCache(p) {
+  for (const [y, l] of CACHE_ANIO) { const i = l.findIndex(x => x.id === p.id); if (i >= 0) { if (y === p.anioFiscal) l[i] = p; else l.splice(i, 1); } }
+  const l = CACHE_ANIO.get(p.anioFiscal); if (l && !l.some(x => x.id === p.id)) l.push(p);
+}
+async function proyecto(id, fresco) {
+  if (!fresco) { const c = enCache(id); if (c) return c; }
+  const s = await db.collection('capex').doc(id).get(); window.__capexLecturas++;
+  if (!s.exists) return null;
+  const p = { id: s.id, ...s.data() }; guardarEnCache(p); return p;
+}
+// Stock de los repuestos: del catálogo de equipos en caché (0 lecturas extra), por código y por nombre.
+function prepararStock(docs) {
+  STOCK = { cod: new Map(), desc: new Map() };
+  EQ_DOCS = docs || [];
+  EQ_DOCS.forEach(d => {
+    const x = (d.data && d.data()) || {};
+    (Array.isArray(x.repuestos) ? x.repuestos : []).forEach(r => {
+      const q = parseFloat(r.q); if (!isFinite(q)) return;
+      [r.m, r.modelo].forEach(c => { const k = K(c); if (k) STOCK.cod.set(k, (STOCK.cod.get(k) || 0) + q); });
+      const k = K(r.r); if (k) STOCK.desc.set(k, (STOCK.desc.get(k) || 0) + q);
+    });
+  });
+}
+function stockDe(r) {
+  const kc = K(r.codigo), kd = K(r.descripcion);
+  if (kc && STOCK.cod.has(kc)) return STOCK.cod.get(kc);
+  if (kd && STOCK.desc.has(kd)) return STOCK.desc.get(kd);
+  return null;
+}
+const stockHtml = n => n == null ? '' : n > 0 ? `<span class="stock sem-ok">📦 ${esc(t('r_hay', { n: fmtNum(n, n % 1 ? 1 : 0) }))}</span>` : `<span class="stock sem-bad">${esc(t('r_nohay'))}</span>`;
+
+// ══════ RUTAS (#p=ID · #nuevo · #nuevo&equipo=ID · #nuevo&dup=ID · #editar=ID) ══════
+function leerHash() {
+  const h = (location.hash || '').slice(1), q = {};
+  h.split('&').forEach(x => { const i = x.indexOf('='); if (x) q[i < 0 ? x : x.slice(0, i)] = i < 0 ? '' : decodeURIComponent(x.slice(i + 1)); });
+  return q;
+}
+function ir(hash) { if (location.hash === hash || (hash === '#' && !location.hash)) route(); else location.hash = hash; }
+window.addEventListener('hashchange', () => route());
+// Cerrar la pestaña o recargar con cambios sin guardar en el editor: el navegador pregunta.
+window.addEventListener('beforeunload', e => { if (EDIT && EDIT.dirty) { e.preventDefault(); e.returnValue = ''; } });
+let _ignorarHash = false;
+async function route() {
+  if (_ignorarHash) { _ignorarHash = false; return; } // volvimos al editor: se queda tal cual
+  if (EDIT && EDIT.dirty) {
+    const q0 = leerHash();
+    const sigue = ('nuevo' in q0 && !EDIT.id) || (q0.editar && q0.editar === EDIT.id);
+    if (!sigue && !confirm(t('unsaved'))) { _ignorarHash = true; history.back(); return; }
+  }
+  const q = leerHash();
+  if ('nuevo' in q) { UI.vista = 'edit'; await abrirEditor(null, q); }
+  else if (q.editar) { UI.vista = 'edit'; await abrirEditor(q.editar, q); }
+  else if (q.p) { UI.vista = 'det'; UI.id = q.p; EDIT = null; await pintar(); }
+  else { UI.vista = 'port'; EDIT = null; await pintar(); }
+  window.scrollTo(0, 0);
+}
+async function pintar() {
+  Object.keys(charts).forEach(k => { try { charts[k].destroy(); } catch (e) {} delete charts[k]; });
+  $('portWrap').style.display = UI.vista === 'port' ? '' : 'none';
+  window.__capexVista = UI.vista;
+  if (UI.vista === 'port') await vistaPortafolio();
+  else if (UI.vista === 'det') await vistaDetalle();
+  window.__capexListo = true;
+}
+
+// ══════ PORTAFOLIO ══════
+const coincideTexto = (p, q) => { if (!q) return true; const k = K(q); return [p.codigo, p.titulo, p.area, p.linea, fbNaveDe(p), ...(p.equipos || []).map(e => e.nombre)].some(x => K(x).includes(k)); };
+const accesoCapex = x => ({ area: x.area || '', linea: x.linea || '', equipoId: (x.equipoIds || [])[0] || '', equipo: '' });
+function pintarHerramientas() {
+  const y0 = new Date().getFullYear(), anios = [];
+  for (let y = y0 + 2; y >= y0 - 3; y--) anios.push(y);
+  if (!anios.includes(UI.anio)) anios.push(UI.anio);
+  $('portTools').innerHTML = `<div class="tools">
+      <div><label class="f" for="tAnio">${esc(t('year'))}</label><select id="tAnio">${anios.map(y => `<option value="${y}"${y === UI.anio ? ' selected' : ''}>${y}</option>`).join('')}</select></div>
+      <div><label class="f" for="tEst">${esc(t('f_estado'))}</label><select id="tEst"><option value="">${esc(t('allStates'))}</option>${ESTADOS.map(e => `<option value="${e}"${e === UI.estado ? ' selected' : ''}>${esc(t('st_' + e))}</option>`).join('')}</select></div>
+      <div class="tipo"><label class="f" for="tTipo">${esc(t('f_tipo'))}</label><select id="tTipo"><option value="">${esc(t('allTypes'))}</option>${TIPOS.map(e => `<option value="${e}"${e === UI.tipo ? ' selected' : ''}>${esc(t('tp_' + e))}</option>`).join('')}</select></div>
+      <div class="full"><label class="f" for="tQ">🔎 ${esc(t('search'))}</label><input id="tQ" type="search" value="${esc(UI.q)}" autocomplete="off"></div>
+    </div>
+    <div class="btns" style="margin:4px 0 10px">
+      <a class="btn" href="#nuevo" id="bNuevo">${esc(t('newCapex'))}</a>
+      <button type="button" class="btn sec" id="bXlsPort">⬇ ${esc(t('a_xlsPortfolio'))}</button>
+      ${esAdmin() ? `<button type="button" class="btn sec" id="bPres">💰 ${esc(t('budget'))}</button><button type="button" class="btn sec" id="bCfg">⚙️ ${esc(t('settings'))}</button>` : ''}
+      <button type="button" class="btn sec" id="bAct" aria-label="${esc(t('refresh'))}" title="${esc(t('refresh'))}">🔄</button>
+    </div>`;
+  $('tAnio').onchange = e => { UI.anio = Number(e.target.value); pintar(); };
+  $('tEst').onchange = e => { UI.estado = e.target.value; pintar(); };
+  $('tTipo').onchange = e => { UI.tipo = e.target.value; pintar(); };
+  let _qT; $('tQ').oninput = e => { clearTimeout(_qT); _qT = setTimeout(() => { UI.q = e.target.value.trim(); pintar(); }, 250); };
+  $('bXlsPort').onclick = () => exportarPortafolio();
+  $('bAct').onclick = async () => { CACHE_ANIO.delete(UI.anio); await pintar(); };
+  if ($('bPres')) $('bPres').onclick = () => modalPresupuesto();
+  if ($('bCfg')) $('bCfg').onclick = () => modalAjustes();
+}
+function presupuestoAnio(y) {
+  const a = PRES && PRES.presupuestos && PRES.presupuestos[String(y)];
+  if (!a) return null;
+  const nav = fbNaveActiva();
+  if (nav) { const v = a.porNave && a.porNave[cfgKey(nav)]; return v > 0 ? { total: Number(v), nave: nav } : null; }
+  return Number(a.total) > 0 ? { total: Number(a.total), nave: '' } : null;
+}
+const cfgKey = s => { const k = K(s).replace(/[^a-z0-9]/g, '_'); return /^__.*__$/.test(k) ? 'k' + k : k; };
+let PORT = null;
+async function vistaPortafolio() {
+  if (!$('tAnio') || $('portTools').dataset.lang !== LANG + CUR) { pintarHerramientas(); $('portTools').dataset.lang = LANG + CUR; }
+  else { $('tAnio').value = String(UI.anio); }
+  const app = $('app');
+  app.innerHTML = `<div class="card empty">${esc(t('loading'))}</div>`;
+  let lista; const anio = UI.anio;
+  try { lista = await cargarAnio(anio); }
+  catch (e) { if (UI.vista === 'port' && UI.anio === anio) app.innerHTML = `<div class="card empty">⚠️ ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
+  if (UI.vista !== 'port' || UI.anio !== anio) return; // se cambió de año mientras se leía
+  const vis = lista.filter(p => fbEnNave(p) && (!ubic || ubic.coincide(p, accesoCapex)) && (!UI.estado || p.estado === UI.estado) && (!UI.tipo || p.tipo === UI.tipo) && coincideTexto(p, UI.q));
+  const P = calcPortafolio(vis); PORT = P;
+  const pres = esAdmin() ? presupuestoAnio(UI.anio) : null;
+  window.__capexPort = { n: P.n, sol: P.sol, apr: P.apr, real: P.real, comp: P.comp, porEstado: P.porEstado, presupuesto: pres && pres.total,
+    porNave: [...P.porNave.values()].map(x => ({ nombre: x.nombre, n: x.n, sol: x.sol, apr: x.apr, real: x.real })), orden: P.filas.filter(f => !['cancelado', 'rechazado', 'cerrado'].includes(f.est)).map(f => f.p.codigo) };
+  const pctE = P.apr.DOP > 0 ? P.real.DOP / P.apr.DOP * 100 : null;
+  const semE = pctE == null ? 'na' : pctE > 100 ? 'bad' : pctE >= 90 ? 'warn' : 'ok';
+  let h = `<div class="kpis">
+    <div class="kpi"><span>${esc(t('kProjects'))}</span><b>${P.n}</b><small>${esc(t('kPipeline'))}: ${P.porEstado.borrador}</small></div>
+    <div class="kpi"><span>${esc(t('kRequested'))}</span><b>${dineroPar(P.sol.DOP, P.sol.USD)}</b></div>
+    <div class="kpi"><span>${esc(t('kApproved'))}</span><b>${dineroPar(P.apr.DOP, P.apr.USD)}</b></div>
+    <div class="kpi"><span>${esc(t('kActual'))}</span><b>${dineroPar(P.real.DOP, P.real.USD)}</b><small class="sem-${semE}">${esc(t('kPctExec'))}: ${esc(fmtPct(pctE))}</small></div>
+    <div class="kpi"><span>${esc(t('kCommitted'))}</span><b>${dineroPar(P.comp.DOP, P.comp.USD)}</b></div>`;
+  if (esAdmin()) {
+    if (pres) { const usd = conv(pres.total, 'DOP', 'USD', CFG.tasaCambio); h += `<div class="kpi acc"><span>${esc(t('kBudget'))}${pres.nave ? ' · <span class="ut">' + esc(pres.nave) + '</span>' : ''}</span><b>${dineroPar(pres.total, usd)}</b><small>${esc(t('kAvailable'))}: ${dineroPar(pres.total - P.apr.DOP, usd - P.apr.USD, true)}</small></div>`; }
+    else h += `<div class="kpi acc"><span>${esc(t('kBudget'))}</span><b>—</b><small>${esc(fbNaveActiva() ? t('noBudgetNave', { y: UI.anio }) : t('noBudget', { y: UI.anio }))}</small></div>`;
+  }
+  h += '</div>';
+  if (pres) {
+    const ref = Math.max(pres.total, P.apr.DOP, 1), wa = Math.min(100, P.apr.DOP / ref * 100), wr = Math.min(100, P.real.DOP / ref * 100);
+    h += `<div class="card"><div class="ct">${esc(t('budgetUse', { y: UI.anio, a: fmtMoney(P.apr.DOP, 'DOP'), b: fmtMoney(pres.total, 'DOP') }))}</div>
+      <div class="meter" role="img" aria-label="${esc(t('kApproved') + ' ' + fmtPct(P.apr.DOP / pres.total * 100) + ' · ' + t('kActual') + ' ' + fmtPct(P.real.DOP / pres.total * 100))}"><i class="a${P.apr.DOP > pres.total ? ' over' : ''}" style="width:${wa.toFixed(1)}%"></i><i class="r" style="width:${wr.toFixed(1)}%"></i></div>
+      <div class="leg"><span><i class="sw" style="background:#3987e5"></i>${esc(t('kApproved'))} ${esc(fmtPct(P.apr.DOP / pres.total * 100))}</span><span><i class="sw" style="background:#199e70"></i>${esc(t('kActual'))} ${esc(fmtPct(P.real.DOP / pres.total * 100))}</span><span><i class="sw" style="background:var(--color-surface-3)"></i>${esc(t('kBudget'))} ${esc(fmtMoney(pres.total, 'DOP'))}</span></div></div>`;
+  }
+  h += `<div class="chips" role="group" aria-label="${esc(t('byState'))}">${ESTADOS.filter(e => P.porEstado[e] || UI.estado === e).map(e => `<button type="button" class="chip" data-est="${e}" aria-pressed="${UI.estado === e}"><span class="bdg st-${e}">${esc(t('st_' + e))}</span><b>${P.porEstado[e]}</b></button>`).join('')}</div>`;
+  if (!lista.length) { app.innerHTML = h + `<div class="card empty">${esc(t('empty'))}<br><br><a class="btn" href="#nuevo">${esc(t('newCapex'))}</a></div>`; enlazarPortafolio(); return; }
+  if (!vis.length) { app.innerHTML = h + `<div class="card empty">${esc(t('emptyFilter'))}</div>`; enlazarPortafolio(); return; }
+  const mv = monVista(), mvs = SIM[mv];
+  const naves = [...P.porNave.values()].sort((a, b) => (a.nombre || '~').localeCompare(b.nombre || '~', 'es', { numeric: true }));
+  const tipos = [...P.porTipo.values()].sort((a, b) => b.sol[mv] - a.sol[mv]);
+  const tablaSer = (filas, cab, nom) => `<div class="tw"><table class="sm stk"><thead><tr><th>${esc(cab)}</th><th class="n">${esc(t('projects'))}</th><th class="n">${esc(t('kRequested'))}</th><th class="n">${esc(t('kApproved'))}</th><th class="n">${esc(t('kActual'))}</th></tr></thead><tbody>
+    ${filas.map(x => `<tr>${TD(cab, nom(x), 'lead')}${TD(t('projects'), String(x.n), 'n')}${TD(t('kRequested'), esc(fmtMoney(x.sol[mv], mv)), 'n')}${TD(t('kApproved'), esc(fmtMoney(x.apr[mv], mv)), 'n')}${TD(t('kActual'), esc(fmtMoney(x.real[mv], mv)), 'n')}</tr>`).join('')}</tbody></table></div>`;
+  const leg = `<div class="leg" style="margin-bottom:6px"><span><i class="sw" style="background:${PALETA.sol}"></i>${esc(t('kRequested'))}</span><span><i class="sw" style="background:${PALETA.apr}"></i>${esc(t('kApproved'))}</span><span><i class="sw" style="background:${PALETA.real}"></i>${esc(t('kActual'))}</span></div>`;
+  const sinLib = typeof Chart === 'undefined';
+  const cardG = (id, tit, tabla) => `<div class="card"><div class="chead"><div><div class="ct">${esc(tit)}</div><div class="cs">${esc(mvs)}</div></div>${sinLib ? '' : `<button type="button" class="lnk" data-tabla="${id}">${esc(t('viewTable'))}</button>`}</div>
+    ${sinLib ? `<div class="nota" style="margin-bottom:8px">${esc(t('chartNoLib'))}</div>` : leg + `<div class="chart" id="${id}-g"><canvas id="${id}" role="img" aria-label="${esc(tit)}"></canvas></div>`}
+    <div id="${id}-t"${sinLib ? '' : ' style="display:none"'}>${tabla}</div></div>`;
+  h += `<div class="cols2 eq"><div>${cardG('chNave', t('byNave'), tablaSer(naves, t('f_nave'), x => `<span class="ut">${esc(x.nombre || t('noNave'))}</span>`))}</div>
+    <div>${cardG('chTipo', t('byType'), tablaSer(tipos, t('f_tipo'), x => esc(t('tp_' + x.tipo))))}</div></div>`;
+  // Ranking
+  const rank = P.filas.filter(f => !['cancelado', 'rechazado', 'cerrado'].includes(f.est));
+  if (rank.length) h += `<div class="card"><div class="ct">🏁 ${esc(t('ranking'))}</div><div class="cs">${esc(t('rankingSub'))}</div><div class="tw"><table class="rk"><thead><tr>
+    <th>#</th><th>${esc(t('f_codigo'))}</th><th>${esc(t('f_titulo'))}</th><th>${esc(t('f_nave'))}</th><th>${esc(t('f_criticidad'))}</th><th>${esc(t('f_prioridad'))}</th><th>${esc(t('f_estado'))}</th>
+    <th class="n">${esc(t('f_total'))}</th><th class="n">${esc(t('fin_payback'))}</th><th class="n">${esc(t('fin_roi'))}</th><th class="n">${esc(t('g_pct'))}</th></tr></thead><tbody>
+    ${rank.map((f, i) => `<tr class="click" data-go="${esc(f.p.id)}"><td>${i + 1}</td><td class="cod" style="font-family:var(--font-mono)">${esc(f.p.codigo || '')}</td><td class="ut tit">${esc(f.p.titulo || '')}</td><td class="ut nav">${esc(f.nave || t('noNave'))}</td>
+      <td class="bd">${critBadge(f.crit)}</td><td class="bd">${prioBadge(f.p.prioridad)}</td><td class="bd">${estBadge(f.est)}</td><td class="n">${dinero(f.tot.total, f.tot.B, f.tot.T)}</td>
+      <td class="n">${esc(fmtYears(f.fin.payback))}</td><td class="n">${esc(fmtPct(f.fin.roi, 0))}</td><td class="n"><span class="sem-${f.ej.sem}">${esc(fmtPct(f.ej.pct, 0))}</span></td></tr>`).join('')}</tbody></table></div></div>`;
+  // Tarjetas
+  h += `<div class="ct" style="margin:6px 2px 8px">${esc(P.n === 1 ? t('nProject1') : t('nProjects', { n: P.n }))}</div><div class="plist">${P.filas.slice().sort((a, b) => String(b.p.codigo).localeCompare(String(a.p.codigo))).map(tarjetaProyecto).join('')}</div>
+    <div class="nota" style="margin-top:10px">${esc(t('readsNote'))} ${esc(t('noTranslate'))}</div>`;
+  app.innerHTML = h;
+  enlazarPortafolio();
+  if (!sinLib) {
+    graficaBarras('chNave', naves.map(x => x.nombre || t('noNave')), [['kRequested', 'sol', PALETA.sol], ['kApproved', 'apr', PALETA.apr], ['kActual', 'real', PALETA.real]].map(([k, c, col]) => ({ label: t(k), data: naves.map(x => r2(x[c][mv])), backgroundColor: col })), false);
+    graficaBarras('chTipo', tipos.map(x => t('tp_' + x.tipo)), [['kRequested', 'sol', PALETA.sol], ['kApproved', 'apr', PALETA.apr], ['kActual', 'real', PALETA.real]].map(([k, c, col]) => ({ label: t(k), data: tipos.map(x => r2(x[c][mv])), backgroundColor: col })), true);
+  }
+}
+function enlazarPortafolio() {
+  $('app').querySelectorAll('[data-est]').forEach(b => b.onclick = () => { UI.estado = UI.estado === b.dataset.est ? '' : b.dataset.est; $('portTools').dataset.lang = ''; pintar(); });
+  $('app').querySelectorAll('[data-go]').forEach(r => r.onclick = () => ir('#p=' + encodeURIComponent(r.dataset.go)));
+  $('app').querySelectorAll('[data-tabla]').forEach(b => b.onclick = () => { const g = $(b.dataset.tabla + '-g'), tb = $(b.dataset.tabla + '-t'); const ver = tb.style.display === 'none'; tb.style.display = ver ? '' : 'none'; g.style.display = ver ? 'none' : ''; b.textContent = ver ? t('viewChart') : t('viewTable'); });
+}
+const tokenColor = (v, d) => { try { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || d; } catch (e) { return d; } };
+function graficaBarras(id, labels, datasets, horizontal) {
+  const cv = $(id); if (!cv || typeof Chart === 'undefined') return;
+  const grid = tokenColor('--chart-grid', '#e3e8ef'), txt = tokenColor('--chart-text', '#24344b'), mv = monVista();
+  if (horizontal) cv.parentNode.style.height = Math.max(200, labels.length * 54 + 60) + 'px';
+  datasets.forEach(d => { d.borderRadius = 4; d.maxBarThickness = 26; });
+  const ejeMonto = { grid: { color: grid }, ticks: { color: txt, callback: v => fmtCompact(v) }, beginAtZero: true };
+  const ejeCat = { grid: { display: false }, ticks: { color: txt, autoSkip: false } };
+  try {
+    charts[id] = new Chart(cv, { type: 'bar', data: { labels, datasets },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: horizontal ? 'y' : 'x', animation: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtMoney(horizontal ? c.parsed.x : c.parsed.y, mv) } } },
+        scales: horizontal ? { x: ejeMonto, y: ejeCat } : { x: ejeCat, y: ejeMonto } } });
+  } catch (e) { console.warn('Chart:', e.message); }
+}
+const estBadge = e => `<span class="bdg st-${esc(e || 'borrador')}">${esc(t('st_' + (ESTADOS.includes(e) ? e : 'borrador')))}</span>`;
+const critBadge = c => { c = critValida(c); return `<span class="bdg cr-${c || 'N'}" data-crit="${c}">${esc(t('crit_' + (c || 'N')))}</span>`; };
+const prioBadge = p => PRIORIDADES.includes(p) ? `<span class="bdg pr-${p}">${esc(t('pr_' + p))}</span>` : '';
+function tarjetaProyecto(f) {
+  const p = f.p, c = { aprobado: 'var(--color-success)', en_ejecucion: 'var(--color-primary)', enviado: 'var(--color-info)', en_espera: 'var(--color-warn)', rechazado: 'var(--color-danger)', cerrado: 'var(--color-purple)' }[f.est] || 'var(--color-border-strong)';
+  const ap = APROBADOS.includes(f.est);
+  return `<a class="pcard" href="#p=${encodeURIComponent(p.id)}" style="border-left-color:${c}" data-codigo="${esc(p.codigo || '')}">
+    <div class="top"><span class="code">${esc(p.codigo || '')}</span>${estBadge(f.est)}</div>
+    <h3 class="ut">${esc(p.titulo || '—')}</h3>
+    <div class="meta"><span class="ut">${esc([f.nave, p.area].filter(Boolean).join(' · ') || t('noNave'))}</span> · ${esc(t('tp_' + (p.tipo || 'mejora')))}</div>
+    <div class="dmeta">${critBadge(f.crit)} ${prioBadge(p.prioridad)}</div>
+    <div class="nums"><span><b>${dinero(f.tot.total, f.tot.B, f.tot.T, true)}</b></span><span>${esc(t('fin_payback'))}: <b>${esc(fmtYears(f.fin.payback))}</b></span>${ap ? `<span class="sem-${f.ej.sem}">${esc(t('g_pct'))}: <b>${esc(fmtPct(f.ej.pct, 0))}</b></span>` : ''}</div>
+    ${ap ? `<div class="meter" aria-hidden="true"><i class="${f.ej.pct > 100 ? 'over' : 'r'}" style="width:${Math.min(100, f.ej.pct || 0).toFixed(1)}%"></i></div>` : ''}</a>`;
+}
+
+// ══════ DETALLE DEL PROYECTO ══════
+let ACTUAL = null;
+async function vistaDetalle() {
+  const app = $('app');
+  app.innerHTML = `<div class="card empty">${esc(t('loading'))}</div>`;
+  let p; const id = UI.id;
+  try { p = await proyecto(id); } catch (e) { if (UI.vista === 'det' && UI.id === id) app.innerHTML = `<div class="card empty">⚠️ ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
+  if (UI.vista !== 'det' || UI.id !== id) return; // se cambió de proyecto mientras se leía
+  if (!p) { app.innerHTML = `<div class="card empty">${esc(t('notFound'))}<br><br><a class="btn sec" href="#">${esc(t('a_back'))}</a></div>`; return; }
+  ACTUAL = p;
+  const tot = calcTotales(p), fin = calcFinanzas(p, tot), ej = calcEjecucion(p), B = tot.B, T = tot.T;
+  const ap = APROBADOS.includes(p.estado);
+  const cr = p.cronograma && p.cronograma.fechaInicio ? calcCronograma(p, p.cronograma.fechaInicio) : calcCronograma(p, fbHoy());
+  const crit = critDe(p);
+  window.__capexDet = { id: p.id, codigo: p.codigo, estado: p.estado, tot, fin, ej, cr: { fechaInicio: cr.fechaInicio, fechaFinProyectada: cr.fechaFinProyectada, duracionDias: cr.duracionDias, leadTimeMax: cr.leadTimeMax } };
+  let h = `<div class="btns" style="margin-bottom:10px"><a class="btn sec sm" href="#">${esc(t('a_back'))}</a></div>`;
+  if (ap && ej.pct != null && ej.pct > 100) h += `<div class="alert bad" id="alGasto">${esc(t('al_100', { p: fmtPct(ej.pct) }))}</div>`;
+  else if (ap && ej.pct != null && ej.pct >= 90) h += `<div class="alert warn" id="alGasto">${esc(t('al_90', { p: fmtPct(ej.pct) }))}</div>`;
+  const ult = (p.historial || []).slice(-1)[0];
+  if (['rechazado', 'en_espera'].includes(p.estado) && ult && ult.nota) h += `<div class="alert ${p.estado === 'rechazado' ? 'bad' : 'warn'}">${estBadge(p.estado)} ${esc(t('d_lastNote'))}: <span class="ut">${esc(ult.nota)}</span></div>`;
+  if (ap) h += `<div class="alert info">${esc(t('lockedAfter'))}</div>`;
+  // Cabecera
+  const equipos = (p.equipos || []).map(e => `<span class="ut">${esc(e.nombre || e.id)}</span> ${critBadge(fbCriticidadDeEquipo(e.id) || e.criticidad || '')}`).join(', ') || esc(t('none'));
+  h += `<div class="card"><div class="dhead"><div style="min-width:0"><span class="code" style="font-family:var(--font-mono);color:var(--color-muted)">${esc(p.codigo || '')}</span>
+      <h2 class="ut">${esc(p.titulo || '—')}</h2>
+      <div class="dmeta">${estBadge(p.estado)} <span class="bdg st-borrador">${esc(t('tp_' + (p.tipo || 'mejora')))}</span> ${prioBadge(p.prioridad)} ${critBadge(crit)}</div></div>
+      <div class="dtot" style="text-align:right"><div class="nota">${esc(t('f_total'))}</div><div style="font-size:20px;font-weight:800">${dinero(tot.total, B, T)}</div></div></div>
+    <div class="facts">
+      <div><span class="fl">${esc(t('f_nave'))}:</span><b class="ut">${esc(fbNaveDe(p) || t('noNave'))}</b></div>
+      <div><span class="fl">${esc(t('f_area'))}:</span><b class="ut">${esc(p.area || '—')}</b></div>
+      <div><span class="fl">${esc(t('f_linea'))}:</span><b class="ut">${esc(p.linea || '—')}</b></div>
+      <div style="grid-column:1/-1"><span class="fl">${esc(t('f_equipos'))}:</span>${equipos}</div>
+      <div><span class="fl">${esc(t('f_solicitante'))}:</span><b class="ut">${esc(p.solicitante || '—')}</b> · ${esc(fmtDate(p.fechaSolicitud))}</div>
+      <div><span class="fl">${esc(t('year'))}:</span><b>${esc(p.anioFiscal || '')}</b></div>
+      <div><span class="fl">${esc(t('f_moneda'))}:</span><b>${esc(SIM[B])}</b> · ${esc(t('rateLine', { t: fmtNum(T, 2) }))}</div>
+    </div>
+    ${p.descripcion ? `<div style="margin-top:10px" class="ut">${esc(p.descripcion)}</div>` : ''}
+    <div class="acts" id="acts">${botonesAccion(p)}</div></div>`;
+  // Resumen primero (inversión y evaluación); luego justificación y aprobación; las tablas a lo ancho.
+  const j = p.justificacion || {};
+  h += `<div class="cols2"><div>${cardTotales(tot)}${cardFinanzas(p, fin, tot)}</div><div>`;
+  h += `<div class="card"><div class="ct">🎯 ${esc(t('f_justificacion'))}</div>
+    <label class="f">${esc(t('f_problema'))}</label><div class="ut">${esc(j.problema || '—')}</div>
+    <label class="f">${esc(t('f_beneficio'))}</label><div class="ut">${esc(j.beneficio || '—')}</div></div>`;
+  h += cardAprobacion(p) + `</div></div>`;
+  h += tablasDetalle(p, tot, cr, false);
+  h += cardCronograma(p, cr, ap);
+  if (ap) h += cardGasto(p, tot, ej);
+  h += cardHistorial(p);
+  h += `<div class="nota">${esc(t('noTranslate'))}</div>`;
+  app.innerHTML = h;
+  enlazarDetalle(p, cr);
+}
+function botonesAccion(p) {
+  const e = p.estado, b = [];
+  const btn = (id, txt, cls) => `<button type="button" class="btn ${cls || ''}" data-acc="${id}">${esc(txt)}</button>`;
+  if (EDITABLES.includes(e)) b.push(btn('editar', '✏️ ' + t('a_edit'), 'sec'));
+  if (EDITABLES.includes(e)) b.push(btn('enviar', '📤 ' + t('a_send')));
+  if (e === 'enviado') b.push(btn('retirar', '↩️ ' + t('a_withdraw'), 'sec'));
+  if (esAdmin() && ['enviado', 'en_espera'].includes(e)) b.push(btn('revisar', '✅ ' + t('a_review'), 'ok'));
+  if (e === 'aprobado') b.push(btn('iniciar', '▶️ ' + t('a_start')));
+  if (['aprobado', 'en_ejecucion'].includes(e)) b.push(btn('gasto', t('g_add'), 'sec'));
+  if (e === 'en_ejecucion') b.push(btn('cerrar', '🏁 ' + t('a_close'), 'sec'));
+  if (esAdmin() && !['borrador', 'enviado'].includes(e)) b.push(btn('reabrir', '🔓 ' + t('a_reopen'), 'sec'));
+  if ((esAdmin() && !['cerrado', 'cancelado'].includes(e)) || e === 'borrador') b.push(btn('cancelar', '✖ ' + t('a_cancel'), 'sec'));
+  b.push(btn('ficha', '🖨 ' + t('a_print'), 'sec'), btn('xls', '⬇ ' + t('a_xls'), 'sec'), btn('compras', '🛒 ' + t('a_compras'), 'sec'), btn('dup', '⧉ ' + t('a_dup'), 'sec'));
+  return b.join('');
+}
+function cardTotales(tot) {
+  const fila = (txt, v, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(txt)}</td><td class="n">${esc(fmtMoney(conv(v, tot.B, 'DOP', tot.T), 'DOP'))}</td><td class="n">${esc(fmtMoney(conv(v, tot.B, 'USD', tot.T), 'USD'))}</td></tr>`;
+  return `<div class="card" id="cardTot"><div class="ct">💵 ${esc(t('sec_totales'))}</div><div class="cs">${esc(t('rateLine', { t: fmtNum(tot.T, 2) }))} · ${esc(t('tot_base', { b: SIM[tot.B] }))}</div>
+    <div class="tw"><table class="sm tt"><thead><tr><th></th><th class="n">RD$</th><th class="n">US$</th></tr></thead><tbody>
+    ${fila(t('tot_trabajos'), tot.trabajos)}${fila(t('tot_repuestos'), tot.repuestos)}${fila(t('tot_otros'), tot.otros)}
+    ${fila(t('tot_subtotal'), tot.subtotal, 'tot')}${fila(t('tot_cont', { p: fmtPct(tot.contPct) }), tot.contingencia)}
+    ${tot.itbisAplica ? fila(t('tot_itbis', { p: fmtPct(tot.itbisPct) }), tot.itbis) : ''}
+    ${fila(t('tot_total'), tot.total, 'tot')}</tbody></table></div>
+    <div class="formula">${esc(t('formulaTot'))}</div></div>`;
+}
+function cardFinanzas(p, fin, tot) {
+  const b = p.beneficios || {};
+  const k = (n, v, sub, cls) => `<div class="kpi${cls ? ' ' + cls : ''}"><span>${esc(n)}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  return `<div class="card" id="cardFin"><div class="ct">📈 ${esc(t('sec_fin'))}</div>
+    <div class="cs">${esc(t('b_total'))}: ${dinero(fin.A, tot.B, tot.T, true)} · ${esc(t('b_vida'))}: ${esc(fmtNum(fin.n, 0))} · ${esc(t('b_tasa'))}: ${esc(fmtNum(fin.r, 1))}</div>
+    <div class="fin f2">${k(t('fin_payback'), esc(fin.payback == null ? t('naSavings') : fmtYears(fin.payback)))}${k(t('fin_roi'), esc(fmtPct(fin.roi)))}
+      ${k(t('fin_npv'), fin.npv == null ? '—' : dinero(fin.npv, tot.B, tot.T), '', 'w')}${k(t('fin_irr'), esc(fin.irr == null ? (fin.irrNoConv ? t('noConv') : '—') : fmtPct(fin.irr)))}</div>
+    <div class="tw" style="margin-top:8px"><table class="sm"><tbody>
+      ${[['b_paro', 'paroEvitado'], ['b_energia', 'energia'], ['b_repuestos', 'repuestos'], ['b_mo', 'manoObra'], ['b_otros', 'otros']].filter(([, c]) => num(b[c])).map(([l, c]) => `<tr><td>${esc(t(l))}</td><td class="n">${dinero(num(b[c]), tot.B, tot.T, true)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="formula">${esc(t('formulaFin'))}</div></div>`;
+}
+// Celda con su etiqueta (en el celular la tabla se apila como "etiqueta: valor").
+const TD = (l, v, cls) => `<td data-l="${esc(l)}" class="${cls || ''}${v === '' || v == null ? ' vacio' : ''}">${v == null ? '' : v}</td>`;
+const filaTotal = (n, l, v, resto) => `<tr class="tot"><td colspan="${n}" class="hs">${esc(l)}</td><td class="n" data-l="${esc(l)}">${v}</td>${resto ? `<td colspan="${resto}" class="hs"></td>` : ''}</tr>`;
+function tablasDetalle(p, tot, cr, papel) {
+  const B = tot.B, T = tot.T, ts = p.trabajos || [], rs = p.repuestos || [], os = p.otrosCostos || [];
+  const mon = (v, m) => esc(fmtMoney(v, monLinea(m, B)));
+  const base = (v, m) => esc(fmtMoney(conv(v, monLinea(m, B), B, T), B));
+  const wrap = x => papel ? x : `<div class="tw">${x}</div>`;
+  const tb = cls => `<table class="${papel ? '' : 'stk'}${cls ? ' ' + cls : ''}">`;
+  const cab = (tit, ico) => papel ? `<h4>${esc(tit)}</h4>` : `<div class="ct">${ico} ${esc(tit)}</div>`;
+  const nro = i => `<span class="nstk">#${i + 1} · </span>`;
+  const sB = SIM[B];
+  let h = `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_trabajos'), '🛠')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('t_desc'))}</th><th>${esc(t('t_resp'))}</th><th>${esc(t('t_recurso'))}</th><th class="n">${esc(t('t_horas'))}</th><th class="n">${esc(t('t_dias'))}</th><th>${esc(t('t_dep'))}</th><th class="n">${esc(t('t_costo'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
+    ${ts.map((x, i) => `<tr>${TD('#', i + 1, 'hs')}${TD(t('t_desc'), nro(i) + `<span class="ut">${esc(x.descripcion || '')}</span>`, 'lead')}${TD(t('t_resp'), esc(lbl('resp_', x.responsable)))}${TD(t('t_recurso'), esc(lbl('rec_', x.tipoRecurso)))}${TD(t('t_horas'), x.horas ? esc(fmtNum(x.horas, 1)) : '', 'n')}${TD(t('t_dias'), esc(fmtNum((cr.items[i] || {}).dur || duracionTrabajo(x), 0)), 'n')}${TD(t('t_dep'), x.dependeDe != null && x.dependeDe !== '' ? '#' + (Number(x.dependeDe) + 1) : '—')}${TD(t('t_costo'), mon(num(x.costo), x.moneda), 'n')}${TD(sB, base(num(x.costo), x.moneda), 'n')}</tr>`).join('') || `<tr><td colspan="9">${esc(t('none'))}</td></tr>`}
+    ${filaTotal(8, t('tot_trabajos'), esc(fmtMoney(tot.trabajos, B)))}</tbody></table>`) + '</div>';
+  h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_repuestos'), '📦')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('r_desc'))}</th><th>${esc(t('r_codigo'))}</th><th class="n">${esc(t('r_cant'))}</th><th>${esc(t('r_unidad'))}</th><th class="n">${esc(t('r_cu'))}</th><th class="n">${esc(t('r_importe'))} ${esc(sB)}</th><th>${esc(t('r_prov'))}</th><th class="n">${esc(t('r_lead'))}</th>${papel ? '' : `<th>${esc(t('r_stock'))}</th>`}</tr></thead><tbody>
+    ${rs.map((x, i) => `<tr>${TD('#', i + 1, 'hs')}${TD(t('r_desc'), nro(i) + `<span class="ut">${esc(x.descripcion || '')}</span>`, 'lead')}${TD(t('r_codigo'), x.codigo ? `<span class="ut">${esc(x.codigo)}</span>` : '')}${TD(t('r_cant'), esc(fmtNum(num(x.cantidad), num(x.cantidad) % 1 ? 2 : 0)), 'n')}${TD(t('r_unidad'), esc(x.unidad ? lbl('u_', x.unidad) : ''))}${TD(t('r_cu'), mon(num(x.costoUnitario), x.moneda), 'n')}${TD(t('r_importe') + ' ' + sB, base(num(x.cantidad) * num(x.costoUnitario), x.moneda), 'n')}${TD(t('r_prov'), x.proveedor ? `<span class="ut">${esc(x.proveedor)}</span>` : '')}${TD(t('r_lead'), x.leadTimeDias ? esc(fmtNum(x.leadTimeDias, 0)) : '', 'n')}${papel ? '' : TD(t('r_stock'), stockHtml(stockDe(x)))}</tr>`).join('') || `<tr><td colspan="${papel ? 9 : 10}">${esc(t('none'))}</td></tr>`}
+    ${filaTotal(6, t('tot_repuestos'), esc(fmtMoney(tot.repuestos, B)), papel ? 2 : 3)}</tbody></table>`) + '</div>';
+  if (os.length || !papel) h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_otros'), '🧾')}` + wrap(`${tb('sm')}<thead><tr><th>${esc(t('o_concepto'))}</th><th>${esc(t('o_detalle'))}</th><th class="n">${esc(t('o_monto'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
+    ${os.map(x => `<tr>${TD(t('o_concepto'), esc(lbl('oc_', x.concepto || 'otro')), 'lead')}${TD(t('o_detalle'), x.detalle ? `<span class="ut">${esc(x.detalle)}</span>` : '')}${TD(t('o_monto'), mon(num(x.monto), x.moneda), 'n')}${TD(sB, base(num(x.monto), x.moneda), 'n')}</tr>`).join('') || `<tr><td colspan="4">${esc(t('none'))}</td></tr>`}
+    ${filaTotal(3, t('tot_otros'), esc(fmtMoney(tot.otros, B)))}</tbody></table>`) + '</div>';
+  return h;
+}
+// Gantt: una barra por trabajo + llegada de materiales + marca de hoy; en ejecución, barra real debajo.
+function ganttHtml(p, cr, conReal, papel) {
+  const items = cr.items || [];
+  if (!items.length && !cr.leadTimeMax) return `<div class="nota">${esc(t('c_noWork'))}</div>`;
+  const total = Math.max(1, cr.duracionDias), hoy = fbHoy();
+  const pos = d => Math.max(0, Math.min(100, d / total * 100));
+  const dHoy = diasEntre(cr.fechaInicio, hoy);
+  const marca = dHoy >= 0 && dHoy <= total ? `<i class="today" style="left:${pos(dHoy).toFixed(2)}%" title="${esc(t('c_today'))}"></i>` : '';
+  const av = p.avance || {};
+  let h = `<div class="gantt" role="img" aria-label="${esc(t('c_ganttAria'))}">`;
+  if (cr.leadTimeMax > 0) h += `<div class="gr"><div class="gl">📦 ${esc(t('c_lead'))}<small>${esc(fmtDate(cr.fechaInicio))} → ${esc(fmtDate(sumarDias(cr.fechaInicio, cr.leadTimeMax)))} · ${esc(fmtDays(cr.leadTimeMax))}</small></div><div class="gt">${marca}<i class="gb mat" style="left:0;width:${pos(cr.leadTimeMax).toFixed(2)}%"></i></div></div>`;
+  items.forEach(x => {
+    const tr = (p.trabajos || [])[x.i] || {}, a = av[String(x.i)] || {}, pct = Math.min(100, Math.max(0, num(a.pct)));
+    const late = conReal ? atrasoTrabajo(x, a, hoy) : 0;
+    let real = '';
+    if (conReal && a.ini) { const ri = diasEntre(cr.fechaInicio, a.ini), rf = a.fin ? diasEntre(cr.fechaInicio, a.fin) + 1 : Math.max(ri + 1, dHoy + 1); real = `<i class="gb real" style="left:${pos(ri).toFixed(2)}%;width:${Math.max(0.8, pos(rf) - pos(ri)).toFixed(2)}%" title="${esc(t('c_real'))}"></i>`; }
+    h += `<div class="gr" data-gi="${x.i}"><div class="gl"><span class="ut">${x.i + 1}. ${esc(tr.descripcion || '—')}</span><small>${esc(fmtDate(x.desde))} → ${esc(fmtDate(x.hasta))} · ${esc(fmtDays(x.dur))}${conReal ? ' · ' + esc(fmtPct(pct, 0)) + (late ? ' · <b class="sem-bad">' + esc(t('c_late', { n: fmtDays(late) })) + '</b>' : '') : ''}</small></div>
+      <div class="gt">${marca}<i class="gb${late ? ' late' : ''}" style="left:${pos(x.ini).toFixed(2)}%;width:${Math.max(0.8, pos(x.fin) - pos(x.ini)).toFixed(2)}%" title="${esc(t('c_plan'))}">${conReal && pct ? `<i class="pv" style="width:${pct}%"></i>` : ''}</i>${real}</div></div>`;
+  });
+  const nt = papel ? 4 : (window.innerWidth < 640 ? 1 : 3), ticks = [], vistos = new Set();
+  const corta = cr.fechaInicio.slice(0, 4) === sumarDias(cr.fechaInicio, total - 1).slice(0, 4);
+  for (let k = 0; k <= nt; k++) {
+    const d = Math.round(total * k / nt), f = sumarDias(cr.fechaInicio, Math.max(0, Math.min(d, total - 1))), x = pos(d);
+    if (vistos.has(f)) continue; vistos.add(f);
+    ticks.push(`<span style="left:${x.toFixed(2)}%;transform:translateX(${x > 85 ? '-100%' : x < 15 ? '0' : '-50%'})">${esc(corta && !(papel && k === 0) ? fmtDateCorta(f) : fmtDate(f))}</span>`);
+  }
+  h += `<div class="gx"><div></div><div class="ticks">${ticks.join('')}</div></div></div>`;
+  return h;
+}
+function cardCronograma(p, cr, ap) {
+  const ej = ['en_ejecucion', 'cerrado'].includes(p.estado);
+  const avt = avanceTotal(p, cr);
+  return `<div class="card" id="cardCrono"><div class="chead"><div><div class="ct">🗓 ${esc(t('sec_crono'))}</div><div class="cs">${esc(p.cronograma && p.cronograma.fechaInicio ? t('crono_base') : t('crono_proj'))}</div></div>
+      ${ap && esEnc() && p.estado !== 'cerrado' ? `<button type="button" class="btn sec sm" data-acc="fechaIni">📅 ${esc(t('c_editStart'))}</button>` : ''}</div>
+    <div class="fin" style="margin-bottom:10px">
+      <div class="kpi"><span>${esc(t('c_inicio'))}</span><b style="font-size:15px">${esc(fmtDate(cr.fechaInicio))}</b></div>
+      <div class="kpi"><span>${esc(t('c_fin'))}</span><b style="font-size:15px" id="crFin">${esc(fmtDate(cr.fechaFinProyectada))}</b></div>
+      <div class="kpi"><span>${esc(t('c_dur'))}</span><b style="font-size:15px">${esc(fmtDays(cr.duracionDias))}</b></div>
+      <div class="kpi"><span>${esc(ej ? t('av_total') : t('c_lead'))}</span><b style="font-size:15px">${esc(ej ? fmtPct(avt, 0) : fmtDays(cr.leadTimeMax))}</b></div></div>
+    <div class="leg" style="margin-bottom:8px"><span><i class="sw" style="background:#3987e5"></i>${esc(t('c_plan'))}</span>${cr.leadTimeMax ? `<span><i class="sw" style="background:#c98500"></i>${esc(t('c_lead'))}</span>` : ''}${ej ? `<span><i class="sw" style="background:#199e70"></i>${esc(t('c_real'))}</span><span><i class="sw" style="background:#d95926"></i>${esc(t('c_lateLeg'))}</span>` : ''}<span><i class="sw" style="background:var(--color-danger);width:3px"></i>${esc(t('c_today'))}</span></div>
+    ${ganttHtml(p, cr, ej)}
+    <div class="nota" style="margin-top:8px">${cr.leadTimeMax ? esc(t('c_note')) + ' ' : ''}${esc(t('c_hitos'))}: ${cr.hitos.map(x => esc(t(x.k)) + ' ' + esc(fmtDate(x.fecha))).join(' · ')}</div>
+    ${p.estado === 'en_ejecucion' && esEnc() ? `<div class="tw" style="margin-top:10px"><table class="sm stk"><thead><tr><th>${esc(t('t_desc'))}</th><th class="n">${esc(t('avance'))}</th><th>${esc(t('av_ini'))}</th><th>${esc(t('av_fin'))}</th><th></th></tr></thead><tbody>
+      ${cr.items.map(x => { const a = (p.avance || {})[String(x.i)] || {}; return `<tr>${TD(t('t_desc'), `<span class="ut">${x.i + 1}. ${esc(((p.trabajos || [])[x.i] || {}).descripcion || '')}</span>`, 'lead')}${TD(t('avance'), esc(fmtPct(num(a.pct), 0)), 'n')}${TD(t('av_ini'), esc(a.ini ? fmtDate(a.ini) : '—'))}${TD(t('av_fin'), esc(a.fin ? fmtDate(a.fin) : '—'))}<td><button type="button" class="btn sec sm" data-av="${x.i}">${esc(t('av_update'))}</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}</div>`;
+}
+function cardGasto(p, tot, ej) {
+  const B = tot.B, T = tot.T;
+  const ref = Math.max(ej.aprobado, ej.exposicion, 1), wr = ej.real / ref * 100, wc = ej.comp / ref * 100, wa = ej.aprobado / ref * 100;
+  const k = (n, v, cls) => `<div class="kpi"><span>${esc(n)}</span><b class="${cls || ''}" style="font-size:16px">${v}</b></div>`;
+  const plan = { trabajo: tot.trabajos, repuesto: tot.repuestos, otro: tot.otros + tot.contingencia + tot.itbis };
+  const gs = (p.gastoReal || []).slice().reverse();
+  return `<div class="card" id="cardGasto"><div class="chead"><div><div class="ct">💸 ${esc(t('sec_gasto'))}</div><div class="cs">${esc(t('g_appendOnly'))}</div></div>
+      ${['aprobado', 'en_ejecucion'].includes(p.estado) ? `<button type="button" class="btn sm" data-acc="gasto">${esc(t('g_add'))}</button>` : ''}</div>
+    <div class="fin">${k(t('g_aprobado'), dinero(ej.aprobado, B, T))}${k(t('g_comp'), dinero(ej.comp, B, T))}${k(t('g_real'), dinero(ej.real, B, T), 'sem-' + ej.sem)}${k(t('g_disp'), dinero(ej.disponible, B, T), ej.disponible < 0 ? 'sem-bad' : '')}</div>
+    <div class="meter" style="height:16px;margin-top:12px" role="img" aria-label="${esc(t('g_pct') + ' ' + fmtPct(ej.pct))}"><i class="r${ej.real > ej.aprobado ? ' over' : ''}" style="width:${Math.min(100, wr).toFixed(1)}%"></i><i style="left:${Math.min(100, wr).toFixed(1)}%;width:${Math.min(100 - Math.min(100, wr), wc).toFixed(1)}%;background:#c98500"></i><i style="left:${Math.min(99.5, wa).toFixed(1)}%;width:3px;background:var(--color-text)"></i></div>
+    <div class="leg"><span><i class="sw" style="background:#199e70"></i>${esc(t('g_real'))} ${esc(fmtPct(ej.pct))}</span><span><i class="sw" style="background:#c98500"></i>${esc(t('g_comp'))}</span><span><i class="sw" style="background:var(--color-text);width:3px"></i>${esc(t('g_aprobado'))}</span>
+      <span class="sem-${ej.sem}"><b>● ${esc(t('sem_' + ej.sem))}</b></span><span>${esc(t('g_desv'))}: <b class="${ej.desviacion > 0 ? 'sem-bad' : 'sem-ok'}">${esc(fmtMoney(ej.desviacion, B))}</b></span></div>
+    <div class="tw" style="margin-top:10px"><table class="sm stk"><thead><tr><th>${esc(t('g_byCat'))}</th><th class="n">${esc(t('g_planned'))}</th><th class="n">${esc(t('g_real'))}</th><th class="n">%</th></tr></thead><tbody>
+      ${CATS.map(c => `<tr>${TD(t('g_byCat'), esc(t('cat_' + c)), 'lead')}${TD(t('g_planned'), esc(fmtMoney(plan[c], B)), 'n')}${TD(t('g_real'), esc(fmtMoney(ej.porCat[c], B)), 'n')}${TD('%', esc(fmtPct(plan[c] > 0 ? ej.porCat[c] / plan[c] * 100 : null, 0)), 'n')}</tr>`).join('')}</tbody></table></div>
+    <div class="tw" style="margin-top:10px"><table class="stk"><thead><tr><th>${esc(t('g_fecha'))}</th><th>${esc(t('g_tipo'))}</th><th>${esc(t('g_cat'))}</th><th>${esc(t('g_concepto'))}</th><th>${esc(t('g_doc'))}</th><th class="n">${esc(t('o_monto'))}</th><th class="n">${esc(SIM[B])}</th><th>${esc(t('g_por'))}</th></tr></thead><tbody>
+      ${gs.map(g => `<tr>${TD(t('g_fecha'), esc(fmtDate(g.fecha)), 'nw')}${TD(t('g_tipo'), esc(g.tipo === 'compromiso' ? t('g_tComp') : t('g_tReal')))}${TD(t('g_cat'), esc(t('cat_' + (CATS.includes(g.categoria) ? g.categoria : 'otro'))))}${TD(t('g_concepto'), `<span class="ut">${esc(g.concepto || '')}${g.nota ? `<br><small class="nota">${esc(g.nota)}</small>` : ''}</span>`, 'lead')}${TD(t('g_doc'), g.documento || g.ref ? `<span class="ut">${esc(g.documento || '')}${g.ref ? ' → ' + esc(g.ref) : ''}</span>` : '')}${TD(t('o_monto'), esc(fmtMoney(num(g.monto), monLinea(g.moneda, B))), 'n')}${TD(SIM[B], esc(fmtMoney(conv(num(g.monto), monLinea(g.moneda, B), B, T), B)), 'n')}${TD(t('g_por'), `<span class="ut">${esc(g.por || '')}</span>`)}</tr>`).join('') || `<tr><td colspan="8">${esc(t('g_empty'))}</td></tr>`}</tbody></table></div></div>`;
+}
+function cardAprobacion(p) {
+  const a = p.aprobacion, prev = p.aprobacionAnterior;
+  const blk = (x, tit) => `<div class="ct" style="font-size:13.5px;margin-top:6px">${esc(tit)}</div><div>${esc(t('d_aprobadoPor', { n: x.por || '—', f: fmtDateTime(x.en) }))}</div><div><b>${esc(fmtMoney(num(x.montoAprobado), monLinea(x.moneda, 'DOP')))}</b> · ${esc(t('rateLine', { t: fmtNum(x.tasaCambio, 2) }))}</div>${x.nota ? `<div class="nota ut">${esc(x.nota)}</div>` : ''}`;
+  return `<div class="card" id="cardAprob"><div class="ct">✅ ${esc(t('d_aprobacion'))}</div>${a ? blk(a, t('st_aprobado')) : `<div class="nota">${esc(t('d_sinAprob'))}</div>`}${prev ? blk(prev, t('d_prevApproval')) : ''}</div>`;
+}
+function cardHistorial(p) {
+  const hs = (p.historial || []).slice().reverse();
+  return `<div class="card" id="cardHist"><div class="ct">🕑 ${esc(t('d_historial'))}</div><ul class="hist">${hs.map(x => `<li>${estBadge(x.estado)} ${x.accion === 'creado' ? esc(t('h_creado')) : x.accion === 'cronograma' ? esc(t('h_editado')) : ''}<small><span class="ut">${esc(x.por || '')}</span> · ${esc(fmtDateTime(x.en))}</small>${x.nota ? `<div class="ut">${esc(x.nota)}</div>` : ''}</li>`).join('')}</ul></div>`;
+}
+function enlazarDetalle(p, cr) {
+  $('app').querySelectorAll('[data-acc]').forEach(b => b.onclick = () => accion(b.dataset.acc, p, cr));
+  $('app').querySelectorAll('[data-av]').forEach(b => b.onclick = () => modalAvance(p, cr, Number(b.dataset.av)));
+}
+function accion(a, p, cr) {
+  if (a === 'editar') return ir('#editar=' + encodeURIComponent(p.id));
+  if (a === 'dup') return ir('#nuevo&dup=' + encodeURIComponent(p.id));
+  if (a === 'ficha') return abrirFicha(p);
+  if (a === 'xls') return exportarProyecto(p);
+  if (a === 'compras') return exportarCompras(p);
+  if (a === 'revisar') return modalAprobacion(p);
+  if (a === 'gasto') return modalGasto(p);
+  if (a === 'fechaIni') return modalFechaInicio(p, cr);
+  if (a === 'enviar') {
+    const errs = validar(p);
+    if (errs.length) { toast(t('v_fix') + ' ' + errs.join(' '), 'error'); return; }
+    return modalTransicion(p, 'enviado', 'a_send', false);
+  }
+  if (a === 'retirar') return modalTransicion(p, 'borrador', 'a_withdraw', false);
+  if (a === 'iniciar') return modalTransicion(p, 'en_ejecucion', 'a_start', false);
+  if (a === 'cerrar') return modalTransicion(p, 'cerrado', 'a_close', false);
+  if (a === 'cancelar') return modalTransicion(p, 'cancelado', 'a_cancel', true);
+  if (a === 'reabrir') return modalTransicion(p, 'borrador', 'a_reopen', true);
+}
+
+// ══════ CAMBIOS DE ESTADO (transacción: historial y gastos solo crecen) ══════
+const BORRAR = Object.freeze({ borrar: true }); // campo que se quita del documento (FieldValue.delete)
+function entradaHistorial(estado, nota, accion) { const e = { estado, por: quien(), uid: uidYo(), en: new Date().toISOString(), nota: String(nota || '').slice(0, 1000) }; if (accion) e.accion = accion; return e; }
+async function cambiarProyecto(p, armar) {
+  if (!navigator.onLine) throw Object.assign(new Error(t('err_offline')), { code: 'unavailable' });
+  const ref = db.collection('capex').doc(p.id);
+  const res = await db.runTransaction(async tx => {
+    const s = await tx.get(ref);
+    if (!s.exists) throw Object.assign(new Error(t('notFound')), { code: 'not-found' });
+    const cur = { id: s.id, ...s.data() };
+    const upd = armar(cur);
+    if (!upd) throw Object.assign(new Error(t('err_conflict')), { code: 'aborted' });
+    const w = {}; Object.keys(upd).forEach(k => { w[k] = upd[k] === BORRAR ? firebase.firestore.FieldValue.delete() : upd[k]; });
+    tx.update(ref, { ...w, updatedAt: fbTimestamp(), actualizadoPor: quien() });
+    return { cur, upd };
+  });
+  const loc = { ...res.cur };
+  Object.keys(res.upd).forEach(k => {
+    const v = res.upd[k];
+    if (v === BORRAR) { delete loc[k]; return; }
+    if (k.includes('.')) { const [a, b] = k.split('.'); loc[a] = { ...(loc[a] || {}), [b]: v }; } else loc[k] = v;
+  });
+  guardarEnCache(loc);
+  return loc;
+}
+function modalTransicion(p, nuevo, accKey, notaReq) {
+  abrirModal(`<h3 id="mTitle">${esc(t('m_transTitle', { a: t(accKey), c: p.codigo }))}</h3><div class="nota ut">${esc(p.titulo || '')}</div>
+    <div style="margin:10px 0">${estBadge(p.estado)} → ${estBadge(nuevo)}</div>
+    <label class="f" for="mNota">${esc(t('m_nota'))}${notaReq ? ' *' : ''}</label><textarea id="mNota" maxlength="1000"></textarea>
+    <div class="nota">${esc(notaReq ? t('m_notaReq') : t('m_transHint'))}</div><div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn ${nuevo === 'cancelado' ? 'mal' : ''}" id="mSi">${esc(t(accKey))}</button></div>`);
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const nota = $('mNota').value.trim();
+    if (notaReq && !nota) { $('mErr').textContent = t('v_nota'); return; }
+    $('mSi').disabled = true;
+    try {
+      await cambiarProyecto(p, cur => {
+        if (cur.estado !== p.estado) return null;
+        const upd = { estado: nuevo, historial: (cur.historial || []).concat([entradaHistorial(nuevo, nota)]) };
+        if (accKey === 'a_reopen') { if (cur.aprobacion) upd.aprobacionAnterior = cur.aprobacion; upd.aprobacion = BORRAR; upd.cronograma = BORRAR; }
+        if (nuevo === 'en_ejecucion' && !cur.cronograma) upd.cronograma = cronoGuardado(cur, fbHoy());
+        return upd;
+      });
+      cerrarModal(); toast(t('ok_state', { s: t('st_' + nuevo) })); pintar();
+    } catch (e) { $('mSi').disabled = false; if (e.code === 'aborted') { CACHE_ANIO.clear(); cerrarModal(); pintar(); } fallo(e); }
+  };
+}
+function modalAprobacion(p) {
+  const tot = calcTotales(p), B = tot.B;
+  abrirModal(`<h3 id="mTitle">${esc(t('m_approveTitle', { c: p.codigo }))}</h3><div class="nota ut">${esc(p.titulo || '')}</div>
+    <div class="fin" style="margin-top:10px"><div class="kpi"><span>${esc(t('m_requested'))}</span><b style="font-size:15px">${esc(fmtMoney(tot.totalDOP, 'DOP'))}</b><small>${esc(fmtMoney(tot.totalUSD, 'USD'))}</small></div>
+      <div class="kpi"><span>${esc(t('fin_payback'))}</span><b style="font-size:15px">${esc(fmtYears(calcFinanzas(p, tot).payback))}</b><small>${esc(t('fin_roi'))} ${esc(fmtPct(calcFinanzas(p, tot).roi))}</small></div></div>
+    <div class="g2"><div><label class="f" for="mMonto">${esc(t('m_montoAprobado'))} (${esc(SIM[B])})</label><input id="mMonto" type="number" inputmode="decimal" step="0.01" min="0" value="${r2(tot.total)}"></div>
+      <div><label class="f" for="mTasa">${esc(t('f_tasa'))}</label><input id="mTasa" type="number" inputmode="decimal" step="0.0001" min="0" value="${esc(p.tasaCambio || CFG.tasaCambio)}"></div>
+      <div><label class="f" for="mIni">${esc(t('m_fechaInicio'))}</label><input id="mIni" type="date" value="${fbHoy()}"></div>
+      <div><label class="f">${esc(t('c_fin'))}</label><div id="mFin" style="padding:10px 0;font-weight:800"></div></div></div>
+    <label class="f" for="mNota">${esc(t('m_nota'))}</label><textarea id="mNota" maxlength="1000"></textarea>
+    <div class="nota">${esc(t('m_approveHint'))} ${esc(t('m_notaReq'))}</div><div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn warn" data-dec="en_espera">⏸ ${esc(t('a_hold'))}</button><button type="button" class="btn mal" data-dec="rechazado">✖ ${esc(t('a_reject'))}</button><button type="button" class="btn ok" data-dec="aprobado">✅ ${esc(t('a_approve'))}</button></div>`);
+  const finTxt = () => { const c = calcCronograma(p, $('mIni').value || fbHoy()); $('mFin').textContent = fmtDate(c.fechaFinProyectada) + ' · ' + fmtDays(c.duracionDias); };
+  finTxt(); $('mIni').oninput = finTxt;
+  $('mNo').onclick = cerrarModal;
+  $('modal').querySelectorAll('[data-dec]').forEach(b => b.onclick = async () => {
+    const dec = b.dataset.dec, nota = $('mNota').value.trim(), monto = num($('mMonto').value), tasa = num($('mTasa').value), ini = $('mIni').value;
+    if (dec !== 'aprobado' && !nota) { $('mErr').textContent = t('v_nota'); return; }
+    if (dec === 'aprobado' && !(monto > 0)) { $('mErr').textContent = t('v_monto'); return; }
+    if (dec === 'aprobado' && !(tasa > 0)) { $('mErr').textContent = t('v_tasa'); return; }
+    if (dec === 'aprobado' && !fbParseFecha(ini)) { $('mErr').textContent = t('v_fecha'); return; }
+    $('modal').querySelectorAll('button').forEach(x => { x.disabled = true; });
+    try {
+      await cambiarProyecto(p, cur => {
+        if (!['enviado', 'en_espera'].includes(cur.estado)) return null;
+        const upd = { estado: dec, historial: (cur.historial || []).concat([entradaHistorial(dec, nota)]) };
+        if (dec === 'aprobado') {
+          const c2 = { ...cur, tasaCambio: tasa };
+          upd.tasaCambio = tasa;
+          upd.totales = totalesGuardados(c2);
+          upd.aprobacion = { por: quien(), uid: uidYo(), en: new Date().toISOString(), montoAprobado: r2(monto), moneda: baseDe(cur), tasaCambio: tasa, nota };
+          upd.cronograma = cronoGuardado(c2, ini);
+        }
+        return upd;
+      });
+      cerrarModal(); toast(t('ok_state', { s: t('st_' + dec) })); pintar();
+    } catch (e) { $('modal').querySelectorAll('button').forEach(x => { x.disabled = false; }); if (e.code === 'aborted') { CACHE_ANIO.clear(); cerrarModal(); pintar(); } fallo(e); }
+  });
+}
+function modalFechaInicio(p, cr) {
+  abrirModal(`<h3 id="mTitle">${esc(t('c_editStart'))} · ${esc(p.codigo)}</h3>
+    <label class="f" for="mIni">${esc(t('m_fechaInicio'))}</label><input id="mIni" type="date" value="${esc(cr.fechaInicio)}">
+    <label class="f" for="mNota">${esc(t('m_nota'))} *</label><textarea id="mNota" maxlength="1000"></textarea><div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mSi">${esc(t('a_ok'))}</button></div>`);
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const ini = $('mIni').value, nota = $('mNota').value.trim();
+    if (!fbParseFecha(ini)) { $('mErr').textContent = t('v_fecha'); return; }
+    if (!nota) { $('mErr').textContent = t('v_nota'); return; }
+    try {
+      await cambiarProyecto(p, cur => (APROBADOS.includes(cur.estado) ? { cronograma: cronoGuardado(cur, ini), historial: (cur.historial || []).concat([entradaHistorial(cur.estado, nota + ' (' + ini + ')', 'cronograma')]) } : null));
+      cerrarModal(); toast(t('ok_saved')); pintar();
+    } catch (e) { fallo(e); }
+  };
+}
+function modalAvance(p, cr, i) {
+  const a = (p.avance || {})[String(i)] || {}, tr = (p.trabajos || [])[i] || {};
+  abrirModal(`<h3 id="mTitle">${esc(t('av_update'))}</h3><div class="nota ut">${i + 1}. ${esc(tr.descripcion || '')}</div>
+    <div class="g3"><div><label class="f" for="mPct">${esc(t('avance'))} %</label><input id="mPct" type="number" min="0" max="100" step="5" value="${esc(num(a.pct))}"></div>
+    <div><label class="f" for="mIni">${esc(t('av_ini'))}</label><input id="mIni" type="date" value="${esc(a.ini || '')}"></div>
+    <div><label class="f" for="mFin">${esc(t('av_fin'))}</label><input id="mFin" type="date" value="${esc(a.fin || '')}"></div></div>
+    <label class="ck"><input type="checkbox" id="mDone"${num(a.pct) >= 100 ? ' checked' : ''}> ${esc(t('av_done'))}</label><div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mSi">${esc(t('a_ok'))}</button></div>`);
+  $('mDone').onchange = () => { if ($('mDone').checked) { $('mPct').value = 100; if (!$('mFin').value) $('mFin').value = fbHoy(); if (!$('mIni').value) $('mIni').value = cr.items[i] ? cr.items[i].desde : fbHoy(); } };
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const pct = Math.min(100, Math.max(0, num($('mPct').value))), ini = $('mIni').value, fin = $('mFin').value;
+    if ((ini && !fbParseFecha(ini)) || (fin && !fbParseFecha(fin)) || (ini && fin && fin < ini)) { $('mErr').textContent = t('v_fecha'); return; }
+    const v = { pct, ini: ini || (pct > 0 ? fbHoy() : ''), fin: pct >= 100 ? (fin || fbHoy()) : fin, por: quien(), en: new Date().toISOString() };
+    try {
+      await cambiarProyecto(p, cur => (cur.estado === 'en_ejecucion' ? { ['avance.' + i]: v } : null));
+      cerrarModal(); toast(t('ok_saved')); pintar();
+    } catch (e) { fallo(e); }
+  };
+}
+function modalGasto(p) {
+  const B = baseDe(p);
+  abrirModal(`<h3 id="mTitle">${esc(t('g_add'))} · ${esc(p.codigo)}</h3><div class="nota">${esc(t('g_appendOnly'))}</div>
+    <div class="g2"><div><label class="f" for="gTipo">${esc(t('g_tipo'))}</label><select id="gTipo"><option value="real">${esc(t('g_tReal'))}</option><option value="compromiso">${esc(t('g_tComp'))}</option></select></div>
+      <div><label class="f" for="gCat">${esc(t('g_cat'))}</label><select id="gCat">${CATS.map(c => `<option value="${c}">${esc(t('cat_' + c))}</option>`).join('')}</select></div>
+      <div><label class="f" for="gFecha">${esc(t('g_fecha'))}</label><input id="gFecha" type="date" value="${fbHoy()}"></div>
+      <div><label class="f" for="gDoc">${esc(t('g_doc'))}</label><input id="gDoc" maxlength="60"></div>
+      <div class="spanAll"><label class="f" for="gConc">${esc(t('g_concepto'))} *</label><input id="gConc" maxlength="200"></div>
+      <div><label class="f" for="gMonto">${esc(t('o_monto'))} *</label><input id="gMonto" type="number" inputmode="decimal" step="0.01"></div>
+      <div><label class="f" for="gMon">${esc(t('f_moneda2'))}</label><select id="gMon">${MONEDAS.map(m => `<option value="${m}"${m === B ? ' selected' : ''}>${SIM[m]}</option>`).join('')}</select></div>
+      <div class="spanAll" id="gRefW"><label class="f" for="gRef">${esc(t('g_ref'))}</label><input id="gRef" maxlength="60" list="gRefs"><datalist id="gRefs">${(p.gastoReal || []).filter(g => g.tipo === 'compromiso' && g.documento).map(g => `<option value="${esc(g.documento)}"></option>`).join('')}</datalist></div>
+      <div class="spanAll"><label class="f" for="gNota">${esc(t('g_nota'))}</label><input id="gNota" maxlength="300"></div></div>
+    <div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mSi">${esc(t('a_ok'))}</button></div>`);
+  $('gTipo').onchange = () => { $('gRefW').style.display = $('gTipo').value === 'real' ? '' : 'none'; };
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const monto = $('gMonto').value, conc = $('gConc').value.trim(), fecha = $('gFecha').value;
+    if (!conc) { $('mErr').textContent = t('v_concepto'); return; }
+    if (!numOk(monto) || num(monto) === 0) { $('mErr').textContent = t('v_monto'); return; }
+    if (!fbParseFecha(fecha)) { $('mErr').textContent = t('v_fecha'); return; }
+    const g = { id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), fecha, tipo: $('gTipo').value, categoria: $('gCat').value, concepto: conc,
+      documento: $('gDoc').value.trim(), ref: $('gTipo').value === 'real' ? $('gRef').value.trim() : '', monto: r2(num(monto)), moneda: $('gMon').value, nota: $('gNota').value.trim(), por: quien(), porUid: uidYo(), en: new Date().toISOString() };
+    $('mSi').disabled = true;
+    try {
+      await cambiarProyecto(p, cur => (['aprobado', 'en_ejecucion'].includes(cur.estado) ? { gastoReal: (cur.gastoReal || []).concat([g]) } : null));
+      cerrarModal(); toast(t('ok_gasto')); pintar();
+    } catch (e) { $('mSi').disabled = false; fallo(e); }
+  };
+}
+
+// ══════ EDITOR (crear, editar, duplicar, desde equipo) ══════
+const vacioTrabajo = B => ({ descripcion: '', responsable: 'interno', tipoRecurso: 'mo_interna', horas: '', dias: '', costo: '', moneda: B, orden: 0, dependeDe: null });
+const vacioRepuesto = B => ({ descripcion: '', codigo: '', cantidad: 1, unidad: 'und', costoUnitario: '', moneda: B, proveedor: '', enStock: null, leadTimeDias: '' });
+const vacioOtro = B => ({ concepto: 'flete', detalle: '', monto: '', moneda: B });
+function nuevoBorrador() {
+  return { titulo: '', descripcion: '', justificacion: { problema: '', beneficio: '' }, tipo: 'mejora', prioridad: 'media', planta: fbNaveActiva() || (fbNavesDisponibles().length === 1 ? fbNavesDisponibles()[0] : ''), area: '', linea: '',
+    equipoIds: [], equipos: [], anioFiscal: new Date().getFullYear(), moneda: 'DOP', tasaCambio: Number(CFG.tasaCambio) || 63,
+    trabajos: [vacioTrabajo('DOP')], repuestos: [], otrosCostos: [], contingenciaPct: num(CFG.contingenciaPct != null ? CFG.contingenciaPct : 10), itbisAplica: true, itbisPct: num(CFG.itbisPct != null ? CFG.itbisPct : 18),
+    beneficios: { paroEvitado: '', energia: '', repuestos: '', manoObra: '', otros: '', vidaUtilAnios: 10, tasaDescuentoPct: 12 } };
+}
+const CAMPOS_EDIT = ['titulo', 'descripcion', 'justificacion', 'tipo', 'prioridad', 'planta', 'area', 'linea', 'equipoIds', 'equipos', 'anioFiscal', 'moneda', 'tasaCambio', 'trabajos', 'repuestos', 'otrosCostos', 'contingenciaPct', 'itbisAplica', 'itbisPct', 'beneficios'];
+const clonar = o => JSON.parse(JSON.stringify(o));
+function equipoIdx(id) { return fbEquiposIndice().find(e => e.id === id) || null; }
+function agregarEquipo(d, id) {
+  if (!id || d.equipoIds.includes(id)) return;
+  const e = equipoIdx(id); if (!e) return;
+  d.equipoIds.push(id);
+  d.equipos.push({ id, nombre: e.nombre, criticidad: e.criticidad || '' });
+  if (!d.planta) d.planta = fbPlantaDeEquipo(id) || '';
+  if (!d.area && e.localidad) d.area = fbNombreActual('areas', e.localidad);
+  if (!d.linea && e.linea) d.linea = fbNombreActual('lineas', e.linea);
+}
+async function abrirEditor(id, q) {
+  $('portWrap').style.display = 'none';
+  window.__capexVista = 'edit';
+  let d, orig = null;
+  if (id) {
+    let p; try { p = await proyecto(id); } catch (e) { p = null; }
+    if (!p) { $('app').innerHTML = `<div class="card empty">${esc(t('notFound'))}</div>`; return; }
+    if (!EDITABLES.includes(p.estado)) { toast(p.estado === 'enviado' ? t('editWithdraw') : t('lockedAfter'), 'warn'); ir('#p=' + encodeURIComponent(id)); return; }
+    orig = p; d = {}; CAMPOS_EDIT.forEach(k => { if (p[k] !== undefined) d[k] = clonar(p[k]); });
+    d = { ...nuevoBorrador(), ...d };
+  } else {
+    d = nuevoBorrador();
+    if (q && q.dup) {
+      let p = null; try { p = await proyecto(q.dup); } catch (e) {}
+      if (p) { CAMPOS_EDIT.forEach(k => { if (p[k] !== undefined) d[k] = clonar(p[k]); }); d.titulo = (p.titulo || '') + t('copySuffix'); d.anioFiscal = new Date().getFullYear(); d.tasaCambio = Number(p.tasaCambio) || d.tasaCambio; }
+    }
+    if (q && q.equipo) { agregarEquipo(d, q.equipo); const e = equipoIdx(q.equipo); if (e) { d.tipo = 'reemplazo'; d.prioridad = (e.criticidad === 'A') ? 'alta' : 'media'; d.titulo = t('replTitle', { eq: e.nombre }); } }
+  }
+  ['trabajos', 'repuestos', 'otrosCostos', 'equipoIds', 'equipos'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; });
+  d.justificacion = { problema: '', beneficio: '', ...(d.justificacion || {}) };
+  d.beneficios = { ...nuevoBorrador().beneficios, ...(d.beneficios || {}) };
+  EDIT = { id: id || null, d, dirty: !!(q && (q.dup || q.equipo)), orig };
+  pintarEditor();
+}
+function opcionesAreas(nave) {
+  const kn = naveKey(nave), m = new Map();
+  fbListaNombres('areas').forEach(a => { if (a.activo !== false && (!kn || !a.plantaNombre || naveKey(a.plantaNombre) === kn)) m.set(K(a.nombre), a.nombre); });
+  fbEquiposIndice().forEach(e => { if (e.localidad && (!kn || naveKey(fbPlantaDeEquipo(e.id)) === kn)) { const n = fbNombreActual('areas', e.localidad); if (!m.has(K(n))) m.set(K(n), n); } });
+  return [...m.values()].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+}
+function opcionesLineas(nave, area) {
+  const m = new Map(), ka = area ? fbClaveNombre('areas', area) : '';
+  fbListaNombres('lineas').forEach(l => { if (l.activo !== false && (!ka || fbClaveNombre('areas', l.areaNombre || '') === ka)) m.set(K(l.nombre), l.nombre); });
+  fbEquiposIndice().forEach(e => { if (e.linea && (!ka || fbClaveNombre('areas', e.localidad || '') === ka) && (!nave || naveKey(fbPlantaDeEquipo(e.id)) === naveKey(nave))) m.set(K(e.linea), e.linea); });
+  return [...m.values()].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+}
+const optsHtml = (vals, cur, lab, vacio) => (vacio != null ? `<option value="">${esc(vacio)}</option>` : '') + vals.map(v => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(lab ? lab(v) : v)}</option>`).join('') + (cur && !vals.map(String).includes(String(cur)) ? `<option value="${esc(cur)}" selected>${esc(lab ? lab(cur) : cur)}</option>` : '');
+function inp(f, v, o) {
+  o = o || {};
+  const id = 'e_' + f.replace(/\W/g, '_');
+  return `<div class="${o.cls || ''}"><label class="f" for="${id}">${esc(o.l)}</label>${o.ta ? `<textarea id="${id}" data-f="${f}" maxlength="${o.max || 2000}">${esc(v == null ? '' : v)}</textarea>`
+    : `<input id="${id}" data-f="${f}"${o.n ? ' data-n="1" type="number" inputmode="decimal" step="any"' : ' type="text"'}${o.min != null ? ` min="${o.min}"` : ''} maxlength="${o.max || 200}" value="${esc(v == null ? '' : v)}">`}</div>`;
+}
+function sel(f, v, vals, lab, o) { o = o || {}; const id = 'e_' + f.replace(/\W/g, '_'); return `<div class="${o.cls || ''}"><label class="f" for="${id}">${esc(o.l)}</label><select id="${id}" data-f="${f}">${optsHtml(vals, v, lab, o.vacio)}</select></div>`; }
+function filaInp(arr, i, k, v, l, o) { o = o || {}; const id = `r_${arr}_${i}_${k}`; return `<div class="${o.cls || ''}"><label class="f" for="${id}">${esc(l)}</label><input id="${id}" data-arr="${arr}" data-i="${i}" data-k="${k}"${o.n ? ' data-n="1" type="number" inputmode="decimal" step="any" min="0"' : ' type="text"'} maxlength="${o.max || 200}" value="${esc(v == null ? '' : v)}"></div>`; }
+function filaSel(arr, i, k, v, vals, lab, l, o) { o = o || {}; const id = `r_${arr}_${i}_${k}`; return `<div class="${o.cls || ''}"><label class="f" for="${id}">${esc(l)}</label><select id="${id}" data-arr="${arr}" data-i="${i}" data-k="${k}">${optsHtml(vals, v, lab, o.vacio)}</select></div>`; }
+const monSel = (arr, i, v) => filaSel(arr, i, 'moneda', v, MONEDAS, m => SIM[m], t('f_moneda2'));
+function depOpts(d, i) { return d.trabajos.map((x, j) => j).filter(j => j !== i); }
+function htmlTrabajos(d) {
+  return d.trabajos.map((x, i) => `<div class="rowc" data-row="trabajos" data-ri="${i}"><div class="rh"><span>#${i + 1}</span><button type="button" class="btn sec sm" data-del="trabajos" data-i="${i}" aria-label="${esc(t('a_remove'))} #${i + 1}">✕ ${esc(t('a_remove'))}</button></div>
+    <div class="g4">${filaInp('trabajos', i, 'descripcion', x.descripcion, t('t_desc'), { cls: 'spanAll', max: 300 })}
+      ${filaSel('trabajos', i, 'responsable', x.responsable, RESPONSABLES, v => t('resp_' + v), t('t_resp'))}${filaSel('trabajos', i, 'tipoRecurso', x.tipoRecurso, RECURSOS, v => t('rec_' + v), t('t_recurso'))}
+      ${filaInp('trabajos', i, 'horas', x.horas, t('t_horas'), { n: 1 })}${filaInp('trabajos', i, 'dias', x.dias, t('t_dias'), { n: 1 })}
+      ${filaInp('trabajos', i, 'costo', x.costo, t('t_costo'), { n: 1 })}${monSel('trabajos', i, x.moneda)}
+      ${filaSel('trabajos', i, 'dependeDe', x.dependeDe == null ? '' : x.dependeDe, depOpts(d, i), j => '#' + (j + 1) + ' ' + (d.trabajos[j].descripcion || ''), t('t_dep'), { cls: 'span2', vacio: t('t_noDep') })}</div></div>`).join('');
+}
+function htmlRepuestos(d) {
+  return d.repuestos.map((x, i) => `<div class="rowc" data-row="repuestos" data-ri="${i}"><div class="rh"><span>#${i + 1} <span data-stock="${i}">${stockHtml(stockDe(x))}</span></span><button type="button" class="btn sec sm" data-del="repuestos" data-i="${i}" aria-label="${esc(t('a_remove'))} #${i + 1}">✕ ${esc(t('a_remove'))}</button></div>
+    <div class="g4">${filaInp('repuestos', i, 'descripcion', x.descripcion, t('r_desc'), { cls: 'span2', max: 300 })}${filaInp('repuestos', i, 'codigo', x.codigo, t('r_codigo'), { max: 80 })}${filaInp('repuestos', i, 'proveedor', x.proveedor, t('r_prov'), { max: 120 })}
+      ${filaInp('repuestos', i, 'cantidad', x.cantidad, t('r_cant'), { n: 1 })}${filaSel('repuestos', i, 'unidad', x.unidad || 'und', UNIDADES, v => t('u_' + v), t('r_unidad'))}
+      ${filaInp('repuestos', i, 'costoUnitario', x.costoUnitario, t('r_cu'), { n: 1 })}${monSel('repuestos', i, x.moneda)}${filaInp('repuestos', i, 'leadTimeDias', x.leadTimeDias, t('r_lead'), { n: 1 })}</div></div>`).join('');
+}
+function htmlOtros(d) {
+  return d.otrosCostos.map((x, i) => `<div class="rowc" data-row="otrosCostos" data-ri="${i}"><div class="rh"><span>#${i + 1}</span><button type="button" class="btn sec sm" data-del="otrosCostos" data-i="${i}" aria-label="${esc(t('a_remove'))} #${i + 1}">✕ ${esc(t('a_remove'))}</button></div>
+    <div class="g4">${filaSel('otrosCostos', i, 'concepto', x.concepto || 'otro', CONCEPTOS, v => t('oc_' + v), t('o_concepto'))}${filaInp('otrosCostos', i, 'detalle', x.detalle, t('o_detalle'), { max: 200 })}
+      ${filaInp('otrosCostos', i, 'monto', x.monto, t('o_monto'), { n: 1 })}${monSel('otrosCostos', i, x.moneda)}</div></div>`).join('');
+}
+function sugerenciaRent(d) {
+  if (!esAdmin() || !d.equipoIds.length) return '';
+  let s = null; try { s = JSON.parse(localStorage.getItem('capexRentSug') || 'null'); } catch (e) {}
+  const eqs = s && s.equipos ? d.equipoIds.map(id => s.equipos[id] && { id, ...s.equipos[id] }).filter(Boolean) : [];
+  if (!eqs.length) return `<div class="sug nota">${esc(t('sugRentNone'))}</div>`;
+  const sum = k => eqs.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  return `<div class="sug" id="sugRent"><b>💡 ${esc(t('sugRent'))}</b> <span class="nota">(${esc(s.periodo || '')} · ${esc(fmtDate(s.fecha))})</span><br>
+    ${eqs.map(x => esc(t('sugRentTxt', { eq: x.nombre, p: fmtMoney(x.paro, 'DOP'), r: fmtMoney(x.rep, 'DOP'), m: fmtMoney(x.mo, 'DOP') })) + (x.precio ? ' ' + esc(t('sugRentNueva', { n: fmtMoney(x.precio, 'DOP') })) : '')).join('<br>')}
+    <div style="margin-top:8px"><button type="button" class="btn sm" id="bSug" data-paro="${sum('paro')}" data-rep="${sum('rep')}" data-mo="${sum('mo')}" data-mant="${eqs.reduce((a, x) => a + (Number(x.precio) || 0) * (Number(x.mantNuevaPct) || 0) / 100, 0)}">${esc(t('useSug'))}</button></div></div>`;
+}
+function pintarEditor() {
+  const d = EDIT.d, B = d.moneda === 'USD' ? 'USD' : 'DOP';
+  window.__capexVista = 'edit';
+  Object.keys(charts).forEach(k => { try { charts[k].destroy(); } catch (e) {} delete charts[k]; });
+  $('portWrap').style.display = 'none';
+  const naves = fbNavesDisponibles();
+  const y0 = new Date().getFullYear(), anios = [y0 - 1, y0, y0 + 1, y0 + 2, y0 + 3];
+  const eqDisp = fbEquiposIndice().filter(e => e.nombre && e.activo !== false && !d.equipoIds.includes(e.id) && (!d.planta || naveKey(fbPlantaDeEquipo(e.id)) === naveKey(d.planta)) && (!d.area || fbClaveNombre('areas', e.localidad) === fbClaveNombre('areas', d.area)))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }));
+  const titulo = EDIT.id ? t('editTitle', { c: (EDIT.orig && EDIT.orig.codigo) || '' }) : t('newTitle');
+  $('app').innerHTML = `<div class="btns" style="margin-bottom:10px"><a class="btn sec sm" href="${EDIT.id ? '#p=' + encodeURIComponent(EDIT.id) : '#'}" id="eBack">${esc(EDIT.id ? '← ' + ((EDIT.orig && EDIT.orig.codigo) || '') : t('a_back'))}</a></div>
+  <div class="ed"><div>
+    <div class="card"><div class="ct">${esc(titulo)}</div><div class="cs">${esc(EDIT.id ? '' : t('autoCode'))} · ${esc(t('noTranslate'))}</div>
+      ${inp('titulo', d.titulo, { l: t('f_titulo') + ' *', max: 160 })}${inp('descripcion', d.descripcion, { l: t('f_descripcion'), ta: 1 })}
+      <div class="g2">${sel('tipo', d.tipo, TIPOS, v => t('tp_' + v), { l: t('f_tipo') })}${sel('prioridad', d.prioridad, PRIORIDADES, v => t('pr_' + v), { l: t('f_prioridad') })}
+        ${sel('planta', d.planta, naves, null, { l: t('f_nave') + ' *', vacio: t('choose') })}${sel('area', d.area, opcionesAreas(d.planta), null, { l: t('f_area'), vacio: '—' })}
+        ${sel('linea', d.linea, opcionesLineas(d.planta, d.area), null, { l: t('f_linea'), vacio: '—' })}${sel('anioFiscal', d.anioFiscal, anios, null, { l: t('year') })}</div>
+      <label class="f" for="eEqAdd">${esc(t('f_equipos'))}</label>
+      <div style="display:flex;gap:8px"><select id="eEqAdd"><option value="">${esc(t('f_addEquipo'))}…</option>${eqDisp.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}${e.criticidad ? ' (' + e.criticidad + ')' : ''}</option>`).join('')}</select></div>
+      <div class="eqchips">${d.equipos.map(e => `<span><span class="ut">${esc(e.nombre)}</span> ${critBadge(fbCriticidadDeEquipo(e.id) || e.criticidad || '')}<button type="button" data-qeq="${esc(e.id)}" aria-label="${esc(t('a_remove'))} ${esc(e.nombre)}">✕</button></span>`).join('')}</div>
+    </div>
+    <div class="card"><div class="ct">${esc(t('f_justificacion'))}</div>${inp('justificacion.problema', d.justificacion.problema, { l: t('f_problema') + ' *', ta: 1 })}${inp('justificacion.beneficio', d.justificacion.beneficio, { l: t('f_beneficio') + ' *', ta: 1 })}</div>
+    <div class="card"><div class="ct">💱 ${esc(t('f_moneda'))}</div><div class="g2">${sel('moneda', B, MONEDAS, m => SIM[m], { l: t('f_moneda') })}${inp('tasaCambio', d.tasaCambio, { l: t('f_tasa') + ' *', n: 1, min: 0 })}</div></div>
+    <div class="card"><div class="ct">🛠 ${esc(t('sec_trabajos'))} *</div><div id="eTrab">${htmlTrabajos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="trabajos">${esc(t('addTrabajo'))}</button></div>
+    <div class="card"><div class="ct">📦 ${esc(t('sec_repuestos'))}</div><div id="eRep">${htmlRepuestos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="repuestos">${esc(t('addRepuesto'))}</button></div>
+    <div class="card"><div class="ct">🧾 ${esc(t('sec_otros'))}</div><div id="eOtr">${htmlOtros(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="otrosCostos">${esc(t('addOtro'))}</button>
+      <div class="g3" style="margin-top:6px">${inp('contingenciaPct', d.contingenciaPct, { l: t('f_contPct'), n: 1, min: 0 })}${inp('itbisPct', d.itbisPct, { l: t('f_itbisPct'), n: 1, min: 0 })}
+        <div><label class="f" for="e_itbisAplica">&nbsp;</label><label class="ck"><input type="checkbox" id="e_itbisAplica" data-f="itbisAplica"${d.itbisAplica ? ' checked' : ''}> ${esc(t('f_itbisAplica'))}</label></div></div>
+      <div class="nota">${esc(t('itbisNote'))}</div></div>
+    <div class="card"><div class="ct">📈 ${esc(t('sec_benef'))}</div><div class="cs">${esc(SIM[B])}</div>
+      <div class="g4">${inp('beneficios.paroEvitado', d.beneficios.paroEvitado, { l: t('b_paro'), n: 1 })}${inp('beneficios.energia', d.beneficios.energia, { l: t('b_energia'), n: 1 })}${inp('beneficios.repuestos', d.beneficios.repuestos, { l: t('b_repuestos'), n: 1 })}
+        ${inp('beneficios.manoObra', d.beneficios.manoObra, { l: t('b_mo'), n: 1 })}${inp('beneficios.otros', d.beneficios.otros, { l: t('b_otros'), n: 1 })}${inp('beneficios.vidaUtilAnios', d.beneficios.vidaUtilAnios, { l: t('b_vida'), n: 1, min: 0 })}
+        ${inp('beneficios.tasaDescuentoPct', d.beneficios.tasaDescuentoPct, { l: t('b_tasa'), n: 1, min: 0 })}</div>${sugerenciaRent(d)}</div>
+  </div>
+  <div class="sticky"><div id="ePrev"></div>
+    <div class="card"><div class="errbox" id="eErr" role="alert"></div>
+      <div class="btns" style="flex-direction:column"><button type="button" class="btn sec" id="eSave">💾 ${esc(t('a_save'))}</button><button type="button" class="btn" id="eSend">📤 ${esc(t('a_send'))}</button>
+      <a class="btn sec" href="${EDIT.id ? '#p=' + encodeURIComponent(EDIT.id) : '#'}" id="eDiscard">${esc(t('a_discard'))}</a></div></div></div></div>`;
+  previsualizar();
+  const app = $('app');
+  app.oninput = onEdit; app.onchange = onEdit;
+  app.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { const k = b.dataset.add, Bm = EDIT.d.moneda; EDIT.d[k].push(k === 'trabajos' ? vacioTrabajo(Bm) : k === 'repuestos' ? vacioRepuesto(Bm) : vacioOtro(Bm)); EDIT.dirty = true; repintarEditor(k); });
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = () => quitarFila(b.dataset.del, Number(b.dataset.i)));
+  app.querySelectorAll('[data-qeq]').forEach(b => b.onclick = () => { const i = EDIT.d.equipoIds.indexOf(b.dataset.qeq); if (i >= 0) { EDIT.d.equipoIds.splice(i, 1); EDIT.d.equipos.splice(EDIT.d.equipos.findIndex(e => e.id === b.dataset.qeq), 1); EDIT.dirty = true; pintarEditor(); } });
+  $('eEqAdd').onchange = e => { agregarEquipo(EDIT.d, e.target.value); EDIT.dirty = true; pintarEditor(); };
+  $('eSave').onclick = () => guardarEditor(false);
+  $('eSend').onclick = () => guardarEditor(true);
+  $('eDiscard').onclick = () => { EDIT.dirty = false; };
+  if ($('bSug')) $('bSug').onclick = () => {
+    const b = $('bSug').dataset, dd = EDIT.d, Bm = dd.moneda, T = num(dd.tasaCambio);
+    const c = v => r2(conv(Number(v) || 0, 'DOP', Bm, T));
+    dd.beneficios.paroEvitado = c(b.paro); dd.beneficios.repuestos = c(b.rep); dd.beneficios.manoObra = c(b.mo); dd.beneficios.otros = c(-Number(b.mant || 0));
+    let s = null; try { s = JSON.parse(localStorage.getItem('capexRentSug') || 'null'); } catch (e) {}
+    if (dd.tipo === 'reemplazo' && s && s.equipos) dd.equipoIds.forEach(id => { const x = s.equipos[id]; const txt = x && t('newMachine', { eq: x.nombre }); if (x && x.precio > 0 && !dd.repuestos.some(r => r.descripcion === txt)) dd.repuestos.push({ ...vacioRepuesto(Bm), descripcion: txt, costoUnitario: c(x.precio), moneda: Bm }); });
+    EDIT.dirty = true; pintarEditor(); toast(t('sugApplied'));
+  };
+  window.__capexListo = true;
+}
+function repintarEditor(k) {
+  const d = EDIT.d;
+  if (k === 'trabajos') $('eTrab').innerHTML = htmlTrabajos(d);
+  else if (k === 'repuestos') $('eRep').innerHTML = htmlRepuestos(d);
+  else if (k === 'otrosCostos') $('eOtr').innerHTML = htmlOtros(d);
+  $('app').querySelectorAll('[data-del]').forEach(b => b.onclick = () => quitarFila(b.dataset.del, Number(b.dataset.i)));
+  previsualizar();
+}
+function quitarFila(k, i) {
+  const d = EDIT.d; d[k].splice(i, 1);
+  if (k === 'trabajos') d.trabajos.forEach(x => { if (x.dependeDe === i) x.dependeDe = null; else if (x.dependeDe != null && x.dependeDe > i) x.dependeDe--; });
+  EDIT.dirty = true; repintarEditor(k);
+}
+function onEdit(e) {
+  const el = e.target; if (!el || !EDIT) return;
+  const d = EDIT.d;
+  if (el.dataset.arr) {
+    const fila = d[el.dataset.arr][Number(el.dataset.i)]; if (!fila) return;
+    let v = el.value;
+    if (el.dataset.k === 'dependeDe') v = v === '' ? null : Number(v);
+    fila[el.dataset.k] = v; EDIT.dirty = true;
+    if (el.dataset.arr === 'repuestos' && ['descripcion', 'codigo'].includes(el.dataset.k)) { const s = $('app').querySelector(`[data-stock="${el.dataset.i}"]`); if (s) s.innerHTML = stockHtml(stockDe(fila)); }
+    if (el.dataset.arr === 'trabajos' && el.dataset.k === 'descripcion') $('eTrab').querySelectorAll('select[data-k="dependeDe"] option[value]').forEach(o => { const j = o.value === '' ? -1 : Number(o.value); if (j >= 0 && d.trabajos[j]) o.textContent = '#' + (j + 1) + ' ' + (d.trabajos[j].descripcion || ''); });
+    previsualizar(); return;
+  }
+  const f = el.dataset.f; if (!f) return;
+  let v = el.type === 'checkbox' ? el.checked : el.value;
+  if (f === 'anioFiscal') v = Number(v);
+  if (f.includes('.')) { const [a, b] = f.split('.'); d[a][b] = v; } else d[f] = v;
+  EDIT.dirty = true;
+  if (e.type === 'change' && ['planta', 'area', 'moneda'].includes(f)) {
+    if (f === 'planta') { d.area = ''; d.linea = ''; }
+    if (f === 'area') d.linea = '';
+    if (f === 'moneda') { d.trabajos.concat(d.repuestos, d.otrosCostos).forEach(x => { if (!x.descripcion && !x.detalle && !num(x.costo) && !num(x.costoUnitario) && !num(x.monto)) x.moneda = v; }); }
+    pintarEditor(); return;
+  }
+  previsualizar();
+}
+function previsualizar() {
+  const d = EDIT.d, tot = calcTotales(d), fin = calcFinanzas(d, tot), cr = calcCronograma(d, fbHoy());
+  window.__capexEdit = { tot, fin, cr: { fechaFinProyectada: cr.fechaFinProyectada, duracionDias: cr.duracionDias, leadTimeMax: cr.leadTimeMax, items: cr.items } };
+  $('ePrev').innerHTML = cardTotales(tot) + cardFinanzas(d, fin, tot)
+    + `<div class="card"><div class="ct">🗓 ${esc(t('sec_crono'))}</div><div class="cs">${esc(t('crono_proj'))} · ${esc(t('c_fin'))}: <b>${esc(fmtDate(cr.fechaFinProyectada))}</b> · ${esc(fmtDays(cr.duracionDias))}</div>${ganttHtml(d, cr, false)}${cr.leadTimeMax ? `<div class="nota" style="margin-top:6px">${esc(t('c_note'))}</div>` : ''}</div>`;
+}
+function limpiar(d) {
+  const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n || 300);
+  const n = v => (numOk(v) ? Number(String(v).replace(',', '.')) : 0);
+  const B = d.moneda === 'USD' ? 'USD' : 'DOP';
+  const trabajosRaw = d.trabajos.filter(x => s(x.descripcion) || n(x.costo) || n(x.horas) || n(x.dias));
+  const mapa = new Map(); d.trabajos.forEach((x, i) => { const j = trabajosRaw.indexOf(x); if (j >= 0) mapa.set(i, j); });
+  const out = {
+    titulo: s(d.titulo, 160), descripcion: s(d.descripcion, 2000), justificacion: { problema: s(d.justificacion.problema, 2000), beneficio: s(d.justificacion.beneficio, 2000) },
+    tipo: TIPOS.includes(d.tipo) ? d.tipo : 'mejora', prioridad: PRIORIDADES.includes(d.prioridad) ? d.prioridad : 'media',
+    planta: s(d.planta, 80), area: s(d.area, 120), linea: s(d.linea, 120), equipoIds: d.equipoIds.slice(0, 30), equipos: d.equipos.slice(0, 30).map(e => ({ id: String(e.id), nombre: s(e.nombre, 120), criticidad: fbCriticidadDeEquipo(e.id) || e.criticidad || '' })),
+    anioFiscal: Number(d.anioFiscal) || new Date().getFullYear(), moneda: B, tasaCambio: n(d.tasaCambio),
+    trabajos: trabajosRaw.map((x, i) => ({ descripcion: s(x.descripcion), responsable: RESPONSABLES.includes(x.responsable) ? x.responsable : 'interno', tipoRecurso: RECURSOS.includes(x.tipoRecurso) ? x.tipoRecurso : 'mo_interna',
+      horas: n(x.horas), dias: Math.round(n(x.dias)), costo: r2(n(x.costo)), moneda: monLinea(x.moneda, B), orden: i, dependeDe: x.dependeDe != null && x.dependeDe !== '' && mapa.has(Number(x.dependeDe)) && mapa.get(Number(x.dependeDe)) !== i ? mapa.get(Number(x.dependeDe)) : null })),
+    repuestos: d.repuestos.filter(x => s(x.descripcion) || n(x.costoUnitario)).map(x => { const st = stockDe(x); return { descripcion: s(x.descripcion), codigo: s(x.codigo, 80), cantidad: n(x.cantidad), unidad: UNIDADES.includes(x.unidad) ? x.unidad : 'und', costoUnitario: r2(n(x.costoUnitario)), moneda: monLinea(x.moneda, B), proveedor: s(x.proveedor, 120), enStock: st == null ? null : st, leadTimeDias: Math.round(n(x.leadTimeDias)) }; }),
+    otrosCostos: d.otrosCostos.filter(x => n(x.monto) || s(x.detalle)).map(x => ({ concepto: CONCEPTOS.includes(x.concepto) ? x.concepto : 'otro', detalle: s(x.detalle, 200), monto: r2(n(x.monto)), moneda: monLinea(x.moneda, B) })),
+    contingenciaPct: n(d.contingenciaPct), itbisAplica: !!d.itbisAplica, itbisPct: n(d.itbisPct),
+    beneficios: { paroEvitado: r2(n(d.beneficios.paroEvitado)), energia: r2(n(d.beneficios.energia)), repuestos: r2(n(d.beneficios.repuestos)), manoObra: r2(n(d.beneficios.manoObra)), otros: r2(n(d.beneficios.otros)), vidaUtilAnios: Math.round(n(d.beneficios.vidaUtilAnios)), tasaDescuentoPct: n(d.beneficios.tasaDescuentoPct) },
+  };
+  out.totales = totalesGuardados(out);
+  return out;
+}
+// Antes de "Enviar": campos obligatorios, al menos un trabajo y total > 0.
+function validar(p) {
+  const e = [];
+  if (!String(p.titulo || '').trim()) e.push(t('v_titulo'));
+  if (!String(p.planta || '').trim()) e.push(t('v_nave'));
+  if (!TIPOS.includes(p.tipo)) e.push(t('v_tipo'));
+  const j = p.justificacion || {};
+  if (!String(j.problema || '').trim() || !String(j.beneficio || '').trim()) e.push(t('v_just'));
+  const ts = (p.trabajos || []).filter(x => String(x.descripcion || '').trim() || num(x.costo));
+  if (!ts.length) e.push(t('v_trabajo'));
+  else if (ts.some(x => !String(x.descripcion || '').trim())) e.push(t('v_trabajoDesc'));
+  if ((p.repuestos || []).some(x => (String(x.descripcion || '').trim() || num(x.costoUnitario)) && (!String(x.descripcion || '').trim() || !(num(x.cantidad) > 0) || !(num(x.costoUnitario) > 0)))) e.push(t('v_rep'));
+  if (!(num(p.tasaCambio) > 0)) e.push(t('v_tasa'));
+  if (!(calcTotales(p).total > 0)) e.push(t('v_total'));
+  return e;
+}
+async function folioNuevo(anio) {
+  const ref = db.collection('config').doc('capexFolio');
+  try {
+    const n = await Promise.race([db.runTransaction(async tx => {
+      const s = await tx.get(ref);
+      const a = s.exists && typeof s.data().ultimo === 'number' ? s.data().ultimo : 0;
+      if (s.exists) tx.update(ref, { ultimo: a + 1 }); else tx.set(ref, { ultimo: 1 });
+      return a + 1;
+    }), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
+    return 'CAPEX-' + anio + '-' + String(n).padStart(3, '0');
+  } catch (e) {
+    console.warn('folio CAPEX:', e && (e.code || e.message));
+    return 'CAPEX-' + anio + '-P' + Date.now().toString(36).toUpperCase().slice(-8);
+  }
+}
+let _guardando = false;
+async function guardarEditor(enviar) {
+  if (_guardando) return;
+  const d = limpiar(EDIT.d);
+  const err = $('eErr');
+  err.innerHTML = '';
+  if (!d.titulo) { err.innerHTML = esc(t('v_titulo')); return; }
+  if (enviar) { const errs = validar(d); if (errs.length) { err.innerHTML = `<b>${esc(t('v_fix'))}</b><ul>${errs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`; err.scrollIntoView({ block: 'center' }); return; } }
+  _guardando = true; $('eSave').disabled = $('eSend').disabled = true; toast(t('saving'));
+  try {
+    let p;
+    if (!EDIT.id) {
+      const codigo = await folioNuevo(d.anioFiscal);
+      const ref = db.collection('capex').doc();
+      const doc = { ...d, codigo, estado: 'borrador', solicitante: quien(), solicitanteUid: uidYo(), creadoPorUid: uidYo(), fechaSolicitud: fbHoy(),
+        historial: [entradaHistorial('borrador', '', 'creado')], gastoReal: [], avance: {}, createdAt: fbTimestamp(), updatedAt: fbTimestamp(), actualizadoPor: quien() };
+      const r = await conLimite(ref.set(doc));
+      p = { ...doc, id: ref.id }; delete p.createdAt; delete p.updatedAt;
+      if (r === 'pendiente') toast(t('ok_saved') + ' 📵', 'warn');
+    } else {
+      const ref = db.collection('capex').doc(EDIT.id);
+      const r = await conLimite(ref.update({ ...d, updatedAt: fbTimestamp(), actualizadoPor: quien() }));
+      p = { ...EDIT.orig, ...d };
+      if (r === 'pendiente') toast(t('ok_saved') + ' 📵', 'warn');
+    }
+    guardarEnCache(p);
+    EDIT.dirty = false;
+    if (enviar) {
+      try { p = await cambiarProyecto(p, cur => (EDITABLES.includes(cur.estado) ? { estado: 'enviado', historial: (cur.historial || []).concat([entradaHistorial('enviado', '')]) } : null)); toast(t('ok_state', { s: t('st_enviado') })); }
+      catch (e) { fallo(e); }
+    } else toast(t('ok_saved'));
+    EDIT = null;
+    UI.anio = p.anioFiscal;
+    ir('#p=' + encodeURIComponent(p.id));
+  } catch (e) { fallo(e); }
+  finally { _guardando = false; if ($('eSave')) { $('eSave').disabled = $('eSend').disabled = false; } }
+}
+
+// ══════ PRESUPUESTO (solo Admin) Y AJUSTES ══════
+function modalPresupuesto() {
+  const y = String(UI.anio), a = (PRES && PRES.presupuestos && PRES.presupuestos[y]) || {};
+  const naves = fbNavesDisponibles();
+  abrirModal(`<h3 id="mTitle">${esc(t('budgetTitle', { y }))}</h3><div class="nota">${esc(t('budgetNote'))}</div>
+    <label class="f" for="pTot">${esc(t('budgetTotal'))}</label><input id="pTot" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(a.total || '')}">
+    <div class="ct" style="font-size:13px;margin-top:12px">${esc(t('budgetPerNave'))}</div>
+    <div class="g2">${naves.map((n, i) => `<div><label class="f ut" for="pN${i}">${esc(n)}</label><input id="pN${i}" data-nave="${esc(cfgKey(n))}" type="number" inputmode="decimal" min="0" step="0.01" value="${esc((a.porNave || {})[cfgKey(n)] || '')}"></div>`).join('')}</div>
+    <div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mSi">${esc(t('a_ok'))}</button></div>`);
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const porNave = {}; $('modal').querySelectorAll('[data-nave]').forEach(i => { if (num(i.value) > 0) porNave[i.dataset.nave] = r2(num(i.value)); });
+    const ent = { total: r2(num($('pTot').value)), moneda: 'DOP', porNave, por: quien(), en: new Date().toISOString() };
+    PRES = PRES || {}; PRES.presupuestos = { ...(PRES.presupuestos || {}), [y]: ent };
+    try { await conLimite(db.collection('capex_config').doc('general').set({ presupuestos: { [y]: ent }, actualizadoPor: quien(), actualizadoEn: fbTimestamp() }, { merge: true })); cerrarModal(); toast(t('ok_saved')); pintar(); }
+    catch (e) { fallo(e); }
+  };
+}
+function modalAjustes() {
+  abrirModal(`<h3 id="mTitle">${esc(t('cfgTitle'))}</h3><div class="nota">${esc(t('cfgNoCost'))}</div>
+    <div class="g3"><div><label class="f" for="cTasa">${esc(t('cfgTasa'))}</label><input id="cTasa" type="number" step="0.0001" min="0" value="${esc(CFG.tasaCambio)}"></div>
+      <div><label class="f" for="cCont">${esc(t('cfgCont'))}</label><input id="cCont" type="number" step="0.5" min="0" value="${esc(CFG.contingenciaPct)}"></div>
+      <div><label class="f" for="cItb">${esc(t('cfgItbis'))}</label><input id="cItb" type="number" step="0.5" min="0" value="${esc(CFG.itbisPct)}"></div></div>
+    <label class="f" for="cEmp">${esc(t('cfgEmpresa'))}</label><input id="cEmp" maxlength="120" value="${esc(CFG.empresa || '')}">
+    <label class="f" for="cLogo">${esc(t('cfgLogo'))}</label><input id="cLogo" type="file" accept="image/png,image/jpeg,image/webp">
+    <div class="errbox" id="mErr"></div>
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mSi">${esc(t('a_ok'))}</button></div>`);
+  $('mNo').onclick = cerrarModal;
+  $('mSi').onclick = async () => {
+    const tasa = num($('cTasa').value);
+    if (!(tasa > 0)) { $('mErr').textContent = t('v_tasa'); return; }
+    CFG = { ...CFG, tasaCambio: tasa, contingenciaPct: num($('cCont').value), itbisPct: num($('cItb').value), empresa: $('cEmp').value.trim() };
+    try {
+      await conLimite(db.collection('config').doc('capex').set({ tasaCambio: CFG.tasaCambio, contingenciaPct: CFG.contingenciaPct, itbisPct: CFG.itbisPct, empresa: CFG.empresa, actualizadoPor: quien(), actualizadoEn: fbTimestamp() }, { merge: true }));
+      const f = $('cLogo').files && $('cLogo').files[0];
+      if (f) { const r = await reducirLogo(f); if (r) { LOGO = r; await conLimite(db.collection('config').doc('capexLogo').set({ ...r, subidoPor: quien(), subidoEn: fbTimestamp() })); } }
+      cerrarModal(); toast(t('ok_cfg')); pintar();
+    } catch (e) { fallo(e); }
+  };
+}
+function reducirLogo(file) {
+  return new Promise(res => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(1, 400 / img.width, 140 / img.height), w = Math.round(img.width * s), h = Math.round(img.height * s);
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+      let data = c.toDataURL('image/png'); let tipo = 'png';
+      if (data.length > 250000) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h); data = c.toDataURL('image/jpeg', 0.85); tipo = 'jpeg'; }
+      URL.revokeObjectURL(url); res(data.length <= 300000 ? { data, tipo, ancho: w, alto: h } : null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+    img.src = url;
+  });
+}
+async function cargarLogo() {
+  if (LOGO !== undefined) return LOGO;
+  const ok = d => d && typeof d.data === 'string' && /^data:image\/(png|jpeg);base64,/.test(d.data) ? { data: d.data, tipo: /^data:image\/jpeg/.test(d.data) ? 'jpeg' : 'png', ancho: Number(d.ancho) || 0, alto: Number(d.alto) || 0 } : null;
+  LOGO = null;
+  try { const s = await db.collection('config').doc('capexLogo').get(); window.__capexLecturas++; LOGO = s.exists ? ok(s.data()) : null; } catch (e) { console.warn('capexLogo:', e.message); }
+  if (!LOGO && esAdmin()) { try { const s = await db.collection('incentivos_config').doc('logo').get(); window.__capexLecturas++; LOGO = s.exists ? ok(s.data()) : null; } catch (e) { console.warn('logo:', e.message); } }
+  return LOGO;
+}
+
+// ══════ FICHA DEL PROYECTO (papel carta, en el idioma elegido) ══════
+let FICHA = null;
+async function abrirFicha(p) {
+  FICHA = p;
+  $('fichaBg').classList.add('open'); document.documentElement.classList.add('ficha-abierta');
+  $('fichaBg').scrollTop = 0;
+  pintarFicha(p);
+  await cargarLogo(); if (FICHA === p) pintarFicha(p);
+}
+function cerrarFicha() { $('fichaBg').classList.remove('open'); document.documentElement.classList.remove('ficha-abierta'); FICHA = null; }
+$('fClose').onclick = cerrarFicha;
+$('fPrint').onclick = () => { const pp = $('paper'); pp.style.transform = ''; try { window.print(); } finally { setTimeout(ajustarPapel, 300); } };
+$('fXls').onclick = () => { if (FICHA) exportarProyecto(FICHA); };
+window.addEventListener('beforeprint', () => { const pp = $('paper'); if (pp) pp.style.transform = ''; const w = $('pWrap'); if (w) w.style.height = ''; });
+window.addEventListener('afterprint', () => { if (FICHA) ajustarPapel(); });
+window.addEventListener('resize', () => { if (FICHA) ajustarPapel(); });
+function ajustarPapel() {
+  const w = $('pWrap'), pp = $('paper'); if (!w || !pp) return;
+  const disp = w.parentNode.clientWidth - 2, s = Math.min(1, disp / 780);
+  pp.style.transform = s < 1 ? `scale(${s})` : '';
+  w.style.height = s < 1 ? Math.ceil(pp.offsetHeight * s) + 'px' : '';
+}
+function pintarFicha(p) {
+  const tot = calcTotales(p), fin = calcFinanzas(p, tot), ej = calcEjecucion(p), B = tot.B, T = tot.T;
+  const cr = p.cronograma && p.cronograma.fechaInicio ? calcCronograma(p, p.cronograma.fechaInicio) : calcCronograma(p, fbHoy());
+  const ap = APROBADOS.includes(p.estado), a = p.aprobacion, j = p.justificacion || {}, b = p.beneficios || {};
+  $('fTit').textContent = t('p_page') + ' · ' + (p.codigo || '');
+  const logo = LOGO && LOGO.data ? `<img src="${esc(LOGO.data)}" alt="Logo">` : `<div class="emp">${esc(CFG.empresa || '')}</div>`;
+  const dd = (v, m) => esc(fmtMoney(conv(v, B, m, T), m));
+  const filaT = (txt, v, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(txt)}</td><td class="n">${dd(v, 'DOP')}</td><td class="n">${dd(v, 'USD')}</td></tr>`;
+  $('paper').innerHTML = `<div class="ph"><div class="plogo">${logo}${LOGO && CFG.empresa ? `<div style="font-weight:700;margin-top:4px">${esc(CFG.empresa)}</div>` : ''}</div>
+      <div class="ptit"><div class="t1">${esc(t('p_title'))}</div><div class="t2">${esc(p.codigo || '')}</div><div class="t3">${estBadge(p.estado)} · ${esc(t('p_generated', { f: fmtDateTime(new Date().toISOString()) }))}</div></div></div>
+    <div class="pt ut">${esc(p.titulo || '')}</div>
+    <div class="pinfo">
+      <div><span>${esc(t('f_tipo'))}</span>${esc(t('tp_' + (p.tipo || 'mejora')))}</div><div><span>${esc(t('f_prioridad'))}</span>${esc(lbl('pr_', p.prioridad))}</div><div><span>${esc(t('f_criticidad'))}</span>${esc(t('crit_' + (critDe(p) || 'N')))}</div>
+      <div><span>${esc(t('d_location'))}</span><span class="ut" style="text-transform:none;font-size:11.5px;color:#111;letter-spacing:0">${esc([fbNaveDe(p), p.area, p.linea].filter(Boolean).join(' · ') || '—')}</span></div>
+      <div><span>${esc(t('f_equipos'))}</span><span class="ut" style="text-transform:none;font-size:11.5px;color:#111;letter-spacing:0">${esc((p.equipos || []).map(e => e.nombre).join(', ') || '—')}</span></div>
+      <div><span>${esc(t('f_solicitante'))}</span><span class="ut" style="text-transform:none;font-size:11.5px;color:#111;letter-spacing:0">${esc(p.solicitante || '—')}</span> · ${esc(fmtDate(p.fechaSolicitud))}</div>
+      <div><span>${esc(t('year'))}</span>${esc(p.anioFiscal || '')}</div><div><span>${esc(t('f_moneda'))}</span>${esc(SIM[B])}</div><div><span>${esc(t('f_tasa'))}</span>${esc(fmtNum(T, 2))}</div></div>
+    ${p.descripcion ? `<h4>${esc(t('f_descripcion'))}</h4><div class="ut">${esc(p.descripcion)}</div>` : ''}
+    <div class="pcols keep"><div><h4>${esc(t('f_problema'))}</h4><div class="ut">${esc(j.problema || '—')}</div></div><div><h4>${esc(t('f_beneficio'))}</h4><div class="ut">${esc(j.beneficio || '—')}</div></div></div>
+    ${tablasDetalle(p, tot, cr, true)}
+    <div class="pcols keep" style="margin-top:4px"><div><h4>${esc(t('sec_totales'))}</h4><table><thead><tr><th></th><th class="n">RD$</th><th class="n">US$</th></tr></thead><tbody>
+        ${filaT(t('tot_trabajos'), tot.trabajos)}${filaT(t('tot_repuestos'), tot.repuestos)}${filaT(t('tot_otros'), tot.otros)}${filaT(t('tot_subtotal'), tot.subtotal, 'tot')}
+        ${filaT(t('tot_cont', { p: fmtPct(tot.contPct) }), tot.contingencia)}${tot.itbisAplica ? filaT(t('tot_itbis', { p: fmtPct(tot.itbisPct) }), tot.itbis) : ''}${filaT(t('tot_total'), tot.total, 'tot')}</tbody></table>
+        <div class="nota" style="color:#555">${esc(t('rateLine', { t: fmtNum(T, 2) }))}</div></div>
+      <div><h4>${esc(t('sec_fin'))}</h4><div class="pkpi"><div><span>${esc(t('fin_payback'))}</span><b>${esc(fin.payback == null ? '—' : fmtYears(fin.payback))}</b></div><div><span>${esc(t('fin_roi'))}</span><b>${esc(fmtPct(fin.roi))}</b></div>
+        <div><span>${esc(t('fin_npv'))}</span><b>${esc(fin.npv == null ? '—' : fmtMoney(fin.npv, B))}</b></div><div><span>${esc(t('fin_irr'))}</span><b>${esc(fin.irr == null ? (fin.irrNoConv ? t('noConv') : '—') : fmtPct(fin.irr))}</b></div></div>
+        <table style="margin-top:6px"><tbody>${[['b_paro', 'paroEvitado'], ['b_energia', 'energia'], ['b_repuestos', 'repuestos'], ['b_mo', 'manoObra'], ['b_otros', 'otros']].filter(([, c]) => num(b[c])).map(([l, c]) => `<tr><td>${esc(t(l))}</td><td class="n">${esc(fmtMoney(num(b[c]), B))}</td></tr>`).join('')}
+          <tr class="tot"><td>${esc(t('b_total'))}</td><td class="n">${esc(fmtMoney(fin.A, B))}</td></tr><tr><td>${esc(t('b_vida'))} · ${esc(t('b_tasa'))}</td><td class="n">${esc(fmtNum(fin.n, 0))} · ${esc(fmtNum(fin.r, 1))}</td></tr></tbody></table></div></div>
+    <div class="formula">${esc(t('formulaTot'))}<br>${esc(t('formulaFin'))}</div>
+    <div class="keep"><h4>${esc(t('sec_crono'))} — ${esc(p.cronograma && p.cronograma.fechaInicio ? t('crono_base') : t('crono_proj'))}</h4>
+      <div style="margin-bottom:5px">${esc(t('c_inicio'))}: <b>${esc(fmtDate(cr.fechaInicio))}</b> · ${esc(t('c_fin'))}: <b>${esc(fmtDate(cr.fechaFinProyectada))}</b> · ${esc(t('c_dur'))}: <b>${esc(fmtDays(cr.duracionDias))}</b>${cr.leadTimeMax ? ' · ' + esc(t('c_lead')) + ': <b>' + esc(fmtDays(cr.leadTimeMax)) + '</b>' : ''}</div>
+      ${ganttHtml(p, cr, ['en_ejecucion', 'cerrado'].includes(p.estado), true)}
+      <div style="margin-top:4px;color:#555">${esc(t('c_hitos'))}: ${cr.hitos.map(x => esc(t(x.k)) + ' ' + esc(fmtDate(x.fecha))).join(' · ')}</div></div>
+    <div class="pcols keep"><div><h4>${esc(t('d_aprobacion'))}</h4><div class="pbox">${a ? `${esc(t('d_aprobadoPor', { n: a.por || '—', f: fmtDateTime(a.en) }))}<br><b>${esc(t('m_montoAprobado'))}: ${esc(fmtMoney(num(a.montoAprobado), monLinea(a.moneda, B)))}</b>${a.nota ? `<br><span class="ut">${esc(a.nota)}</span>` : ''}` : esc(t('d_sinAprob'))}</div></div>
+      ${ap ? `<div><h4>${esc(t('sec_gasto'))}</h4><table><tbody><tr><td>${esc(t('g_aprobado'))}</td><td class="n">${esc(fmtMoney(ej.aprobado, B))}</td></tr><tr><td>${esc(t('g_comp'))}</td><td class="n">${esc(fmtMoney(ej.comp, B))}</td></tr><tr><td>${esc(t('g_real'))}</td><td class="n">${esc(fmtMoney(ej.real, B))}</td></tr><tr class="tot"><td>${esc(t('g_pct'))} · ${esc(t('sem_' + ej.sem))}</td><td class="n">${esc(fmtPct(ej.pct))}</td></tr></tbody></table></div>` : '<div></div>'}</div>
+    <div class="keep"><div class="firmas"><div>${esc(t('p_sigReq'))}<small class="ut">${esc(p.solicitante || '')}</small><small>${esc(t('p_nameDate'))}</small></div><div>${esc(t('p_sigRev'))}<small>&nbsp;</small><small>${esc(t('p_nameDate'))}</small></div><div>${esc(t('p_sigApr'))}<small class="ut">${esc(a ? a.por : '')}&nbsp;</small><small>${esc(t('p_nameDate'))}</small></div></div>
+    <div class="pfoot"><span>${esc(CFG.empresa || '')} · ${esc(p.codigo || '')}</span><span>${esc(t('noTranslate'))}</span></div></div>`;
+  ajustarPapel();
+  window.__capexFicha = { codigo: p.codigo, lang: LANG };
+}
+
+// ══════ EXCEL / CSV (encabezados en el idioma elegido; montos con formato de moneda) ══════
+const FMT = { DOP: '"RD$" #,##0.00;[Red]-"RD$" #,##0.00', USD: '"US$" #,##0.00;[Red]-"US$" #,##0.00', pct: '0.0"%"', n0: '#,##0', n2: '#,##0.00' };
+function libroXls(hojas) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Mantenimiento 2026 · CAPEX';
+  hojas.forEach(hj => {
+    const ws = wb.addWorksheet(String(hj.nombre).replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31), { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { paperSize: 1, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    const c1 = ws.getRow(1).getCell(1); c1.value = hj.titulo; c1.font = { bold: true, size: 13, color: { argb: 'FF0B2545' } };
+    const c2 = ws.getRow(2).getCell(1); c2.value = [CFG.empresa, t('p_generated', { f: fmtDateTime(new Date().toISOString()) })].filter(Boolean).join(' · '); c2.font = { italic: true, size: 9, color: { argb: 'FF555555' } };
+    const hr = ws.getRow(4);
+    hj.columnas.forEach((c, i) => {
+      const cell = hr.getCell(i + 1); cell.value = c.t;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2545' } };
+      cell.alignment = { vertical: 'middle', wrapText: true };
+      ws.getColumn(i + 1).width = c.w || 14;
+    });
+    hr.height = 30;
+    hj.filas.forEach((f, ri) => {
+      const row = ws.getRow(5 + ri);
+      f.forEach((x, i) => {
+        const obj = x && typeof x === 'object' && 'v' in x, v = obj ? x.v : x;
+        const cell = row.getCell(i + 1); cell.value = v == null ? '' : v;
+        const fm = obj && x.f ? x.f : (hj.columnas[i] && hj.columnas[i].f);
+        if (fm && typeof v === 'number') cell.numFmt = FMT[fm] || fm;
+      });
+      if (hj.totales && hj.totales.includes(ri)) row.font = { bold: true };
+    });
+  });
+  return wb;
+}
+function dialogoCsv(msg, alCsv) {
+  abrirModal(`<h3 id="mTitle">📵 Excel</h3><div>${esc(msg)}</div><div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mCsv">⬇ ${esc(t('a_csv'))}</button></div>`);
+  $('mNo').onclick = cerrarModal; $('mCsv').onclick = () => { cerrarModal(); alCsv(); };
+}
+async function descargarHojas(base, hojas) {
+  window.__capexExport = { archivo: null, formato: null, hojas, lang: LANG };
+  const plano = hojas.map(h => ({ ...h, filas: h.filas.map(f => f.map(x => (x && typeof x === 'object' && 'v' in x ? x.v : x))) }));
+  const csv = () => { fbDescargar(new Blob([fbCsv(plano)], { type: 'text/csv;charset=utf-8' }), base + '.csv'); window.__capexExport.formato = 'csv'; window.__capexExport.archivo = base + '.csv'; toast(t('csvOk')); };
+  try {
+    await fbCargarExcelJS();
+    const wb = libroXls(hojas); window.__capexExport.wb = wb;
+    const buf = await wb.xlsx.writeBuffer();
+    fbDescargar(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), base + '.xlsx');
+    window.__capexExport.formato = 'xlsx'; window.__capexExport.archivo = base + '.xlsx';
+    toast(t('xlsOk'));
+  } catch (e) {
+    console.warn('Excel CAPEX:', e && e.message);
+    window.__capexExport.formato = 'csv-ofrecido';
+    dialogoCsv(t('xlsFail', { e: (e && e.message) || 'error' }), csv);
+  }
+}
+function hojasProyecto(p) {
+  const tot = calcTotales(p), fin = calcFinanzas(p, tot), ej = calcEjecucion(p), B = tot.B, T = tot.T;
+  const cr = p.cronograma && p.cronograma.fechaInicio ? calcCronograma(p, p.cronograma.fechaInicio) : calcCronograma(p, fbHoy());
+  const tit = (p.codigo || '') + ' · ' + (p.titulo || '');
+  const D = v => r2(conv(v, B, 'DOP', T)), U = v => r2(conv(v, B, 'USD', T));
+  const fx = (lab, v) => [lab, D(v), U(v)];
+  const info = (lab, v) => [lab, v == null ? '' : String(v), ''];
+  const res = [info(t('f_codigo'), p.codigo), info(t('f_titulo'), p.titulo), info(t('f_estado'), t('st_' + (p.estado || 'borrador'))), info(t('f_tipo'), t('tp_' + (p.tipo || 'mejora'))),
+    info(t('f_prioridad'), lbl('pr_', p.prioridad)), info(t('f_criticidad'), t('crit_' + (critDe(p) || 'N'))), info(t('f_nave'), fbNaveDe(p)), info(t('f_area'), p.area), info(t('f_linea'), p.linea),
+    info(t('f_equipos'), (p.equipos || []).map(e => e.nombre).join(', ')), info(t('f_solicitante'), p.solicitante), info(t('f_fechaSol'), p.fechaSolicitud), info(t('year'), p.anioFiscal),
+    info(t('f_moneda'), SIM[B]), [t('f_tasa'), { v: T, f: 'n2' }, ''], info(t('f_problema'), (p.justificacion || {}).problema), info(t('f_beneficio'), (p.justificacion || {}).beneficio), ['', '', ''],
+    fx(t('tot_trabajos'), tot.trabajos), fx(t('tot_repuestos'), tot.repuestos), fx(t('tot_otros'), tot.otros), fx(t('tot_subtotal'), tot.subtotal),
+    fx(t('tot_cont', { p: fmtPct(tot.contPct) }), tot.contingencia), fx(t('tot_itbis', { p: fmtPct(tot.itbisAplica ? tot.itbisPct : 0) }), tot.itbis), fx(t('tot_total'), tot.total), ['', '', ''],
+    fx(t('b_total'), fin.A), [t('b_vida'), { v: fin.n, f: 'n0' }, ''], [t('b_tasa'), { v: fin.r, f: 'pct' }, ''], [t('fin_payback') + ' (' + t('years', { n: '' }).trim() + ')', fin.payback == null ? '' : { v: r2(fin.payback), f: 'n2' }, ''],
+    [t('fin_roi'), fin.roi == null ? '' : { v: r2(fin.roi), f: 'pct' }, ''], fx(t('fin_npv'), fin.npv || 0), [t('fin_irr'), fin.irr == null ? (fin.irrNoConv ? t('noConv') : '') : { v: r2(fin.irr), f: 'pct' }, ''], ['', '', ''],
+    info(t('c_inicio'), cr.fechaInicio), info(t('c_fin'), cr.fechaFinProyectada), [t('c_dur') + ' (' + t('t_dias') + ')', { v: cr.duracionDias, f: 'n0' }, '']];
+  if (p.aprobacion) res.push(['', '', ''], info(t('d_aprobacion'), t('d_aprobadoPor', { n: p.aprobacion.por, f: fmtDateTime(p.aprobacion.en) })), fx(t('m_montoAprobado'), ej.aprobado), info(t('m_nota'), p.aprobacion.nota));
+  if (APROBADOS.includes(p.estado)) res.push(fx(t('g_comp'), ej.comp), fx(t('g_real'), ej.real), fx(t('g_disp'), ej.disponible), [t('g_pct'), ej.pct == null ? '' : { v: r2(ej.pct), f: 'pct' }, '']);
+  const sB = SIM[B];
+  return [
+    { nombre: t('x_resumen'), titulo: t('p_title') + ' · ' + tit, columnas: [{ t: t('x_concepto'), w: 34 }, { t: 'RD$', w: 20, f: 'DOP' }, { t: 'US$', w: 18, f: 'USD' }], filas: res },
+    { nombre: t('x_trabajos'), titulo: t('sec_trabajos') + ' · ' + tit, columnas: [{ t: '#', w: 5 }, { t: t('t_desc'), w: 40 }, { t: t('t_resp'), w: 14 }, { t: t('t_recurso'), w: 20 }, { t: t('t_horas'), w: 9, f: 'n2' }, { t: t('t_dias'), w: 8, f: 'n0' }, { t: t('t_dep'), w: 11 }, { t: t('t_costo'), w: 15, f: 'n2' }, { t: t('f_moneda2'), w: 9 }, { t: t('x_amountIn', { c: sB }), w: 16, f: B }, { t: t('c_inicio'), w: 12 }, { t: t('c_fin'), w: 12 }],
+      filas: (p.trabajos || []).map((x, i) => { const it = cr.items[i] || {}; return [i + 1, x.descripcion || '', lbl('resp_', x.responsable), lbl('rec_', x.tipoRecurso), num(x.horas), it.dur || duracionTrabajo(x), x.dependeDe != null && x.dependeDe !== '' ? '#' + (Number(x.dependeDe) + 1) : '', num(x.costo), SIM[monLinea(x.moneda, B)], r2(conv(num(x.costo), monLinea(x.moneda, B), B, T)), it.desde || '', it.hasta || '']; })
+        .concat([['', t('tot_trabajos'), '', '', '', '', '', '', '', r2(tot.trabajos), '', '']]), totales: [(p.trabajos || []).length] },
+    { nombre: t('x_repuestos'), titulo: t('sec_repuestos') + ' · ' + tit, columnas: [{ t: '#', w: 5 }, { t: t('r_desc'), w: 36 }, { t: t('r_codigo'), w: 14 }, { t: t('r_cant'), w: 9, f: 'n2' }, { t: t('r_unidad'), w: 8 }, { t: t('r_cu'), w: 14, f: 'n2' }, { t: t('f_moneda2'), w: 9 }, { t: t('x_amountIn', { c: sB }), w: 16, f: B }, { t: t('r_prov'), w: 20 }, { t: t('r_lead'), w: 11, f: 'n0' }, { t: t('r_stock'), w: 9 }],
+      filas: (p.repuestos || []).map((x, i) => { const st = stockDe(x); return [i + 1, x.descripcion || '', x.codigo || '', num(x.cantidad), x.unidad ? lbl('u_', x.unidad) : '', num(x.costoUnitario), SIM[monLinea(x.moneda, B)], r2(conv(num(x.cantidad) * num(x.costoUnitario), monLinea(x.moneda, B), B, T)), x.proveedor || '', num(x.leadTimeDias), st == null ? '' : st]; })
+        .concat([['', t('tot_repuestos'), '', '', '', '', '', r2(tot.repuestos), '', '', '']]), totales: [(p.repuestos || []).length] },
+    { nombre: t('x_otros'), titulo: t('sec_otros') + ' · ' + tit, columnas: [{ t: '#', w: 5 }, { t: t('o_concepto'), w: 22 }, { t: t('o_detalle'), w: 34 }, { t: t('o_monto'), w: 15, f: 'n2' }, { t: t('f_moneda2'), w: 9 }, { t: t('x_amountIn', { c: sB }), w: 16, f: B }],
+      filas: (p.otrosCostos || []).map((x, i) => [i + 1, lbl('oc_', x.concepto || 'otro'), x.detalle || '', num(x.monto), SIM[monLinea(x.moneda, B)], r2(conv(num(x.monto), monLinea(x.moneda, B), B, T))]).concat([['', t('tot_otros'), '', '', '', r2(tot.otros)]]), totales: [(p.otrosCostos || []).length] },
+    { nombre: t('x_crono'), titulo: t('sec_crono') + ' · ' + tit, columnas: [{ t: '#', w: 5 }, { t: t('t_desc'), w: 40 }, { t: t('c_inicio'), w: 12 }, { t: t('c_fin'), w: 12 }, { t: t('t_dias'), w: 8, f: 'n0' }, { t: t('avance') + ' %', w: 10, f: 'pct' }, { t: t('av_ini'), w: 12 }, { t: t('av_fin'), w: 12 }],
+      filas: (cr.leadTimeMax ? [['', t('c_lead'), cr.fechaInicio, sumarDias(cr.fechaInicio, cr.leadTimeMax), cr.leadTimeMax, '', '', '']] : [])
+        .concat(cr.items.map(x => { const a = (p.avance || {})[String(x.i)] || {}; return [x.i + 1, ((p.trabajos || [])[x.i] || {}).descripcion || '', x.desde, x.hasta, x.dur, num(a.pct), a.ini || '', a.fin || '']; }))
+        .concat([['', '', '', '', '', '', '', '']], cr.hitos.map(h => ['', t(h.k), h.fecha, '', '', '', '', ''])) },
+    { nombre: t('x_gasto'), titulo: t('sec_gasto') + ' · ' + tit, columnas: [{ t: t('g_fecha'), w: 12 }, { t: t('g_tipo'), w: 22 }, { t: t('g_cat'), w: 18 }, { t: t('g_concepto'), w: 34 }, { t: t('g_doc'), w: 14 }, { t: t('g_ref'), w: 14 }, { t: t('o_monto'), w: 15, f: 'n2' }, { t: t('f_moneda2'), w: 9 }, { t: t('x_amountIn', { c: sB }), w: 16, f: B }, { t: t('g_por'), w: 22 }, { t: t('g_nota'), w: 30 }],
+      filas: (p.gastoReal || []).map(g => [g.fecha || '', g.tipo === 'compromiso' ? t('g_tComp') : t('g_tReal'), t('cat_' + (CATS.includes(g.categoria) ? g.categoria : 'otro')), g.concepto || '', g.documento || '', g.ref || '', num(g.monto), SIM[monLinea(g.moneda, B)], r2(conv(num(g.monto), monLinea(g.moneda, B), B, T)), g.por || '', g.nota || ''])
+        .concat([['', t('g_aprobado'), '', '', '', '', '', '', r2(ej.aprobado), '', ''], ['', t('g_comp'), '', '', '', '', '', '', r2(ej.comp), '', ''], ['', t('g_real'), '', '', '', '', '', '', r2(ej.real), '', ''], ['', t('g_disp'), '', '', '', '', '', '', r2(ej.disponible), '', '']]) },
+  ];
+}
+const archivo = (...partes) => partes.map(x => fbSlug(x)).filter(Boolean).join('_');
+function exportarProyecto(p) { return descargarHojas(archivo('capex', p.codigo, LANG), hojasProyecto(p)); }
+function exportarCompras(p) {
+  const B = baseDe(p), T = Number(p.tasaCambio) || 0;
+  const hojas = [{ nombre: t('x_compras'), titulo: t('x_comprasTitle', { c: (p.codigo || '') + ' · ' + (p.titulo || '') }),
+    columnas: [{ t: '#', w: 5 }, { t: t('r_desc'), w: 38 }, { t: t('r_codigo'), w: 14 }, { t: t('r_cant'), w: 9, f: 'n2' }, { t: t('r_unidad'), w: 8 }, { t: t('r_prov'), w: 22 }, { t: t('r_lead'), w: 11, f: 'n0' }, { t: t('r_stock'), w: 9 }, { t: t('r_cu'), w: 14, f: 'n2' }, { t: t('f_moneda2'), w: 9 }, { t: t('x_amountIn', { c: SIM[B] }), w: 16, f: B }],
+    filas: (p.repuestos || []).map((x, i) => { const st = stockDe(x); return [i + 1, x.descripcion || '', x.codigo || '', num(x.cantidad), x.unidad ? lbl('u_', x.unidad) : '', x.proveedor || '', num(x.leadTimeDias), st == null ? '' : st, num(x.costoUnitario), SIM[monLinea(x.moneda, B)], r2(conv(num(x.cantidad) * num(x.costoUnitario), monLinea(x.moneda, B), B, T))]; }) }];
+  return descargarHojas(archivo('compras', p.codigo, LANG), hojas);
+}
+async function exportarPortafolio() {
+  if (!PORT) return;
+  const P = PORT, y = UI.anio, pres = esAdmin() ? presupuestoAnio(y) : null;
+  const filas = P.filas.map(f => [f.p.codigo || '', f.p.titulo || '', f.nave || '', f.p.area || '', t('tp_' + (f.p.tipo || 'mejora')), lbl('pr_', f.p.prioridad), t('crit_' + (f.crit || 'N')), t('st_' + f.est),
+    r2(f.tot.totalDOP), r2(f.tot.totalUSD), r2(conv(f.ej.aprobado, f.tot.B, 'DOP', f.tot.T)), r2(conv(f.ej.real, f.tot.B, 'DOP', f.tot.T)), f.ej.pct == null ? '' : r2(f.ej.pct),
+    f.fin.payback == null ? '' : r2(f.fin.payback), f.fin.roi == null ? '' : r2(f.fin.roi), f.fin.npv == null ? '' : r2(conv(f.fin.npv, f.tot.B, 'DOP', f.tot.T)), f.fin.irr == null ? '' : r2(f.fin.irr),
+    (f.p.cronograma && f.p.cronograma.fechaFinProyectada) || calcCronograma(f.p, fbHoy()).fechaFinProyectada]);
+  const naves = [...P.porNave.values()];
+  const hojas = [
+    { nombre: t('x_portafolio'), titulo: t('x_portTitle', { y }) + (fbNavesFiltro() ? ' · ' + (fbNaveActiva() || t('myNaves')) : ''), columnas: [{ t: t('f_codigo'), w: 16 }, { t: t('f_titulo'), w: 36 }, { t: t('f_nave'), w: 14 }, { t: t('f_area'), w: 14 }, { t: t('f_tipo'), w: 20 }, { t: t('f_prioridad'), w: 10 }, { t: t('f_criticidad'), w: 14 }, { t: t('f_estado'), w: 18 },
+      { t: t('f_total') + ' RD$', w: 16, f: 'DOP' }, { t: t('f_total') + ' US$', w: 15, f: 'USD' }, { t: t('kApproved') + ' RD$', w: 16, f: 'DOP' }, { t: t('kActual') + ' RD$', w: 16, f: 'DOP' }, { t: t('g_pct'), w: 10, f: 'pct' },
+      { t: t('fin_payback'), w: 11, f: 'n2' }, { t: t('fin_roi') + ' %', w: 10, f: 'pct' }, { t: t('fin_npv') + ' RD$', w: 16, f: 'DOP' }, { t: t('fin_irr') + ' %', w: 10, f: 'pct' }, { t: t('c_fin'), w: 12 }],
+      filas: filas.concat([['', t('tot_total'), '', '', '', '', '', '', r2(P.filas.reduce((s, f) => s + f.tot.totalDOP, 0)), r2(P.filas.reduce((s, f) => s + f.tot.totalUSD, 0)), r2(P.apr.DOP), r2(P.real.DOP), P.apr.DOP > 0 ? r2(P.real.DOP / P.apr.DOP * 100) : '', '', '', '', '', '']]), totales: [filas.length] },
+    { nombre: t('x_porNave'), titulo: t('x_portTitle', { y }) + ' · ' + t('byNave'), columnas: [{ t: t('f_nave'), w: 20 }, { t: t('projects'), w: 10, f: 'n0' }, { t: t('kRequested') + ' RD$', w: 18, f: 'DOP' }, { t: t('kApproved') + ' RD$', w: 18, f: 'DOP' }, { t: t('kActual') + ' RD$', w: 18, f: 'DOP' }, { t: t('kRequested') + ' US$', w: 16, f: 'USD' }, { t: t('kApproved') + ' US$', w: 16, f: 'USD' }, { t: t('kActual') + ' US$', w: 16, f: 'USD' }].concat(pres ? [{ t: t('x_presupuesto') + ' RD$', w: 18, f: 'DOP' }] : []),
+      filas: naves.map(x => [x.nombre || t('noNave'), x.n, r2(x.sol.DOP), r2(x.apr.DOP), r2(x.real.DOP), r2(x.sol.USD), r2(x.apr.USD), r2(x.real.USD)].concat(pres ? [r2(((PRES.presupuestos[String(y)] || {}).porNave || {})[cfgKey(x.nombre || '')] || 0)] : []))
+        .concat([[t('tot_total'), P.n, r2(P.sol.DOP), r2(P.apr.DOP), r2(P.real.DOP), r2(P.sol.USD), r2(P.apr.USD), r2(P.real.USD)].concat(pres ? [r2(pres.total)] : [])]), totales: [naves.length] },
+    { nombre: t('byType'), titulo: t('x_portTitle', { y }) + ' · ' + t('byType'), columnas: [{ t: t('f_tipo'), w: 26 }, { t: t('projects'), w: 10, f: 'n0' }, { t: t('kRequested') + ' RD$', w: 18, f: 'DOP' }, { t: t('kApproved') + ' RD$', w: 18, f: 'DOP' }, { t: t('kActual') + ' RD$', w: 18, f: 'DOP' }],
+      filas: [...P.porTipo.values()].map(x => [t('tp_' + x.tipo), x.n, r2(x.sol.DOP), r2(x.apr.DOP), r2(x.real.DOP)]) },
+  ];
+  return descargarHojas(archivo('capex-portafolio', String(y), fbNaveActiva() || '', LANG), hojas);
+}
+
+// ══════ ARRANQUE ══════
+function pintarBloqueo() {
+  $('portWrap').style.display = 'none';
+  $('segCur').style.display = 'none';
+  $('app').innerHTML = `<div class="card empty" id="capexBloqueo">${esc(t('locked'))}<br><span class="nota">${esc(t('lockedSub'))}</span></div>`;
+}
+window.CX = { critDe, conv, calcTotales, calcFinanzas, calcCronograma, calcEjecucion, calcPortafolio, vpn, tir, ahorroAnual, validar, limpiar, t, I18N, fmtMoney, fmtPct, fmtDate, fmtNum, setLang, atrasoTrabajo, duracionTrabajo, hojasProyecto };
+pintarCabecera();
+window.fbReady.then(async () => {
+  pintarCabecera();
+  if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('capex');
+  if (!esEnc()) { pintarBloqueo(); window.__capexListo = true; window.__capexVista = 'bloqueo'; return; } // sin lecturas para otros roles
+  try { prepararStock((await fbEquiposCatalogo(false)).docs); } catch (e) { console.warn('equipos:', e.message); }
+  await cargarConfig();
+  ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'capex', niveles: ['nave', 'area'], onChange: () => { traducirFiltro(); if (UI.vista === 'port') pintar(); } });
+  traducirFiltro();
+  if (typeof fbOnCatalogo === 'function') fbOnCatalogo(() => traducirFiltro());
+  fbOnNaveCambio(() => { traducirFiltro(); if (UI.vista === 'port') pintar(); });
+  await route();
+}).catch(e => { try { console.error(e); } catch (_) {} });
+</script>
+</body>
+</html>
