@@ -35,6 +35,59 @@
 
 firebase.initializeApp(firebaseConfig);
 
+// ══════════════════════════════════════════════════════════════════════
+// (v3, nov 2026) DISEÑO VoidTech + ESTRUCTURA DE LA APP (app-shell.js)
+//  - Tema elegido en este celular (Más → Tema): 'light' | 'dark' | 'auto'.
+//    Se aplica aquí, antes de pintar, para que no parpadee.
+//  - En todas las pantallas (menos equipo.html y etiquetas-qr.html, que no
+//    cambian, y login.html, que no carga este archivo) se cargan al terminar
+//    el HTML: icons.js, i18n.js + i18n/common.js + i18n/shell.js (si la
+//    pantalla no los trae) y app-shell.js, que pinta la barra superior, la
+//    barra inferior / menú lateral y el menú Más.
+//  - Si app-shell.js no carga (sin señal y sin copia), se pinta la barra de
+//    páginas de siempre (fbRenderMiniNav clásico).
+// ══════════════════════════════════════════════════════════════════════
+const FB_SIN_SHELL = ['equipo.html', 'etiquetas-qr.html', 'login.html'];
+(function () {
+  try {
+    const t = localStorage.getItem('vtTema');
+    // 'sol' (alto contraste) solo en las pantallas con la estructura de la app; equipo.html y
+    // etiquetas-qr.html no cambian: ahí 'sol' se ve como 'Claro'.
+    const sinShell = ['equipo.html', 'etiquetas-qr.html', 'login.html'].includes(location.pathname.split('/').pop());
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    else if (t === 'sol') document.documentElement.setAttribute('data-theme', sinShell ? 'light' : 'sol');
+  } catch (e) {}
+})();
+function fbConShell() { return !FB_SIN_SHELL.includes(location.pathname.split('/').pop() || 'index.html') && !window.__vtShellFail; }
+(function () {
+  const pagina = location.pathname.split('/').pop() || 'index.html';
+  if (FB_SIN_SHELL.includes(pagina)) return;
+  document.documentElement.classList.add('vt-shell');
+  const cargar = () => {
+    const hay = src => !!document.querySelector('script[src="' + src + '"]');
+    // Letra IBM Plex (Google Fonts) si la pantalla todavía no la pide.
+    if (!document.querySelector('link[href*="IBM+Plex"]')) {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap';
+      document.head.appendChild(l);
+    }
+    const lista = [];
+    if (!hay('icons.js') && !window.VTIcons) lista.push('icons.js');
+    if (!hay('i18n.js') && !window.i18n) lista.push('i18n.js');
+    if (!hay('i18n/common.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.common)) lista.push('i18n/common.js');
+    if (!hay('i18n/shell.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.shell)) lista.push('i18n/shell.js');
+    if (!hay('app-shell.js') && !window.VTShell) lista.push('app-shell.js');
+    lista.forEach(src => {
+      const s = document.createElement('script');
+      s.src = src; s.async = false;
+      if (src === 'app-shell.js') s.onerror = () => { window.__vtShellFail = true; document.documentElement.classList.remove('vt-shell'); _fbBarraMinima(); };
+      document.head.appendChild(s);
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cargar); else cargar();
+})();
+
 const auth = firebase.auth();
 const db = firebase.firestore();
 // (5 oct 2026) Algunas redes (WiFi de planta, datos con filtro) bloquean la
@@ -66,7 +119,53 @@ window.currentUserRole = null;
 // window.fbEtapa: en qué paso va el arranque (lo muestran las pantallas si
 // tarda demasiado, para saber si el problema es la sesión o la base de datos).
 window.fbEtapa = 'abriendo la sesión';
+// (v3) Acceso por rol en las pantallas que no tenían su propio candado: si el
+// rol no puede usarla, fbReady no se resuelve (la pantalla no lee nada) y
+// app-shell.js muestra la tarjeta "Sin acceso". window.fbSesion se resuelve
+// siempre que la sesión abre (lo usa la estructura de la app).
+const FB_MANT = ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO'];
+// (v3 etapa 3a) Todas las pantallas con candado usan esta misma tabla y la
+// misma tarjeta localizada (antes Incentivos, Rentabilidad, Administración,
+// CAPEX, Almacén y Herramientas tenían su propio aviso). Mismos roles que antes.
+const FB_ACCESO_PAGINA = {
+  'bitacora.html': FB_MANT, 'analisis.html': FB_MANT, 'checklist.html': FB_MANT, 'hoja-vida.html': FB_MANT,
+  'inventario.html': FB_MANT.concat(['ALMACEN']), 'almacen.html': FB_MANT.concat(['ALMACEN']),
+  'incentivos.html': ['ADMINISTRADOR'], 'rentabilidad.html': ['ADMINISTRADOR'], 'admin.html': ['ADMINISTRADOR'],
+  'capex.html': ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'],
+  'herramientas.html': FB_MANT.concat(['ALMACEN', 'RRHH']),
+};
+// Texto de la tarjeta "Sin acceso" de cada pantalla (i18n/shell.js).
+const FB_ACCESO_CLAVE = {
+  'inventario.html': 'shell.lock_inv', 'almacen.html': 'shell.lock_almMod', 'incentivos.html': 'shell.lock_inc',
+  'rentabilidad.html': 'shell.lock_rent', 'admin.html': 'shell.lock_adm', 'capex.html': 'shell.lock_capex', 'herramientas.html': 'shell.lock_herr',
+};
+// Secciones de una pantalla con su propio candado (mismos roles que la pantalla vieja):
+// Almacén → Solicitudes era almacen.html (Administrador, Encargado y Almacén).
+const FB_ACCESO_SECCION = {
+  'almacen.html#solicitudes': { roles: ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'ALMACEN'], clave: 'shell.lock_alm' },
+};
+function fbPuedeSeccion(pagSec) {
+  const s = FB_ACCESO_SECCION[pagSec]; const rol = window.currentUserRole && window.currentUserRole.rol;
+  return !s || s.roles.includes(rol);
+}
+let _fbSesionOk, _fbSesionMal;
+window.fbSesion = new Promise((res, rej) => { _fbSesionOk = res; _fbSesionMal = rej; });
+window.fbSesion.catch(() => {});
 window.fbReady = new Promise((resolve, reject) => {
+  const _resolve = resolve;
+  resolve = () => {
+    const permitidos = FB_ACCESO_PAGINA[currentPage];
+    const rol = window.currentUserRole && window.currentUserRole.rol;
+    if (permitidos && !permitidos.includes(rol)) {
+      window.__vtBloqueo = { pagina: currentPage, rol, clave: FB_ACCESO_CLAVE[currentPage] || 'shell.lock_mant' };
+      _fbSesionOk();
+      return; // fbReady queda pendiente: la pantalla no arranca sus lecturas
+    }
+    _fbSesionOk();
+    _resolve();
+  };
+  const _reject = reject;
+  reject = (e) => { _fbSesionMal(e); _reject(e); };
   auth.onAuthStateChanged(async (user) => {
     window.fbEtapa = user ? 'leyendo tu usuario en la base de datos' : 'sin sesión';
     if (!user || user.isAnonymous) {
@@ -141,6 +240,30 @@ async function fbLogout() {
 // "Salir". Se agrega aquí para no dejar esa llamada rota.
 // ══════════════════════════════════════════════════════════════════════
 function fbRenderMiniNav(active) {
+  // (v3) Con la estructura nueva no hay barra de páginas: la pestaña activa la
+  // marca app-shell.js. equipo/etiquetas-qr (y si app-shell.js no cargó): la de siempre.
+  window.__vtNavActivo = active || window.__vtNavActivo || '';
+  if (fbConShell()) { if (window.VTShell && typeof window.VTShell.activo === 'function') window.VTShell.activo(window.__vtNavActivo); return; }
+  // (v3 etapa 3a) Una sola lista de pantallas (la de app-shell.js). La barra de
+  // páginas de siempre queda SOLO en etiquetas-qr.html; si app-shell.js no
+  // carga (sin señal y sin copia) se pinta una barra mínima: Inicio y Salir.
+  if (currentPage === 'etiquetas-qr.html') _fbMiniNavLegacy(active); else _fbBarraMinima();
+}
+function _fbBarraMinima() {
+  window.fbReady.then(() => {
+    if (document.getElementById('fbMiniNav')) return;
+    const bar = document.createElement('div');
+    bar.id = 'fbMiniNav';
+    bar.style.cssText = 'display:flex;gap:8px;padding:8px 14px;background:var(--color-nav-bg,#0B131C);border-bottom:1px solid var(--color-nav-border,#2D3F55);font-size:12px;align-items:center;position:sticky;top:0;z-index:250;';
+    bar.innerHTML = `<a href="index.html" style="padding:5px 9px;border-radius:6px;text-decoration:none;font-weight:600;color:#94A3B8;">Inicio</a>`
+      + `<span style="margin-left:auto;color:#94A3B8;white-space:nowrap;">${fbEsc((window.currentUserRole && window.currentUserRole.nombre) || '')}</span>`
+      + `<button onclick="fbLogout()" style="background:none;border:1px solid #2D3F55;color:#94A3B8;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;">Salir</button>`;
+    document.body.insertBefore(bar, document.body.firstChild);
+  }).catch(() => {});
+}
+// (v3 etapa 3b) Barra clásica de respaldo (etiquetas-qr.html y si app-shell.js no carga): se deja
+// exactamente igual que en main, con sus símbolos, para no cambiar el diseño de esa pantalla.
+function _fbMiniNavLegacy(active) {
   window.fbReady.then(() => {
     if (document.getElementById('fbMiniNav')) return; // evita duplicar si se llama 2 veces
     const pages = [
@@ -355,9 +478,9 @@ function fbMostrarErrorArranque(texto) {
     d.id = 'fbErrArranque';
     d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,25,35,.94);display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,system-ui,sans-serif;';
     d.innerHTML = '<div style="background:#202F42;border:1px solid #2D3F55;border-radius:14px;padding:24px 20px;max-width:360px;width:100%;text-align:center;color:#F1F5F9;">'
-      + '<div style="font-size:40px;margin-bottom:8px;">⚠️</div>'
+      + '<div style="font-size:40px;margin-bottom:8px;"><span data-icon="alert" class="ic-warn"></span></div>'
       + '<div style="font-size:15px;line-height:1.5;margin-bottom:16px;">' + fbEsc(texto) + '</div>'
-      + '<button onclick="location.reload()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#F59E0B;color:#0F1923;font-weight:800;font-size:15px;cursor:pointer;">🔄 Reintentar</button>'
+      + '<button onclick="location.reload()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#F59E0B;color:#0F1923;font-weight:800;font-size:15px;cursor:pointer;"><span data-icon="refresh"></span> Reintentar</button>'
       + '<a href="login.html?next=' + encodeURIComponent(currentPage + location.search) + '" style="display:block;margin-top:10px;padding:11px;border-radius:10px;background:#2D3F55;color:#F1F5F9;font-weight:700;text-decoration:none;font-size:14px;">Iniciar sesión con otra cuenta</a>'
       + '</div>';
     document.body.appendChild(d);

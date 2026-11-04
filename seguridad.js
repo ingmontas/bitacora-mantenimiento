@@ -37,7 +37,9 @@
 (function () {
   const COL = 'permisos_trabajo';
   const ABIERTOS = ['abierto', 'por_autorizar', 'autorizado', 'rechazado'];
-  const ESTADO_TXT = { abierto: '🔒 Bloqueo abierto', por_autorizar: '⏳ Por autorizar', autorizado: '✅ Autorizado', cerrado: '🔓 Cerrado', rechazado: '✋ Rechazado' };
+  const ESTADO_TXT = { abierto: 'Bloqueo abierto', por_autorizar: 'Por autorizar', autorizado: 'Autorizado', cerrado: 'Cerrado', rechazado: 'Rechazado' };
+  // (v3) Icono de cada estado (antes era un emoji al inicio del texto)
+  const ESTADO_IC = { abierto: 'lock', por_autorizar: 'clock', autorizado: 'check-circle', cerrado: 'unlock', rechazado: 'hand' };
   const ENERGIAS = [['electrica', 'Eléctrica'], ['neumatica', 'Neumática (aire)'], ['hidraulica', 'Hidráulica (aceite)'], ['mecanica', 'Mecánica / gravedad'], ['termica', 'Térmica (calor / frío)'], ['quimica', 'Química']];
   const RIESGOS = [
     ['altura', 'Trabajo en altura', 'Más de 1.8 m del piso: escalera, andamio, techo'],
@@ -195,7 +197,7 @@
   }
   function htmlPaso(ctx, eq, nivel, obl, cfg, st) {
     const ck = k => st.ck[k] ? ' checked' : '';
-    const loto = st.requiere === true ? `<div class="fbsh-sec" id="fbsLoto"><b>🔒 Bloqueo y etiquetado (LOTO)</b>
+    const loto = st.requiere === true ? `<div class="fbsh-sec" id="fbsLoto"><b><span data-icon="lock"></span> Bloqueo y etiquetado (LOTO)</b>
       ${PASOS.map(([k, t, d]) => {
         let extra = '';
         if (k === 'energias') extra = `<div class="fbsh-chips">${ENERGIAS.map(([v, tx]) => `<label class="fbsh-ck"><input type="checkbox" data-en="${v}"${st.energias.has(v) ? ' checked' : ''}/>${esc(tx)}</label>`).join('')}</div>`;
@@ -204,16 +206,16 @@
         const conCk = !['energias', 'epp'].includes(k);
         return `<label class="fbsh-ck paso">${conCk ? `<input type="checkbox" data-paso="${k}"${ck(k)}/>` : '<span style="width:22px;flex:0 0 22px;text-align:center;">•</span>'}<span>${esc(t)}<small>${esc(d)}</small></span></label>${extra}`;
       }).join('')}</div>` : '';
-    return `<div class="fbsh-head"><div><h3>🦺 Antes de empezar — Seguridad</h3><small>${esc(eq.nombre || 'Equipo')}${ctx.ot && ctx.ot.folio ? ' · ' + esc(ctx.ot.folio) : ''} ${typeof fbCritBadge === 'function' ? fbCritBadge(nivel) : ''}</small></div></div>
+    return `<div class="fbsh-head"><div><h3><span data-icon="shield"></span> Antes de empezar — Seguridad</h3><small>${esc(eq.nombre || 'Equipo')}${ctx.ot && ctx.ot.folio ? ' · ' + esc(ctx.ot.folio) : ''} ${typeof fbCritBadge === 'function' ? fbCritBadge(nivel) : ''}</small></div></div>
       <div class="fbsh-t">¿Hay que bloquear la máquina (LOTO)?</div>
       ${obl.si ? `<div class="fbsh-caja err" data-obligatorio="1">Obligatorio: ${esc(obl.motivo)}. Haz el bloqueo antes de meter las manos.</div>` : '<div class="fbsh-nota">Si vas a meter las manos, quitar guardas o hay piezas que se pueden mover: <b>sí</b>.</div>'}
       <div class="fbsh-seg"><button type="button" data-a="req" data-v="si" class="${st.requiere === true ? 'sel' : ''}">Sí, bloquear</button><button type="button" data-a="req" data-v="no" class="${st.requiere === false ? 'sel' : ''}"${obl.si ? ' disabled' : ''}>No hace falta</button></div>
       ${loto}
-      <div class="fbsh-sec"><b>⚠️ Riesgos especiales</b><div class="fbsh-nota">Si marcas alguno, un Supervisor o Encargado tiene que autorizar desde su celular antes de hacer esa parte del trabajo.</div>
+      <div class="fbsh-sec"><b><span data-icon="alert"></span> Riesgos especiales</b><div class="fbsh-nota">Si marcas alguno, un Supervisor o Encargado tiene que autorizar desde su celular antes de hacer esa parte del trabajo.</div>
         ${RIESGOS.map(([k, t, d]) => `<label class="fbsh-ck paso"><input type="checkbox" data-riesgo="${k}"${st.riesgos[k] ? ' checked' : ''}/><span>${esc(t)}<small>${esc(d)}</small></span></label>`).join('')}
-        <div class="fbsh-caja warn" id="fbsAutNota" style="${tieneRiesgo(st.riesgos) ? '' : 'display:none'}">Se enviará a "Permisos por autorizar". Puedes ir preparando; no hagas el trabajo especial hasta que salga <b>✅ Autorizado</b>.</div></div>
+        <div class="fbsh-caja warn" id="fbsAutNota" style="${tieneRiesgo(st.riesgos) ? '' : 'display:none'}">Se enviará a "Permisos por autorizar". Puedes ir preparando; no hagas el trabajo especial hasta que salga <b><span data-icon="check-circle"></span> Autorizado</b>.</div></div>
       <div class="fbsh-err" id="fbsErr">${esc(st.err)}</div>
-      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="cancelar">Ahora no</button><button type="button" class="fbsh-btn ok" data-a="listo">✅ Listo, empezar</button></div>`;
+      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="cancelar">Ahora no</button><button type="button" class="fbsh-btn ok" data-a="listo"><span data-icon="check-circle"></span> Listo, empezar</button></div>`;
   }
   function guardarPaso(ctx, eq, nivel, obl, st, s) {
     const err = m => { st.err = m; const e = s.el.querySelector('#fbsErr'); if (e) { e.textContent = m; e.scrollIntoView({ block: 'center' }); } };
@@ -245,10 +247,10 @@
     };
     const local = { id: ref.id, ...doc, creadoEn: null };
     // Sin esperar al servidor: sin señal queda en el celular y se sube solo.
-    ref.set(doc).catch(e => aviso('❌ El permiso de trabajo no se subió: ' + (e && e.code === 'permission-denied' ? 'Firebase lo rechazó (permiso denegado).' : (e && e.message) || e), 'error'));
+    ref.set(doc).catch(e => aviso('El permiso de trabajo no se subió: ' + (e && e.code === 'permission-denied' ? 'Firebase lo rechazó (permiso denegado).' : (e && e.message) || e), 'error'));
     if (!_mios.some(p => p.id === ref.id)) { _mios = _mios.concat([local]); _pend.add(ref.id); }
     avisar();
-    aviso(esp ? '⏳ Permiso enviado — espera la autorización del supervisor para el trabajo especial' : (sinSenal() ? '💾 Bloqueo guardado en el celular — se sube al volver la señal' : '🔒 Bloqueo registrado. Trabaja seguro.'), esp || sinSenal() ? 'warn' : undefined);
+    aviso(esp ? 'Permiso enviado — espera la autorización del supervisor para el trabajo especial' : (sinSenal() ? 'Bloqueo guardado en el celular — se sube al volver la señal' : 'Bloqueo registrado. Trabaja seguro.'), esp || sinSenal() ? 'warn' : undefined);
     if (ctx.onListo) ctx.onListo(local);
   }
 
@@ -261,12 +263,12 @@
     const items = RETIRO.filter(([k]) => conLoto || k !== 'candado');
     const st = {};
     const s = fbSheet('', { id: 'fbSegRetiro', fijo: true });
-    const pintar = (err) => s.set(`<div class="fbsh-head"><div><h3>🔓 Retirar bloqueo</h3><small>${esc(p.equipoNombre || '')}${p.loto && p.loto.candado ? ' · candado ' + esc(p.loto.candado) : ''}</small></div></div>
+    const pintar = (err) => s.set(`<div class="fbsh-head"><div><h3><span data-icon="unlock"></span> Retirar bloqueo</h3><small>${esc(p.equipoNombre || '')}${p.loto && p.loto.candado ? ' · candado ' + esc(p.loto.candado) : ''}</small></div></div>
       <div class="fbsh-nota">Antes de devolver la máquina a producción:</div>
       ${items.map(([k, t]) => `<label class="fbsh-ck"><input type="checkbox" data-r="${k}"${st[k] ? ' checked' : ''}/>${esc(t)}</label>`).join('')}
       <label class="fbsh-ck" style="gap:8px;">Hora<input type="time" id="fbsRetHora" value="${esc(st.hora || ahoraHM())}" style="max-width:140px;margin:0;"/></label>
       <div class="fbsh-err">${esc(err || '')}</div>
-      <div class="fbsh-acc">${opts.saltar ? `<button type="button" class="fbsh-btn sec" data-a="saltar">${esc(opts.saltar)}</button>` : '<button type="button" class="fbsh-btn sec" data-a="saltar">Ahora no</button>'}<button type="button" class="fbsh-btn ok" data-a="ok">🔓 Retirar y cerrar</button></div>`);
+      <div class="fbsh-acc">${opts.saltar ? `<button type="button" class="fbsh-btn sec" data-a="saltar">${esc(opts.saltar)}</button>` : '<button type="button" class="fbsh-btn sec" data-a="saltar">Ahora no</button>'}<button type="button" class="fbsh-btn ok" data-a="ok"><span data-icon="unlock"></span> Retirar y cerrar</button></div>`);
     s.el.addEventListener('change', ev => { const t = ev.target; if (t.dataset.r) st[t.dataset.r] = t.checked; if (t.id === 'fbsRetHora') st.hora = t.value; });
     s.el.addEventListener('click', ev => {
       const b = ev.target.closest('[data-a]'); if (!b) return;
@@ -290,9 +292,9 @@
   }
   // extra = { otId, otFolio } si se cierra al guardar la OT; callado = sin mensaje.
   function cerrar(p, retiro, extra, callado) {
-    db.collection(COL).doc(p.id).update(cambiosCierre(retiro, extra)).catch(e => aviso('❌ No se cerró el permiso de trabajo: ' + (e && e.code === 'permission-denied' ? 'Firebase lo rechazó (¿ya estaba cerrado?).' : (e && e.message) || e), 'error'));
+    db.collection(COL).doc(p.id).update(cambiosCierre(retiro, extra)).catch(e => aviso('No se cerró el permiso de trabajo: ' + (e && e.code === 'permission-denied' ? 'Firebase lo rechazó (¿ya estaba cerrado?).' : (e && e.message) || e), 'error'));
     marcarLocal(p.id, { estado: 'cerrado', retiro, ...(extra || {}) });
-    if (!callado) aviso(sinSenal() ? '💾 Bloqueo retirado (en el celular) — se sube al volver la señal' : '🔓 Bloqueo retirado. Equipo devuelto a producción.', sinSenal() ? 'warn' : undefined);
+    if (!callado) aviso(sinSenal() ? 'Bloqueo retirado (en el celular) — se sube al volver la señal' : 'Bloqueo retirado. Equipo devuelto a producción.', sinSenal() ? 'warn' : undefined);
   }
   function marcarLocal(id, cambios) {
     if (cambios.estado === 'cerrado') { const p = _mios.find(x => x.id === id) || _cerrados.get(id); if (p) _cerrados.set(id, { ...p, ...cambios }); }
@@ -310,21 +312,21 @@
 
   // ══════ AUTORIZAR (Supervisor / Encargado / Administrador) ══════
   function decidir(p, aprobar, nota) {
-    if (!esSupervisor()) { aviso('⛔ Solo Supervisor, Encargado o Administrador autorizan permisos.', 'error'); return Promise.resolve(false); }
-    if (p.tecnicoUid === uid()) { aviso('⛔ Tu propio permiso lo tiene que autorizar otra persona.', 'error'); return Promise.resolve(false); }
+    if (!esSupervisor()) { aviso('Solo Supervisor, Encargado o Administrador autorizan permisos.', 'error'); return Promise.resolve(false); }
+    if (p.tecnicoUid === uid()) { aviso('Tu propio permiso lo tiene que autorizar otra persona.', 'error'); return Promise.resolve(false); }
     const c = { estado: aprobar ? 'autorizado' : 'rechazado', autorizadoPor: miNombre().slice(0, 100), autorizadoPorUid: uid(), autorizadoEn: fbTimestamp(), notaAutorizacion: String(nota || '').trim().slice(0, 300) };
-    db.collection(COL).doc(p.id).update(c).catch(e => aviso(e && e.code === 'permission-denied' ? '⚠️ No se pudo: el permiso ya cambió (lo cerró el técnico o lo decidió otro supervisor).' : '❌ No se guardó la autorización: ' + ((e && e.message) || e), 'error'));
+    db.collection(COL).doc(p.id).update(c).catch(e => aviso(e && e.code === 'permission-denied' ? 'No se pudo: el permiso ya cambió (lo cerró el técnico o lo decidió otro supervisor).' : 'No se guardó la autorización: ' + ((e && e.message) || e), 'error'));
     marcarLocal(p.id, c);
-    aviso(aprobar ? (sinSenal() ? '💾 Autorizado en tu celular — se sube al volver la señal' : '✅ Permiso autorizado') : '✋ Permiso rechazado', aprobar ? (sinSenal() ? 'warn' : undefined) : 'warn');
+    aviso(aprobar ? (sinSenal() ? 'Autorizado en tu celular — se sube al volver la señal' : 'Permiso autorizado') : 'Permiso rechazado', aprobar ? (sinSenal() ? 'warn' : undefined) : 'warn');
     return Promise.resolve(true);
   }
   function abrirAutorizar(p) {
     const s = fbSheet('', { id: 'fbSegAut' });
-    const pintar = err => s.set(`<div class="fbsh-head"><div><h3>🦺 Autorizar permiso de trabajo</h3><small>${esc(p.equipoNombre || '')} ${typeof fbCritBadge === 'function' ? fbCritBadge(p.criticidad) : ''}</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar">✕</button></div>
+    const pintar = err => s.set(`<div class="fbsh-head"><div><h3>Autorizar permiso de trabajo</h3><small>${esc(p.equipoNombre || '')} ${typeof fbCritBadge === 'function' ? fbCritBadge(p.criticidad) : ''}</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar"><span data-icon="x"></span></button></div>
       ${detalleHtml(p)}
       <textarea id="fbsNotaAut" maxlength="300" placeholder="Nota (obligatoria si rechazas): condiciones, quién vigila…"></textarea>
       <div class="fbsh-err">${esc(err || '')}</div>
-      <div class="fbsh-acc"><button type="button" class="fbsh-btn mal" data-a="no">✋ Rechazar</button><button type="button" class="fbsh-btn ok" data-a="si">✅ Autorizar</button></div>`);
+      <div class="fbsh-acc"><button type="button" class="fbsh-btn mal" data-a="no"><span data-icon="hand"></span> Rechazar</button><button type="button" class="fbsh-btn ok" data-a="si"><span data-icon="check-circle"></span> Autorizar</button></div>`);
     s.el.addEventListener('click', ev => {
       const b = ev.target.closest('[data-a]'); if (!b) return;
       if (b.dataset.a === 'x') return fbSheetCerrar();
@@ -336,7 +338,7 @@
   }
 
   // ── HTML ──
-  function estadoHtml(p) { const e = (p && p.estado) || ''; return `<span class="fbs-est fbs-${esc(e)}" data-estado="${esc(e)}">${esc(ESTADO_TXT[e] || e || '—')}</span>`; }
+  function estadoHtml(p) { const e = (p && p.estado) || ''; return `<span class="fbs-est fbs-${esc(e)}" data-estado="${esc(e)}">${ESTADO_IC[e] && window.VTIcons ? VTIcons.icon(ESTADO_IC[e], { cls: 'sm' }) : ''}${esc(ESTADO_TXT[e] || e || '—')}</span>`; }
   function horaDe(p) { const ms = msDe(p); if (!ms) return p.horaInicio || ''; const d = new Date(ms); return fbFechaLocal(d).slice(8, 10) + '/' + fbFechaLocal(d).slice(5, 7) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
   function detalleHtml(p) {
     const l = p.loto || {}, r = riesgosTxt(p.riesgos);
@@ -344,10 +346,10 @@
     return `<table>
       <tr><td>Técnico</td><td>${esc(p.tecnico || '—')}</td></tr>
       <tr><td>Desde</td><td>${esc(horaDe(p))}${p.otFolio ? ' · ' + esc(p.otFolio) : ''}${p.tipoTrabajo ? ' · ' + esc(p.tipoTrabajo) : ''}</td></tr>
-      <tr><td>LOTO</td><td>${l.requerido ? `✅ Hecho${l.candado ? ' · candado <b>' + esc(l.candado) + '</b>' : ''}${en.length ? '<br>Energías: ' + esc(en.join(', ')) : ''}${(l.epp || []).length ? '<br>EPP: ' + esc(l.epp.join(', ')) : ''}` : 'No requerido'}</td></tr>
+      <tr><td>LOTO</td><td>${l.requerido ? `<span data-icon="check-circle"></span> Hecho${l.candado ? ' · candado <b>' + esc(l.candado) + '</b>' : ''}${en.length ? '<br>Energías: ' + esc(en.join(', ')) : ''}${(l.epp || []).length ? '<br>EPP: ' + esc(l.epp.join(', ')) : ''}` : 'No requerido'}</td></tr>
       <tr><td>Riesgos</td><td>${r.length ? '<b>' + esc(r.join(', ')) + '</b>' : 'Ninguno especial'}</td></tr>
       ${p.autorizadoPor ? `<tr><td>${p.estado === 'rechazado' ? 'Rechazó' : 'Autorizó'}</td><td>${esc(p.autorizadoPor)}${p.notaAutorizacion ? ' — ' + esc(p.notaAutorizacion) : ''}</td></tr>` : ''}
-      ${p.retiro ? `<tr><td>Retiro</td><td>🔓 ${esc(p.retiro.hora || '')} · ${esc(p.retiro.por || '')}</td></tr>` : ''}
+      ${p.retiro ? `<tr><td>Retiro</td><td><span data-icon="unlock"></span> ${esc(p.retiro.hora || '')} · ${esc(p.retiro.por || '')}</td></tr>` : ''}
     </table>`;
   }
   // Tarjeta para el formulario / avisos (sin datos en onclick: solo el id del documento).
@@ -355,22 +357,22 @@
     opts = opts || {};
     const pend = _pend.has(p.id);
     const r = riesgosTxt(p.riesgos);
-    const msg = p.estado === 'por_autorizar' ? '⏳ Falta la autorización del supervisor para: ' + r.join(', ') + '. No hagas esa parte del trabajo todavía.'
-      : p.estado === 'rechazado' ? '✋ Rechazado' + (p.notaAutorizacion ? ': ' + p.notaAutorizacion : '') + '. No hagas el trabajo especial; habla con tu supervisor.'
-      : p.estado === 'autorizado' ? '✅ Autorizado por ' + (p.autorizadoPor || 'el supervisor') + (p.notaAutorizacion ? ' — ' + p.notaAutorizacion : '') : '';
+    const msg = p.estado === 'por_autorizar' ? 'Falta la autorización del supervisor para: ' + r.join(', ') + '. No hagas esa parte del trabajo todavía.'
+      : p.estado === 'rechazado' ? 'Rechazado' + (p.notaAutorizacion ? ': ' + p.notaAutorizacion : '') + '. No hagas el trabajo especial; habla con tu supervisor.'
+      : p.estado === 'autorizado' ? 'Autorizado por ' + (p.autorizadoPor || 'el supervisor') + (p.notaAutorizacion ? ' — ' + p.notaAutorizacion : '') : '';
     return `<div class="fbs-card ${esc(p.estado)}" data-permiso="${esc(p.id)}">
-      <div class="t"><span>🦺 ${esc(p.equipoNombre || 'Permiso de trabajo')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''}</span>${estadoHtml(p)}</div>
-      <div class="m">${p.loto && p.loto.requerido ? '🔒 LOTO hecho' + (p.loto.candado ? ' · candado ' + esc(p.loto.candado) : '') : 'Sin bloqueo'} · desde ${esc(horaDe(p))}${pend ? ' · 📵 sin subir todavía' : ''}</div>
+      <div class="t"><span><span data-icon="shield"></span> ${esc(p.equipoNombre || 'Permiso de trabajo')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''}</span>${estadoHtml(p)}</div>
+      <div class="m">${p.loto && p.loto.requerido ? '<span data-icon="lock"></span> LOTO hecho' + (p.loto.candado ? ' · candado ' + esc(p.loto.candado) : '') : 'Sin bloqueo'} · desde ${esc(horaDe(p))}${pend ? ' · <span data-icon="wifi-off"></span> sin subir todavía' : ''}</div>
       ${msg ? `<div class="m" style="color:var(--color-text);font-weight:700;">${esc(msg)}</div>` : ''}
-      ${opts.acciones === false ? '' : `<div class="acc"><button type="button" class="fbsh-btn sec sm" data-seg="retirar" data-id="${esc(p.id)}">🔓 Retirar bloqueo</button></div>`}
+      ${opts.acciones === false ? '' : `<div class="acc"><button type="button" class="fbsh-btn sec sm" data-seg="retirar" data-id="${esc(p.id)}"><span data-icon="unlock"></span> Retirar bloqueo</button></div>`}
     </div>`;
   }
   function tarjetaAutorizarHtml(p) {
     const r = riesgosTxt(p.riesgos);
     return `<div class="fbs-card por_autorizar" data-por-autorizar="${esc(p.id)}">
       <div class="t"><span>${esc(p.equipoNombre || '—')} ${typeof fbCritBadge === 'function' ? fbCritBadge(p.criticidad) : ''}</span><span class="m" style="margin:0;">${esc(horaDe(p))}</span></div>
-      <div class="m">👤 ${esc(p.tecnico || '—')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''} · ${p.loto && p.loto.requerido ? '🔒 LOTO hecho' : 'sin LOTO'}${_pend.has(p.id) ? ' · 📵 sin subir' : ''}</div>
-      <div class="m" style="color:var(--color-warn-text);font-weight:800;">⚠️ ${esc(r.join(', '))}</div>
+      <div class="m"><span data-icon="user"></span> ${esc(p.tecnico || '—')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''} · ${p.loto && p.loto.requerido ? '<span data-icon="lock"></span> LOTO hecho' : 'sin LOTO'}${_pend.has(p.id) ? ' · <span data-icon="wifi-off"></span> sin subir' : ''}</div>
+      <div class="m" style="color:var(--color-warn-text);font-weight:800;"><span data-icon="alert"></span> ${esc(r.join(', '))}</div>
       <div class="acc"><button type="button" class="fbsh-btn ok sm" data-seg="autorizar" data-id="${esc(p.id)}">Revisar y autorizar</button></div>
     </div>`;
   }
@@ -379,10 +381,10 @@
     let h = '';
     if (esSupervisor()) {
       const l = porAutorizar();
-      h += `<div class="av-sec" id="seg-por-autorizar">🦺 Permisos por autorizar <small>${_porAutErr ? '⚠️ ' + esc(_porAutErr) : !_porAutListo ? 'cargando…' : l.length ? l.length + ' esperando' : 'ninguno'}</small></div>` + l.map(tarjetaAutorizarHtml).join('');
+      h += `<div class="av-sec" id="seg-por-autorizar"><span data-icon="shield"></span> Permisos por autorizar <small>${_porAutErr ? '<span data-icon="alert"></span> ' + esc(_porAutErr) : !_porAutListo ? 'cargando…' : l.length ? l.length + ' esperando' : 'ninguno'}</small></div>` + l.map(tarjetaAutorizarHtml).join('');
     }
     const m = mios();
-    if (m.length) h += `<div class="av-sec" id="seg-mios">🔒 Mis bloqueos abiertos <small>${m.length}</small></div>` + m.map(p => tarjetaHtml(p)).join('');
+    if (m.length) h += `<div class="av-sec" id="seg-mios"><span data-icon="lock"></span> Mis bloqueos abiertos <small>${m.length}</small></div>` + m.map(p => tarjetaHtml(p)).join('');
     return h ? h + '<div class="av-sep"></div>' : '';
   }
   document.addEventListener('click', ev => {
@@ -437,7 +439,7 @@
       const abiertoH = ms && ['abierto', 'autorizado', 'por_autorizar'].includes(p.estado) ? Math.round((ahora - ms) / 360000) / 10 : '';
       return [d ? fbFechaLocal(d) : (p.fecha || ''), p.horaInicio || '', p.equipoNombre || '', p.criticidad || 'Sin evaluar', p.tecnico || '', p.otFolio || '', p.tipoTrabajo || '',
         l.requerido ? 'Sí' : 'No', l.candado || '', (l.energias || []).map(k => (ENERGIAS.find(x => x[0] === k) || [k, k])[1]).join(', '), (l.epp || []).join(', '),
-        riesgosTxt(p.riesgos).join(', '), (ESTADO_TXT[p.estado] || p.estado || '').replace(/^\S+\s/, ''), p.autorizadoPor || '', p.notaAutorizacion || '', (p.retiro && p.retiro.hora) || '', abiertoH];
+        riesgosTxt(p.riesgos).join(', '), (ESTADO_TXT[p.estado] || p.estado || ''), p.autorizadoPor || '', p.notaAutorizacion || '', (p.retiro && p.retiro.hora) || '', abiertoH];
     });
   }
   const COLUMNAS_EXCEL = [{ t: 'Fecha', w: 12 }, { t: 'Hora inicio', w: 10 }, { t: 'Equipo', w: 24 }, { t: 'Criticidad', w: 11 }, { t: 'Técnico', w: 24 }, { t: 'OT', w: 12 }, { t: 'Tipo', w: 12 },

@@ -139,8 +139,9 @@
     });
     return ordenar(out);
   }
-  const NIVEL_TXT = { fuera: '⛔ Fuera de rango', tendencia: '⚠️ Tendencia', cerca: '🟡 Cerca del límite' };
-  function badge(a) { return a ? `<span class="tend-badge tend-${a.nivel}" data-tend="${a.nivel}">${NIVEL_TXT[a.nivel]}</span>` : ''; }
+  const NIVEL_TXT = { fuera: 'Fuera de rango', tendencia: 'Tendencia', cerca: 'Cerca del límite' };
+  const NIVEL_IC = { fuera: 'stop', tendencia: 'alert', cerca: 'gauge' }; // (v3) icono en vez de emoji
+  function badge(a) { return a ? `<span class="tend-badge tend-${a.nivel}" data-tend="${a.nivel}">${NIVEL_IC[a.nivel] ? '<span data-icon="' + NIVEL_IC[a.nivel] + '"></span> ' : ''}${NIVEL_TXT[a.nivel]}</span>` : ''; }
 
   // ── OT desde el checklist (mismo documento y mismo control de repetidas) ──
   const ESTADOS_ABIERTAS = ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'];
@@ -187,10 +188,10 @@
     const planta = (typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(eq.id) : '') || g.planta || '';
     const quien = (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
     const doc = otDoc({ folio, equipo: eq, planta, punto: g.punto, prioridad: a.nivel === 'fuera' || g.crit === 'A' ? 'alta' : 'media', checklistId: ult.ckId || null, creador: quien,
-      descripcionFalla: `${g.punto} (${NIVEL_TXT[a.nivel].replace(/^\S+\s/, '')}: lectura ${fmt(a.ultimo)}${uni}, rango ${rango}) — ${a.texto}`.slice(0, 1000),
+      descripcionFalla: `${g.punto} (${NIVEL_TXT[a.nivel]}: lectura ${fmt(a.ultimo)}${uni}, rango ${rango}) — ${a.texto}`.slice(0, 1000),
       extra: { origenAlerta: 'tendencia', alertaNivel: a.nivel } });
     const ref = db.collection('ots').doc();
-    ref.set(doc).catch(e => (typeof fbAviso === 'function' ? fbAviso : console.warn)('❌ La OT no se guardó: ' + (e && e.code === 'permission-denied' ? 'permiso denegado' : (e && e.message) || e), 'error'));
+    ref.set(doc).catch(e => (typeof fbAviso === 'function' ? fbAviso : console.warn)('La OT no se guardó: ' + (e && e.code === 'permission-denied' ? 'permiso denegado' : (e && e.message) || e), 'error'));
     const local = { id: ref.id, ...doc };
     if (Array.isArray(ots)) ots.push(local); // así un segundo toque no la repite
     return { creada: local };

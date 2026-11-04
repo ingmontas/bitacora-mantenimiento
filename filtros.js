@@ -16,6 +16,14 @@
 // 2) Exportar a Excel (.xlsx con ExcelJS, que se descarga solo al pedirlo) y,
 //    si no se puede cargar (sin señal), ofrece un CSV con lo mismo.
 //    fbExportar({ nombre, hojas:[{ nombre, titulo, columnas:[{t, w}], filas }] })
+//    (v3 etapa 3a) UN solo camino para exportar en toda la app (Análisis, Bitácora,
+//    Checklist, Hoja de vida). Dos opciones para que los archivos de siempre salgan
+//    IGUALES, columna por columna:
+//      · csvFormato: 'comillas' → CSV con comas y cada dato entre comillas (el de
+//        la Bitácora de siempre); por defecto ';' y coma decimal (Excel en español).
+//      · construir: async () => buffer → un libro de Excel propio (la Hoja de vida,
+//        con su Dashboard, fórmulas y gráficas); filtros.js carga ExcelJS, descarga
+//        y, si Excel no se puede cargar, ofrece el CSV de `hojas`.
 // ══════════════════════════════════════════════════════════════════════
 (function () {
   const K = s => fbEquipoKey(s);
@@ -122,7 +130,7 @@
         if (disp.length > 1) {
           const act = fbNaveActiva();
           const lst = disp.map(n => ({ nombre: n, activo: fbNombreActivo('plantas', n) }));
-          h += `<select data-fbf="nave" aria-label="Nave" class="${act ? 'on' : ''}">` + opcionesHtml(lst, act || '', fbMisNaves() ? 'Todas mis naves' : 'Todas las naves', x => '🏭 ' + x.nombre, x => x.nombre) + '</select>';
+          h += `<select data-fbf="nave" aria-label="Nave" class="${act ? 'on' : ''}">` + opcionesHtml(lst, act || '', fbMisNaves() ? 'Todas mis naves' : 'Todas las naves', x => '' + x.nombre, x => x.nombre) + '</select>';
         }
       }
       if (niveles.includes('area')) {
@@ -212,7 +220,13 @@
   }
   // CSV con ; y coma decimal (Excel en español). El apóstrofo evita que un
   // texto que empieza con = + - @ se lea como fórmula.
-  function fbCsv(hojas) {
+  function fbCsv(hojas, formato) {
+    if (formato === 'comillas') {
+      // Bitácora (5 oct 2026): encabezados sin comillas, cada dato entre comillas, una OT por línea.
+      const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      const h = hojas[0];
+      return String.fromCharCode(0xFEFF) + h.columnas.map(c => c.t).join(',') + '\n' + h.filas.map(f => f.map(q).join(',') + '\n').join('');
+    }
     const cel = x => {
       if (typeof x === 'number') return isFinite(x) ? String(Math.round(x * 100) / 100).replace('.', ',') : '';
       let s = String(x == null ? '' : x).replace(/\r?\n/g, ' ');
@@ -253,8 +267,8 @@
     const viejo = document.getElementById('fbExpDlg'); if (viejo) viejo.remove();
     const d = document.createElement('div');
     d.id = 'fbExpDlg';
-    d.innerHTML = `<div role="dialog" aria-modal="true"><div style="font-size:28px;text-align:center">📵</div><div>${fbEsc(msg)}</div>
-      <button id="fbExpCsv" style="background:var(--color-primary,#F59E0B);color:var(--color-on-primary,#0F1923)">⬇️ Descargar CSV (se abre con Excel)</button>
+    d.innerHTML = `<div role="dialog" aria-modal="true"><div style="font-size:28px;text-align:center"><span data-icon="wifi-off"></span></div><div>${fbEsc(msg)}</div>
+      <button id="fbExpCsv" style="background:var(--color-primary,#F59E0B);color:var(--color-on-primary,#0F1923)"><span data-icon="download"></span> Descargar CSV (se abre con Excel)</button>
       <button id="fbExpNo" style="background:var(--color-surface-2,#2D3F55);color:var(--color-text,#F1F5F9);border:1px solid var(--color-border,#2D3F55)">Cerrar</button></div>`;
     document.body.appendChild(d);
     d.querySelector('#fbExpCsv').onclick = () => { d.remove(); alCsv(); };
@@ -262,17 +276,27 @@
     d.onclick = e => { if (e.target === d) d.remove(); };
   }
   // Devuelve una promesa con 'xlsx', 'csv-ofrecido' o 'csv'. opts.csv = true → CSV directo.
+  // (v3 etapa 3b) En inglés / turco se traducen los encabezados, el nombre de la hoja y el título;
+  // los datos van tal cual. En español el archivo queda exactamente igual que siempre.
+  function hojasIdioma(hojas) {
+    if (!window.i18n || i18n.getLang() === 'es' || typeof i18n.tx !== 'function') return hojas;
+    return hojas.map(h => Object.assign({}, h, {
+      nombre: h.nombre != null ? i18n.tx(String(h.nombre)) : h.nombre,
+      titulo: h.titulo != null ? i18n.tx(String(h.titulo)) : h.titulo,
+      columnas: h.columnas.map(c => Object.assign({}, c, { t: i18n.tx(String(c.t)) })),
+    }));
+  }
   async function fbExportar(opts) {
-    const hojas = (opts.hojas || []).filter(h => h && h.columnas);
+    const hojas = hojasIdioma((opts.hojas || []).filter(h => h && h.columnas));
     const base = opts.nombre || 'reporte';
     window.__fbExport = { nombre: base, hojas, formato: null };
-    const csv = () => { descargar(new Blob([fbCsv(hojas)], { type: 'text/csv;charset=utf-8' }), base + '.csv'); window.__fbExport.formato = 'csv'; window.__fbExport.archivo = base + '.csv'; if (opts.aviso) opts.aviso('⬇️ CSV descargado — ábrelo con Excel'); };
+    const csv = () => { descargar(new Blob([fbCsv(hojas, opts.csvFormato)], { type: 'text/csv;charset=utf-8' }), base + '.csv'); window.__fbExport.formato = 'csv'; window.__fbExport.archivo = base + '.csv'; if (opts.aviso) opts.aviso('CSV descargado — ábrelo con Excel', 'success'); };
     if (opts.csv) { csv(); return 'csv'; }
     try {
-      const buf = await xlsx(hojas);
+      const buf = opts.construir ? (await fbCargarExcelJS(), await opts.construir()) : await xlsx(hojas);
       descargar(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), base + '.xlsx');
       window.__fbExport.formato = 'xlsx'; window.__fbExport.archivo = base + '.xlsx';
-      if (opts.aviso) opts.aviso('⬇️ Excel descargado');
+      if (opts.aviso) opts.aviso('Excel descargado', 'success');
       return 'xlsx';
     } catch (e) {
       console.warn('Excel:', e && e.message);

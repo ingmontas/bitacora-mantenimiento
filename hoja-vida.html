@@ -20,6 +20,7 @@
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
   <!-- (28 oct 2026) Criticidad A/B/C y permisos de trabajo (LOTO) del equipo -->
+  <script src="kpis.js"></script><!-- (v3 etapa 3a) indicadores comunes -->
   <script src="criticidad.js"></script>
   <script src="seguridad.js"></script>
   <script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz del equipo -->
@@ -33,8 +34,14 @@
        (5 oct 2026) ExcelJS (~1 MB) ya no se carga en cada visita: se descarga
        solo al pulsar "Exportar" (ver cargarExcelJS). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- (v3, nov 2026) Diseño VoidTech: iconos SVG, idiomas, traductor a pedido y letra IBM Plex -->
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
+<script src="traductor.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
@@ -58,7 +65,48 @@
     #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
     #content { padding: 14px 14px 40px; margin: 0 auto; max-width: 480px; }
+    html.vt-shell #header { display: none; }
+    /* ══ (v3) EQUIPO 360: estado ahora + acciones grandes ══ */
+    .e360 { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow-1); }
+    .e360-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .e360-h h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+    .e360-h .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .e360-st { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; border-radius: var(--radius); background: var(--color-surface-2); font-size: 14.5px; font-weight: 600; }
+    .e360-st .vt-ico { width: 22px; height: 22px; flex: 0 0 auto; }
+    .e360-st small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+    .e360-st.parada { background: var(--color-danger-soft); color: var(--color-danger-text); }
+    .e360-st.parada small { color: inherit; opacity: .85; }
+    .e360-st.aviso { background: var(--color-warn-soft); color: var(--color-warn-text); }
+    .e360-st.aviso small { color: inherit; opacity: .85; }
+    .e360-st.ok .vt-ico { color: var(--color-success); }
+    .e360-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .e360-acts a, .e360-acts button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); color: var(--text); font: 600 14px var(--font-sans); text-decoration: none; cursor: pointer; text-align: left; }
+    .e360-acts .vt-ico { width: 20px; height: 20px; flex: 0 0 auto; }
+    .e360-acts .main { grid-column: 1 / -1; background: var(--color-brand); border-color: transparent; color: #fff; font-size: 15.5px; min-height: 56px; justify-content: center; }
+    .e360-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .e360-t { display: block; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); color: var(--text); text-decoration: none; min-width: 0; }
+    .e360-t > b { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .e360-t > b .vt-ico { width: 15px; height: 15px; }
+    .e360-t > div { font-size: 14px; font-weight: 600; margin-top: 4px; overflow-wrap: anywhere; }
+    .e360-t > small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
+    .e360-t.w { grid-column: 1 / -1; }
+    .e360-t.mal { border-color: color-mix(in srgb, var(--color-danger) 45%, var(--border)); }
+    .e360-t.mal > div { color: var(--color-danger-text); }
+    .e360-t.atn > div { color: var(--color-warn-text); }
+    .e360-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .e360-tools .btn { display: inline-flex; align-items: center; gap: 6px; }
+    @media (min-width: 820px) { .e360-acts { grid-template-columns: repeat(4, 1fr); } .e360-acts .main { grid-column: span 2; } .e360-grid { grid-template-columns: repeat(3, 1fr); } .e360-t.w { grid-column: span 3; } }
     #content.wide { max-width: 1180px; }
+    /* (v3 etapa 3a) módulo Equipos: lista + catálogo */
+    .eq-pk-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .eq-pk-n { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .cat-card > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 32px; }
+    .cat-card > summary::-webkit-details-marker { display: none; }
+    .cat-card > summary small { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
+    .cat-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .cat-acts .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+    .perm-hist > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); padding: 6px 0; }
+    .pk-meta { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
     .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); min-width: 0; }
     .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
     .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
@@ -186,63 +234,85 @@
 </head>
 <body>
 
-<div id="offline-bar">📵 Sin conexión — viendo datos guardados en el celular</div>
+<div id="offline-bar"><span data-icon="wifi-off"></span> Sin conexión — viendo datos guardados en el celular</div>
 
-<div id="header">
-  <div>
-    <h1>🗂️ Hoja de Vida del Equipo</h1>
-    <small id="header-sub">2026 · Cargando...</small>
-  </div>
-  <div id="sp-status" title="Estado de conexión">⚙️</div>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado: el de la app ("Equipos", usuario y nave). -->
 
 <div id="content">
 
   <!-- SCREEN: elegir equipo (si no se llegó por QR con ?equipo=) -->
   <div id="screen-picker">
     <div class="card">
-      <div class="card-title">🔍 Elige un equipo</div>
-      <div class="card-sub">Verás todo lo que se le ha hecho: tablero e historial completo</div>
-      <input type="text" id="picker-buscar" placeholder="Buscar equipo o localidad..." oninput="renderPicker()"/>
+      <div class="eq-pk-h"><div class="card-title" data-i18n="shell.e_elegir">Elige un equipo</div><span class="eq-pk-n" id="picker-n"></span></div>
+      <input type="text" id="picker-buscar" placeholder="Buscar equipo o área…" data-i18n-placeholder="shell.e_buscarEq" oninput="renderPicker()" style="margin-top:8px;"/>
       <!-- (25 oct 2026, Etapa 3) Nave → Área → Línea: acota la lista de equipos -->
       <div id="fUbicHv" style="margin-top:8px;"></div>
-      <button class="btn btn-secondary btn-sm" id="btnCritLista" style="display:none;margin-top:8px;" onclick="fbCritAbrirLista({ onClose: () => renderPicker() })">🎯 Evaluar criticidad</button>
+      <div class="note" id="picker-copia" style="margin-top:6px;"></div>
     </div>
+    <!-- (v3 etapa 3a) CATÁLOGO DE EQUIPOS (antes en Inventario y en Checklist → Ajustes): mismas
+         funciones y permisos (catalogo.js, criticidad.js). hoja-vida.html#catalogo lleva aquí. -->
+    <details class="card cat-card" id="catalogo">
+      <summary><span data-icon="settings"></span> <b data-i18n="shell.e_catalogo">Catálogo de equipos</b><small data-i18n="shell.e_catalogoSub">Agregar, carga masiva, fichas técnicas, criticidad</small></summary>
+      <div class="cat-acts">
+        <button class="btn btn-secondary btn-sm" onclick="catAbrir('nuevo')"><span data-icon="plus"></span> <span data-i18n="shell.e_catNuevo">Agregar equipo</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="catAbrir('masiva')"><span data-icon="upload"></span> <span data-i18n="shell.e_catMasiva">Carga masiva de equipos</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="catAbrir('fichas')"><span data-icon="list"></span> <span data-i18n="shell.e_catFichas">Ordenar fichas técnicas</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnCritLista" style="display:none;" onclick="fbCritAbrirLista({ onClose: () => renderPicker() })"><span data-icon="target"></span> <span data-i18n="shell.e_evaluar">Evaluar criticidad</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnAudHv" style="display:none;" onclick="openAuditoria()"><span data-icon="eye"></span> <span data-i18n="shell.e_catAuditoria">Auditoría</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="configurePin()"><span data-icon="lock"></span> <span data-i18n="shell.e_catClave">Clave de eliminación</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnCatActualizar" onclick="catActualizar()"><span data-icon="refresh"></span> <span data-i18n="shell.e_actualizar">Actualizar</span></button>
+        <a class="btn btn-secondary btn-sm" href="checklist.html#config"><span data-icon="clipboard-check"></span> <span data-i18n="shell.e_catFrecuencias">Frecuencias y puntos de checklist</span></a>
+      </div>
+    </details>
     <div id="picker-lista"></div>
   </div>
 
   <!-- SCREEN: hoja de vida del equipo elegido -->
   <div id="screen-hoja" style="display:none;">
-    <div class="row-actions">
-      <button class="btn btn-secondary btn-sm" onclick="volverAlPicker()">← Cambiar equipo</button>
-      <button class="btn btn-secondary btn-sm" onclick="mostrarQrHojaVida()">📱 Código QR</button>
+    <div class="row-actions e360-tools">
+      <button class="btn btn-secondary btn-sm" onclick="volverAlPicker()"><span data-icon="arrow-left"></span><span data-i18n="shell.e_cambiar">Cambiar equipo</span></button>
+      <button class="btn btn-secondary btn-sm" onclick="mostrarQrHojaVida()" data-i18n-aria-label="shell.e_qr" aria-label="Código QR"><span data-icon="qr"></span>QR</button>
       <!-- (5 oct 2026) El historial se lee una vez por equipo; esto lo vuelve a leer -->
-      <button class="btn btn-secondary btn-sm" onclick="actualizarHojaActual()" title="Volver a leer las OTs de este equipo">🔄 Actualizar</button>
+      <button class="btn btn-secondary btn-sm" onclick="actualizarHojaActual()" title="Volver a leer las OTs de este equipo" data-i18n-aria-label="shell.e_actualizar" aria-label="Actualizar"><span data-icon="refresh"></span></button>
       <span class="grow"></span>
-      <button class="btn btn-primary btn-sm" onclick="exportarExcel()">📊 Exportar a Excel</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportarExcel()"><span data-icon="sheet"></span><span data-i18n="shell.e_excel">Excel</span></button>
     </div>
+
+    <!-- (v3) EQUIPO 360: estado ahora, acciones grandes y resumen (0 lecturas extra: sale de lo que esta pantalla ya lee) -->
+    <section class="e360" id="e360" aria-live="polite"></section>
 
     <div class="card">
       <div class="eq-head">
         <div>
-          <div class="card-title" id="eq-nombre">—</div>
+          <div class="card-title" id="hv-eq-nombre">—</div>
           <div class="card-sub" id="eq-sub" style="margin-bottom:0;">—</div>
         </div>
       </div>
       <div class="eq-facts" id="eq-facts"></div>
+      <!-- (v3 etapa 3a) Datos del equipo (antes en Inventario): mismas funciones de catalogo.js -->
+      <div class="cat-acts" id="catEq">
+        <button class="btn btn-secondary btn-sm" onclick="catPreparar();openEditEquipoModal()"><span data-icon="pencil"></span> <span data-i18n="shell.e_catEditar">Editar datos</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnManualVer" style="display:none" onclick="viewManual()"><span data-icon="file"></span> <span data-i18n="shell.e_catManual">Ver manual</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="enlazarManual()"><span data-icon="link"></span> <span id="btnManualTxt" data-i18n="shell.e_catManualEnl">Enlazar manual</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnManualQuitar" style="display:none" onclick="removeManual()"><span data-icon="trash"></span> <span data-i18n="shell.e_catManualQuitar">Quitar manual</span></button>
+        <button class="btn btn-secondary btn-sm" id="btnFichaEq" style="display:none" onclick="abrirOrdenarFichas(currentEquipoId)"><span data-icon="list"></span> <span data-i18n="shell.e_catFicha">Ordenar ficha</span></button>
+        <button class="btn btn-secondary btn-sm" onclick="showReubicaciones()"><span data-icon="pin"></span> <span data-i18n="shell.e_catReubic">Reubicaciones</span></button>
+        <a class="btn btn-secondary btn-sm" id="btnStockEq" href="almacen.html"><span data-icon="archive"></span> <span data-i18n="shell.e_catStock">Repuestos y stock</span></a>
+        <button class="btn btn-secondary btn-sm" id="btnBorrarEq" style="display:none" onclick="deleteEquipo()"><span data-icon="trash"></span> <span data-i18n="shell.e_catBorrar">Eliminar equipo</span></button>
+      </div>
     </div>
 
     <!-- (28 oct 2026) Criticidad A/B/C y permisos de trabajo (LOTO) de este equipo -->
     <div class="dash-grid">
       <div class="card" id="cardCrit">
-        <h3>🎯 Criticidad</h3>
+        <h3><span data-icon="target"></span> Criticidad</h3>
         <div id="critBox"></div>
-        <button class="btn btn-secondary btn-sm" id="btnCritEval" style="display:none;margin-top:10px;" onclick="evaluarCritActual()">🎯 Evaluar</button>
-        <!-- (29 oct 2026) 💼 CAPEX de este equipo (Administrador y Encargado) -->
-        <a class="btn btn-secondary btn-sm" id="btnCapexEq" style="display:none;margin-top:10px;text-decoration:none;" href="capex.html">💼 Crear CAPEX</a>
+        <button class="btn btn-secondary btn-sm" id="btnCritEval" style="display:none;margin-top:10px;" onclick="evaluarCritActual()"><span data-icon="target"></span> Evaluar</button>
+        <!-- (29 oct 2026) <span data-icon="briefcase"></span> CAPEX de este equipo (Administrador y Encargado) -->
+        <a class="btn btn-secondary btn-sm" id="btnCapexEq" style="display:none;margin-top:10px;text-decoration:none;" href="capex.html"><span data-icon="briefcase"></span> Crear CAPEX</a>
       </div>
       <div class="card" id="cardPermisos">
-        <h3>🦺 Permisos de trabajo (LOTO)</h3>
+        <h3><span data-icon="shield"></span> Permisos de trabajo (LOTO)</h3>
         <div id="permisosBox"><div class="note">Cargando…</div></div>
       </div>
     </div>
@@ -250,11 +320,11 @@
     <!-- (28 oct 2026) Análisis de causa raíz y tendencias de mediciones de este equipo -->
     <div class="dash-grid">
       <div class="card" id="cardRca">
-        <h3>🔍 Causa raíz (RCA)</h3>
+        <h3><span data-icon="search"></span> Causa raíz (RCA)</h3>
         <div id="rcaBox"><div class="note">Cargando…</div></div>
       </div>
       <div class="card" id="cardTend">
-        <h3>📈 Tendencias de mediciones</h3>
+        <h3><span data-icon="trend"></span> Tendencias de mediciones</h3>
         <div id="tendBox"><div class="note">Cargando…</div></div>
       </div>
     </div>
@@ -269,7 +339,7 @@
       <div class="card">
         <h3>Técnicos que lo han atendido</h3>
         <div id="tecList"></div>
-        <div class="note">Clic en un técnico para ver solo sus OTs. Si una OT la hicieron dos técnicos, cuenta para ambos.</div>
+        <div class="note">Toca un técnico para ver solo sus OTs. <button type="button" class="vt-help" data-ayuda="Si una OT la hicieron dos técnicos, cuenta para los dos." aria-label="Ayuda">?</button></div>
       </div>
     </div>
 
@@ -283,13 +353,13 @@
         <h3>Piezas más intervenidas</h3>
         <div id="piezaList"></div>
       </div>
-      <div class="card">
+      <div class="card" id="cardPend">
         <h3>Trabajo pendiente</h3>
         <div id="pendList"></div>
       </div>
     </div>
 
-    <div class="section-title">Historial — todo lo que se le ha hecho</div>
+    <div class="section-title" id="hv-historial">Historial</div>
     <div class="hist-tools">
       <div class="seg" id="segTipo"></div>
       <select id="fTec" onchange="hvFiltro.tec=this.value; renderTodo()"></select>
@@ -313,11 +383,11 @@
       <h3 id="qr-equipo-nombre2" style="margin-bottom:2px;">—</h3>
       <div id="qr-equipo-sub2" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
       <div id="qr-canvas-wrap2" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR único de la máquina: al escanearlo se ofrece reportar parada, checklist, registrar trabajo, hoja de vida y repuestos, según quién lo escanee.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR de la máquina: abre lo que toca según quién lo escanee.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalQrHojaVida')">Cerrar</button>
-      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+      <button class="btn btn-primary" onclick="window.print()"><span data-icon="printer"></span> Imprimir</button>
     </div>
   </div>
 </div>
@@ -325,6 +395,8 @@
 <div id="loading"><div class="spinner"></div><div id="loading-text" style="color:var(--muted);font-size:13px;">Cargando...</div></div>
 <div id="toast"></div>
 
+<!-- (v3 etapa 3a) Catálogo de equipos (movido de Inventario): agregar, editar, carga masiva, fichas, eliminar -->
+<script src="catalogo.js"></script>
 <script>
 let currentEquipos = [];   // desde /equipos
 let currentOts = [];       // (5 oct 2026) OTs del equipo abierto (fbOtsDeEquipo), ya no toda /ots
@@ -337,7 +409,7 @@ let hvLimite = PAGINA; // filas visibles del historial; "Mostrar más" suma otra
 let chartMes = null;
 
 // (5 oct 2026) Escape común de firebase-init (también escapa ` ); copia local de respaldo.
-const esc = typeof fbEsc === 'function' ? fbEsc : (s => String(s ?? '').replace(/[&<>"'`]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c])));
+const esc = fbEsc; // (v3 etapa 3a) el escape común de firebase-init.js (siempre cargado aquí)
 const normEq = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 const splitTec = s => String(s || '').split(',').map(x => x.trim()).filter(x => x && x !== '—' && x !== '-');
 const tipoNorm = t => { t = (t || '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : 'Sin clasificar'; };
@@ -349,16 +421,75 @@ const esPlanificado = t => t === 'Preventivo' || t === 'Predictivo';
 function fmtMin(m){ if (!m) return '0 min'; const h = Math.floor(m/60), mm = Math.round(m%60); return h ? `${h}h ${mm}m` : `${mm} min`; }
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
+// ══════ (v3 etapa 3a) MÓDULO EQUIPOS: lo que catalogo.js necesita de esta pantalla ══════
+// DB = el mismo arreglo de equipos de la lista (catálogo del celular); currentEquipoId = el abierto.
+let DB = [];
+let currentEquipoId = null;
+function getCurrentEquipo() { return DB.find(e => e.id === currentEquipoId); }
+function renderHome() { currentEquipos = DB; renderPicker(); }
+function renderDetail() { const e = getCurrentEquipo(); if (e && document.getElementById('screen-hoja').style.display !== 'none') mostrarHojaDeVida(e); }
+function backHome() { volverAlPicker(); renderHome(); }
+function openEquipo(id) { mostrarHojaDeVida(id); }
+function showLoading(m) { setLoading(true, m); }
+function hideLoading() { setLoading(false); }
+let _undoTimer = null;
+function showUndoToast(msg, onUndo, delayMs = 5200) {
+  if (window.vtToast) return vtToast(msg, { deshacer: onUndo, ms: delayMs });
+  const t = document.getElementById('toast');
+  clearTimeout(_undoTimer);
+  t.innerHTML = '';
+  const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
+  const b = document.createElement('button');
+  b.className = 'btn btn-sm'; b.style.cssText = 'margin-left:12px;padding:4px 10px;width:auto;background:#fff;color:#0B2545;pointer-events:auto;';
+  b.textContent = 'Deshacer';
+  b.onclick = () => { t.className = ''; onUndo(); };
+  t.appendChild(b);
+  t.className = 'show'; t.style.pointerEvents = 'auto';
+  _undoTimer = setTimeout(() => { t.className = ''; t.style.pointerEvents = ''; }, delayMs);
+}
+// Las listas de áreas / plantas / líneas del formulario se leen la primera vez que se usa el catálogo (como en Inventario).
+let _catAreasOk = false;
+function catPreparar() { if (!_catAreasOk) { _catAreasOk = true; loadAreasParaEquipos(); } }
+function catAbrir(que) {
+  catPreparar();
+  if (que === 'nuevo') openNewEquipoModal();
+  else if (que === 'masiva') openBulkEquiposModal();
+  else if (que === 'fichas') abrirOrdenarFichas();
+}
+// "Actualizar": vuelve a pedir el catálogo al servidor (una lectura por equipo).
+function catActualizar() {
+  const b = document.getElementById('btnCatActualizar'); if (b) b.disabled = true;
+  fbRefrescarEquipos(false).then(() => showToast(E3('a_alDia'))).catch(err => showToast(err.message, 'error')).finally(() => { if (b) b.disabled = false; });
+}
+function pintarCopiaCatalogo() {
+  const el = document.getElementById('picker-copia'); if (!el) return;
+  let ts = 0; try { ts = +localStorage.getItem('fbEquiposSync') || 0; } catch (e) {}
+  el.textContent = ts && window.i18n ? E3('e_copia', { t: i18n.fmtRel(ts) }) : '';
+}
+function pintarCatalogoEq(e) {
+  const box = document.getElementById('catEq'); if (!box || !e) return;
+  const admin = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+  document.getElementById('btnBorrarEq').style.display = admin ? '' : 'none';
+  document.getElementById('btnManualVer').style.display = e.manualUrl ? '' : 'none';
+  document.getElementById('btnManualQuitar').style.display = e.manualUrl ? '' : 'none';
+  document.getElementById('btnManualTxt').textContent = E3(e.manualUrl ? 'e_catManualCambiar' : 'e_catManualEnl');
+  document.getElementById('btnFichaEq').style.display = necesitaOrden(e) ? '' : 'none';
+  document.getElementById('btnStockEq').href = 'almacen.html?equipo=' + encodeURIComponent(e.id);
+  // hoja-vida.html?id=<id>#catalogo (desde Almacén → "Datos del equipo"): baja a los datos del equipo una vez
+  if (location.hash === '#catalogo' && !window._catEqVisto) { window._catEqVisto = true; setTimeout(() => box.scrollIntoView({ block: 'center' }), 80); }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   window.fbReady.then(() => {
-    document.getElementById('header-sub').textContent =
-      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('hoja-vida');
     if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => renderPicker()); // (25 oct 2026)
     if (typeof fbFiltroUbicacion === 'function') ubicHv = fbFiltroUbicacion({ el: document.getElementById('fUbicHv'), pagina: 'hoja-vida', niveles: ['nave', 'area', 'linea'], onChange: () => renderPicker() }); // (Etapa 3)
     cargarDatos();
     updateHeaderStatus();
     const bcl = document.getElementById('btnCritLista'); if (bcl && typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar()) bcl.style.display = '';
+    // (v3 etapa 3a) Auditoría: Encargado y Administrador (igual que en Inventario)
+    const bau = document.getElementById('btnAudHv'); if (bau && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO')) bau.style.display = '';
+    if (location.hash === '#catalogo' && !new URLSearchParams(location.search).get('id')) { const c = document.getElementById('catalogo'); c.open = true; setTimeout(() => c.scrollIntoView({ block: 'start' }), 50); }
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   // (5 oct 2026) El error de arranque ya lo muestra firebase-init (aviso global);
   // aquí solo se registra sin volver a lanzar (err puede venir vacío).
@@ -370,12 +501,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function updateHeaderStatus() {
   const bar = document.getElementById('offline-bar');
-  const icon = document.getElementById('sp-status');
-  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
-  else { bar.classList.add('show'); icon.textContent = '📵'; }
+  bar.classList.toggle('show', !navigator.onLine);
 }
 
 function showToast(msg, type) {
+  if (window.vtToast) return vtToast(msg, type);
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show' + (type ? ' ' + type : '');
@@ -396,7 +526,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 // lecturas/día). Ahora la lista de equipos no necesita OTs (se quitó el
 // contador de OTs por equipo) y al abrir uno se leen solo sus OTs con
 // fbOtsDeEquipo (firebase-init.js), una vez por equipo mientras la página
-// siga abierta. "🔄 Actualizar" vuelve a leerlas del servidor.
+// siga abierta. "<span data-icon="refresh"></span> Actualizar" vuelve a leerlas del servidor.
 let _qrAutoAbrioHV = false;
 const _otsPorEquipo = new Map();   // id de equipo → OTs (sin duplicados de folio)
 function cargarDatos() {
@@ -404,8 +534,13 @@ function cargarDatos() {
   fbEscucharEquipos( // (5 oct 2026) lista de equipos con caché de 12 h (ver firebase-init.js)
     (snap) => {
     setLoading(false);
-    currentEquipos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // (v3 etapa 3a) el mismo arreglo para la lista y para el catálogo (catalogo.js usa DB)
+    currentEquipos = snap.docs.map(d => { const x = d.data(); return { id: d.id, ...x, repuestos: Array.isArray(x.repuestos) ? x.repuestos : [] }; });
+    DB = currentEquipos;
+    if (equipoActual) { const e = DB.find(x => x.id === equipoActual.id); if (e) equipoActual = e; }
     renderPicker();
+    pintarCopiaCatalogo();
+    if (equipoActual && document.getElementById('screen-hoja').style.display !== 'none') mostrarHojaDeVida(equipoActual);
     intentarAbrirDesdeQrHV();
   }, (err) => { setLoading(false); console.warn('Error leyendo equipos:', err.message); showToast('Error cargando equipos: ' + err.message, 'error'); });
 }
@@ -435,7 +570,7 @@ function actualizarHojaActual() { if (equipoActual) cargarOtsEquipo(equipoActual
 function intentarAbrirDesdeQrHV() {
   if (_qrAutoAbrioHV) return;
   const params = new URLSearchParams(location.search);
-  const equipoId = params.get('equipo');
+  const equipoId = params.get('equipo') || params.get('id'); // (v3) ?id= (Equipo 360, escáner, buscador)
   if (!equipoId) return;
   const e = currentEquipos.find(x => x.id === equipoId);
   if (!e) return; // puede que /equipos aún no haya llegado — se reintenta en el próximo snapshot
@@ -464,8 +599,10 @@ function renderPicker() {
   const busca = (document.getElementById('picker-buscar').value || '').toLowerCase().trim();
   // (25 oct 2026, Etapa 2) Solo los equipos de la nave elegida arriba (sin nave conocida: salen siempre).
   const lista = currentEquipos.filter(e => fbEquipoEnNave(e)).filter(e => !ubicHv || ubicHv.coincideEquipo(e)).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
+  const nTot = currentEquipos.filter(e => fbEquipoEnNave(e)).length;
+  const pn = document.getElementById('picker-n'); if (pn) pn.textContent = lista.length === nTot ? String(nTot) : lista.length + ' / ' + nTot;
   if (!lista.length) {
-    wrap.innerHTML = `<div class="empty"><span class="emoji">🔍</span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
+    wrap.innerHTML = `<div class="empty"><span class="emoji"><span data-icon="search"></span></span><p>Ningún equipo coincide con la búsqueda.</p></div>`;
     return;
   }
   wrap.innerHTML = lista.map(e => {
@@ -473,7 +610,7 @@ function renderPicker() {
     return `
     <div class="item-row" data-eq="${esc(e.id)}">
       <div class="item-header"><div class="item-title">${esc(e.nombre || '(sin nombre)')}</div>${n != null ? `<span class="tag tag-otro">${n} OT${n === 1 ? '' : 's'}</span>` : ''}${typeof fbCritBadge === 'function' ? fbCritBadge(fbCritNivel(e)) : ''}</div>
-      <div class="item-sub">${e.localidad ? '📍 ' + esc(e.localidad) : ''}</div>
+      <div class="item-sub">${e.localidad ? '<span data-icon="pin"></span> ' + esc(e.localidad) : ''}</div>${[e.linea, e.tipoMaquina, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).length ? `<div class="pk-meta">${esc([e.linea, e.tipoMaquina, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · '))}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -483,6 +620,7 @@ document.getElementById('picker-lista').addEventListener('click', ev => {
 
 function volverAlPicker() {
   equipoActual = null;
+  currentEquipoId = null;
   historialActual = [];
   history.replaceState(null, '', location.pathname);
   document.getElementById('screen-hoja').style.display = 'none';
@@ -497,10 +635,11 @@ function mostrarHojaDeVida(equipoOrId) {
   if (!e) { showToast('Equipo no encontrado', 'error'); return; }
   const cambio = !equipoActual || equipoActual.id !== e.id;
   equipoActual = e;
+  currentEquipoId = e.id;
   if (cambio) { hvFiltro.tipo = ''; hvFiltro.tec = ''; hvFiltro.q = ''; document.getElementById('fBuscar').value = ''; window.scrollTo(0, 0); }
 
   const params = new URLSearchParams(location.search);
-  if (params.get('equipo') !== e.id) history.replaceState(null, '', location.pathname + '?equipo=' + encodeURIComponent(e.id));
+  if ((params.get('equipo') || params.get('id')) !== e.id || params.get('equipo')) history.replaceState(null, '', location.pathname + '?id=' + encodeURIComponent(e.id) + location.hash);
 
   document.getElementById('screen-picker').style.display = 'none';
   document.getElementById('screen-hoja').style.display = 'block';
@@ -518,7 +657,8 @@ function mostrarHojaDeVida(equipoOrId) {
   if (otsListas && typeof publicarHojaVida === 'function' && !_publicados.has(e.id) && ['ADMINISTRADOR','ENCARGADO_MANTENIMIENTO','SUPERVISOR','TECNICO','ALMACEN'].includes((window.currentUserRole || {}).rol)) {
     _publicados.add(e.id); publicarHojaVida(e, currentOts);
   }
-  document.getElementById('eq-nombre').textContent = e.nombre || '(sin nombre)';
+  document.getElementById('hv-eq-nombre').textContent = e.nombre || '(sin nombre)';
+  pintarCatalogoEq(e);
   document.getElementById('eq-sub').textContent = [e.localidad, [e.marca, e.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—';
 
   // Tiempo = TOTAL_MIN_TECNICO (tiempo de trabajo). El tiempo de respuesta de
@@ -556,9 +696,79 @@ function mostrarHojaDeVida(equipoOrId) {
 // Antes renderMes iba de tercera y, si fallaba, el historial quedaba en blanco.
 function renderTodo() {
   hvLimite = PAGINA;
-  [renderCrit, renderPermisos, renderRcaHv, renderTendHv, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
+  [renderE360, renderCrit, renderPermisos, renderRcaHv, renderTendHv, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
     .forEach(fn => { try { fn(); } catch (err) { console.error('Hoja de vida — ' + fn.name + ':', err); } });
+  try { renderE360(); } catch (err) { console.error('Equipo 360:', err); } // otra vez: tendencias y permisos ya en memoria
 }
+
+// ══════ (v3, nov 2026) EQUIPO 360 ══════
+// Lo más importante del equipo arriba y las acciones a un toque. 0 lecturas
+// extra: usa las OTs del equipo (fbOtsDeEquipo), sus permisos y checklists que
+// esta misma pantalla ya leyó, y el catálogo (criticidad, próxima fecha de checklist).
+const E3 = (k, p) => (window.i18n && i18n.has('shell.' + k) ? i18n.t('shell.' + k, p) : k);
+const E3N = (k, n) => (window.i18n ? i18n.tn('shell.' + k, n) : String(n));
+const e3i = (n, c) => (window.VTIcons ? VTIcons.icon(n, { cls: c || '' }) : '');
+function renderE360() {
+  const box = document.getElementById('e360'); if (!box || !equipoActual) return;
+  const e = equipoActual, id = encodeURIComponent(e.id);
+  const listo = _otsPorEquipo.has(e.id);
+  const ots = listo ? currentOts : [];
+  const avisos = ots.filter(o => o.equipoId === e.id && ['pendiente', 'en_atencion'].includes(o.estado) && ['operador', 'qr'].includes(o.origen) && o.estado !== 'anulada');
+  const parada = avisos.find(o => o.maquinaParada === true);
+  const av = parada || avisos[0];
+  const fmtF = f => (window.i18n ? i18n.fmtDate(f) : fmtFechaHV(f));
+  // Estado ahora
+  let st;
+  if (!listo) st = `<div class="e360-st">${e3i('clock')}<span>${esc(E3('e_cargando'))}</span></div>`;
+  else if (av) st = `<div class="e360-st ${parada ? 'parada' : 'aviso'}" data-e360="estado">${e3i(parada ? 'stop' : 'siren')}<span>${esc(E3(parada ? 'e_parada' : 'e_aviso'))}${av.horaParada ? ' · ' + esc(E3('e_desde', { h: av.horaParada })) : ''}<small>${typeof traductor !== 'undefined' ? traductor.html(av, 'descripcionFalla', { col: 'ots' }) : esc(av.descripcionFalla || '')}${av.folio ? ' · <span class="mono">' + esc(av.folio) + '</span>' : ''}</small></span></div>`;
+  else st = `<div class="e360-st ok" data-e360="estado">${e3i('check-circle')}<span>${esc(E3('e_operando'))}</span></div>`;
+  // Acciones
+  const puedeCapex = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
+  const acts = [
+    av ? `<a class="main" href="bitacora.html#avisos" data-e360-act="atender">${e3i('hand')}${esc(E3('e_atender'))}</a>` : `<a class="main" href="bitacora.html?equipo=${id}#nuevo" data-e360-act="registrar">${e3i('clipboard')}${esc(E3('e_registrar'))}</a>`,
+    av ? `<a href="bitacora.html?equipo=${id}#nuevo" data-e360-act="registrar">${e3i('clipboard')}${esc(E3('e_registrar'))}</a>` : '',
+    `<a href="checklist.html?equipo=${id}" data-e360-act="checklist">${e3i('clipboard-check')}${esc(E3('e_checklist'))}</a>`,
+    `<a href="reportar.html?equipo=${id}" data-e360-act="reportar">${e3i('siren')}${esc(E3('e_reportar'))}</a>`,
+    `<a href="bitacora.html?equipo=${id}&rep=1#nuevo" data-e360-act="repuesto">${e3i('package')}${esc(E3('e_repuesto'))}</a>`,
+    `<a href="#hv-historial" data-e360-act="historial">${e3i('history')}${esc(E3('e_historial'))}</a>`,
+    puedeCapex ? `<a href="capex.html#nuevo&equipo=${id}" data-e360-act="capex">${e3i('briefcase')}${esc(E3('e_capex'))}</a>` : '',
+  ].filter(Boolean).join('');
+  // Último trabajo
+  const hist = otsDeEquipo(e).slice().sort((a, b) => String(b.FECHA || '').localeCompare(String(a.FECHA || '')) || ((b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0)));
+  const u = hist[0];
+  const tUlt = !listo ? esc(E3('e_cargando')) : u ? `${esc(fmtF(u.FECHA))} · ${esc(window.i18n && i18n.has('tm_' + tipoNorm(u.TIPO_MANTENIMIENTO)) ? i18n.t('tm_' + tipoNorm(u.TIPO_MANTENIMIENTO)) : tipoNorm(u.TIPO_MANTENIMIENTO))}` : esc(E3('e_nunca'));
+  const sUlt = u ? (typeof traductor !== 'undefined' ? traductor.html(u, 'DESCRIPCION_FALLA', { col: 'ots' }) : esc(u.DESCRIPCION_FALLA || '')) + (u.TECNICOS ? ' · ' + esc(E3('e_porTec', { t: splitTec(u.TECNICOS).join(', ') })) : '') : '';
+  // Checklist
+  const prox = e.checklistProximaFecha || '';
+  let ckTxt, ckCls = '';
+  if (!prox || !(Number(e.checklistFrecuenciaDias) > 0 || prox)) ckTxt = E3('e_ckSin');
+  else {
+    const d = Math.round((fechaD(prox) - hoy0()) / 86400000);
+    if (d < 0) { ckTxt = E3N('e_ckVencido', -d); ckCls = 'mal'; }
+    else if (d === 0) { ckTxt = E3('e_ckHoy'); ckCls = 'atn'; }
+    else ckTxt = E3('e_ckProx', { f: fmtF(prox) });
+  }
+  // LOTO, RCA, pendiente, tendencias
+  const perm = _permisosPorEquipo.get(e.id);
+  const lotoAb = Array.isArray(perm) ? perm.filter(p => ['abierto', 'por_autorizar', 'autorizado'].includes(p.estado)) : null;
+  const rcaPend = listo ? otsDeEquipo(e).filter(o => typeof fbRcaEstado === 'function' && fbRcaEstado(o) === 'pendiente') : [];
+  const tend = Array.isArray(_ckPorEquipo.get(e.id)) ? (window._tendHv || []).filter(g => g.alerta && (!g.equipoId || g.equipoId === e.id)) : [];
+  const crit = typeof fbCritNivel === 'function' ? fbCritNivel(e) : '';
+  const tile = (k, ic, val, sub, cls, href, extra) => `<a class="e360-t ${cls || ''}" href="${href || '#'}" data-e360="${k}"${extra || ''}><b>${e3i(ic)}${esc(E3('e_' + k))}</b><div>${val}</div>${sub ? `<small>${sub}</small>` : ''}</a>`;
+  const nP = pendientesActual.length;
+  box.innerHTML = `<div class="e360-h"><div><h2>${esc(e.nombre || '—')}</h2><div class="sub">${esc([e.localidad, e.linea, fbPlantaDeEquipo(e)].filter(Boolean).join(' · '))}</div></div>${typeof fbCritBadge === 'function' ? fbCritBadge(crit) : ''}</div>`
+    + st + `<div class="e360-acts">${acts}</div>`
+    + `<div class="e360-grid">`
+    + tile('ultimo', 'history', tUlt, sUlt, 'w', '#hv-historial')
+    + tile('ck', 'clipboard-check', esc(ckTxt), '', ckCls, `checklist.html?equipo=${id}`)
+    + tile('pend', 'list', listo ? esc(nP ? E3N('e_nPend', nP) : E3('e_ninguno')) : esc(E3('e_cargando')), '', nP ? 'atn' : '', '#cardPend')
+    + tile('loto', 'shield', lotoAb == null ? esc(E3('e_cargando')) : esc(lotoAb.length ? E3N('e_nPend', lotoAb.length) : E3('e_ninguno')), '', lotoAb && lotoAb.length ? 'atn' : '', '#cardPermisos')
+    + tile('rca', 'search-check', esc(rcaPend.length ? E3N('e_nPend', rcaPend.length) : E3('e_ninguno')), '', rcaPend.length ? 'mal' : '', '#cardRca')
+    + tile('tend', 'trend', !Array.isArray(_ckPorEquipo.get(e.id)) ? esc(E3(_ckPorEquipo.get(e.id) && _ckPorEquipo.get(e.id).err ? 'e_ninguno' : 'e_cargando')) : esc(tend.length ? E3N('e_nAlertas', tend.length) : E3('e_tendOk')), '', tend.length ? 'mal' : '', '#cardTend')
+    + tile('crit', 'target', esc(crit ? (window.i18n ? i18n.t('crit_' + crit) : crit) : (window.i18n ? i18n.t('crit_N') : '—')), '', '', '#cardCrit')
+    + `</div>`;
+}
+window.addEventListener('idioma-cambiado', () => { try { renderE360(); } catch (e) {} });
 
 // ══════ (28 oct 2026) Criticidad y permisos de trabajo del equipo ══════
 // Criticidad: del catálogo (0 lecturas). Permisos: 1 consulta por equipo
@@ -567,8 +777,8 @@ function renderCrit() {
   const box = document.getElementById('critBox'); if (!box || !equipoActual) return;
   box.innerHTML = typeof fbCritDetalleHtml === 'function' ? fbCritDetalleHtml(equipoActual) : '';
   const b = document.getElementById('btnCritEval');
-  if (b) { b.style.display = (typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar()) ? '' : 'none'; b.textContent = fbCritNivel(equipoActual) ? '🎯 Volver a evaluar' : '🎯 Evaluar'; }
-  const cx = document.getElementById('btnCapexEq'); // (29 oct 2026) 💼 CAPEX
+  if (b) { b.style.display = (typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar()) ? '' : 'none'; b.textContent = fbCritNivel(equipoActual) ? 'Volver a evaluar' : 'Evaluar'; }
+  const cx = document.getElementById('btnCapexEq'); // (29 oct 2026) CAPEX
   if (cx) { const puede = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'); cx.style.display = puede ? 'inline-block' : 'none'; cx.href = 'capex.html#nuevo&equipo=' + encodeURIComponent(equipoActual.id); }
 }
 function evaluarCritActual() { if (equipoActual) fbCritAbrirAsistente(equipoActual, { onGuardado: () => renderCrit() }); }
@@ -580,19 +790,26 @@ function renderPermisos() {
   if (lista === undefined) {
     _permisosPorEquipo.set(e.id, null);
     box.innerHTML = '<div class="note">Cargando…</div>';
-    fbSegPermisosDeEquipo(e.id).then(l => { _permisosPorEquipo.set(e.id, l); if (equipoActual && equipoActual.id === e.id) renderPermisos(); })
+    fbSegPermisosDeEquipo(e.id).then(l => { _permisosPorEquipo.set(e.id, l); if (equipoActual && equipoActual.id === e.id) { renderPermisos(); renderE360(); } })
       .catch(err => { _permisosPorEquipo.set(e.id, { err: err.code === 'permission-denied' ? 'Tu usuario no puede ver los permisos de trabajo.' : err.message }); if (equipoActual && equipoActual.id === e.id) renderPermisos(); });
     return;
   }
   if (lista === null) return;
-  if (lista.err) { box.innerHTML = `<div class="note">⚠️ ${esc(lista.err)}</div>`; return; }
+  if (lista.err) { box.innerHTML = `<div class="note"><span data-icon="alert"></span> ${esc(lista.err)}</div>`; return; }
   if (!lista.length) { box.innerHTML = '<div class="note">Todavía no hay permisos de trabajo de este equipo.</div>'; return; }
   const conLoto = lista.filter(fbSegLotoHecho).length;
+  // (v3 etapa 3a) Resumen: los permisos ABIERTOS con la misma tarjeta de seguridad.js (sin botones);
+  // la lista para actuar (retirar / autorizar) está en Trabajos → Avisos. El historial sigue aquí, plegado.
+  const abiertos = lista.filter(p => ['abierto', 'por_autorizar', 'autorizado'].includes(p.estado));
   box.innerHTML = `<div class="note" style="margin-bottom:8px;">${lista.length} permiso(s) · ${conLoto} con bloqueo (LOTO)</div>`
+    + abiertos.map(p => fbSegTarjetaHtml(p, { acciones: false })).join('')
+    + (abiertos.length ? `<a class="btn btn-secondary btn-sm" href="bitacora.html#avisos" style="display:inline-flex;gap:6px;align-items:center;text-decoration:none;margin:2px 0 8px;"><span data-icon="siren"></span> ${esc(E3('e_permisosTrabajos'))}</a>` : '')
+    + `<details class="perm-hist"><summary>${esc(E3('e_permisosHist'))} (${lista.length})</summary>`
     + lista.slice(0, 30).map(p => { const ms = fbSegMs(p); const d = ms ? new Date(ms) : null; const r = fbSegRiesgosTxt(p.riesgos);
       return `<div class="fbs-card ${esc(p.estado)}" data-permiso="${esc(p.id)}"><div class="t"><span>${d ? esc(fmtFechaHV(fbFechaLocal(d))) + ' ' + esc(p.horaInicio || '') : esc(p.fecha || '')}${p.otFolio ? ' · ' + esc(p.otFolio) : ''}</span>${fbSegEstadoHtml(p)}</div>
-        <div class="m">👤 ${esc(p.tecnico || '—')} · ${fbSegLotoHecho(p) ? '🔒 LOTO' + (p.loto.candado ? ' (candado ' + esc(p.loto.candado) + ')' : '') : 'sin LOTO'}${r.length ? ' · ⚠️ ' + esc(r.join(', ')) : ''}${p.autorizadoPor ? ' · ' + (p.estado === 'rechazado' ? 'rechazó ' : 'autorizó ') + esc(p.autorizadoPor) : ''}${p.retiro && p.retiro.hora ? ' · retiro ' + esc(p.retiro.hora) : ''}</div></div>`; }).join('')
-    + (lista.length > 30 ? `<div class="note">Se muestran los 30 más recientes.</div>` : '');
+        <div class="m"><span data-icon="user"></span> ${esc(p.tecnico || '—')} · ${fbSegLotoHecho(p) ? '<span data-icon="lock"></span> LOTO' + (p.loto.candado ? ' (candado ' + esc(p.loto.candado) + ')' : '') : 'sin LOTO'}${r.length ? ' · <span data-icon="alert"></span> ' + esc(r.join(', ')) : ''}${p.autorizadoPor ? ' · ' + (p.estado === 'rechazado' ? 'rechazó ' : 'autorizó ') + esc(p.autorizadoPor) : ''}${p.retiro && p.retiro.hora ? ' · retiro ' + esc(p.retiro.hora) : ''}</div></div>`; }).join('')
+    + (lista.length > 30 ? `<div class="note">Se muestran los 30 más recientes.</div>` : '') + '</details>';
+  if (window.VTIcons) VTIcons.hydrate(box);
 }
 
 // ══════ (28 oct 2026) Causa raíz y tendencias del equipo ══════
@@ -623,7 +840,7 @@ function renderTendHv() {
     return;
   }
   if (cks === null) return;
-  if (cks.err) { box.innerHTML = `<div class="note">⚠️ ${esc(cks.err)}</div>`; return; }
+  if (cks.err) { box.innerHTML = `<div class="note"><span data-icon="alert"></span> ${esc(cks.err)}</div>`; return; }
   _tendCharts.splice(0).forEach(c => { try { c.destroy(); } catch (x) {} });
   const grupos = [...fbTendAgrupar(cks).values()];
   if (!grupos.length) { box.innerHTML = '<div class="note">Este equipo no tiene puntos de checklist con medición (mín / máx) todavía.</div>'; return; }
@@ -633,19 +850,20 @@ function renderTendHv() {
   window._tendHv = grupos;
   box.innerHTML = grupos.map((g, i) => {
     const u = g.lecturas[g.lecturas.length - 1];
-    return `<div class="pend-row" style="display:block;" data-tend-hv="${i}"><div><b>${esc(g.punto)}</b> ${g.alerta ? fbTendBadge(g.alerta) : '<span class="tend-badge rca-ok">✅ Normal</span>'}</div>
+    return `<div class="pend-row" style="display:block;" data-tend-hv="${i}"><div><b>${esc(g.punto)}</b> ${g.alerta ? fbTendBadge(g.alerta) : '<span class="tend-badge rca-ok"><span data-icon="check-circle"></span> Normal</span>'}</div>
       <div class="note" style="margin-top:2px;">Última ${esc(fbTendFmt(u.valor))} ${esc(u.unidad)} el ${fmtFechaHV(u.fecha)} · ${g.lecturas.length} lectura(s)${g.alerta ? ' · ' + esc(g.alerta.texto) : ''}</div>
       ${typeof Chart !== 'undefined' ? `<div class="tend-chart"><canvas id="tendHv${i}"></canvas></div>` : fbTendTablaHtml(g)}
-      ${g.alerta ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="otDesdeTendHv(${i}, this)">🧾 Crear OT predictiva</button>` : ''}</div>`;
+      ${g.alerta ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="otDesdeTendHv(${i}, this)"><span data-icon="file"></span> Crear OT predictiva</button>` : ''}</div>`;
   }).join('');
   grupos.forEach((g, i) => { const c = fbTendDibujar(document.getElementById('tendHv' + i), g); if (c) _tendCharts.push(c); });
+  try { renderE360(); } catch (err) {}
 }
 function otDesdeTendHv(i, btn) {
   const g = (window._tendHv || [])[i]; if (!g || !g.alerta) return;
   btn.disabled = true;
   fbTendCrearOt(g, currentOts, { equipo: equipoActual }).then(r => {
-    showToast(r.existente ? 'ℹ️ Ya hay una OT abierta para ese punto: ' + r.existente : '✅ OT predictiva ' + r.creada.folio + ' creada');
-  }).catch(err => showToast('❌ ' + ((err && err.message) || err), 'error')).finally(() => { btn.disabled = false; });
+    showToast(r.existente ? 'Ya hay una OT abierta para ese punto: ' + r.existente : 'OT predictiva ' + r.creada.folio + ' creada');
+  }).catch(err => showToast('' + ((err && err.message) || err), 'error')).finally(() => { btn.disabled = false; });
 }
 
 // (5 oct 2026) Devuelve texto ya escapado (la fecha viene de Firestore y se
@@ -689,8 +907,8 @@ function renderKpis() {
   const paro = H.reduce((s, r) => s + r.paro, 0);
   // días promedio entre fallas correctivas (días distintos, mínimo 3), mismo criterio que Análisis
   const dias = [...new Set(corr.map(r => r.fecha).filter(f => fechaD(f)))].sort();
-  let mtbf = null;
-  if (dias.length >= 3) mtbf = (fechaD(dias[dias.length - 1]) - fechaD(dias[0])) / 86400000 / (dias.length - 1);
+  // (v3 etapa 3a) mismo intervalo promedio entre fallas que Análisis (kpis.js)
+  const mtbf = VTKpis.mtbfDeFechas(dias.map(fechaD));
   const tiles = [
     { k: 'k0', l: 'Total de OTs', v: n, f: `${corr.length} correctivas · ${prev} preventivas o predictivas` },
     { k: 'k1', l: 'Tiempo total', v: totalMin.toLocaleString('es-DO') + ' min', f: fmtMin(totalMin) + ' de trabajo' },
@@ -812,7 +1030,7 @@ function renderPiezas() {
 
 function renderPendientes() {
   const el = document.getElementById('pendList');
-  if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0">✅ No hay OTs abiertas para este equipo.</div>'; return; }
+  if (!pendientesActual.length) { el.innerHTML = '<div class="note" style="margin-top:0"><span data-icon="check-circle"></span> No hay OTs abiertas para este equipo.</div>'; return; }
   const est = { pendiente: 'Pendiente', en_atencion: 'En atención', planificada: 'Planificada', en_revision: 'En revisión', rechazada: 'Devuelta' };
   el.innerHTML = pendientesActual.map(o => `
     <div class="pend-row"><div><b>${esc(o.folio || o.id)}</b> · ${esc(o.descripcionFalla || '—')}<div class="item-sub">${o.tipoReporte === 'proyecto' ? 'Proyecto / mejora de producción' : o.origen === 'operador' ? 'Reportada por operador' : o.origen === 'qr' ? 'Reportada desde el QR' : o.origen === 'checklist' ? 'Detectada en checklist (predictivo)' : ''}${o.asignadoA ? ' · asignada a ' + esc(o.asignadoA) : ''}</div></div>
@@ -847,14 +1065,14 @@ function renderHistorial() {
   const total = historialActual.length;
   const filtrado = hvFiltro.tipo || hvFiltro.tec || hvFiltro.q;
   document.getElementById('histCount').innerHTML = `<span>${HF.length === total ? `<b>${total}</b> OTs` : `<b>${HF.length}</b> de ${total} OTs`} · ${HF.reduce((s, r) => s + r.min, 0).toLocaleString('es-DO')} min de trabajo</span>`
-    + (filtrado ? `<button class="linkbtn" id="limpiarHist">Quitar filtros ✕</button>` : '');
+    + (filtrado ? `<button class="linkbtn" id="limpiarHist">Quitar filtros <span data-icon="x"></span></button>` : '');
   const lb = document.getElementById('limpiarHist');
   if (lb) lb.onclick = () => { hvFiltro.tipo = ''; hvFiltro.tec = ''; hvFiltro.q = ''; document.getElementById('fBuscar').value = ''; renderTodo(); };
 
   const wrap = document.getElementById('historial');
   const body = document.getElementById('histBody');
   if (!total) {
-    wrap.innerHTML = `<div class="empty"><span class="emoji">🗂️</span><p>Este equipo todavía no tiene OTs registradas en Bitácora ni Checklist.</p></div>`;
+    wrap.innerHTML = `<div class="empty"><span class="emoji"><span data-icon="folder"></span></span><p>Este equipo todavía no tiene OTs registradas en Bitácora ni Checklist.</p></div>`;
     body.innerHTML = `<tr><td colspan="9" class="empty">Este equipo todavía no tiene OTs registradas.</td></tr>`;
     return;
   }
@@ -892,9 +1110,9 @@ function renderHistorial() {
         <div class="item-title">${esc(r.folio)} · ${fmtFechaHV(r.fecha)}</div>
         <span class="tag ${TIPO_TAG(r.tipo)}">${esc(r.tipo)}</span>
       </div>
-      <div class="item-sub">${r.area ? '📍 ' + esc(r.area) + ' · ' : ''}${r.equipo || r.pieza ? '🔧 ' + esc(eqTxt(r)) + ' · ' : ''}👤 ${esc(tecTxt(r))} · ⏱ ${r.min} min${r.paro ? ' · paro ' + r.paro + ' min' : ''}</div>
+      <div class="item-sub">${r.area ? '<span data-icon="pin"></span> ' + esc(r.area) + ' · ' : ''}${r.equipo || r.pieza ? '<span data-icon="wrench"></span> ' + esc(eqTxt(r)) + ' · ' : ''}<span data-icon="user"></span> ${esc(tecTxt(r))} · <span data-icon="timer"></span> ${r.min} min${r.paro ? ' · paro ' + r.paro + ' min' : ''}</div>
       ${r.falla ? `<div class="item-sub"><strong style="color:var(--text)">Falla:</strong> ${r.causa ? '[' + esc(r.causa) + '] ' : ''}${esc(r.falla)}</div>` : ''}
-      ${r.solucion ? `<div class="item-sol"><strong>✓ Solución:</strong> ${esc(r.solucion)}</div>` : ''}
+      ${r.solucion ? `<div class="item-sol"><strong><span data-icon="check"></span> Solución:</strong> ${esc(r.solucion)}</div>` : ''}
     </div>`).join('');
 }
 
@@ -902,7 +1120,7 @@ function renderHistorial() {
 function mostrarQrHojaVida() {
   if (!equipoActual) return;
   document.getElementById('qr-equipo-nombre2').textContent = equipoActual.nombre || '(sin nombre)';
-  document.getElementById('qr-equipo-sub2').textContent = equipoActual.localidad ? '📍 ' + equipoActual.localidad : '';
+  document.getElementById('qr-equipo-sub2').textContent = equipoActual.localidad ? '' + equipoActual.localidad : '';
   const wrap = document.getElementById('qr-canvas-wrap2');
   wrap.innerHTML = '';
   // (5 oct 2026) Sin conexión la librería del QR puede no haber cargado.
@@ -916,23 +1134,7 @@ function mostrarQrHojaVida() {
 // ══════ Exportar a Excel con dashboard (generado en el navegador) ══════
 const PALETTE = { blue: '2A78D6', orange: 'EB6834', aqua: '1BAF7A', yellow: 'EDA100', red: 'E66767' };
 
-// (5 oct 2026) Carga ExcelJS solo cuando se pide exportar (antes ~1 MB en cada visita).
-let _excelJsPromesa = null;
-function cargarExcelJS() {
-  if (typeof fbCargarExcelJS === 'function') return fbCargarExcelJS(); // (25 oct 2026, Etapa 3) mismo cargador para toda la app
-  if (typeof ExcelJS !== 'undefined') return Promise.resolve();
-  if (!_excelJsPromesa) {
-    const tag = document.createElement('script');
-    tag.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
-    _excelJsPromesa = new Promise((resolve, reject) => {
-      tag.onload = () => (typeof ExcelJS !== 'undefined' ? resolve() : reject(new Error('ExcelJS no disponible')));
-      tag.onerror = () => reject(new Error('no se pudo descargar ExcelJS (¿sin conexión?)'));
-      document.head.appendChild(tag);
-    }).catch(err => { _excelJsPromesa = null; tag.remove(); throw err; }); // permite reintentar
-  }
-  return _excelJsPromesa;
-}
-
+// (v3 etapa 3a) ExcelJS lo carga el exportador común (filtros.js → fbCargarExcelJS).
 function chartToImage(config, w, h) {
   if (typeof Chart === 'undefined') return null; // (5 oct 2026) sin Chart.js: el Excel sale sin imágenes
   const canvas = document.createElement('canvas');
@@ -946,8 +1148,22 @@ function chartToImage(config, w, h) {
 async function exportarExcel() {
   if (!historialActual.length) { showToast('Este equipo no tiene historial todavía', 'error'); return; }
   setLoading(true, 'Generando Excel...');
+  // (v3 etapa 3a) Por el exportador común (filtros.js): carga ExcelJS, descarga y, sin señal, ofrece el CSV de la hoja "Hoja de Vida".
+  // El libro (Hoja de Vida + Dashboard con fórmulas y gráficas) es el mismo de siempre.
+  const nombreArchivo = `Hoja_de_vida_${(equipoActual.nombre || 'equipo').replace(/\s+/g, '_')}`;
+  const hojaCsv = { nombre: 'Hoja de Vida', columnas: ['N° Orden', 'Fecha', 'Área', 'Equipo', 'Técnico', 'Tiempo de trabajo (min)', 'Tipo', 'Descripción', 'Solución'].map(t => ({ t })),
+    filas: historialActual.map(r => [r.folio, r.fecha, r.area, [r.equipo, r.pieza].filter(Boolean).join(' · '), r.tecnicos.join(', ') || 'Sin técnico registrado', r.min, r.tipo, r.falla, r.solucion]) };
   try {
-    await cargarExcelJS();
+    const formato = await fbExportar({ nombre: nombreArchivo, hojas: [hojaCsv], construir: () => libroHojaDeVida() });
+    setLoading(false);
+    if (formato === 'xlsx') showToast('Excel descargado');
+  } catch (err) {
+    setLoading(false);
+    showToast('No se pudo generar el Excel: ' + err.message, 'error');
+  }
+}
+async function libroHojaDeVida() {
+  {
     const DATA = historialActual;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Hoja de Vida', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
@@ -1057,19 +1273,7 @@ async function exportarExcel() {
       }
     }
 
-    const buf = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buf], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `Hoja_de_vida_${(equipoActual.nombre || 'equipo').replace(/\s+/g, '_')}.xlsx`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast('✅ Excel descargado');
-  } catch (err) {
-    console.error(err);
-    showToast('Error generando el Excel: ' + err.message, 'error');
-  } finally {
-    setLoading(false);
+    return wb.xlsx.writeBuffer();
   }
 }
 </script>

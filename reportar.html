@@ -17,8 +17,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<!-- (v3, nov 2026) Diseño VoidTech: iconos SVG, idiomas y letra IBM Plex -->
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
@@ -53,6 +58,7 @@
     #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
     #content { padding: 14px 14px 40px; }
+    html.vt-shell #header { display: none; }
     .screen { display: none; }
     .screen.active { display: block; }
     .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
@@ -130,27 +136,20 @@
 </head>
 <body>
 
-<div id="offline-bar">📵 Sin conexión — el reporte se guardará en cuanto vuelva la señal</div>
+<div id="offline-bar"><span data-icon="wifi-off"></span> Sin conexión — el reporte se guardará en cuanto vuelva la señal</div>
 
-<div id="header">
-  <div>
-    <h1>🚨 Reportar Parada</h1>
-    <small id="header-sub">2026 · Cargando...</small>
-    <div id="nave-rep" style="margin-top:4px;font-size:11px;display:flex;"></div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px"><a href="guia.html" title="Guía de uso" style="color:inherit;text-decoration:none;font-size:13px;font-weight:700">📘 Guía</a><div id="sp-status" title="Estado de conexión">⚙️</div></div>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
 
 <div id="content">
 
   <!-- SCREEN: ELEGIR EQUIPO -->
   <div class="screen active" id="screen-elegir">
     <div class="card">
-      <div class="card-title">🚨 Reportar falla o proyecto</div>
-      <div class="card-sub">Elige el equipo. Una falla les llega a los técnicos al momento; un proyecto o mejora lo planifica el Encargado.</div>
-      <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="verEstado()">📋 Ver estado de los reportes <span id="estado-badge"></span></button>
+      <div class="card-title">Reportar falla o proyecto <button type="button" class="vt-help" data-ayuda="Una falla les llega a los técnicos al momento; un proyecto o mejora lo planifica el Encargado." aria-label="Ayuda">?</button></div>
+      <div class="card-sub">Elige el equipo.</div>
+      <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="verEstado()"><span data-icon="clipboard"></span> Ver estado de los reportes <span id="estado-badge"></span></button>
       <input type="text" id="buscar-equipo" placeholder="Buscar equipo..." oninput="renderListaEquipos()" style="margin-bottom:10px;"/>
-      <div id="lista-equipos"><div class="empty" style="padding:20px 10px;"><p>⏳ Cargando equipos…</p></div></div>
+      <div id="lista-equipos"><div class="empty" style="padding:20px 10px;"><p><span data-icon="clock"></span> Cargando equipos…</p></div></div>
     </div>
   </div>
 
@@ -162,21 +161,21 @@
           <div class="card-title" id="rf-equipo-nombre">—</div>
           <div class="card-sub" id="rf-equipo-sub" style="margin-bottom:0;">—</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="cerrarForm()">✕ Cambiar</button>
+        <button class="btn btn-secondary btn-sm" onclick="cerrarForm()"><span data-icon="x"></span> Cambiar</button>
       </div>
       <!-- (20 oct 2026) Elección obligatoria: falla (aviso inmediato) o proyecto (se planifica). -->
       <div class="field" id="rf-tipo-field" style="margin-top:14px;">
         <label>¿Qué quieres reportar? *</label>
         <div class="tipo-grid" id="rf-tipo-grid">
-          <button type="button" class="tipo-btn" data-t="falla" onclick="setTipoReporte('falla')"><b>⚠️ Falla en la máquina</b><span>Se atiende ya: avisa a los técnicos</span></button>
-          <button type="button" class="tipo-btn" data-t="proyecto" onclick="setTipoReporte('proyecto')"><b>📐 Proyecto / mejora</b><span>Se planifica: el Encargado le pone técnico y fecha</span></button>
+          <button type="button" class="tipo-btn" data-t="falla" onclick="setTipoReporte('falla')"><b><span data-icon="alert"></span> Falla en la máquina</b><span>Se atiende ya: avisa a los técnicos</span></button>
+          <button type="button" class="tipo-btn" data-t="proyecto" onclick="setTipoReporte('proyecto')"><b><span data-icon="ruler"></span> Proyecto / mejora</b><span>Se planifica: el Encargado le pone técnico y fecha</span></button>
         </div>
       </div>
       <div class="field" id="rf-parada-field">
         <label>¿La máquina está parada?</label>
         <div class="toggle-row" id="rf-parada-grid">
-          <button type="button" class="toggle-btn sel-si" data-v="si" onclick="setParada('si')">⛔ Sí, está parada</button>
-          <button type="button" class="toggle-btn" data-v="no" onclick="setParada('no')">⚠️ No, sigue trabajando</button>
+          <button type="button" class="toggle-btn sel-si" data-v="si" onclick="setParada('si')"><span data-icon="stop"></span> Sí, está parada</button>
+          <button type="button" class="toggle-btn" data-v="no" onclick="setParada('no')"><span data-icon="alert"></span> No, sigue trabajando</button>
         </div>
       </div>
       <div class="field" id="rf-hora-field">
@@ -190,16 +189,16 @@
       <div class="field">
         <label id="rf-prio-label">¿Qué tan urgente es?</label>
         <div class="toggle-row" id="rf-prioridad-grid">
-          <button type="button" class="toggle-btn" data-pr="alta" onclick="setPrioridad('alta')">🔴 Alta</button>
-          <button type="button" class="toggle-btn sel-media" data-pr="media" onclick="setPrioridad('media')">🟡 Media</button>
-          <button type="button" class="toggle-btn" data-pr="baja" onclick="setPrioridad('baja')">🟢 Baja</button>
+          <button type="button" class="toggle-btn" data-pr="alta" onclick="setPrioridad('alta')"><span data-icon="dot" style="color:var(--color-danger)"></span> Alta</button>
+          <button type="button" class="toggle-btn sel-media" data-pr="media" onclick="setPrioridad('media')"><span data-icon="dot" style="color:var(--color-warn)"></span> Media</button>
+          <button type="button" class="toggle-btn" data-pr="baja" onclick="setPrioridad('baja')"><span data-icon="dot" style="color:var(--color-success)"></span> Baja</button>
         </div>
       </div>
       <div class="field">
         <label>Tu nombre</label>
         <input type="text" id="rf-nombre" maxlength="80" placeholder="¿Quién reporta?"/>
       </div>
-      <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()">🚨 Enviar reporte</button>
+      <button class="btn btn-primary" id="rf-submit-btn" onclick="enviarReporte()"><span data-icon="siren"></span> Enviar reporte</button>
     </div>
   </div>
 
@@ -207,8 +206,8 @@
   <div class="screen" id="screen-estado">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div><div class="card-title">📋 Estado de los reportes</div>
-        <div class="card-sub" style="margin-bottom:10px;">Se actualiza solo. Rojo: esperando técnico · Amarillo: en atención · Verde: resuelto · Morado: proyecto.</div></div>
+        <div><div class="card-title"><span data-icon="clipboard"></span> Estado de los reportes</div>
+        <div class="card-sub" style="margin-bottom:10px;">En vivo. <button type="button" class="vt-help" data-ayuda="Rojo: esperando técnico · Amarillo: en atención · Verde: resuelto · Morado: proyecto." aria-label="Ayuda">?</button></div></div>
         <button class="btn btn-secondary btn-sm" onclick="nuevoReporte()">← Volver</button>
       </div>
       <div class="seg-dia" id="seg-dia">
@@ -224,13 +223,13 @@
   <div class="screen" id="screen-exito">
     <div class="card">
       <div class="exito-wrap">
-        <span class="emoji">✅</span>
+        <span class="emoji"><span data-icon="check-circle"></span></span>
         <h2 id="exito-titulo">Reporte enviado</h2>
         <p id="exito-texto">Los técnicos ya recibieron el aviso. Puedes seguir el estado aquí.</p>
         <div class="folio" id="exito-folio">—</div>
         <p id="exito-equipo" style="margin-bottom:20px;">—</p>
-        <button class="btn btn-primary" onclick="verEstado()" style="margin-bottom:8px;">📋 Ver estado del reporte</button>
-        <button class="btn btn-secondary" onclick="nuevoReporte()">➕ Hacer otro reporte</button>
+        <button class="btn btn-primary" onclick="verEstado()" style="margin-bottom:8px;"><span data-icon="clipboard"></span> Ver estado del reporte</button>
+        <button class="btn btn-secondary" onclick="nuevoReporte()"><span data-icon="plus"></span> Hacer otro reporte</button>
       </div>
     </div>
   </div>
@@ -269,17 +268,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // "Cargando..." sin lista de equipos y sin decir nada. Ahora explica qué pasa.
   let sesionLista = false;
   const avisoSesion = (texto) => {
-    document.getElementById('header-sub').textContent = '2026 · Sin sesión';
-    document.getElementById('lista-equipos').innerHTML = `<div class="empty"><span class="emoji">⚠️</span><p>${texto}</p>
+    document.getElementById('lista-equipos').innerHTML = `<div class="empty"><span class="emoji"><span data-icon="alert"></span></span><p>${texto}</p>
       <a class="btn btn-primary" style="display:block;margin-top:12px;text-decoration:none;text-align:center;background:var(--color-primary);color:var(--color-on-primary);font-weight:800;padding:13px;border-radius:10px;" href="login.html?next=${encodeURIComponent('reportar.html' + location.search)}">Iniciar sesión</a>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="location.reload()">🔄 Reintentar</button>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="location.reload()"><span data-icon="refresh"></span> Reintentar</button>
       <p style="margin-top:12px;font-size:12.5px;">Sin usuario también puedes reportar escaneando el código QR pegado en la máquina.</p></div>`;
   };
   setTimeout(() => { if (!sesionLista) avisoSesion('La conexión está tardando más de lo normal (paso: ' + (window.fbEtapa || '?') + '). Revisa el internet o la señal y pulsa Reintentar.<br><small>Si carga más tarde, la lista aparece sola aquí.</small>'); }, 15000);
   window.fbReady.then(() => {
     sesionLista = true;
-    document.getElementById('header-sub').textContent =
-      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     // Nota a propósito: NO se llama fbRenderMiniNav() aquí — el rol
     // Operador no tiene permiso de lectura para las otras pantallas
     // (Bitácora/Inventario/Análisis/Checklist/Hoja de Vida), así que esos
@@ -287,12 +283,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEquipos();
     escucharReportes();
     // (25 oct 2026, Etapa 2) Nave: selector (si ve más de una) y repintado sin recargar.
-    if (typeof fbRenderSelectorNave === 'function') fbRenderSelectorNave(document.getElementById('nave-rep'));
+    // (v3 etapa 3a) la nave se elige arriba (encabezado de la app)
     if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => { renderListaEquipos(); unirReportes(); });
     updateHeaderStatus();
     // Si llega desde un QR con ?equipo=<id>, salta directo al formulario.
     const qEquipo = new URLSearchParams(location.search).get('equipo');
     if (qEquipo) intentarAbrirDesdeQuery(qEquipo);
+    else if (location.hash === '#estado') verEstado();
   }).catch((err) => {
     sesionLista = true;
     console.warn('Sin sesión activa:', err.message);
@@ -304,13 +301,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function updateHeaderStatus() {
-  const bar = document.getElementById('offline-bar');
-  const icon = document.getElementById('sp-status');
-  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
-  else { bar.classList.add('show'); icon.textContent = '📵'; }
+  document.getElementById('offline-bar').classList.toggle('show', !navigator.onLine);
 }
 
 function showToast(msg, type) {
+  if (window.vtToast) return vtToast(msg, type);
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show' + (type ? ' ' + type : '');
@@ -342,7 +337,7 @@ function loadEquipos() {
   }, (err) => {
     console.warn('Error leyendo equipos:', err.message);
     document.getElementById('lista-equipos').innerHTML =
-      `<div class="empty"><span class="emoji">⚠️</span><p>No se pudo cargar la lista de equipos. Verifica tu conexión o pide ayuda a un administrador.</p></div>`;
+      `<div class="empty"><span class="emoji"><span data-icon="alert"></span></span><p>No se pudo cargar la lista de equipos. Verifica tu conexión o pide ayuda a un administrador.</p></div>`;
   });
 }
 
@@ -356,7 +351,7 @@ function intentarAbrirDesdeQuery(equipoId) {
 // lecturas; si falta una máquina nueva, este botón la trae del servidor.
 function actualizarListaEquipos() {
   showToast('Actualizando lista…');
-  fbRefrescarEquipos(false).then(() => showToast('✅ Lista actualizada')).catch(e => showToast('Sin conexión: ' + e.message, 'error'));
+  fbRefrescarEquipos(false).then(() => showToast('Lista actualizada')).catch(e => showToast('Sin conexión: ' + e.message, 'error'));
 }
 function renderListaEquipos() {
   const busca = (document.getElementById('buscar-equipo').value || '').trim().toLowerCase();
@@ -367,9 +362,9 @@ function renderListaEquipos() {
       <div class="item-header">
         <div class="item-title">${escR(e.nombre || '(sin nombre)')}</div>
       </div>
-      <div class="item-sub">${e.localidad ? '📍 ' + escR(e.localidad) : ''}</div>
+      <div class="item-sub">${e.localidad ? '<span data-icon="pin"></span> ' + escR(e.localidad) : ''}</div>
     </div>`).join('') :
-    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p><button class="btn btn-secondary" style="margin-top:10px;" onclick="actualizarListaEquipos()">🔄 Actualizar lista de equipos</button></div>`;
+    `<div class="empty" style="padding:20px 10px;"><p>No hay equipos que coincidan.</p><button class="btn btn-secondary" style="margin-top:10px;" onclick="actualizarListaEquipos()"><span data-icon="refresh"></span> Actualizar lista de equipos</button></div>`;
 }
 
 // ══════ FORMULARIO ══════
@@ -378,7 +373,7 @@ function abrirForm(equipoId) {
   if (!e) return;
   equipoSeleccionado = e;
   document.getElementById('rf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
-  document.getElementById('rf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  document.getElementById('rf-equipo-sub').textContent = e.localidad ? '' + e.localidad : '';
   document.getElementById('rf-descripcion').value = '';
   document.getElementById('rf-nombre').value = (window.currentUserRole && window.currentUserRole.nombre) || '';
   setPrioridad('media');
@@ -433,7 +428,7 @@ function setTipoReporte(t) {
   document.getElementById('rf-desc-label').textContent = proy ? 'Describe el proyecto o mejora' : '¿Qué le pasa al equipo?';
   document.getElementById('rf-descripcion').placeholder = proy ? 'Qué se quiere hacer o mejorar, y para qué...' : 'Describe la falla: qué se ve, se oye o se siente raro...';
   document.getElementById('rf-prio-label').textContent = proy ? '¿Qué tan importante es?' : '¿Qué tan urgente es?';
-  document.getElementById('rf-submit-btn').textContent = proy ? '📐 Enviar proyecto' : '🚨 Enviar reporte';
+  document.getElementById('rf-submit-btn').textContent = proy ? 'Enviar proyecto' : 'Enviar reporte';
 }
 const esProyectoR = r => r && r.tipoReporte === 'proyecto';
 const horaAhora = () => new Date().toTimeString().slice(0, 5);
@@ -494,10 +489,10 @@ async function enviarReporte() {
       fechaReporte: fechaReporte,
       horaParada: horaParada,
       createdAt: fbTimestamp(),
-    }).catch(e => showToast('⚠️ El reporte ' + folio + ' no se pudo guardar: ' + (e.code === 'permission-denied' ? 'el sistema lo rechazó. Avisa a mantenimiento.' : e.message), 'error'));
+    }).catch(e => showToast('El reporte ' + folio + ' no se pudo guardar: ' + (e.code === 'permission-denied' ? 'el sistema lo rechazó. Avisa a mantenimiento.' : e.message), 'error'));
 
     setLoading(false);
-    if (!navigator.onLine) showToast('📵 Sin señal: el reporte se enviará solo al volver la conexión', 'warn');
+    if (!navigator.onLine) showToast('Sin señal: el reporte se enviará solo al volver la conexión', 'warn');
     document.getElementById('exito-titulo').textContent = esProy ? 'Proyecto enviado' : 'Reporte enviado';
     document.getElementById('exito-texto').textContent = esProy
       ? 'El Encargado lo va a planificar (técnico y fecha). Puedes seguir el estado aquí.'
@@ -531,7 +526,7 @@ const _repUnsubDia = new Map(); // 'YYYY-MM-DD' → unsubscribe
 function qReportes() { return db.collection('ots').where('origen', 'in', ['operador', 'qr']); }
 function errorReportes(err) {
   console.warn('Error leyendo reportes:', err.message);
-  document.getElementById('estado-lista').innerHTML = `<div class="empty"><span class="emoji">🔒</span><p>No se pudo leer el estado de los reportes (${escR(err.code || err.message)}). Pide al administrador que publique las reglas nuevas de Firestore.</p></div>`;
+  document.getElementById('estado-lista').innerHTML = `<div class="empty"><span class="emoji"><span data-icon="lock"></span></span><p>No se pudo leer el estado de los reportes (${escR(err.code || err.message)}). Pide al administrador que publique las reglas nuevas de Firestore.</p></div>`;
 }
 function escucharParte(clave, q) {
   return q.onSnapshot((snap) => {
@@ -570,7 +565,12 @@ const ESTADOS_PROY_CURSO = ['planificada', 'en_revision', 'rechazada', 'validada
 // Un reporte sigue "abierto" mientras no esté terminado (los proyectos pasan por más pasos).
 const reporteAbierto = r => ['pendiente', 'en_atencion'].includes(r.estado) || (esProyectoR(r) && ESTADOS_PROY_CURSO.includes(r.estado));
 const ddmmR = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] : (f || ''); };
-function verEstado() { goToScreen('screen-estado'); renderEstado(); }
+function verEstado() {
+  goToScreen('screen-estado'); renderEstado();
+  // (v3) "Mis reportes" de la barra inferior = reportar.html#estado
+  if (location.hash !== '#estado') { try { history.replaceState(null, '', location.pathname + location.search + '#estado'); } catch (e) {} if (window.VTShell) VTShell.pintar(); }
+}
+window.addEventListener('hashchange', () => { if (location.hash === '#estado') verEstado(); else if (!location.hash && document.getElementById('screen-estado').classList.contains('active')) nuevoReporte(); });
 function setDiasEstado(d) {
   diasEstado = d;
   if (estadoEscuchando) sincronizarDiasReportes(); // (5 oct 2026) escucha solo los días visibles
@@ -595,35 +595,36 @@ function renderEstado() {
   const orden = { pendiente: 0, en_atencion: 1 };
   const lista = reportes.filter(r => reporteAbierto(r) || fechaDe(r) >= lim)
     .sort((a, b) => (orden[a.estado] ?? 2) - (orden[b.estado] ?? 2) || (fechaDe(b) + (b.horaParada || '')).localeCompare(fechaDe(a) + (a.horaParada || '')));
-  if (!lista.length) { wrap.innerHTML = '<div class="empty"><span class="emoji">✅</span><p>No hay reportes en este período.</p></div>'; return; }
+  if (!lista.length) { wrap.innerHTML = '<div class="empty"><span class="emoji"><span data-icon="check-circle"></span></span><p>No hay reportes en este período.</p></div>'; return; }
   wrap.innerHTML = lista.map(r => {
     const espera = minDesde(fechaDe(r), r.horaParada);
     let estado;
     const proy = esProyectoR(r);
     // (20 oct 2026) Estados de un proyecto: por planificar → planificado → en proceso → terminado.
     if (proy) {
-      if (r.estado === 'pendiente') estado = '📐 Pendiente de planificar';
-      else if (r.estado === 'planificada') estado = `📅 Planificado para el ${escR(ddmmR(r.fechaPlanificada))}${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
-      else if (ESTADOS_PROY_CURSO.includes(r.estado)) estado = `🔧 En proceso${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
-      else if (r.estado === 'completada') estado = `✅ Terminado${r.fechaCompletada ? ' el ' + escR(ddmmR(r.fechaCompletada)) : ''}`;
-      else estado = '📌 ' + escR(r.estado || '—');
-    } else if (r.estado === 'pendiente') estado = `⏳ Esperando técnico${espera != null ? ' · ' + fmtMinR(espera) : ''}`;
-    else if (r.estado === 'en_atencion') estado = `🔧 En atención por ${escR(r.asignadoA || 'un técnico')}${r.horaLlegada ? ' · llegó ' + escR(r.horaLlegada) : ''}`;
-    else if (r.estado === 'completada') estado = `✅ Resuelto${r.H_FINAL ? ' a las ' + escR(r.H_FINAL) : ''}${r.TECNICOS ? ' por ' + escR(r.TECNICOS) : ''}`;
-    else estado = '📌 ' + escR(r.estado || '—');
+      if (r.estado === 'pendiente') estado = 'Pendiente de planificar';
+      else if (r.estado === 'planificada') estado = `Planificado para el ${escR(ddmmR(r.fechaPlanificada))}${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
+      else if (ESTADOS_PROY_CURSO.includes(r.estado)) estado = `En proceso${r.asignadoA ? ' · ' + escR(r.asignadoA) : ''}`;
+      else if (r.estado === 'completada') estado = `Terminado${r.fechaCompletada ? ' el ' + escR(ddmmR(r.fechaCompletada)) : ''}`;
+      else estado = '' + escR(r.estado || '—');
+    } else if (r.estado === 'pendiente') estado = `Esperando técnico${espera != null ? ' · ' + fmtMinR(espera) : ''}`;
+    else if (r.estado === 'en_atencion') estado = `En atención por ${escR(r.asignadoA || 'un técnico')}${r.horaLlegada ? ' · llegó ' + escR(r.horaLlegada) : ''}`;
+    else if (r.estado === 'completada') estado = `Resuelto${r.H_FINAL ? ' a las ' + escR(r.H_FINAL) : ''}${r.TECNICOS ? ' por ' + escR(r.TECNICOS) : ''}`;
+    else estado = '' + escR(r.estado || '—');
     const cls = proy ? (r.estado === 'completada' ? 'completada' : 'proyecto') : ['pendiente', 'en_atencion', 'completada'].includes(r.estado) ? r.estado : '';
-    const tipoTag = proy ? '<span class="tag tag-tipo-proyecto">📐 Proyecto</span>' : '<span class="tag tag-tipo-falla">⚠️ Falla</span>';
+    const tipoTag = proy ? '<span class="tag tag-tipo-proyecto"><span data-icon="ruler"></span> Proyecto</span>' : '<span class="tag tag-tipo-falla"><span data-icon="alert"></span> Falla</span>';
     return `<div class="rep-row ${cls}">
       <div class="item-header"><div class="item-title">${escR(r.equipoNombre || r.EQUIPO || '—')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${tipoTag}<span class="tag tag-prioridad-${escR(r.prioridad || 'media')}">${escR(r.folio || '')}</span></div></div>
-      <div class="item-sub">${r.equipoLocalidad ? '📍 ' + escR(r.equipoLocalidad) + ' · ' : ''}${proy ? 'reportado el ' + escR(ddmmR(fechaDe(r))) : (r.maquinaParada ? '⛔ Parada' : '⚠️ Trabajando') + (r.horaParada ? ' desde ' + escR(r.horaParada) : '')} · reportó ${escR(r.creadoPor || '—')}</div>
+      <div class="item-sub">${r.equipoLocalidad ? '<span data-icon="pin"></span> ' + escR(r.equipoLocalidad) + ' · ' : ''}${proy ? 'reportado el ' + escR(ddmmR(fechaDe(r))) : (r.maquinaParada ? '<span data-icon="stop"></span> Parada' : '<span data-icon="alert"></span> Trabajando') + (r.horaParada ? ' desde ' + escR(r.horaParada) : '')} · reportó ${escR(r.creadoPor || '—')}</div>
       <div class="item-sub" style="color:var(--text);margin-top:4px;">${escR(r.descripcionFalla || r.DESCRIPCION_FALLA || '')}</div>
       <div class="rep-estado ${cls}">${estado}</div>
-      ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div class="rep-sol">✓ ${escR(r.DESCRIPCION_SOLUCION)}</div>` : ''}
+      ${r.estado === 'completada' && r.DESCRIPCION_SOLUCION ? `<div class="rep-sol"><span data-icon="check"></span> ${escR(r.DESCRIPCION_SOLUCION)}</div>` : ''}
     </div>`;
   }).join('');
 }
 
 function nuevoReporte() {
+  if (location.hash === '#estado') { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} if (window.VTShell) VTShell.pintar(); }
   equipoSeleccionado = null;
   document.getElementById('buscar-equipo').value = '';
   renderListaEquipos();

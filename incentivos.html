@@ -14,6 +14,10 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
   <script src="filtros.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
@@ -158,31 +162,28 @@
 </head>
 <body>
 
-<div id="header">
-  <h1>💰 Incentivos por cumplimiento</h1>
-  <small id="header-sub">Cargando...</small>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
 
 <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo: qué técnicos y trabajos se muestran -->
 <div class="wrap" id="fUbicWrap" style="display:none;padding-bottom:0;"><div class="card" style="margin-bottom:0;padding:10px;"><div id="fUbic"></div></div></div>
-<div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
+<div class="wrap" id="view"><div class="vt-sk-list" aria-busy="true" role="status"><span class="vt-sr">Cargando…</span><i></i><i></i><i></i></div></div>
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
 <div id="toast"></div>
 
 <!-- (26 oct 2026) Reporte para pago: pantalla completa con la hoja (papel) y lo que se edita -->
 <div id="repBg" class="rep-bg">
-  <div class="rep-bar rep-ui"><button id="repCerrar" aria-label="Volver a incentivos">←</button><div class="t"><b>📄 Reporte para pago</b><small id="repTit"></small></div></div>
+  <div class="rep-bar rep-ui"><button id="repCerrar" aria-label="Volver a incentivos">←</button><div class="t"><b><span data-icon="file"></span> Reporte para pago</b><small id="repTit"></small></div></div>
   <div class="rep-in">
     <div class="rep-ui" id="repEstado" style="margin-bottom:8px"></div>
-    <div class="rep-acts rep-ui"><button class="btn" id="repGuardar">💾 Guardar reporte</button><button class="btn2" id="repXls">⬇️ Excel</button><button class="btn2" id="repPdf">🖨 PDF / Imprimir</button></div>
+    <div class="rep-acts rep-ui"><button class="btn" id="repGuardar"><span data-icon="save"></span> Guardar reporte</button><button class="btn2" id="repXls"><span data-icon="download"></span> Excel</button><button class="btn2" id="repPdf"><span data-icon="printer"></span> PDF / Imprimir</button></div>
     <div class="rep-wrap" id="repWrap"><div class="paper" id="repPaper"></div></div>
     <div class="nota rep-ui" style="margin:-4px 2px 12px">Toca una fila de la hoja para cambiarla. <b style="color:#C00000">*</b> = monto u horas puestos a mano (no sale al imprimir).</div>
     <div class="rep-ui" id="repEd"></div>
   </div>
 </div>
-<div id="repCsvDlg" class="rep-dlg"><div class="modal" role="dialog" aria-modal="true"><h3>📵 Excel no disponible</h3><div class="nota" id="repCsvMsg"></div>
-  <div class="modal-actions"><button class="btn2 btn-sm" id="repCsvNo">Cerrar</button><button class="btn btn-sm" id="repCsvOk">⬇️ Descargar CSV</button></div></div></div>
+<div id="repCsvDlg" class="rep-dlg"><div class="modal" role="dialog" aria-modal="true"><h3><span data-icon="wifi-off"></span> Excel no disponible</h3><div class="nota" id="repCsvMsg"></div>
+  <div class="modal-actions"><button class="btn2 btn-sm" id="repCsvNo">Cerrar</button><button class="btn btn-sm" id="repCsvOk"><span data-icon="download"></span> Descargar CSV</button></div></div></div>
 
 <script>
 // ══════ AYUDAS ══════
@@ -206,19 +207,19 @@ const quien = () => (window.currentUserRole && window.currentUserRole.nombre) ||
 const uidYo = () => (window.currentUser && window.currentUser.uid) || '';
 
 let _toastT = null;
-function toast(msg, tipo) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3200); }
+function toast(msg, tipo) { if (window.vtToast) return vtToast(msg, tipo); const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3200); }
 function openModal(html) { $('modal').innerHTML = html; $('modalBg').classList.add('open'); }
 function closeModal() { $('modalBg').classList.remove('open'); }
 $('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
-const fail = e => { console.error(e); toast('❌ ' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar incentivos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
+const fail = e => { console.error(e); toast('' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar incentivos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
 
 // Escritura sin bloquear: sin señal, Firestore la guarda en el celular y la
 // sube sola al volver; la pantalla no espera (mismo patrón que Checklist).
 function escribir(promesa, msgOk, alFallar) {
   let listo = false, avisado = false;
-  promesa.then(() => { listo = true; if (avisado) toast('☁️ Incentivos subidos al servidor ✅'); })
+  promesa.then(() => { listo = true; if (avisado) toast('Incentivos subidos al servidor ', 'success'); })
     .catch(e => { listo = true; fail(e); if (alFallar) alFallar(e); });
-  if (!navigator.onLine) { avisado = true; toast(msgOk + ' 📵 Se subirá cuando haya señal.', 'warn'); }
+  if (!navigator.onLine) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); }
   else { toast(msgOk); setTimeout(() => { if (!listo) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); } }, 3000); }
 }
 
@@ -234,15 +235,17 @@ function lunesDeId(id) {
 function rangoTxt(lunes) {
   const dom = new Date(lunes); dom.setDate(dom.getDate() + 6);
   const mesL = lunes.getMonth() !== dom.getMonth() ? ' ' + MESES[lunes.getMonth()] : '';
+  // (v3 etapa 3b) en inglés / turco, fechas del idioma (Intl); en español, igual que siempre
+  if (window.i18n && i18n.getLang() !== 'es') return i18n.fmtDate(lunes, 'dayMonth') + ' – ' + i18n.fmtDate(dom, 'medium');
   return `lun ${lunes.getDate()}${mesL} – dom ${dom.getDate()} ${MESES[dom.getMonth()]} ${dom.getFullYear()}`;
 }
 
 // ══════ REGLAS (valores por defecto) ══════
 const CRITERIOS = [
-  { k: 'checklists', icono: '✅', nombre: 'Checklists a tiempo', vacio: 'sin checklists' },
-  { k: 'ots', icono: '🧾', nombre: 'OTs a tiempo', vacio: 'sin OTs' },
-  { k: 'avisos', icono: '🚨', nombre: 'Respuesta avisos', vacio: 'sin avisos' },
-  { k: 'calidad', icono: '🛠', nombre: 'Calidad', vacio: 'sin trabajos' },
+  { k: 'checklists', icono: '<span data-icon="check-circle" class="ic-ok"></span>', nombre: 'Checklists a tiempo', vacio: 'sin checklists' },
+  { k: 'ots', icono: '<span data-icon="receipt"></span>', nombre: 'OTs a tiempo', vacio: 'sin OTs' },
+  { k: 'avisos', icono: '<span data-icon="siren"></span>', nombre: 'Respuesta avisos', vacio: 'sin avisos' },
+  { k: 'calidad', icono: '<span data-icon="wrench"></span>', nombre: 'Calidad', vacio: 'sin trabajos' },
 ];
 const CFG_DEF = { pesos: { checklists: 25, ots: 25, avisos: 25, calidad: 25 }, minimo: 70, pctDefault: 10, metaParadaMin: 15, metaFallaMin: 30, diasReincidencia: 15, tecnicos: {} };
 function normCfg(d) {
@@ -309,20 +312,16 @@ const _cacheSemana = new Map(); // id → datos leídos de esa semana (en memori
 
 window.fbReady.then(async () => {
   const u = window.currentUserRole || {};
-  $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('incentivos');
   fbOnNaveCambio(() => render()); // (25 oct 2026, Etapa 2)
-  if (!userHasRole('ADMINISTRADOR')) {
-    $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Los incentivos incluyen salarios y montos de cada técnico.</div>';
-    return;
-  }
+  // (v3 etapa 3a) El candado (solo Administrador) lo pone firebase-init.js + app-shell.js: sin acceso, esto no corre.
   // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json;
   // mismos {nombre, corto}, así el emparejamiento de nombres no cambia.
   try { prepararTecnicos(await fbTecnicos()); } catch (e) { console.warn('técnicos:', e.message); }
   ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'incentivos', onChange: () => render() }); // (25 oct 2026, Etapa 3)
   $('fUbicWrap').style.display = '';
   try { const c = await db.collection('incentivos_config').doc('general').get(); CFG = normCfg(c.exists ? c.data() : null); REPCFG = repCfgDe(c.exists ? c.data() : null); }
-  catch (e) { console.warn('incentivos_config:', e.message); toast('⚠️ No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
+  catch (e) { console.warn('incentivos_config:', e.message); toast('No se pudieron leer las reglas: se usan las de por defecto', 'warn'); }
   const pedida = lunesDeId(decodeURIComponent((location.hash || '').slice(1)));
   const hoyL = lunesDe(new Date());
   // Por defecto la semana pasada (la última que ya terminó).
@@ -368,7 +367,7 @@ async function cargarSemana(fresco) {
   } catch (e) {
     console.error(e);
     if (SEM === id) {
-      $('view').innerHTML = cabeceraHtml(null) + `<div class="card empty">⚠️ No se pudieron leer los datos de la semana (${esc(e.code || e.message)}).<br><button class="btn2 btn-sm" id="bRe">🔄 Reintentar</button></div>`;
+      $('view').innerHTML = cabeceraHtml(null) + `<div class="card empty"><span data-icon="alert" class="ic-warn"></span> No se pudieron leer los datos de la semana (${esc(e.code || e.message)}).<br><button class="btn2 btn-sm" id="bRe"><span data-icon="refresh"></span> Reintentar</button></div>`;
       bindCabecera(); $('bRe').onclick = () => cargarSemana(true);
     }
   } finally { cargando = false; }
@@ -550,14 +549,14 @@ function estadoHtml(v) {
   const fechaTs = t => tsFecha(t) ? ddmmaa(tsFecha(t)) : '';
   let h = 'Estado: ';
   if (v.congelada) {
-    h += sd.pagada ? `<span class="tag ok">💵 Pagada${sd.pagadoEn ? ' el ' + esc(fechaTs(sd.pagadoEn)) : ''}</span> ` : '';
-    h += `<span class="tag ok">✅ Aprobada</span><div class="nota">Aprobada por ${esc(sd.aprobadoPor || '—')}${sd.aprobadoEn ? ' el ' + esc(fechaTs(sd.aprobadoEn)) : ''}. Se muestra tal como se aprobó (no se recalcula).</div>`;
+    h += sd.pagada ? `<span class="tag ok"><span data-icon="banknote"></span> Pagada${sd.pagadoEn ? ' el ' + esc(fechaTs(sd.pagadoEn)) : ''}</span> ` : '';
+    h += `<span class="tag ok"><span data-icon="check-circle" class="ic-ok"></span> Aprobada</span><div class="nota">Aprobada por ${esc(sd.aprobadoPor || '—')}${sd.aprobadoEn ? ' el ' + esc(fechaTs(sd.aprobadoEn)) : ''}. Se muestra tal como se aprobó (no se recalcula).</div>`;
   } else {
     h += '<span class="tag">Borrador — sin aprobar</span>';
     if (sd.reabiertaPor) h += `<div class="nota">Reabierta por ${esc(sd.reabiertaPor)}${sd.reabiertaEn ? ' el ' + esc(fechaTs(sd.reabiertaEn)) : ''}.</div>`;
-    if (fbFechaLocal(LUNES) <= fbHoy() && fbHoy() <= DATOS.domingo) h += '<div class="nota">⏳ La semana todavía no termina: los números pueden cambiar.</div>';
+    if (fbFechaLocal(LUNES) <= fbHoy() && fbHoy() <= DATOS.domingo) h += '<div class="nota"><span data-icon="hourglass"></span> La semana todavía no termina: los números pueden cambiar.</div>';
   }
-  if (v.calidadDefinitiva && v.calidadDefinitiva > fbHoy() && !v.congelada) h += `<div class="nota">🛠 Calidad definitiva el ${esc(ddmmaa(v.calidadDefinitiva))} (se revisa si la máquina vuelve a fallar por la misma causa en ${esc(CFG.diasReincidencia)} días).</div>`;
+  if (v.calidadDefinitiva && v.calidadDefinitiva > fbHoy() && !v.congelada) h += `<div class="nota"><span data-icon="wrench"></span> Calidad definitiva el ${esc(ddmmaa(v.calidadDefinitiva))} (se revisa si la máquina vuelve a fallar por la misma causa en ${esc(CFG.diasReincidencia)} días).</div>`;
   return h;
 }
 function bindCabecera() {
@@ -572,14 +571,14 @@ function tarjetaHtml(f, v) {
   const crit = CRITERIOS.map(x => { const c = f.criterios[x.k] || {}; return `<span>${x.icono} ${x.nombre} <b>${c.v == null ? '—' : pctTxt(c.v)}</b>${c.v == null ? ' ' + x.vacio : ''}</span>`; }).join('');
   const MAXD = 8;
   const bajo = f.bajo.length ? `<div class="det">Lo que bajó su puntaje:${f.bajo.slice(0, MAXD).map(t => `<span class="m">• ${esc(t)}</span>`).join('')}${f.bajo.length > MAXD ? `<span class="i">… y ${f.bajo.length - MAXD} más (ver Excel)</span>` : ''}</div>` : '';
-  const info = f.info.length ? `<div class="det">${f.info.slice(0, 4).map(t => `<span class="i">ℹ️ ${esc(t)}</span>`).join('')}${f.info.length > 4 ? `<span class="i">… y ${f.info.length - 4} más</span>` : ''}</div>` : '';
-  const enF = f.enFiltro ? `<div class="det">📍 En el filtro (${f.enFiltro.length}): ${esc(f.enFiltro.slice(0, 6).join(' · '))}${f.enFiltro.length > 6 ? ' …' : ''}</div>` : '';
-  const adj = f.ajuste ? `<div class="adj">✏️ Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : '';
+  const info = f.info.length ? `<div class="det">${f.info.slice(0, 4).map(t => `<span class="i"><span data-icon="info"></span> ${esc(t)}</span>`).join('')}${f.info.length > 4 ? `<span class="i">… y ${f.info.length - 4} más</span>` : ''}</div>` : '';
+  const enF = f.enFiltro ? `<div class="det"><span data-icon="pin"></span> En el filtro (${f.enFiltro.length}): ${esc(f.enFiltro.slice(0, 6).join(' · '))}${f.enFiltro.length > 6 ? ' …' : ''}</div>` : '';
+  const adj = f.ajuste ? `<div class="adj"><span data-icon="pencil"></span> Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : '';
   let pie;
   if (f.sinDatos) pie = `<span>Sin trabajos esta semana</span><b>${money(f.monto)}</b>`;
   else if (!f.cobra) pie = `<span>Menos de ${esc(min)}%: no cobra esta semana${f.ajuste ? ' (+ ajuste)' : ''}</span><b>${money(f.monto)}</b>`;
   else pie = `<span>Base ${money(f.base)} × ${f.puntaje}%${f.ajuste ? ' + ajuste' : ''}</span><b>${money(f.monto)}</b>`;
-  const sinSal = f.salarioOk === false ? '<div class="nota"><span class="tag bad">Sin salario configurado</span> Ponlo en ⚙️ Reglas y salarios.</div>' : '';
+  const sinSal = f.salarioOk === false ? '<div class="nota"><span class="tag bad">Sin salario configurado</span> Ponlo en <span data-icon="settings"></span> Reglas y salarios.</div>' : '';
   return `<div class="tec${cls}" data-tec="${esc(f.key)}">
     <div class="top"><b>${esc(f.nombre)}</b><span class="pct" style="color:${col}">${f.sinDatos ? '—' : f.puntaje + '%'}</span></div>
     <div class="bar"><i style="width:${f.sinDatos ? 0 : Math.max(0, Math.min(100, f.puntaje))}%;background:${col}"></i></div>
@@ -635,16 +634,16 @@ function render() {
   const esActual = fbFechaLocal(LUNES) === fbFechaLocal(hoyL);
   const sd = DATOS.semDoc || {};
   let botones = '';
-  if (!v.congelada && (terminada || esActual)) botones += `<button class="btn" id="bAprobar">✅ Aprobar semana ${fbSemanaISO(LUNES)}</button>`;
+  if (!v.congelada && (terminada || esActual)) botones += `<button class="btn" id="bAprobar"><span data-icon="check-circle" class="ic-ok"></span> Aprobar semana ${fbSemanaISO(LUNES)}</button>`;
   if (v.congelada) {
-    botones += sd.pagada ? `<button class="btn2" id="bPagada">↩ Quitar marca de pagada</button>` : `<button class="btn" id="bPagada">💵 Marcar como pagada</button><button class="btn2 btn-danger" id="bReabrir">🔓 Reabrir semana</button>`;
+    botones += sd.pagada ? `<button class="btn2" id="bPagada"><span data-icon="undo"></span> Quitar marca de pagada</button>` : `<button class="btn" id="bPagada"><span data-icon="banknote"></span> Marcar como pagada</button><button class="btn2 btn-danger" id="bReabrir"><span data-icon="unlock"></span> Reabrir semana</button>`;
   }
-  botones += `<button class="btn2" id="bReporte">📄 Reporte para pago</button><button class="btn2" id="bExcel">⬇️ Descargar Excel</button><button class="btn2" id="bReglas">⚙️ Reglas y salarios</button>`;
-  const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px">ℹ️ Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
+  botones += `<button class="btn2" id="bReporte"><span data-icon="file"></span> Reporte para pago</button><button class="btn2" id="bExcel"><span data-icon="download"></span> Descargar Excel</button><button class="btn2" id="bReglas"><span data-icon="settings"></span> Reglas y salarios</button>`;
+  const notaCk = v.filas.some(f => f.info.length) ? '<div class="nota" style="margin:0 2px 10px"><span data-icon="info"></span> Los checklists guardados antes del 20 oct 2026 no tienen fecha de vencimiento y se cuentan a tiempo. Desde ahora este criterio es exacto.</div>' : '';
   $('view').innerHTML = cabeceraHtml(v)
-    + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en la lista (⚙️ Administración → Usuarios).</div>')
-    + notaCk + (v.parcial ? `<div class="nota" style="margin:0 2px 10px">🏭 Mostrando los técnicos ${ubic && ubic.activo() ? 'con trabajo en ' + esc(ubic.texto()) : 'de ' + esc(fbNaveTexto())} (${v.filas.length} de ${vTodas.filas.length}). Su puntaje y monto son de toda su semana. Aprobar guarda la semana de todos (${esc(money(vTodas.total))}).</div>` : '')
-    + (v.ubicNoAplica ? '<div class="nota" style="margin:0 2px 10px">📍 Semana aprobada: se guardó sin el detalle de las OTs, así que el filtro de área / línea / equipo no se aplica (solo el de nave).</div>' : '') + botones
+    + (v.filas.length ? v.filas.map(f => tarjetaHtml(f, v)).join('') : '<div class="card empty">No hay técnicos en la lista (<span data-icon="settings"></span> Administración → Usuarios).</div>')
+    + notaCk + (v.parcial ? `<div class="nota" style="margin:0 2px 10px"><span data-icon="factory"></span> Mostrando los técnicos ${ubic && ubic.activo() ? 'con trabajo en ' + esc(ubic.texto()) : 'de ' + esc(fbNaveTexto())} (${v.filas.length} de ${vTodas.filas.length}). Su puntaje y monto son de toda su semana. Aprobar guarda la semana de todos (${esc(money(vTodas.total))}).</div>` : '')
+    + (v.ubicNoAplica ? '<div class="nota" style="margin:0 2px 10px"><span data-icon="pin"></span> Semana aprobada: se guardó sin el detalle de las OTs, así que el filtro de área / línea / equipo no se aplica (solo el de nave).</div>' : '') + botones
     + `<div class="nota" style="text-align:center;margin-top:12px">${v.congelada ? 'Toca un técnico para ver su detalle.' : 'Toca un técnico para poner un ajuste (+/− RD$).'} Pesos: ${CRITERIOS.map(x => esc(x.nombre) + ' ' + esc((v.congelada && (sd.reglas || {}).pesos ? sd.reglas.pesos : CFG.pesos)[x.k]) + '%').join(' · ')}.</div>`;
   bindCabecera();
   $('view').querySelectorAll('[data-tec]').forEach(el => el.onclick = () => modalAjuste(el.dataset.tec, v));
@@ -663,11 +662,11 @@ function modalAjuste(key, v) {
   const f = v.filas.find(x => x.key === key); if (!f) return;
   if (v.congelada) {
     openModal(`<h3>${esc(f.nombre)}</h3><div class="nota">Semana aprobada: ${f.sinDatos ? 'sin trabajos' : 'puntaje ' + esc(f.puntaje) + '%'} · ${esc(money(f.monto))}. Para cambiar el ajuste, reabre la semana.</div>
-      ${f.ajuste ? `<div class="adj">✏️ Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : ''}
+      ${f.ajuste ? `<div class="adj"><span data-icon="pencil"></span> Ajuste ${esc(signo(f.ajuste))} · "${esc(f.motivo)}"</div>` : ''}
       <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cerrar</button></div>`);
     return;
   }
-  openModal(`<h3>✏️ Ajuste — ${esc(f.nombre)}</h3>
+  openModal(`<h3><span data-icon="pencil"></span> Ajuste — ${esc(f.nombre)}</h3>
     <div class="nota">Se suma (o resta, con signo −) al monto calculado: ${esc(money(f.montoCalc))}. El total nunca baja de RD$ 0.</div>
     <label class="f" for="aMonto">Ajuste (RD$)</label><input id="aMonto" type="number" inputmode="decimal" step="0.01" value="${f.ajuste || ''}" placeholder="Ej: 120 o -200"/>
     <label class="f" for="aMotivo">Motivo (obligatorio)</label><textarea id="aMotivo" maxlength="200" placeholder="Ej: Cubrió turno de noche el sábado">${esc(f.motivo)}</textarea>
@@ -687,7 +686,7 @@ function modalAjuste(key, v) {
     if (!DATOS.semDoc.estado || DATOS.semDoc.estado !== 'aprobada') datosDoc.estado = DATOS.semDoc.estado || 'borrador';
     DATOS.semDoc.estado = datosDoc.estado;
     closeModal(); render();
-    escribir(semRef().set(datosDoc, { merge: true }), monto ? `✏️ Ajuste guardado para ${f.nombre}` : `Ajuste quitado a ${f.nombre}`, () => cargarSemana(true));
+    escribir(semRef().set(datosDoc, { merge: true }), monto ? `Ajuste guardado para ${f.nombre}` : `Ajuste quitado a ${f.nombre}`, () => cargarSemana(true));
   };
   $('aOk').onclick = () => {
     const raw = $('aMonto').value.trim();
@@ -704,11 +703,11 @@ function modalAjuste(key, v) {
 // ══════ APROBAR / REABRIR / PAGADA ══════
 function modalAprobar(v, esActual) {
   const n = fbSemanaISO(LUNES);
-  openModal(`<h3>✅ ¿Aprobar la semana ${n}?</h3>
+  openModal(`<h3><span data-icon="check-circle" class="ic-ok"></span> ¿Aprobar la semana ${n}?</h3>
     <div class="nota">${esc(rangoTxt(LUNES))} · ${v.filas.length} técnicos · total a pagar <b style="color:var(--text)">${esc(money(v.total))}</b>.</div>
     <div class="nota">Se guarda una copia de cada técnico (criterios, puntaje, base, ajuste y monto). Después ya no se recalcula aunque cambien las OTs o las reglas; para corregir hay que reabrirla.</div>
-    ${esActual ? '<div class="formula" style="margin-top:10px">⚠️ Esta semana todavía no termina. Lo que pase de aquí al domingo no se contará.</div>' : ''}
-    ${v.calidadDefinitiva > fbHoy() ? `<div class="formula" style="margin-top:10px">🛠 La calidad todavía no es definitiva (hasta el ${esc(ddmmaa(v.calidadDefinitiva))}).</div>` : ''}
+    ${esActual ? '<div class="formula" style="margin-top:10px"><span data-icon="alert" class="ic-warn"></span> Esta semana todavía no termina. Lo que pase de aquí al domingo no se contará.</div>' : ''}
+    ${v.calidadDefinitiva > fbHoy() ? `<div class="formula" style="margin-top:10px"><span data-icon="wrench"></span> La calidad todavía no es definitiva (hasta el ${esc(ddmmaa(v.calidadDefinitiva))}).</div>` : ''}
     <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="apOk">Sí, aprobar semana ${n}</button></div>`);
   $('apOk').onclick = () => {
     const tecnicos = v.filas.map(f => ({ key: f.key, nombre: f.nombre, criterios: f.criterios, puntaje: f.puntaje, sinDatos: f.sinDatos, cobra: f.cobra, base: f.base, pct: f.pct, salarioOk: f.salarioOk, montoCalc: f.montoCalc, ajuste: f.ajuste, motivo: f.motivo, monto: f.monto, bajo: f.bajo, info: f.info }));
@@ -723,12 +722,12 @@ function modalAprobar(v, esActual) {
     // merge: se conservan los ajustes (con quién y cuándo) y los datos de reapertura.
     DATOS.semDoc = { ...sd, ...doc, aprobadoEn: firebase.firestore.Timestamp.now() };
     closeModal(); render();
-    escribir(semRef().set(doc, { merge: true }), `✅ Semana ${n} aprobada · ${money(v.total)}`, () => cargarSemana(true));
+    escribir(semRef().set(doc, { merge: true }), `Semana ${n} aprobada · ${money(v.total)}`, () => cargarSemana(true));
   };
 }
 function modalReabrir() {
   const n = fbSemanaISO(LUNES);
-  openModal(`<h3>🔓 ¿Reabrir la semana ${n}?</h3>
+  openModal(`<h3><span data-icon="unlock"></span> ¿Reabrir la semana ${n}?</h3>
     <div class="nota">La semana vuelve a borrador y se recalcula con los datos y reglas de hoy. Los ajustes se conservan. Queda registrado quién la reabrió.</div>
     <div class="modal-actions"><button class="btn2 btn-sm" onclick="closeModal()">Cancelar</button><button class="btn btn-sm" id="reOk">Sí, reabrir</button></div>`);
   $('reOk').onclick = () => {
@@ -736,7 +735,7 @@ function modalReabrir() {
     closeModal();
     DATOS.semDoc = { ...(DATOS.semDoc || {}), ...cambios, reabiertaEn: firebase.firestore.Timestamp.now() };
     $('view').innerHTML = cabeceraHtml(null) + '<div class="card empty">Recalculando la semana...</div>'; bindCabecera();
-    escribir(semRef().update(cambios), `🔓 Semana ${n} reabierta`, () => cargarSemana(true));
+    escribir(semRef().update(cambios), `Semana ${n} reabierta`, () => cargarSemana(true));
     // Una semana aprobada no tenía leídas sus OTs: se leen ahora.
     cargando = true;
     leerDatosSemana(DATOS).then(() => { _cacheSemana.set(DATOS.id, DATOS); render(); }).catch(e => { fail(e); }).finally(() => { cargando = false; });
@@ -746,7 +745,7 @@ function marcarPagada(si) {
   const cambios = si ? { pagada: true, pagadoEn: fbTimestamp(), pagadoPor: quien() } : { pagada: false, pagadoEn: null, pagadoPor: '' };
   DATOS.semDoc = { ...DATOS.semDoc, ...cambios, pagadoEn: si ? firebase.firestore.Timestamp.now() : null };
   render();
-  escribir(semRef().update(cambios), si ? '💵 Semana marcada como pagada' : 'Se quitó la marca de pagada', () => cargarSemana(true));
+  escribir(semRef().update(cambios), si ? 'Semana marcada como pagada' : 'Se quitó la marca de pagada', () => cargarSemana(true));
 }
 
 // ══════ EXCEL ══════
@@ -769,7 +768,7 @@ function descargarExcel(v) {
 function modalReglas() {
   const c = CFG;
   const campo = (id, label, val, extra) => `<div><label class="f" for="${id}">${label}</label><input id="${id}" type="number" inputmode="decimal" min="0" ${extra || ''} value="${esc(val)}"/></div>`;
-  openModal(`<h3>⚙️ Reglas y salarios</h3>
+  openModal(`<h3><span data-icon="settings"></span> Reglas y salarios</h3>
     <div class="nota">Solo el Administrador ve y cambia esto. Las semanas ya aprobadas no cambian.</div>
     <div class="sec">Pesos de los criterios (deben sumar 100)</div>
     <div class="g2">${CRITERIOS.map(x => campo('rp-' + x.k, x.icono + ' ' + x.nombre, c.pesos[x.k], 'max="100" step="1"')).join('')}</div>
@@ -820,7 +819,7 @@ function modalReglas() {
     CFG = normCfg(doc);
     if (diasCambio) _cacheSemana.clear(); // cambia el rango de la consulta de reincidencias
     closeModal();
-    escribir(db.collection('incentivos_config').doc('general').set(doc, { merge: true }), '⚙️ Reglas y salarios guardados');
+    escribir(db.collection('incentivos_config').doc('general').set(doc, { merge: true }), 'Reglas y salarios guardados');
     if (diasCambio && !(DATOS.semDoc && DATOS.semDoc.estado === 'aprobada')) cargarSemana(true); else render();
   };
 }
@@ -1031,14 +1030,14 @@ async function cargarLogo() {
 function pintarReporte() {
   const sd = DATOS.semDoc || {};
   $('repTit').textContent = 'Semana ' + fbSemanaISO(LUNES) + ' · ' + rangoTxt(LUNES);
-  $('repEstado').innerHTML = (semanaAprobada() ? '<span class="tag ok">✅ Aprobada</span> ' : '<span class="tag">Borrador</span> ')
-    + (REP.guardado ? `<span class="tag info">💾 Reporte guardado${sd.reporte && sd.reporte.guardadoPor ? ' por ' + esc(sd.reporte.guardadoPor) : ''}</span>` : '<span class="tag info">Sin guardar</span>');
+  $('repEstado').innerHTML = (semanaAprobada() ? '<span class="tag ok"><span data-icon="check-circle" class="ic-ok"></span> Aprobada</span> ' : '<span class="tag">Borrador</span> ')
+    + (REP.guardado ? `<span class="tag info"><span data-icon="save"></span> Reporte guardado${sd.reporte && sd.reporte.guardadoPor ? ' por ' + esc(sd.reporte.guardadoPor) : ''}</span>` : '<span class="tag info">Sin guardar</span>');
   pintarPapel();
   pintarEditor();
 }
 function logoHtml() {
   if (LOGO && LOGO.data) return `<img src="${esc(LOGO.data)}" alt="Logo">`;
-  return '<span class="p-ph" title="Sube el logo con 🖼 Subir logo">Void<i>Tech</i></span>';
+  return '<span class="p-ph" title="Sube el logo con Subir logo">Void<i>Tech</i></span>';
 }
 function pintarPapel() {
   if (!REP) return;
@@ -1074,8 +1073,8 @@ function pintarEditor() {
   const tarjeta = f => {
     const marca = [];
     if (f.tipo !== 'tec') marca.push('<span class="tag info">Monto manual</span>');
-    if (montoEditado(f)) marca.push(`<span class="tag">✏️ $ cambiado (calculado ${esc(usd(f.montoCalc))})</span> <button class="lnk" data-act="mreset" data-rid="${esc(f.id)}">↺</button>`);
-    if (horasEditadas(f)) marca.push(`<span class="tag">✏️ horas cambiadas (calculado ${esc(r2(f.horasCalc).toFixed(2))})</span> <button class="lnk" data-act="hreset" data-rid="${esc(f.id)}">↺</button>`);
+    if (montoEditado(f)) marca.push(`<span class="tag"><span data-icon="pencil"></span> $ cambiado (calculado ${esc(usd(f.montoCalc))})</span> <button class="lnk" data-act="mreset" data-rid="${esc(f.id)}">↺</button>`);
+    if (horasEditadas(f)) marca.push(`<span class="tag"><span data-icon="pencil"></span> horas cambiadas (calculado ${esc(r2(f.horasCalc).toFixed(2))})</span> <button class="lnk" data-act="hreset" data-rid="${esc(f.id)}">↺</button>`);
     return `<div class="rf" data-rid="${esc(f.id)}">
       <div class="rf-top"><b>${esc(f.nombre || '(sin nombre)')}</b><span class="rf-btns"><button data-act="up" data-rid="${esc(f.id)}" aria-label="Subir">↑</button><button data-act="down" data-rid="${esc(f.id)}" aria-label="Bajar">↓</button><button data-act="del" data-rid="${esc(f.id)}" aria-label="Quitar" class="del">✕</button></span></div>
       <div class="rf-g">
@@ -1099,7 +1098,7 @@ function pintarEditor() {
       <div><label class="f" for="repDep">Departamento por defecto</label><input id="repDep" maxlength="40" value="${esc(REP.departamentoDefault)}"></div></div>
       <label class="f" for="repFirma">Firma</label><input id="repFirma" maxlength="80" value="${esc(REP.firma)}">
       <label class="f">Logo de la empresa</label>
-      <div class="rep-logo"><div class="rep-logo-v">${logoHtml()}</div><label class="btn2 btn-sm rep-file">🖼 ${LOGO && LOGO.data ? 'Cambiar logo' : 'Subir logo'}<input id="repLogo" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
+      <div class="rep-logo"><div class="rep-logo-v">${logoHtml()}</div><label class="btn2 btn-sm rep-file"><span data-icon="image"></span> ${LOGO && LOGO.data ? 'Cambiar logo' : 'Subir logo'}<input id="repLogo" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
       <div class="nota">Se reduce a 300 px de ancho (máx. 150 KB) y se guarda para las próximas semanas.</div>
     </div>
     ${REP.grupos.map(g => `<div class="card">
@@ -1112,14 +1111,14 @@ function pintarEditor() {
       <div class="rep-add"><input id="repNuevo" list="repSug" maxlength="80" placeholder="Nombre"><button class="btn btn-sm" id="repAdd">Agregar</button></div>
       <datalist id="repSug">${[...new Set(sugerencias)].map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
       ${REP_USUARIOS ? `<select id="repUsr"><option value="">— Elegir de Usuarios —</option>${REP_USUARIOS.map(u => `<option value="${esc(u.id)}">${esc(u.nombre)}${u.rol ? ' · ' + esc(String(u.rol).toLowerCase()) : ''}</option>`).join('')}</select>`
-        : '<button class="btn2 btn-sm" id="repCargarUsr">👥 Elegir de Usuarios</button>'}
+        : '<button class="btn2 btn-sm" id="repCargarUsr"><span data-icon="users"></span> Elegir de Usuarios</button>'}
     </div>
     <div class="card"><div class="sec" style="margin-top:0">Trabajos realizados (uno por línea)</div>
       <textarea id="repDesc" rows="5" maxlength="2000" placeholder="Mantenimiento preventivo de …">${esc(REP.descripciones)}</textarea>
       <button class="btn2 btn-sm" id="repAuto">↺ Resumen automático de la semana</button>
       ${DATOS.otFecha && !semanaAprobada() ? '' : '<div class="nota">Semana aprobada: sus OTs no se volvieron a leer, así que escribe los trabajos a mano.</div>'}
     </div>
-    ${REP.sinHoras ? '<div class="nota" style="margin:0 2px 10px">🕐 Semana aprobada: las horas no se guardaron al aprobar; escríbelas a mano (se guardan con el reporte).</div>' : ''}
+    ${REP.sinHoras ? '<div class="nota" style="margin:0 2px 10px"><span data-icon="clock"></span> Semana aprobada: las horas no se guardaron al aprobar; escríbelas a mano (se guardan con el reporte).</div>' : ''}
     <button class="btn2" id="repRellenar">↺ Volver a llenar desde la semana</button>`;
 }
 function repFila(id) { return REP.filas.find(f => f.id === id); }
@@ -1170,7 +1169,7 @@ function onRepClick(e) {
   if (b.id === 'repAdd') { const n = $('repNuevo').value.trim().replace(/\s+/g, ' '); if (!n) return toast('Escribe el nombre', 'error'); agregarPersona(n); return; }
   if (b.id === 'repAuto') { REP.descripciones = resumenTrabajos(DATOS).join('\n'); $('repDesc').value = REP.descripciones; pintarPapel(); if (!REP.descripciones) toast('No hay trabajos de la semana para resumir', 'warn'); return; }
   if (b.id === 'repCargarUsr') { cargarUsuariosRep(); return; }
-  if (b.id === 'repRellenar') { const g = REP.guardado; REP = reporteNuevo(); REP.guardado = g; pintarReporte(); toast('↺ Llenado otra vez desde la semana (pulsa 💾 Guardar para conservarlo)'); return; }
+  if (b.id === 'repRellenar') { const g = REP.guardado; REP = reporteNuevo(); REP.guardado = g; pintarReporte(); toast('↺ Llenado otra vez desde la semana (pulsa Guardar para conservarlo)'); return; }
 }
 // Persona nueva: un técnico (con su monto calculado), alguien de /usuarios o texto libre.
 function agregarPersona(nombre, usuario) {
@@ -1198,7 +1197,7 @@ async function cargarUsuariosRep() {
     REP_USUARIOS = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.activo === true && u.nombre).map(u => ({ id: u.id, nombre: String(u.nombre), rol: String(u.rol || '') }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     if (REP) pintarEditor();
-  } catch (e) { if (b) { b.disabled = false; b.textContent = '👥 Elegir de Usuarios'; } fail(e); }
+  } catch (e) { if (b) { b.disabled = false; b.textContent = 'Elegir de Usuarios'; } fail(e); }
 }
 
 // ── Guardar ──
@@ -1245,7 +1244,7 @@ function guardarReporte(silencioso) {
   else DATOS.semDoc = { reporte: { ...rep, guardadoEn: firebase.firestore.Timestamp.now() } };
   REP.guardado = true;
   const w = semRef().set({ reporte: rep }, { merge: true });
-  if (silencioso) w.catch(fail); else escribir(w, '💾 Reporte guardado');
+  if (silencioso) w.catch(fail); else escribir(w, 'Reporte guardado');
   const c = cambiosCfgReporte();
   if (c) {
     REPCFG = { ...REPCFG, ...c.local };
@@ -1253,7 +1252,7 @@ function guardarReporte(silencioso) {
   }
   pintarReporte();
 }
-// Al descargar: se guarda solo si la semana ya tiene documento (si no, solo con 💾 Guardar).
+// Al descargar: se guarda solo si la semana ya tiene documento (si no, solo con <span data-icon="save"></span> Guardar).
 function autoguardar() {
   if (DATOS.semDoc) { guardarReporte(true); return; }
   const c = cambiosCfgReporte();
@@ -1291,12 +1290,12 @@ async function subirLogo(file) {
   if (!file) return;
   if (!/^image\/(png|jpeg|webp)$/.test(file.type || '')) return toast('Elige una imagen PNG o JPG', 'error');
   let r = null;
-  try { r = reducirLogo(await cargarImagen(file)); } catch (e) { return toast('❌ ' + e.message, 'error'); }
+  try { r = reducirLogo(await cargarImagen(file)); } catch (e) { return toast('' + e.message, 'error'); }
   if (!r) return toast('La imagen es muy pesada aun reducida: prueba con otra más sencilla', 'error');
   LOGO = { ...r };
   const doc = { data: r.data, tipo: r.tipo, ancho: r.ancho, alto: r.alto, bytes: r.data.length, subidoPor: quien(), subidoPorUid: uidYo(), subidoEn: fbTimestamp() };
   if (REP) { pintarPapel(); pintarEditor(); }
-  escribir(db.collection('incentivos_config').doc('logo').set(doc), '🖼 Logo guardado');
+  escribir(db.collection('incentivos_config').doc('logo').set(doc), 'Logo guardado');
 }
 
 // ── Excel ──
@@ -1394,11 +1393,11 @@ async function descargarReporteExcel() {
     const buf = await wb.xlsx.writeBuffer();
     fbDescargar(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), base + '.xlsx');
     window.__incRep.formato = 'xlsx';
-    toast('⬇️ Excel descargado');
+    toast('Excel descargado', 'success');
   } catch (e) {
     console.warn('Excel reporte:', e && e.message);
     window.__incRep.formato = 'csv-ofrecido';
-    $('repCsvMsg').textContent = 'No se pudo preparar el Excel (' + ((e && e.message) || 'error') + '). Puedes descargar lo mismo en CSV, que también abre en Excel, o usar 🖨 PDF / Imprimir.';
+    $('repCsvMsg').textContent = 'No se pudo preparar el Excel (' + ((e && e.message) || 'error') + '). Puedes descargar lo mismo en CSV, que también abre en Excel, o usar PDF / Imprimir.';
     $('repCsvDlg').classList.add('open');
   } finally { b.disabled = false; }
 }
@@ -1407,7 +1406,7 @@ function descargarReporteCsv() {
   const nombre = archivoRep() + '.csv';
   fbDescargar(new Blob([csvReporte()], { type: 'text/csv;charset=utf-8' }), nombre);
   window.__incRep = { ...(window.__incRep || {}), formato: 'csv', archivo: nombre };
-  toast('⬇️ CSV descargado — ábrelo con Excel');
+  toast('CSV descargado — ábrelo con Excel', 'success');
 }
 function imprimirReporte() {
   if (!REP) return;

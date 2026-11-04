@@ -23,9 +23,16 @@
   <script src="criticidad.js"></script>
   <script src="seguridad.js"></script>
   <script src="rca.js"></script><!-- (28 oct 2026) análisis de causa raíz (RCA) -->
-  <!-- (7 oct 2026) Diseño claro "CMMS" aprobado (fuente Barlow; si no carga, usa la del sistema). -->
+  <script src="kpis.js"></script><!-- (v3 etapa 3a) indicadores comunes -->
+  <script src="ots-cola.js"></script><!-- (v3 etapa 3a) cola "Por planificar / Por validar" (antes la pestaña OTs de Checklist) -->
+  <!-- (v3, nov 2026) Diseño VoidTech: iconos SVG, idiomas, traductor a pedido y letra IBM Plex -->
+  <script src="icons.js"></script>
+  <script src="i18n.js"></script>
+  <script src="i18n/common.js"></script>
+  <script src="i18n/shell.js"></script>
+  <script src="traductor.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
   <style>
     /* (7 oct 2026) Paleta clara aprobada (mockup "Registro de trabajo"):
@@ -38,7 +45,7 @@
       --green: var(--color-success); --green-txt: var(--color-success-text); --red: var(--color-danger); --red-txt: var(--color-danger-text);
       --blue: var(--color-primary); --purple: var(--color-purple); --orange: var(--color-warn);
       --text: var(--color-text); --text2: var(--color-text-2); --muted: var(--color-muted); --muted2: var(--color-muted-2); --border: var(--color-border); --line: var(--color-surface-2);
-      --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+      --mono: var(--font-mono);
       --nav-h: 58px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -50,11 +57,14 @@
     #header h1 { font-size: 17px; font-weight: 700; }
     #header small { font-size: 11px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
-    #nav { display: flex; background: var(--color-surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; box-shadow: 0 -2px 10px rgba(11,37,69,.06); }
-    .nav-btn { flex: 1; min-height: 56px; padding: 8px 4px 9px; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 10px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
-    .nav-btn.active { color: var(--color-primary-text); }
-    .nav-btn span { font-size: 21px; }
-    #content { padding: 12px 12px 84px; }
+    /* (v3) Las secciones van arriba como control segmentado (.vt-seg en tema.css): una sola barra inferior, la de la app. */
+    #nav.vt-seg { margin: 0 -0px; }
+    html:not(.vt-shell) #nav.vt-seg { top: 0; }
+    #content { padding: 12px 12px 24px; }
+    /* La barra de la app ya muestra el título y la conexión */
+    html.vt-shell #header { display: none; }
+    html.vt-shell { --nav-h: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
+    @media (min-width: 1024px) { html.vt-shell { --nav-h: 0px; } body { max-width: 760px; } }
     .screen { display: none; }
     .screen.active { display: block; }
     .card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid var(--border); }
@@ -73,7 +83,7 @@
     .col-sm { width: 80px; flex-shrink: 0; }
     .btn { width: 100%; min-height: 44px; padding: 12px; border-radius: 10px; border: none; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s, background .15s; }
     .btn:active { opacity: .85; }
-    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary { background: var(--accent); color: var(--color-on-primary); }
     .btn-secondary { background: var(--color-surface); color: var(--text2); border: 1px solid var(--border); }
     .btn-danger { background: var(--red); color: #fff; }
     .btn-sm { padding: 8px 14px; font-size: 13.5px; border-radius: 10px; width: auto; }
@@ -95,14 +105,14 @@
     /* Segmentados (antes botones sueltos) */
     .toggle-row { display: flex; gap: 3px; background: var(--surface); border-radius: 10px; padding: 3px; }
     .toggle-btn { flex: 1; min-width: 0; min-height: 44px; padding: 0 8px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
-    .toggle-btn.sel { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(11,37,69,.15); }
-    #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: var(--color-danger); }
-    #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: var(--color-success); }
-    #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: var(--color-purple); }
-    #tipo-mto-group .toggle-btn.sel[data-val="Predictivo"] { background: var(--color-info); }
+    .toggle-btn.sel { background: var(--accent); color: var(--color-on-primary); box-shadow: 0 1px 2px rgba(11,37,69,.15); }
+    #tipo-mto-group .toggle-btn.sel[data-val="Correctivo"] { background: var(--color-danger); color: #fff; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Preventivo"] { background: var(--color-success); color: #fff; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Proyecto"] { background: var(--color-purple); color: #fff; }
+    #tipo-mto-group .toggle-btn.sel[data-val="Predictivo"] { background: var(--color-info); color: #fff; }
     #tipo-mto-group .toggle-btn { padding: 0 3px; font-size: 13px; } /* 4 tipos en 390 px */
     #tipo-mto-group .toggle-btn:disabled { opacity: .35; cursor: default; }
-    #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: var(--color-danger); }
+    #paro-group .toggle-btn.sel[data-val="si"], #prioridad-group .toggle-btn.sel[data-val="alta"] { background: var(--color-danger); color: #fff; }
     #toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%) translateY(-10px); z-index: 999; background: var(--green); color: #fff; border-radius: 10px; padding: 12px 18px; font-size: 14.5px; font-weight: 600; max-width: 360px; text-align: center; box-shadow: 0 6px 24px rgba(11,37,69,.25); opacity: 0; transition: all .3s; pointer-events: none; width: 90%; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #toast.error { background: var(--red); }
@@ -144,7 +154,7 @@
     .sync-banner.sync-edit p { color: var(--accent-dark); }
     #search-box { margin-bottom: 10px; position: relative; }
     #search-box input { padding-left: 36px; }
-    #search-box::before { content: "🔍"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 15px; }
+    #search-box::before { content: ""; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 15px; }
     .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
     .empty .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
     .empty p { font-size: 14.5px; line-height: 1.6; }
@@ -199,7 +209,6 @@
     .ms-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 18px 0 8px; }
     /* ══ Avisos de producción — 1 oct 2026 ══ */
     .nav-btn { position: relative; }
-    .nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 6px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; padding: 0 5px; text-align: center; }
     .av-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
     .av-card.pendiente { border-left-color: var(--red); }
     .av-card.pendiente.parada { box-shadow: 0 0 0 1px var(--color-danger); }
@@ -213,8 +222,8 @@
     .av-timer.tarde b { color: var(--red-txt); }
     .av-dup { display: inline-block; margin-top: 5px; background: var(--color-warn-soft); color: var(--color-warn-text); border: 1px solid var(--color-warn); border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
     /* (23 oct 2026) Trabajos asignados (OTs planificadas) mostrados como avisos */
-    .av-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text2); margin: 6px 0 8px; }
-    .av-sec small { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .av-sec { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--text2); margin: 6px 0 8px; }
+    .av-sec small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: auto; }
     .av-card.asig { border-left-color: var(--color-info); }
     .av-card.asig.proyecto { border-left-color: var(--purple); }
     .av-card.asig.atrasada { border-left-color: var(--red); box-shadow: 0 0 0 1px var(--color-danger); }
@@ -365,15 +374,24 @@
 </head>
 <body>
 
-<div id="offline-bar">📵 Sin conexión — los registros se guardan localmente</div>
+<div id="offline-bar"><span data-icon="wifi-off"></span> Sin conexión — los registros se guardan localmente</div>
 
-<div id="header">
-  <div>
-    <h1>🔧 Bitácora Mantenimiento</h1>
-    <small id="header-sub">2026 · Cargando...</small>
-  </div>
-  <div id="sp-status" title="Estado de conexión">⚙️</div>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
+
+<!-- (v3 etapa 3a) TRABAJOS: UNA sola cola de órdenes de trabajo. Avisos · Asignados · Por planificar ·
+     Por validar · Historial · Nuevo (+ Mi semana y Ajustes). "Por planificar / validar" era la pestaña
+     OTs de Checklist (mismo código: ots-cola.js). Enlaces: #avisos #asignados #planificar #validar
+     #historial #nuevo #resumen #config (y #ot=<id>, #buscar=<folio>; checklist.html#ots → #planificar). -->
+<nav id="nav" class="vt-seg" role="tablist" aria-label="Trabajos">
+  <button class="nav-btn" id="nav-avisos" role="tab" onclick="goTo('avisos',this)"><span data-icon="siren"></span><b data-i18n="shell.b_avisos">Avisos</b><b class="nav-badge" id="avisos-badge" style="display:none">0</b></button>
+  <button class="nav-btn" id="nav-asignados" role="tab" onclick="goTo('asignados',this)"><span data-icon="calendar"></span><b data-i18n="shell.t_asignados">Asignados</b><b class="nav-badge" id="asig-badge" style="display:none">0</b></button>
+  <button class="nav-btn" id="nav-planificar" role="tab" onclick="goTo('planificar',this)"><span data-icon="layers"></span><b data-i18n="shell.t_planificar">Por planificar</b><b class="nav-badge vt-n2" id="plan-badge" style="display:none">0</b></button>
+  <button class="nav-btn" id="nav-validar" role="tab" onclick="goTo('validar',this)"><span data-icon="check-circle"></span><b data-i18n="shell.t_validar">Por validar</b><b class="nav-badge vt-n2" id="val-badge" style="display:none">0</b></button>
+  <button class="nav-btn" id="nav-historial" role="tab" onclick="goTo('historial',this)"><span data-icon="history"></span><b data-i18n="shell.b_historial">Historial</b></button>
+  <button class="nav-btn active" id="nav-nuevo" role="tab" onclick="goTo('nuevo',this)"><span data-icon="plus"></span><b data-i18n="shell.b_nuevo">Nuevo</b></button>
+  <button class="nav-btn" id="nav-stats" role="tab" onclick="goTo('stats',this)"><span data-icon="chart"></span><b data-i18n="shell.t_miSemana">Mi semana</b></button>
+  <button class="nav-btn" id="nav-config" role="tab" onclick="goTo('config',this)" data-i18n-aria-label="shell.b_config" aria-label="Ajustes" title="Ajustes"><span data-icon="settings"></span></button>
+</nav>
 
 <div id="content">
 
@@ -388,7 +406,7 @@
     <div id="borrador-banner" class="sync-banner sync-err" style="display:none;flex-wrap:wrap;"></div>
     <div id="edit-banner" class="sync-banner sync-edit" style="display:none;">
       <div>
-        <p>✏️ Editando registro existente</p>
+        <p><span data-icon="pencil"></span> Editando registro existente</p>
         <small>Los cambios reemplazarán la entrada original</small>
       </div>
       <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancelar</button>
@@ -397,7 +415,7 @@
     <!-- (20 oct 2026) OTs de checklist y proyectos planificados para el técnico
          que inició sesión: desde aquí se registran al terminarlos. -->
     <section class="nf-card" id="mis-trabajos" style="display:none" aria-live="polite">
-      <div class="nf-row"><span class="nf-lbl">📅 Mis trabajos planificados</span><span class="nf-count" id="mis-trabajos-n"></span></div>
+      <div class="nf-row"><span class="nf-lbl"><span data-icon="calendar"></span> Mis trabajos planificados</span><span class="nf-count" id="mis-trabajos-n"></span></div>
       <div id="mis-trabajos-lista" style="display:flex;flex-direction:column;gap:6px;"></div>
     </section>
 
@@ -436,13 +454,13 @@
           <select id="f-tipo-sel" aria-label="Tipo de máquina"><option value="">— Sin elegir —</option></select></label>
       </div>
       <input type="text" id="f-tipo-maq" placeholder="Escribe el tipo de máquina…" style="display:none" aria-label="Tipo de máquina (texto libre)"/>
-      <div class="eq-lock" id="eq-lock" style="display:none">🔒 Equipo fijo: es el de la OT planificada.</div>
+      <div class="eq-lock" id="eq-lock" style="display:none"><span data-icon="lock"></span> Equipo fijo: es el de la OT planificada.</div>
       <div class="eq-lock" id="eq-crit" style="display:none"></div>
     </section>
 
     <!-- ── SEGURIDAD (28 oct 2026): LOTO y permiso de trabajo del trabajo actual ── -->
     <section class="nf-card" id="card-seg" style="display:none" aria-live="polite">
-      <div class="nf-row"><span class="nf-lbl">🦺 Seguridad (LOTO)</span><span id="seg-crit"></span></div>
+      <div class="nf-row"><span class="nf-lbl"><span data-icon="shield"></span> Seguridad (LOTO)</span><span id="seg-crit"></span></div>
       <div id="seg-body"></div>
     </section>
 
@@ -491,7 +509,7 @@
           <div>
             <span class="nf-lbl">¿Paró la planta?</span>
             <div class="toggle-row" id="paro-group">
-              <button type="button" class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)">🚨 Sí, paró</button>
+              <button type="button" class="toggle-btn" data-val="si" onclick="selectToggle('paro-group',this)"><span data-icon="siren"></span> Sí, paró</button>
               <button type="button" class="toggle-btn sel" data-val="no" onclick="selectToggle('paro-group',this)">No</button>
             </div>
           </div>
@@ -556,10 +574,33 @@
   </div>
 
   <!-- SCREEN: HISTORIAL -->
+  <!-- (v3 etapa 3a) ASIGNADOS: mis trabajos planificados y (Supervisor+) los de todos — antes dentro de Avisos -->
+  <div class="screen" id="screen-asignados">
+    <div class="card-title" style="margin-bottom:4px" data-i18n="shell.t_asignados">Asignados</div>
+    <div class="card-sub" data-i18n="shell.t_asignadosSub">OTs de checklist y proyectos planificados, con la fecha acordada.</div>
+    <div id="asig-vacio"></div>
+    <!-- (23 oct 2026) OTs planificadas para mí (checklist / proyectos), como avisos -->
+    <div id="asig-mios"></div>
+    <!-- (23 oct 2026) Supervisor / Encargado / Admin: todos los trabajos asignados -->
+    <div id="asig-todos"></div>
+  </div>
+
+  <!-- (v3 etapa 3a) POR PLANIFICAR / POR VALIDAR: la pestaña "OTs" de Checklist (mismas tarjetas, botones y permisos) -->
+  <div class="screen otc" id="screen-planificar">
+    <div class="card-title" style="margin-bottom:4px"><span data-i18n="shell.t_planificar">Por planificar</span> <button type="button" class="vt-help" data-ayuda="shell.t_planificarAyuda" aria-label="Ayuda">?</button></div>
+    <div class="card-sub" data-i18n="shell.t_planificarSub">Fallas de checklist y proyectos: asignar técnico y fecha; planificadas y devueltas.</div>
+    <div id="ots-planificar"><div class="vt-sk-list" aria-busy="true" role="status"><span class="vt-sr">Cargando…</span><i></i><i></i><i></i></div></div>
+  </div>
+  <div class="screen otc" id="screen-validar">
+    <div class="card-title" style="margin-bottom:4px" data-i18n="shell.t_validar">Por validar</div>
+    <div class="card-sub" data-i18n="shell.t_validarSub">Trabajo registrado en la Bitácora que espera revisión (Supervisor) o el cierre (Administrador).</div>
+    <div id="ots-validar"><div class="vt-sk-list" aria-busy="true" role="status"><span class="vt-sr">Cargando…</span><i></i><i></i><i></i></div></div>
+  </div>
+
   <div class="screen" id="screen-historial">
     <div id="search-box" style="display:flex;gap:8px;align-items:center;">
       <input type="text" id="search-input" placeholder="Buscar por área, equipo, falla..." oninput="renderHistory()" style="flex:1"/>
-      <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryExcel()">📊 Excel</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto;white-space:nowrap;" onclick="exportHistoryExcel()"><span data-icon="chart"></span> Excel</button>
     </div>
     <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo -->
     <div id="fUbicHist" style="margin:0 0 10px;"></div>
@@ -577,13 +618,13 @@
 
   <!-- SCREEN: ESTADÍSTICAS -->
   <div class="screen" id="screen-stats">
-    <div class="card-title" style="margin-bottom:4px">📊 Resumen</div>
+    <div class="card-title" style="margin-bottom:4px"><span data-icon="chart"></span> Resumen</div>
     <div class="card-sub">Tu semana y la de toda la planta</div>
     <!-- ══ Resumen del técnico: lo que hizo en la semana, día por día, y su avance ══ -->
     <div class="card" id="ms-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
         <div>
-          <div style="font-weight:800;font-size:16px;">👷 <span id="ms-nombre">Mi semana</span></div>
+          <div style="font-weight:800;font-size:16px;"><span data-icon="hardhat"></span> <span id="ms-nombre">Mi semana</span></div>
           <div class="card-sub" id="ms-sub" style="margin:2px 0 0;">Lo que realizaste esta semana</div>
         </div>
       </div>
@@ -594,7 +635,7 @@
         <button id="ms-next" onclick="msMoverSemana(1)" aria-label="Semana siguiente">›</button>
       </div>
       <div class="stat-grid ms-kpis" id="ms-kpis"></div>
-      <div style="font-weight:700;margin:4px 0 10px;">📆 Día por día</div>
+      <div style="font-weight:700;margin:4px 0 10px;"><span data-icon="calendar"></span> Día por día</div>
       <div id="ms-dias"></div>
       <div class="ms-legend">
         <span style="--c:var(--green)">Trabajado en OTs</span>
@@ -610,18 +651,18 @@
     </div>
 
     <div class="card" id="ms-avance-card">
-      <div style="font-weight:700;margin-bottom:2px;">📈 Avance de mejora</div>
+      <div style="font-weight:700;margin-bottom:2px;"><span data-icon="trend"></span> Avance de mejora</div>
       <div class="card-sub">Últimas 8 semanas (la barra azul es la semana elegida). Cada valor se compara con el promedio de las 4 semanas anteriores; si la semana va a la mitad, los totales se comparan a la misma altura.</div>
       <div id="ms-insights"></div>
       <div id="ms-trend"></div>
     </div>
 
     <div class="card" id="ms-ots-card">
-      <div style="font-weight:700;margin-bottom:10px;">🧾 OTs de la semana <span id="ms-ots-n" style="color:var(--muted);font-weight:500;"></span></div>
+      <div style="font-weight:700;margin-bottom:10px;"><span data-icon="file"></span> OTs de la semana <span id="ms-ots-n" style="color:var(--muted);font-weight:500;"></span></div>
       <div id="ms-ots"></div>
     </div>
 
-    <div class="ms-section-title">🏭 Toda la planta</div>
+    <div class="ms-section-title"><span data-icon="factory"></span> Toda la planta</div>
     <div class="card-sub" style="margin-top:-4px" id="s-alcance">Últimos 30 días</div>
     <div id="fUbicRes" style="margin:0 0 10px;"></div>
     <div class="stat-grid">
@@ -631,11 +672,11 @@
       <div class="stat-box"><div class="stat-num" style="color:var(--color-warn-text)" id="s-paro">—</div><div class="stat-lbl">Paros Planta</div></div>
     </div>
     <div class="card" id="lineas-card" style="display:none">
-      <div style="font-weight:700;margin-bottom:12px">🏭 Top Áreas</div>
+      <div style="font-weight:700;margin-bottom:12px"><span data-icon="factory"></span> Top Áreas</div>
       <div id="lineas-bars"></div>
     </div>
     <div class="card" id="semana-card" style="display:none">
-      <div style="font-weight:700;margin-bottom:12px">📅 Por Semana</div>
+      <div style="font-weight:700;margin-bottom:12px"><span data-icon="calendar"></span> Por Semana</div>
       <div id="semana-bars"></div>
     </div>
   </div>
@@ -643,86 +684,68 @@
   <!-- SCREEN: CONFIGURACIÓN -->
   <!-- SCREEN: AVISOS DE PRODUCCIÓN -->
   <div class="screen" id="screen-avisos">
-    <div class="card-title" style="margin-bottom:4px">🚨 Avisos de producción</div>
-    <div class="card-sub">Paradas y fallas reportadas desde planta. Se actualiza solo.</div>
-    <button class="btn btn-secondary" id="avisos-activar" style="margin-bottom:12px;" onclick="activarAvisos()">🔔 Activar sonido y notificaciones en este celular</button>
+    <div class="card-title" style="margin-bottom:4px">Avisos de producción</div>
+    <div class="card-sub">Paradas y fallas de planta, en vivo.</div>
+    <button class="btn btn-secondary" id="avisos-activar" style="margin-bottom:12px;" onclick="activarAvisos()"><span data-icon="bell"></span> Activar sonido y notificaciones</button>
     <!-- (28 oct 2026) Permisos de trabajo: por autorizar (Supervisor+) y mis bloqueos abiertos -->
     <div id="seg-avisos"></div>
-    <!-- (23 oct 2026) OTs planificadas para mí (checklist / proyectos), como avisos -->
-    <div id="asig-mios"></div>
+    <!-- (v3 etapa 3a) Los trabajos asignados (míos y de todos) están en la sección Asignados -->
     <div id="avisos-lista"></div>
-    <!-- (23 oct 2026) Supervisor / Encargado / Admin: todos los trabajos asignados -->
-    <div id="asig-todos"></div>
     <!-- (23 oct 2026) Solo Administrador: avisos y OTs anuladas -->
     <div id="anuladas-wrap" style="display:none">
-      <button type="button" class="btn btn-secondary btn-sm" id="anuladas-btn" style="width:100%;margin-top:6px;" onclick="toggleAnuladas()">🚫 Ver anuladas</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="anuladas-btn" style="width:100%;margin-top:6px;" onclick="toggleAnuladas()"><span data-icon="ban"></span> Ver anuladas</button>
       <div id="anuladas-lista" style="margin-top:8px;"></div>
     </div>
   </div>
 
   <div class="screen" id="screen-config">
-    <div class="card-title" style="margin-bottom:4px">⚙️ Configuración</div>
-    <div class="card-sub">Base de datos central (Firebase)</div>
+    <div class="card-title" style="margin-bottom:12px">Ajustes</div>
 
     <div class="card">
-      <div style="font-weight:700;margin-bottom:8px">☁️ Conexión a Firebase</div>
+      <div style="font-weight:700;margin-bottom:8px"><span data-icon="cloud"></span> Conexión <button type="button" class="vt-help" data-ayuda="Sin señal, los registros se guardan en el celular y se suben solos al volver la conexión." aria-label="Ayuda">?</button></div>
       <div id="fb-status-box" style="font-size:13px;color:var(--muted);line-height:1.7">Comprobando conexión…</div>
-      <div class="info-box" style="margin-top:12px;margin-bottom:0;">
-        Esta app comparte los registros con Inventario y Análisis a través de la misma base de datos en la nube (Firebase). No hace falta configurar nada aquí — ya viene conectado desde <code>firebase-config.js</code>. Los cambios se guardan localmente si no hay señal y se suben solos cuando vuelve la conexión.
-      </div>
     </div>
 
     <div class="card">
-      <div style="font-weight:700;margin-bottom:8px">👷 Lista de técnicos (central)</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        <!-- (25 oct 2026) La lista ya no se edita en GitHub: la mantiene el Administrador. -->
-        Los técnicos que aparecen en "Nueva Entrada" los mantiene el <strong style="color:var(--text)">Administrador</strong> en <strong style="color:var(--text)">⚙️ Administración → Usuarios</strong> (mientras no la use, salen del archivo <code>tecnicos.json</code>). Los celulares ven los cambios la próxima vez que abran la app, o al pulsar el botón de abajo.
-      </div>
+      <div style="font-weight:700;margin-bottom:8px"><span data-icon="users"></span> Lista de técnicos</div>
+      <!-- (25 oct 2026) La lista ya no se edita en GitHub: la mantiene el Administrador. -->
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">La mantiene el Administrador en Administración → Usuarios.</div>
       <div id="tec-actual-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
-      <button class="btn btn-secondary btn-sm" onclick="loadTecnicos(true).then(()=>showToast('✅ Lista de técnicos recargada','success'))">🔄 Recargar lista ahora</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadTecnicos(true).then(()=>showToast('Lista de técnicos recargada','success'))">Recargar lista ahora</button>
     </div>
 
     <div class="card">
-      <div style="font-weight:700;margin-bottom:8px">⬇ Respaldo de la bitácora</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Descarga una copia de todas las OTs registradas (formato JSON), por si algún día necesitas restaurar o auditar los datos fuera de la app.
-      </div>
+      <div style="font-weight:700;margin-bottom:8px"><span data-icon="save"></span> Respaldo</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-secondary btn-sm" onclick="exportHistoryCSV(true)">📊 Reporte completo a Excel (CSV)</button>
-        <button class="btn btn-secondary btn-sm" onclick="exportBackup()">⬇ Exportar respaldo (JSON)</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportHistoryCSV(true)"><span data-icon="sheet"></span> Excel (CSV)</button>
+        <!-- (v3 etapa 3a) El respaldo completo vive solo en Administración (Administrador) -->
+        <a class="btn btn-secondary btn-sm" id="respaldoAdm" href="admin.html#respaldo" style="display:none;text-decoration:none;"><span data-icon="download"></span> <span data-i18n="shell.t_respaldoAdm">Respaldo completo (Administración)</span></a>
       </div>
     </div>
 
     <div class="card">
-      <div style="font-weight:700;margin-bottom:8px">📱 Instalar en celular</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.7">
-        <strong style="color:var(--text)">Android (Chrome):</strong> Menú ⋮ → "Agregar a pantalla de inicio"<br/><br/>
-        <strong style="color:var(--text)">iPhone (Safari):</strong> Botón compartir 📤 → "En la pantalla de inicio"
+      <div style="font-weight:700;margin-bottom:8px"><span data-icon="phone"></span> Instalar en celular</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">
+        <strong style="color:var(--text)">Android:</strong> menú ⋮ → Agregar a pantalla de inicio<br/>
+        <strong style="color:var(--text)">iPhone:</strong> compartir <span data-icon="upload"></span> → En la pantalla de inicio
       </div>
     </div>
 
     <div class="card" style="border-color:var(--red)">
-      <div style="font-weight:700;margin-bottom:8px;color:var(--color-danger-text)">🗑 Limpiar caché local del navegador</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Borra la copia local (caché) que este celular guarda para funcionar sin señal. <strong>No borra nada en la nube</strong> — es solo para este dispositivo, por si el caché se corrompe.</div>
-      <button class="btn btn-danger" onclick="clearLocal()">Limpiar caché de este celular</button>
+      <div style="font-weight:700;margin-bottom:8px;color:var(--color-danger-text)"><span data-icon="trash"></span> Limpiar caché de este celular</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">No borra nada en la nube.</div>
+      <button class="btn btn-danger" onclick="clearLocal()">Limpiar caché</button>
     </div>
   </div>
 
 </div>
 
-<nav id="nav">
-  <button class="nav-btn active" id="nav-nuevo" onclick="goTo('nuevo',this)"><span>➕</span>Nuevo</button>
-  <button class="nav-btn" id="nav-avisos" onclick="goTo('avisos',this)"><span>🚨</span>Avisos<b class="nav-badge" id="avisos-badge" style="display:none">0</b></button>
-  <button class="nav-btn" id="nav-historial" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
-  <button class="nav-btn" id="nav-stats" onclick="goTo('stats',this)"><span>📊</span>Resumen</button>
-  <button class="nav-btn" id="nav-config" onclick="goTo('config',this)"><span>⚙️</span>Configurar</button>
-</nav>
 
 <div id="toast"></div>
 <!-- (23 oct 2026) Anular aviso: el motivo es obligatorio (solo Administrador) -->
 <div class="modal-bg" id="modal-anular" onclick="if (event.target === this) cerrarModalAnular()">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="anular-titulo">
-    <h3 id="anular-titulo">🚫 Anular aviso</h3>
+    <h3 id="anular-titulo"><span data-icon="ban"></span> Anular aviso</h3>
     <div class="modal-sub" id="anular-sub"></div>
     <div class="field" style="margin-bottom:8px;">
       <label for="anular-motivo">Motivo (obligatorio)</label>
@@ -731,7 +754,7 @@
     <div class="modal-err" id="anular-err"></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="cerrarModalAnular()">Cancelar</button>
-      <button type="button" class="btn btn-danger" id="anular-ok" onclick="confirmarAnular()">🚫 Anular</button>
+      <button type="button" class="btn btn-danger" id="anular-ok" onclick="confirmarAnular()"><span data-icon="ban"></span> Anular</button>
     </div>
   </div>
 </div>
@@ -818,8 +841,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!navigator.onLine) document.getElementById('offline-bar').classList.add('show');
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-  // Al tocar una notificación de parada se abre bitacora.html#avisos
-  if (location.hash === '#avisos') goTo('avisos', document.getElementById('nav-avisos'));
+  // Al tocar una notificación de parada se abre bitacora.html#avisos.
+  // (v3) Cada sección tiene su enlace: #nuevo #avisos #historial #resumen #config
+  // (y #ot=<id>, #buscar=<folio>). Sin enlace y con algo esperando, abre Avisos.
+  vtRutaBitacora();
+  window.addEventListener('hashchange', vtRutaBitacora);
+  window.addEventListener('idioma-cambiado', () => { if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos(); });
+  document.getElementById('nav').addEventListener('click', () => { _vtTocoAlgo = true; });
+  document.getElementById('screen-nuevo').addEventListener('input', () => { _vtTocoAlgo = true; }, true);
 
   // Escucha en vivo la colección compartida de órdenes de trabajo. Cualquier
   // OT que se cree desde Inventario/Análisis o desde otro celular aparece
@@ -840,9 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
         combinarOts();
       }, (err) => {
         console.error('Error escuchando avisos:', err);
-        showToast('⚠️ Error leyendo los avisos: ' + err.message, 'error');
+        showToast('Error leyendo los avisos: ' + err.message, 'error');
       });
     vigilarBorradoresAnteriores();
+    { const ra = document.getElementById('respaldoAdm'); if (ra && userHasRole('ADMINISTRADOR')) ra.style.display = ''; } // (v3 etapa 3a)
     // (20 oct 2026) Trabajos planificados del técnico y apertura desde
     // Checklist (bitacora.html#ot=<id>) en modo "registrar esta OT".
     escucharMisTrabajos();
@@ -856,10 +886,10 @@ document.addEventListener('DOMContentLoaded', () => {
     abrirOtDesdeHash();
     window.addEventListener('hashchange', abrirOtDesdeHash);
     const box = document.getElementById('fb-status-box');
-    if (box) box.innerHTML = `🟢 Conectado a Firebase (proyecto <strong>${esc(firebaseConfig.projectId)}</strong>). Los registros se comparten en tiempo real con todos los celulares conectados a esta misma app.`;
+    if (box) box.innerHTML = `<span data-icon="dot" style="color:var(--color-success)"></span> Conectado a Firebase (proyecto <strong>${esc(firebaseConfig.projectId)}</strong>). Los registros se comparten en tiempo real con todos los celulares conectados a esta misma app.`;
   }).catch((err) => {
     const box = document.getElementById('fb-status-box');
-    if (box) box.innerHTML = `🔴 No se pudo conectar a Firebase: ${esc(err.message)}. Revisa <code>firebase-config.js</code>.`;
+    if (box) box.innerHTML = `No se pudo conectar a Firebase: ${esc(err.message)}. Revisa <code>firebase-config.js</code>.`;
   });
 });
 
@@ -909,7 +939,7 @@ function abrirTramo(i) {
     combinarOts();
   }, (err) => {
     console.error('Error escuchando OTs:', err);
-    showToast('⚠️ Error leyendo la base de datos: ' + err.message, 'error');
+    showToast('Error leyendo la base de datos: ' + err.message, 'error');
   });
 }
 // Abre los tramos hasta 'nivel' (0..3). Cada tramo se abre una sola vez.
@@ -924,14 +954,14 @@ function suscribirOtsRecientes(completo) { ampliarHistorial(completo ? TRAMOS_DI
 
 function verMasHistorial() {
   if (_nivelTramos + 1 >= TRAMOS_DIAS.length - 1) return cargarHistorialCompleto();
-  showToast('⏳ Cargando hasta ' + TRAMOS_DIAS[_nivelTramos + 1] + ' días…', 'warn');
+  showToast('Cargando hasta ' + TRAMOS_DIAS[_nivelTramos + 1] + ' días…', 'warn');
   window.fbReady.then(() => ampliarHistorial(_nivelTramos + 1)).catch(() => {});
 }
 
 function cargarHistorialCompleto() {
   if (_historialCompleto) return;
   if (!confirm('¿Cargar TODO el historial? Lee todas las OTs de todos los años: gasta bastante de la cuota gratis diaria de Firebase y en celulares lentos puede tardar. Al salir de la Bitácora vuelve a los últimos días.')) return;
-  showToast('⏳ Cargando historial completo…', 'warn');
+  showToast('Cargando historial completo…', 'warn');
   window.fbReady.then(() => ampliarHistorial(TRAMOS_DIAS.length - 1)).catch(() => {});
 }
 
@@ -1017,15 +1047,18 @@ function renderCausasOptions(valorActual) {
 // Área, Línea y Tipo con los datos del equipo (ver aplicarEquipo).
 function prefillEquipoDesdeQR() {
   const id = new URLSearchParams(location.search).get('equipo');
+  // (v3) Equipo 360 → "Pedir repuesto": abre el formulario con "Con repuestos" marcado.
+  const pedirRep = new URLSearchParams(location.search).get('rep') === '1';
   if (!id) return;
   window.fbReady.then(async () => {
     try {
       const s = await db.collection('equipos').doc(id).get();
-      if (!s.exists) { showToast('⚠️ El equipo del código QR ya no existe', 'error'); return; }
+      if (!s.exists) { showToast('El equipo del código QR ya no existe', 'error'); return; }
       const e = s.data() || {};
       aplicarEquipo({ id: s.id, nombre: e.nombre || '', localidad: e.localidad || '', planta: e.planta || '', linea: e.linea || '', tipoMaquina: e.tipoMaquina || '' });
-      showToast('📋 Equipo: ' + (e.nombre || ''));
+      showToast('Equipo: ' + (e.nombre || ''));
       history.replaceState(null, '', location.pathname);
+      if (pedirRep && typeof setRepModo === 'function') { setRepModo('si'); const c = document.getElementById('card-rep'); if (c) setTimeout(() => c.scrollIntoView({ block: 'center' }), 200); }
     } catch (err) { console.warn('No se pudo precargar el equipo del QR:', err.message); }
   }).catch(() => {});
 }
@@ -1041,7 +1074,7 @@ const TECNICOS_FALLBACK = [
 ];
 
 // (25 oct 2026) La lista sale de fbTecnicos() (firebase-init.js): la que el
-// Administrador mantiene en ⚙️ Administración → /config/tecnicos, o
+// Administrador mantiene en <span data-icon="settings"></span> Administración → /config/tecnicos, o
 // tecnicos.json mientras esa lista no exista. forzar = volver a leerla.
 async function loadTecnicos(forzar) {
   let lista = TECNICOS_FALLBACK;
@@ -1087,7 +1120,7 @@ function guardarPlantaActual(nombre) {
   try { localStorage.setItem(PLANTA_LS_KEY, nombre || ''); } catch (e) {}
 }
 
-// (7 oct 2026) Valor de un <select> sin las opciones especiales ("➕ Agregar…", "Otro…").
+// (7 oct 2026) Valor de un <select> sin las opciones especiales ("<span data-icon="plus"></span> Agregar…", "Otro…").
 const OTRO = '__otro__';
 const NUEVA = '__nueva__';
 const eqK = s => fbEquipoKey(s);
@@ -1115,7 +1148,7 @@ function renderPlantaOptions(lista, valorActual) {
   if (typeof fbNavePermitida === 'function') lista = lista.filter(p => fbNombreActivo('plantas', p) && fbNavePermitida(p));
   sel.innerHTML = '<option value="">Seleccionar planta...</option>'
     + opcionesConValor(lista, valor) // (5 oct 2026) escapado
-    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar planta nueva…</option>' : '');
+    + (puedeAgregar ? '<option value="__nueva__">Agregar planta nueva…</option>' : '');
   sel.value = valor === NUEVA ? '' : (valor || '');
   actualizarPills();
 }
@@ -1164,7 +1197,7 @@ async function onPlantaSelectChange() {
     // (25 oct 2026) también si es el nombre anterior de una nave renombrada
     const igualP = p => p.toLowerCase() === nombre.toLowerCase() || fbMismoNombre('plantas', p, nombre);
     if (currentPlantas.some(igualP)) {
-      showToast('⚠️ Esa planta ya existe', 'error');
+      showToast('Esa planta ya existe', 'error');
       renderPlantaOptions(currentPlantas, currentPlantas.find(igualP));
       refrescarAreaYLinea();
       return;
@@ -1175,14 +1208,14 @@ async function onPlantaSelectChange() {
         createdAt: fbTimestamp(),
         creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
       });
-      showToast('✅ Planta "' + nombre + '" agregada', 'success');
+      showToast('Planta "' + nombre + '" agregada', 'success');
       setTimeout(() => {
         renderPlantaOptions(currentPlantas, nombre);
         guardarPlantaActual(nombre);
         refrescarAreaYLinea();
       }, 400);
     } catch (e) {
-      showToast('❌ No se pudo agregar la planta: ' + e.message, 'error');
+      showToast('No se pudo agregar la planta: ' + e.message, 'error');
       renderPlantaOptions(currentPlantas, '');
       refrescarAreaYLinea();
     }
@@ -1240,7 +1273,7 @@ function renderAreaOptions(lista, valorActual) {
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
   sel.innerHTML = '<option value="">Seleccionar área...</option>'
     + opcionesConValor(lista, valor) // (5 oct 2026) escapado
-    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar área nueva…</option>' : '');
+    + (puedeAgregar ? '<option value="__nueva__">Agregar área nueva…</option>' : '');
   sel.value = valor === NUEVA ? '' : (valor || '');
   actualizarPills();
 }
@@ -1267,7 +1300,7 @@ function loadAreas() {
   }).catch(() => {}); // sin sesión: fbReady ya redirigió a login.html
 }
 
-// Encargado/Admin elige "➕ Agregar área nueva…" en el mismo <select> del
+// Encargado/Admin elige "<span data-icon="plus"></span> Agregar área nueva…" en el mismo <select> del
 // formulario — sin pantalla aparte ni deploy de código nuevo, tal como se
 // pidió ("dame la oportunidad de crearlo en el transcurso"). El técnico no
 // ve esta opción (ver renderAreaOptions). El área nueva queda ligada a la
@@ -1281,7 +1314,7 @@ async function onAreaSelectChange() {
 
   const plantaActual = valSel('f-planta');
   if (!plantaActual) {
-    showToast('⚠️ Primero selecciona una Planta', 'error');
+    showToast('Primero selecciona una Planta', 'error');
     renderAreaOptions(nombresAreasParaPlanta(''), '');
     cascadaDesde(1);
     return;
@@ -1291,7 +1324,7 @@ async function onAreaSelectChange() {
   if (!nombre) { renderAreaOptions(nombresAreasParaPlanta(plantaActual), ''); cascadaDesde(1); return; }
   const igualA = a => a.nombre.toLowerCase() === nombre.toLowerCase() || fbMismoNombre('areas', a.nombre, nombre); // (25 oct 2026) + nombre anterior
   if (currentAreas.some(igualA)) {
-    showToast('⚠️ Esa área ya existe', 'error');
+    showToast('Esa área ya existe', 'error');
     renderAreaOptions(nombresAreasParaPlanta(plantaActual), currentAreas.find(igualA).nombre);
     cascadaDesde(1);
     return;
@@ -1303,12 +1336,12 @@ async function onAreaSelectChange() {
       createdAt: fbTimestamp(),
       creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
     });
-    showToast('✅ Área "' + nombre + '" agregada', 'success');
+    showToast('Área "' + nombre + '" agregada', 'success');
     // El onSnapshot de loadAreas() repinta el <select> solo en cuanto Firebase
     // confirme el nuevo documento; se deja seleccionada el área recién creada.
     setTimeout(() => { renderAreaOptions(nombresAreasParaPlanta(valSel('f-planta')), nombre); cascadaDesde(1); }, 400);
   } catch (e) {
-    showToast('❌ No se pudo agregar el área: ' + e.message, 'error');
+    showToast('No se pudo agregar el área: ' + e.message, 'error');
     renderAreaOptions(nombresAreasParaPlanta(plantaActual), '');
     cascadaDesde(1);
   }
@@ -1334,7 +1367,7 @@ function renderLineaOptions(lista, valorActual) {
   const puedeAgregar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO') && !!areaElegida;
   sel.innerHTML = '<option value="">— Ninguna / No aplica —</option>'
     + opcionesConValor(lista, valor) // (5 oct 2026) escapado
-    + (puedeAgregar ? '<option value="__nueva__">➕ Agregar línea nueva…</option>' : '');
+    + (puedeAgregar ? '<option value="__nueva__">Agregar línea nueva…</option>' : '');
   sel.value = valor === NUEVA ? '' : (valor || '');
   actualizarPills();
 }
@@ -1359,7 +1392,7 @@ async function onLineaSelectChange() {
   const nombre = (window.prompt('Nombre de la nueva línea (ej: "Línea 2"):') || '').trim();
   if (!nombre) { renderLineaOptions(nombresLineasParaArea(areaActual), ''); cascadaDesde(2); return; }
   if (currentLineas.some(l => eqK(l.areaNombre) === eqK(areaActual) && l.nombre.toLowerCase() === nombre.toLowerCase())) {
-    showToast('⚠️ Esa línea ya existe en esta área', 'error');
+    showToast('Esa línea ya existe en esta área', 'error');
     renderLineaOptions(nombresLineasParaArea(areaActual), nombresLineasParaArea(areaActual).find(l => l.toLowerCase() === nombre.toLowerCase()));
     cascadaDesde(2);
     return;
@@ -1371,10 +1404,10 @@ async function onLineaSelectChange() {
       createdAt: fbTimestamp(),
       creadoPor: (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || ''
     });
-    showToast('✅ Línea "' + nombre + '" agregada', 'success');
+    showToast('Línea "' + nombre + '" agregada', 'success');
     setTimeout(() => { renderLineaOptions(nombresLineasParaArea(valSel('f-linea')), nombre); cascadaDesde(2); }, 400);
   } catch (e) {
-    showToast('❌ No se pudo agregar la línea: ' + e.message, 'error');
+    showToast('No se pudo agregar la línea: ' + e.message, 'error');
     renderLineaOptions(nombresLineasParaArea(areaActual), '');
     cascadaDesde(2);
   }
@@ -1387,12 +1420,7 @@ function getWeekNumber(d) {
 }
 
 function updateHeaderStatus() {
-  const sub = document.getElementById('header-sub');
-  const icon = document.getElementById('sp-status');
-  const pending = allRecords.filter(r => r._pending).length;
-  sub.textContent = `2026 · Firebase ${pending > 0 ? '· '+pending+' sin subir' : '✓'}`;
-  icon.textContent = navigator.onLine ? '🟢' : '🟡';
-  icon.onclick = () => goTo('config', document.getElementById('nav-config'));
+  // (v3 etapa 3a) sin encabezado propio: lo pendiente de subir se ve en Ajustes → estado de Firebase
 }
 
 // (29 sep 2026) /equipos es la fuente de nombres CANÓNICOS (los mismos que
@@ -1557,8 +1585,8 @@ function setModoForm(modo, aviso) {
     const eqN = avEquipo(aviso).nombre;
     ab.innerHTML = `<div class="h"><span class="k">${proy ? 'Proyecto / mejora' : 'OT de checklist · predictivo'}</span><span class="f">${esc(aviso.folio || '')}</span></div>
       <div class="d"><b>${esc(eqN || '—')}</b> — “${esc(aviso.descripcionFalla || '—')}”</div>
-      <div class="d">📅 Planificada para el ${esc(fmtDdMmB(aviso.fechaPlanificada) || '—')} · 👤 ${esc(aviso.asignadoA || '—')}${proy && aviso.creadoPor ? ' · pidió ' + esc(aviso.creadoPor) : ''}</div>
-      ${aviso.estado === 'rechazada' ? `<div class="d rech">⚠️ Devuelta${aviso.revisadoPor ? ' por ' + esc(aviso.revisadoPor) : ''}: ${esc(aviso.notaRevision || 'no concluida')}. Corrige y vuelve a enviar.</div>` : ''}
+      <div class="d"><span data-icon="calendar"></span> Planificada para el ${esc(fmtDdMmB(aviso.fechaPlanificada) || '—')} · <span data-icon="user"></span> ${esc(aviso.asignadoA || '—')}${proy && aviso.creadoPor ? ' · pidió ' + esc(aviso.creadoPor) : ''}</div>
+      ${aviso.estado === 'rechazada' ? `<div class="d rech"><span data-icon="alert"></span> Devuelta${aviso.revisadoPor ? ' por ' + esc(aviso.revisadoPor) : ''}: ${esc(aviso.notaRevision || 'no concluida')}. Corrige y vuelve a enviar.</div>` : ''}
       <div class="d nota">Al terminar: escribe la solución, los técnicos, las herramientas y si usaste repuestos. Al guardar pasa a revisión del supervisor.</div>
       <button type="button" class="c" onclick="cancelEdit()">Cancelar</button>`;
     ab.style.display = '';
@@ -1613,15 +1641,15 @@ function abrirOtDesdeHash() {
   const local = _misTrabajos.get(m[1]);
   if (local) { abrirRegistroOt(local); return; }
   db.collection('ots').doc(m[1]).get()
-    .then(snap => { if (!snap.exists) { showToast('⚠️ Esa OT ya no existe', 'error'); return; } abrirRegistroOt({ id: snap.id, ...snap.data() }); })
-    .catch(e => showToast('❌ No se pudo abrir la OT: ' + msgErrorFirestore(e), 'error', 8000));
+    .then(snap => { if (!snap.exists) { showToast('Esa OT ya no existe', 'error'); return; } abrirRegistroOt({ id: snap.id, ...snap.data() }); })
+    .catch(e => showToast('No se pudo abrir la OT: ' + msgErrorFirestore(e), 'error', 8000));
 }
 
 async function abrirRegistroOt(o) {
-  if (!esOtPlanificable(o)) { showToast('⚠️ Esa OT no es de checklist ni un proyecto planificado', 'error'); return; }
+  if (!esOtPlanificable(o)) { showToast('Esa OT no es de checklist ni un proyecto planificado', 'error'); return; }
   if (!ESTADOS_REGISTRABLES.includes(o.estado)) {
     const txt = { pendiente: 'todavía no está planificada (el Encargado le pone técnico y fecha)', en_revision: 'ya está en revisión', validada: 'ya fue validada', completada: 'ya está cerrada', anulada: 'está anulada' }[o.estado] || ('está ' + (o.estado || 'sin estado'));
-    showToast('⚠️ ' + (o.folio || 'Esta OT') + ' ' + txt, 'warn', 6000);
+    showToast('' + (o.folio || 'Esta OT') + ' ' + txt, 'warn', 6000);
     return;
   }
   if (window.editingRecord && window.editingRecord.id !== o.id) exitEditMode();
@@ -1706,22 +1734,15 @@ function renderMisTrabajos() {
   // (23 oct 2026) Los mismos datos salen también en Avisos (sin otra lectura).
   actualizarBadgeAvisos();
   if (document.getElementById('screen-avisos').classList.contains('active')) renderAvisos();
+  if (document.getElementById('screen-asignados').classList.contains('active')) renderAsignados();
   const card = document.getElementById('mis-trabajos');
   if (!card) return;
   const lista = _misTrabajosLista();
   card.style.display = (lista.length && _modoForm === 'nuevo') ? '' : 'none';
   document.getElementById('mis-trabajos-n').textContent = lista.length ? lista.length + (lista.length === 1 ? ' pendiente' : ' pendientes') : '';
-  const hoy = fbHoy();
-  // Dentro del onclick solo va el id del documento (seguro).
-  document.getElementById('mis-trabajos-lista').innerHTML = lista.map(o => {
-    const proy = esProyectoOt(o), tarde = o.estado === 'planificada' && o.fechaPlanificada && o.fechaPlanificada < hoy;
-    return `<div class="mt-item ${proy ? 'proyecto' : ''} ${o.estado === 'rechazada' ? 'rechazada' : ''}">
-      <div class="t"><b>${esc(avEquipo(o).nombre || '—')}</b> ${critBadge(critDeAviso(o))} <span class="tag tag-${proy ? 'proyecto' : 'predictivo'}">${proy ? 'Proyecto' : 'Predictivo'}</span>
-        <div>${esc(o.descripcionFalla || '')}</div>
-        <div class="m ${tarde ? 'tarde' : ''}">${esc(o.folio || '')} · ${o.estado === 'rechazada' ? '⚠️ Devuelta: ' + esc(o.notaRevision || 'corregir') : '📅 para el ' + esc(fmtDdMmB(o.fechaPlanificada)) + (tarde ? ' (atrasada)' : '')}</div></div>
-      <button type="button" class="btn btn-primary btn-sm" onclick="abrirRegistroOtId('${esc(o.id)}')">${o.estado === 'rechazada' ? 'Corregir' : 'Registrar'}</button>
-    </div>`;
-  }).join('');
+  // (v3 etapa 3a) Una sola lista: la de Asignados (aquí solo el acceso directo).
+  document.getElementById('mis-trabajos-lista').innerHTML = lista.length ? `<a class="btn btn-secondary btn-sm" href="#asignados" style="text-decoration:none;text-align:center;"><span data-icon="calendar"></span> ${esc(window.i18n ? i18n.t('shell.t_verAsignados') : 'Ver mis trabajos en Asignados')}</a>` : '';
+  if (window.VTIcons) VTIcons.hydrate(card);
 }
 function abrirRegistroOtId(id) { const o = _misTrabajos.get(id); if (o) abrirRegistroOt(o); }
 
@@ -1746,7 +1767,7 @@ function asigDias(o) {
 function asigCuenta(o) {
   const d = asigDias(o);
   if (d == null) return { txt: 'sin fecha', cls: '' };
-  if (d < 0) return { txt: `⚠️ atrasado ${-d} ${d === -1 ? 'día' : 'días'}`, cls: 'tarde' };
+  if (d < 0) return { txt: `atrasado ${-d} ${d === -1 ? 'día' : 'días'}`, cls: 'tarde' };
   if (d === 0) return { txt: 'vence hoy', cls: 'hoy' };
   return { txt: d === 1 ? 'falta 1 día' : `faltan ${d} días`, cls: '' };
 }
@@ -1758,9 +1779,9 @@ function asigOrden(a, b) {
   if (da == null || dz == null) return (da == null ? 1 : 0) - (dz == null ? 1 : 0);
   return da - dz || String(a.folio || '').localeCompare(String(b.folio || ''));
 }
-const asigTipoBadge = o => esProyectoOt(o) ? '<span class="tag tag-proyecto">📐 Proyecto</span>' : '<span class="tag tag-predictivo">🩺 Predictivo</span>';
+const asigTipoBadge = o => esProyectoOt(o) ? '<span class="tag tag-proyecto"><span data-icon="ruler"></span> Proyecto</span>' : '<span class="tag tag-predictivo"><span data-icon="clipboard-check"></span> Predictivo</span>';
 
-// Sección "📅 Trabajos asignados a ti" arriba de las paradas. Devuelve cuántos hay.
+// Sección "<span data-icon="calendar"></span> Trabajos asignados a ti" arriba de las paradas. Devuelve cuántos hay.
 function renderAsignadosMios() {
   const cont = document.getElementById('asig-mios');
   if (!cont) return 0;
@@ -1768,17 +1789,17 @@ function renderAsignadosMios() {
   if (!lista.length) { cont.innerHTML = ''; return 0; }
   const atras = lista.filter(o => (asigDias(o) ?? 0) < 0).length;
   // Dentro del onclick solo va el id del documento (seguro).
-  cont.innerHTML = `<div class="av-sec">📅 Trabajos asignados a ti <small>${lista.length} ${lista.length === 1 ? 'pendiente' : 'pendientes'}${atras ? ' · ' + atras + (atras === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>`
+  cont.innerHTML = `<div class="av-sec"><span data-icon="calendar"></span> Trabajos asignados a ti <small>${lista.length} ${lista.length === 1 ? 'pendiente' : 'pendientes'}${atras ? ' · ' + atras + (atras === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>`
     + lista.map(o => {
       const c = asigCuenta(o), eq = avEquipo(o), rech = o.estado === 'rechazada';
       return `<div class="av-card asig ${esProyectoOt(o) ? 'proyecto' : ''} ${c.cls === 'tarde' ? 'atrasada' : ''}" data-ot="${esc(o.id)}">
       <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')} ${critBadge(critDeAviso(o))}</div>
-        <div class="av-meta">${eq.localidad ? '📍 ' + esc(eq.localidad) + ' · ' : ''}${esc(o.folio || '')}</div>
+        <div class="av-meta">${eq.localidad ? '<span data-icon="pin"></span> ' + esc(eq.localidad) + ' · ' : ''}${esc(o.folio || '')}</div>
         <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;">${asigTipoBadge(o)}${o.prioridad ? `<span class="tag ${o.prioridad === 'alta' ? 'tag-prioridad-alta' : 'tag-synced'}">Prioridad ${esc(o.prioridad)}</span>` : ''}</div></div>
-        <div class="av-timer asig ${c.cls}">📅 Para el ${esc(fmtDdMmB(o.fechaPlanificada) || '—')}<b class="asig-cuenta">${esc(c.txt)}</b></div></div>
+        <div class="av-timer asig ${c.cls}"><span data-icon="calendar"></span> Para el ${esc(fmtDdMmB(o.fechaPlanificada) || '—')}<b class="asig-cuenta">${esc(c.txt)}</b></div></div>
       <div class="av-desc">${o.causaFalla ? '[' + esc(o.causaFalla) + '] ' : ''}${esc(o.descripcionFalla || '')}</div>
-      ${rech ? `<div class="av-rech">⚠️ Devuelta${o.revisadoPor ? ' por ' + esc(o.revisadoPor) : ''}: ${esc(o.notaRevision || 'corregir y volver a registrar')}</div>` : ''}
-      <button type="button" class="btn btn-primary" style="margin-top:6px;" onclick="abrirRegistroOtId('${esc(o.id)}')">${rech ? '📋 Corregir en Bitácora' : '📋 Registrar en Bitácora'}</button>
+      ${rech ? `<div class="av-rech"><span data-icon="alert"></span> Devuelta${o.revisadoPor ? ' por ' + esc(o.revisadoPor) : ''}: ${esc(o.notaRevision || 'corregir y volver a registrar')}</div>` : ''}
+      <button type="button" class="btn btn-primary" style="margin-top:6px;" onclick="abrirRegistroOtId('${esc(o.id)}')">${rech ? '<span data-icon="clipboard"></span> Corregir en Bitácora' : '<span data-icon="clipboard"></span> Registrar en Bitácora'}</button>
     </div>`;
     }).join('') + '<div class="av-sep"></div>';
   return lista.length;
@@ -1793,7 +1814,7 @@ function escucharAsignadosTodos() {
   _asigTodosUnsub = db.collection('ots').where('estado', 'in', ESTADOS_REGISTRABLES).limit(300)
     .onSnapshot(snap => {
       _asigTodos = snap.docs.map(docAOt); _asigTodosErr = '';
-      if (document.getElementById('screen-avisos').classList.contains('active')) renderAsignadosTodos();
+      if (document.getElementById('screen-avisos').classList.contains('active') || document.getElementById('screen-asignados').classList.contains('active')) renderAsignadosTodos();
     }, err => {
       _asigTodosErr = err.message || String(err);
       console.warn('No se pudieron leer los trabajos asignados:', _asigTodosErr);
@@ -1805,8 +1826,8 @@ function renderAsignadosTodos() {
   if (!cont) return;
   if (!esSupervisorB()) { cont.innerHTML = ''; return; }
   escucharAsignadosTodos();
-  const cab = (txt) => `<div class="av-sep"></div><div class="av-sec">📅 Trabajos asignados (todos) <small>${txt}</small></div>`;
-  if (_asigTodosErr) { cont.innerHTML = cab('') + `<div class="av-meta">⚠️ No se pudieron leer: ${esc(_asigTodosErr)}</div>`; return; }
+  const cab = (txt) => `<div class="av-sep"></div><div class="av-sec"><span data-icon="calendar"></span> Trabajos asignados (todos) <small>${txt}</small></div>`;
+  if (_asigTodosErr) { cont.innerHTML = cab('') + `<div class="av-meta"><span data-icon="alert"></span> No se pudieron leer: ${esc(_asigTodosErr)}</div>`; return; }
   if (_asigTodos === null) { cont.innerHTML = cab('cargando…'); return; }
   const lista = _asigTodos.filter(o => ESTADOS_REGISTRABLES.includes(o.estado) && (typeof fbEnNave !== 'function' || fbEnNave(o))); // (25 oct 2026) nave elegida
   if (!lista.length) { cont.innerHTML = cab('') + '<div class="av-meta" style="margin-bottom:8px;">No hay trabajos planificados abiertos.</div>'; return; }
@@ -1818,9 +1839,9 @@ function renderAsignadosTodos() {
     .sort((a, b) => b.t - a.t || a.k.localeCompare(b.k, 'es'));
   cont.innerHTML = cab(`${lista.length} · ${totalTarde ? totalTarde + (totalTarde === 1 ? ' atrasado' : ' atrasados') : 'ninguno atrasado'}`)
     + orden.map(g => `<div class="asig-grupo" data-tec="${esc(g.k)}">
-      <div class="g"><span>👤 ${esc(g.k)}</span><small class="${g.t ? 'tarde' : ''}">${g.l.length}${g.t ? ' · ' + g.t + (g.t === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>
+      <div class="g"><span><span data-icon="user"></span> ${esc(g.k)}</span><small class="${g.t ? 'tarde' : ''}">${g.l.length}${g.t ? ' · ' + g.t + (g.t === 1 ? ' atrasado' : ' atrasados') : ''}</small></div>
       ${g.l.map(o => { const c = asigCuenta(o); return `<div class="asig-fila ${c.cls}" data-ot="${esc(o.id)}">
-        <span><b>${esc(o.folio || '')}</b> · ${esc(avEquipo(o).nombre || '—')} · ${esProyectoOt(o) ? '📐' : '🩺'}${o.estado === 'rechazada' ? ' · <b style="color:var(--red-txt)">devuelta</b>' : ''}</span>
+        <span><b>${esc(o.folio || '')}</b> · ${esc(avEquipo(o).nombre || '—')} · ${esProyectoOt(o) ? '<span data-icon="ruler"></span>' : '<span data-icon="clipboard-check"></span>'}${o.estado === 'rechazada' ? ' · <b style="color:var(--red-txt)">devuelta</b>' : ''}</span>
         <span class="c">${esc(fmtDdMmB(o.fechaPlanificada) || '—')} · ${esc(c.txt)}</span></div>`; }).join('')}
     </div>`).join('');
 }
@@ -1829,7 +1850,7 @@ function renderAsignadosTodos() {
 function alertarTrabajoAsignado(o) {
   const eq = avEquipo(o);
   const txt = `Nuevo trabajo asignado: ${o.folio || ''} ${eq.nombre || ''}${o.fechaPlanificada ? ' para el ' + fmtDdMmB(o.fechaPlanificada) : ''}`.replace(/\s+/g, ' ').trim();
-  showToast('📅 ' + txt, 'warn', 7000);
+  showToast('' + txt, 'warn', 7000);
   avVibrarYSonar();
   avNotificacionSistema('Nuevo trabajo asignado', txt + (o.descripcionFalla ? ' — ' + o.descripcionFalla : ''), 'asig-' + o.id);
 }
@@ -1849,9 +1870,9 @@ function programarRecordatorioAsignados() {
     const partes = [];
     if (hoy) partes.push(hoy + ' para hoy');
     if (atras) partes.push(atras + (atras === 1 ? ' atrasado' : ' atrasados'));
-    const txt = `📅 Tienes ${lista.length === 1 ? '1 trabajo asignado' : lista.length + ' trabajos asignados'}: ${partes.join(' y ')}`;
+    const txt = `Tienes ${lista.length === 1 ? '1 trabajo asignado' : lista.length + ' trabajos asignados'}: ${partes.join(' y ')}`;
     showToast(txt, 'warn', 7000);
-    avNotificacionSistema('Trabajos asignados pendientes', txt.replace(/^📅 /, '') + ' — ' + lista.slice(0, 3).map(o => ((o.folio || '') + ' ' + (avEquipo(o).nombre || '')).trim()).join(', '), 'asig-recordatorio');
+    avNotificacionSistema('Trabajos asignados pendientes', txt.replace(/^/, '') + ' — ' + lista.slice(0, 3).map(o => ((o.folio || '') + ' ' + (avEquipo(o).nombre || '')).trim()).join(', '), 'asig-recordatorio');
   }, 2500);
 }
 
@@ -1866,7 +1887,7 @@ function renderAnuladasWrap() {
 function toggleAnuladas() {
   if (!esAdminB()) return;
   _anuladasAbiertas = !_anuladasAbiertas;
-  document.getElementById('anuladas-btn').textContent = _anuladasAbiertas ? '🚫 Ocultar anuladas' : '🚫 Ver anuladas';
+  document.getElementById('anuladas-btn').textContent = _anuladasAbiertas ? 'Ocultar anuladas' : 'Ver anuladas';
   if (_anuladasAbiertas) cargarAnuladas(); else document.getElementById('anuladas-lista').innerHTML = '';
 }
 async function cargarAnuladas() {
@@ -1881,11 +1902,11 @@ async function cargarAnuladas() {
     if (!lista.length) { cont.innerHTML = '<div class="av-meta">No hay anuladas en los últimos 90 días.</div>'; return; }
     const cuando = t => { const m = ms(t); if (!m) return '—'; const d = new Date(m); return fmtDdMmB(fbFechaLocal(d)) + ' ' + d.toTimeString().slice(0, 5); };
     cont.innerHTML = `<div class="av-meta" style="margin-bottom:6px;">${lista.length} anulada(s) · últimos 90 días${snap.size >= 50 ? ' (las 50 más recientes)' : ''}</div>`
-      + lista.map(o => `<div class="anu-item" data-ot="${esc(o.id)}"><b>${esc(o.folio || o.id)}</b> · ${esc(avEquipo(o).nombre || '—')}${esProyectoOt(o) ? ' · 📐 Proyecto' : o.origen === 'checklist' ? ' · 🩺 Checklist' : ''}
+      + lista.map(o => `<div class="anu-item" data-ot="${esc(o.id)}"><b>${esc(o.folio || o.id)}</b> · ${esc(avEquipo(o).nombre || '—')}${esProyectoOt(o) ? ' · <span data-icon="ruler"></span> Proyecto' : o.origen === 'checklist' ? ' · <span data-icon="clipboard-check"></span> Checklist' : ''}
         <div>Motivo: ${esc(o.motivoAnulacion || '—')}</div>
-        <div class="m">🚫 ${esc(o.anuladoPor || '—')} · ${esc(cuando(o.anuladoEn))}</div></div>`).join('');
+        <div class="m"><span data-icon="ban"></span> ${esc(o.anuladoPor || '—')} · ${esc(cuando(o.anuladoEn))}</div></div>`).join('');
   } catch (e) {
-    cont.innerHTML = `<div class="av-meta">⚠️ No se pudieron leer las anuladas: ${esc(msgErrorFirestore(e))}</div>`;
+    cont.innerHTML = `<div class="av-meta"><span data-icon="alert"></span> No se pudieron leer las anuladas: ${esc(msgErrorFirestore(e))}</div>`;
   }
 }
 
@@ -2149,7 +2170,7 @@ function renderHerrUI() {
     .sort((a, b) => tecCorto(a.tecnico).localeCompare(tecCorto(b.tecnico)) || (a.nombre || a.codigo).localeCompare(b.nombre || b.codigo));
   let html;
   if (!_tecSel.length) html = '<div class="dd-nota">Elige primero los técnicos.</div>';
-  else if (_herrEstado === 'error') html = '<div class="dd-nota">⚠️ No se pudieron leer las herramientas asignadas (sin señal o sin permiso). Puedes guardar igual.</div>';
+  else if (_herrEstado === 'error') html = '<div class="dd-nota"><span data-icon="alert"></span> No se pudieron leer las herramientas asignadas (sin señal o sin permiso). Puedes guardar igual.</div>';
   else if (!_herrAsign) html = '<div class="dd-nota">Cargando herramientas…</div>';
   else if (!_herrVis.length) html = '<div class="dd-nota">Sin herramientas asignadas a los técnicos elegidos</div>';
   else html = _herrVis.map((h, i) => `<label class="chk-row"><input type="checkbox" data-i="${i}"${_herrSel.has(h.asignacionId) ? ' checked' : ''}/><span class="n">${esc(h.nombre || h.codigo)}${h.codigo && h.nombre ? `<small>${esc(h.codigo)}</small>` : ''}</span><span class="o">${esc(tecCorto(h.tecnico))}</span></label>`).join('');
@@ -2166,7 +2187,7 @@ let _repEstados = {};  // solicitudId → estado leído de solicitudes_repuestos
 const REP_ETQ = { pendiente: 'Pendiente', entregado: 'Entregado', rechazado: 'Rechazado' };
 function setRepModo(m) {
   if (m === 'no' && _repItems.some(i => i.solicitudId)) {
-    showToast('⚠️ Esta OT ya tiene repuestos solicitados a almacén', 'error');
+    showToast('Esta OT ya tiene repuestos solicitados a almacén', 'error');
     m = 'si';
   }
   _repModo = m;
@@ -2190,8 +2211,8 @@ function agregarRepuesto() {
   const c = document.getElementById('rep-codigo'), d = document.getElementById('rep-desc'), q = document.getElementById('rep-cant');
   const descripcion = d.value.replace(/\s+/g, ' ').trim();
   const cantidad = Number(String(q.value).replace(',', '.'));
-  if (!descripcion) { showToast('⚠️ Escribe la descripción del repuesto', 'error'); d.focus(); return false; }
-  if (!(cantidad > 0) || cantidad > 100000) { showToast('⚠️ La cantidad debe ser mayor que 0', 'error'); q.focus(); return false; }
+  if (!descripcion) { showToast('Escribe la descripción del repuesto', 'error'); d.focus(); return false; }
+  if (!(cantidad > 0) || cantidad > 100000) { showToast('La cantidad debe ser mayor que 0', 'error'); q.focus(); return false; }
   _repItems.push({ codigo: c.value.replace(/\s+/g, ' ').trim().slice(0, 60), descripcion: descripcion.slice(0, 200), cantidad, solicitudId: null });
   c.value = ''; d.value = ''; q.value = '';
   renderRepUI();
@@ -2211,24 +2232,67 @@ function cargarEstadosSolicitudes(otId) {
 }
 
 // ══════ NAVIGATION ══════
+// (v3) Enlaces por sección y apertura en Avisos cuando hay algo esperando.
+const VT_SECCIONES = { nuevo: 'nuevo', avisos: 'avisos', asignados: 'asignados', planificar: 'planificar', validar: 'validar', ots: 'planificar', historial: 'historial', resumen: 'stats', stats: 'stats', semana: 'stats', config: 'config', ajustes: 'config' };
+const _vtSinHash = !location.hash && !new URLSearchParams(location.search).get('equipo');
+let _vtTocoAlgo = false, _vtAutoHecho = false;
+const _vtT0 = Date.now();
+function vtRutaBitacora() {
+  const h = (location.hash || '').slice(1);
+  const b = /^buscar=(.{1,64})$/.exec(h);
+  if (b) {
+    _vtTocoAlgo = true;
+    goTo('historial', document.getElementById('nav-historial'));
+    const inp = document.getElementById('search-input');
+    try { inp.value = decodeURIComponent(b[1]); } catch (e) { inp.value = b[1]; }
+    renderHistory();
+    return;
+  }
+  const sec = VT_SECCIONES[h];
+  if (sec) { _vtTocoAlgo = true; goTo(sec, document.getElementById('nav-' + sec)); }
+}
+// Se llama cada vez que cambia el número de Avisos (avisos abiertos, mis trabajos, permisos por autorizar).
+function vtQuizasAbrirAvisos(n, nAsig) {
+  if (_vtAutoHecho || !_vtSinHash || _vtTocoAlgo || !(n || nAsig) || window.editingRecord || Date.now() - _vtT0 > 6000) return;
+  if (!document.getElementById('screen-nuevo').classList.contains('active')) return;
+  _vtAutoHecho = true;
+  if (n) goTo('avisos', document.getElementById('nav-avisos')); else goTo('asignados', document.getElementById('nav-asignados'));
+}
 function goTo(screen, btn) {
   // (5 oct 2026) Si se sale del formulario estando en modo edición (o
   // cerrando un aviso), se sale de ese modo: antes la app quedaba "atrapada"
   // y el siguiente registro nuevo sobrescribía la OT que se estaba editando.
   if (screen !== 'nuevo' && window.editingRecord) {
     exitEditMode();
-    showToast('✏️ Edición cancelada (saliste del formulario)', 'warn');
+    showToast('Edición cancelada (saliste del formulario)', 'warn');
   }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
   btn.classList.add('active');
+  document.querySelectorAll('#nav .nav-btn').forEach(b => b.setAttribute('aria-selected', String(b === btn)));
+  try { btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {} // (v3 etapa 3a) la pestaña elegida siempre a la vista
   if (screen === 'historial') renderHistory();
   // (5 oct 2026) La tendencia de Mi semana usa 12 semanas: se abre el tramo de 120 días.
   if (screen === 'stats') { if (_nivelTramos >= 0 && _nivelTramos < 1) ampliarHistorial(1); loadStats(); }
   if (screen === 'avisos') renderAvisos();
+  if (screen === 'asignados') renderAsignados();
+  // (v3 etapa 3a) La cola de OTs se escucha la primera vez que se abre (las mismas 2 consultas de Checklist)
+  if (screen === 'planificar' || screen === 'validar') window.fbReady.then(() => { loadOts(); renderOts(); }).catch(() => {});
   if (screen === 'config') updateHeaderStatus();
 }
+// (v3 etapa 3a) Asignados: mis trabajos y (Supervisor+) los de todos — mismas funciones que antes en Avisos.
+function renderAsignados() {
+  const n = renderAsignadosMios();
+  renderAsignadosTodos();
+  const v = document.getElementById('asig-vacio');
+  if (v) v.innerHTML = !n && !esSupervisorB() ? `<div class="empty" style="padding:40px 10px;"><span class="emoji" style="font-size:40px;display:block;margin-bottom:10px;"><span data-icon="check-circle"></span></span><p style="color:var(--muted)">${esc(window.i18n ? i18n.t('shell.t_sinAsignados') : 'No tienes trabajos asignados.')}</p></div>` : '';
+  if (window.VTIcons) VTIcons.hydrate(document.getElementById('screen-asignados'));
+}
+// Números de "Por planificar" y "Por validar" (cuando la cola ya se abrió).
+window.otcAlPintar = n => {
+  [['plan-badge', 'ots-planificar'], ['val-badge', 'ots-validar']].forEach(([b, k]) => { const el = document.getElementById(b); if (el) { el.textContent = n[k]; el.style.display = n[k] ? '' : 'none'; } });
+};
 
 // ══════ FORM ══════
 function selectToggle(groupId, btn) {
@@ -2394,21 +2458,21 @@ async function submitForm() {
   if (!planta) faltan.push('Planta');
   if (!linea) faltan.push('Área');
   if (!falla) faltan.push('Falla');
-  if (faltan.length) { showToast('⚠️ Completa: ' + faltan.join(', '), 'error'); return; }
-  if (!fbParseFecha(fecha)) { showToast('⚠️ Falta la Fecha', 'error'); return; }
+  if (faltan.length) { showToast('Completa: ' + faltan.join(', '), 'error'); return; }
+  if (!fbParseFecha(fecha)) { showToast('Falta la Fecha', 'error'); return; }
   // (7 oct 2026) Al cerrar un aviso hay que decir si se usaron repuestos.
   if ((_modoForm === 'aviso' || _modoForm === 'ot') && !_repModo) {
     const card = document.getElementById('card-rep');
     card.classList.add('falta');
     card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    showToast('⚠️ Indica si usaste repuestos (Sin / Con repuestos)', 'error');
+    showToast('Indica si usaste repuestos (Sin / Con repuestos)', 'error');
     return;
   }
   if (_repModo === 'si') {
     // Lo que quedó escrito en la fila de agregar (sin tocar "+ Solicitar") también cuenta.
     const pendiente = ['rep-codigo', 'rep-desc', 'rep-cant'].some(id => document.getElementById(id).value.trim());
     if (pendiente && !agregarRepuesto()) return;
-    if (!_repItems.length) { showToast('⚠️ Agrega al menos un repuesto, o elige "Sin"', 'error'); return; }
+    if (!_repItems.length) { showToast('Agrega al menos un repuesto, o elige "Sin"', 'error'); return; }
   }
   // (28 oct 2026) Seguridad: LOTO obligatorio que falte y retiro del bloqueo abierto.
   _submitting = true;
@@ -2544,7 +2608,7 @@ async function submitForm() {
       });
     segTrasGuardar(seg, editing.id, editing.folio || record.Title);
     document.getElementById('loading').classList.remove('show');
-    showToast((navigator.onLine ? (esCierreAviso ? '✅ Aviso cerrado' : esRegistroOt ? '✅ ' + (editing.folio || 'OT') + ' registrada — pasa a revisión' : '✅ Cambios guardados') : '💾 Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
+    showToast((navigator.onLine ? (esCierreAviso ? 'Aviso cerrado' : esRegistroOt ? '' + (editing.folio || 'OT') + ' registrada — pasa a revisión' : 'Cambios guardados') : 'Guardado local — se subirá al volver la señal') + txtRep, navigator.onLine ? 'success' : 'warn');
     exitEditMode();
     goTo('historial', document.getElementById('nav-historial'));
     _submitting = false;
@@ -2576,7 +2640,7 @@ async function submitForm() {
   segTrasGuardar(seg, ref.id, folio);
 
   document.getElementById('loading').classList.remove('show');
-  showToast((navigator.onLine ? '✅ Registrado en la bitácora compartida (' + folio + ')' : '📵 Sin conexión — guardado local, se subirá después') + txtRep, navigator.onLine ? 'success' : 'warn');
+  showToast((navigator.onLine ? 'Registrado en la bitácora compartida (' + folio + ')' : 'Sin conexión — guardado local, se subirá después') + txtRep, navigator.onLine ? 'success' : 'warn');
 
   resetForm();
   window.scrollTo(0, 0);
@@ -2617,7 +2681,7 @@ function rcaLlenarHist(idx) {
 }
 
 // ══════ COPIA LOCAL DE LO GUARDADO (5 oct 2026) ══════
-// Antes: "✅ Guardado" + formulario limpio ANTES de que Firebase confirmara.
+// Antes: "<span data-icon="check-circle" class="ic-ok"></span> Guardado" + formulario limpio ANTES de que Firebase confirmara.
 // Si después el servidor rechazaba la escritura (permiso, regla, sesión
 // vencida) lo escrito se perdía sin aviso. Ahora, antes de limpiar, se guarda
 // una copia en este celular; se borra cuando Firebase confirma. Si lo
@@ -2643,7 +2707,7 @@ function borradorMarcarFallido(id, msg) {
   const l = borradoresLeer();
   const b = l.find(x => x.id === id);
   if (b) { b.fallido = true; b.error = msg || ''; borradoresGuardar(l); }
-  showToast('❌ NO se guardó en la nube: ' + (msg || '') + ' — usa "Recuperar" en Nuevo para no perder lo escrito.', 'error', 12000);
+  showToast('NO se guardó en la nube: ' + (msg || '') + ' — usa "Recuperar" en Nuevo para no perder lo escrito.', 'error', 12000);
   renderBorradorBanner();
 }
 function renderBorradorBanner() {
@@ -2657,7 +2721,7 @@ function renderBorradorBanner() {
     const titulo = [r.FECHA, r.LINEA_EQUIPO, r.EQUIPO].filter(Boolean).join(' · ') || 'Registro';
     // Solo el id del documento va dentro del onclick (es seguro).
     return `<div style="flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-      <div><p style="color:var(--color-danger-text);">⚠️ No se subió: ${esc(titulo)}</p><small>${esc(b.error || 'Firebase rechazó el cambio')} · ${b.modo === 'editar' ? 'edición' : 'registro nuevo'}</small></div>
+      <div><p style="color:var(--color-danger-text);"><span data-icon="alert"></span> No se subió: ${esc(titulo)}</p><small>${esc(b.error || 'Firebase rechazó el cambio')} · ${b.modo === 'editar' ? 'edición' : 'registro nuevo'}</small></div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
         <button class="btn btn-primary btn-sm" onclick="borradorRecuperar('${esc(b.id)}')">Recuperar</button>
         <button class="btn btn-secondary btn-sm" onclick="borradorDescartar('${esc(b.id)}')">Descartar</button>
@@ -2693,11 +2757,14 @@ function borradorRecuperar(id) {
   borradoresGuardar(borradoresLeer().filter(x => x.id !== id));
   renderBorradorBanner();
   window.scrollTo(0, 0);
-  showToast('📋 Registro recuperado — revisa y vuelve a guardar');
+  showToast('Registro recuperado — revisa y vuelve a guardar');
 }
+// (v3 etapa 3b) Reversible en el celular: se descarta ya y el aviso ofrece "Deshacer".
 function borradorDescartar(id) {
-  if (!confirm('¿Descartar este registro que no se subió? Se perderá lo escrito.')) return;
+  const b = borradoresLeer().find(x => x.id === id);
+  if (!window.vtDeshacer && !confirm('¿Descartar este registro que no se subió? Se perderá lo escrito.')) return;
   borradorQuitar(id);
+  if (window.vtDeshacer && b) vtDeshacer('Registro descartado', () => { borradorAgregar(b); renderBorradorBanner(); });
 }
 
 // Copias que quedaron de una sesión anterior (se cerró la app antes de que
@@ -2830,7 +2897,7 @@ function renderHistory() {
   window._historyFiltrada = filtered; // (Etapa 3) lo que se ve, para el Excel
 
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty"><span class="emoji">📭</span><p>Sin registros${q || (ubicHist && ubicHist.activo()) ? ' con ese filtro' : ''}.<br/>Crea el primero en "Nuevo".</p></div>`;
+    list.innerHTML = `<div class="empty"><span class="emoji"><span data-icon="inbox"></span></span><p>Sin registros${q || (ubicHist && ubicHist.activo()) ? ' con ese filtro' : ''}.<br/>Crea el primero en "Nuevo".</p></div>`;
     return;
   }
 
@@ -2842,31 +2909,31 @@ function renderHistory() {
     const tipo = (r.TIPO_MANTENIMIENTO || '').toLowerCase().replace(/[^a-z]/g, '');
     const esParo = r.PARO_PLANTA === 'si';
     const tags = `<span class="tag tag-${tipo}">${esc(r.TIPO_MANTENIMIENTO||'—')}</span>
-      ${r._pending ? '<span class="tag tag-local">SIN SUBIR</span>' : '<span class="tag tag-synced">☁️ ✓</span>'}
+      ${r._pending ? '<span class="tag tag-local">SIN SUBIR</span>' : '<span class="tag tag-synced"><span data-icon="cloud"></span> <span data-icon="check"></span></span>'}
       ${otReportadaEnRevision(r) ? `<span class="tag tag-revision">${r.estado === 'validada' ? 'VALIDADA' : 'EN REVISIÓN'}</span>` : ''}
-      ${esParo ? '<span class="tag tag-paro">🚨 PARÓ</span>' : ''}
-      ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta">🔴 ALTA</span>' : ''}`;
+      ${esParo ? '<span class="tag tag-paro"><span data-icon="siren"></span> PARÓ</span>' : ''}
+      ${r.PRIORIDAD === 'alta' ? '<span class="tag tag-prioridad-alta"><span data-icon="dot" style="color:var(--color-danger)"></span> ALTA</span>' : ''}`;
     const sem = fbSemanaISO(r.FECHA) || r.SEMANA || '?';
     const minMaq = Number(r.TOTAL_MIN_MAQUINA) || 0;
     // (7 oct 2026) Línea compacta de repuestos / herramientas usadas.
     const nRep = Array.isArray(r.REPUESTOS) ? r.REPUESTOS.length : 0;
     const nHer = Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS.length : 0;
-    const uso = [nRep ? `🔩 ${nRep} repuesto${nRep === 1 ? '' : 's'}` : '', nHer ? `🧰 ${nHer} herramienta${nHer === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+    const uso = [nRep ? `${nRep} repuesto${nRep === 1 ? '' : 's'}` : '', nHer ? `${nHer} herramienta${nHer === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     return `<div class="hist-item ${tipo}">
       <div class="hist-header">
         <div>
           <div class="hist-title">${esc(r.LINEA_EQUIPO||'—')}${r.LINEA ? ' · '+esc(r.LINEA) : ''} ${r.EQUIPO ? '· '+esc(r.EQUIPO) : ''}</div>
-          <div class="hist-date">📅 ${esc(r.FECHA||'')} · Sem.${esc(sem)} ${r.PLANTA ? '· 🏭 '+esc(r.PLANTA) : ''} ${r.TECNICOS ? '· 👷 '+esc(String(r.TECNICOS).split(',')[0]) : ''}</div>
+          <div class="hist-date"><span data-icon="calendar"></span> ${esc(r.FECHA||'')} · Sem.${esc(sem)} ${r.PLANTA ? '· <span data-icon="factory"></span> '+esc(r.PLANTA) : ''} ${r.TECNICOS ? '· <span data-icon="hardhat"></span> '+esc(String(r.TECNICOS).split(',')[0]) : ''}</div>
         </div>
         <div class="hist-tags">${tags}</div>
       </div>
       <div class="hist-desc"><strong>Falla:</strong> ${r.CAUSA_FALLA ? '['+esc(r.CAUSA_FALLA)+'] ' : ''}${esc(r.DESCRIPCION_FALLA||'—')}</div>
       ${r.DESCRIPCION_SOLUCION ? `<div class="hist-desc" style="margin-top:4px"><strong>Solución:</strong> ${esc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
       ${uso ? `<div class="hist-uso">${uso}</div>` : ''}
-      ${typeof fbRcaEstado === 'function' && fbRcaEstado(r) ? `<div class="hist-rca">${fbRcaBadge(r)}${fbRcaEstado(r) === 'pendiente' ? ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})">🔍 Llenar análisis</button>` : ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})">Ver / corregir</button>`}</div>` : ''}
+      ${typeof fbRcaEstado === 'function' && fbRcaEstado(r) ? `<div class="hist-rca">${fbRcaBadge(r)}${fbRcaEstado(r) === 'pendiente' ? ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})"><span data-icon="search"></span> Llenar análisis</button>` : ` <button class="btn btn-secondary btn-sm" onclick="rcaLlenarHist(${idx})">Ver / corregir</button>`}</div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-        ${minMaq > 0 ? `<div style="font-size:12px;color:var(--muted);">⏱ ${minMaq} min máquina</div>` : '<div></div>'}
-        <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})">✏️ Editar</button>
+        ${minMaq > 0 ? `<div style="font-size:12px;color:var(--muted);"><span data-icon="timer"></span> ${minMaq} min máquina</div>` : '<div></div>'}
+        <button class="btn btn-secondary btn-sm" onclick="editRecord(${idx})"><span data-icon="pencil"></span> Editar</button>
       </div>
     </div>`;
   }).join('');
@@ -2906,7 +2973,7 @@ const msFecha = f => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(f || ''); retu
 const msHoy = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 const msLunes = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
 const msAddDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const msKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const msKey = d => fbFechaLocal(d); // (v3 etapa 3a) la fecha local común (mismo formato)
 const msHM = m => { if (m == null || isNaN(m)) return '—'; m = Math.round(m); const h = Math.floor(m / 60), mm = m % 60; return h ? `${h}h ${String(mm).padStart(2, '0')}m` : `${mm}m`; };
 const msNoResuelto = s => { s = msNorm(s); return ['no solucionado','no solucionada','no resuelto','sin solucionar','no terminado','pendiente'].some(x => s.includes(x)); };
 const msTipo = r => (r.TIPO_MANTENIMIENTO || '').toLowerCase();
@@ -2976,8 +3043,9 @@ function msStatsSemana(tec, lunes, cfg) {
     // % de la jornada usado en OTs: solo días laborables ya terminados (igual que el inactivo)
     util: jornada ? Math.min(100, dias.reduce((s, d) => s + (d.jornada ? d.trab : 0), 0) / jornada * 100) : null,
     ots: rows.length, corr: corr.length, prev: rows.filter(r => msTipo(r) === 'preventivo').length,
-    reparacion: corrT.length ? corrT.reduce((s, r) => s + Number(r.TOTAL_MIN_TECNICO), 0) / corrT.length : null,
-    respuesta: resp.length ? resp.reduce((a, b) => a + b, 0) / resp.length : null,
+    // (v3 etapa 3a) promedios con kpis.js (la misma cuenta del tiempo técnico promedio de Análisis)
+    reparacion: VTKpis.promedio(corrT.map(r => Number(r.TOTAL_MIN_TECNICO))),
+    respuesta: VTKpis.promedio(resp),
     noRes: corr.length ? corr.filter(r => msNoResuelto(r.DESCRIPCION_SOLUCION)).length / corr.length * 100 : null,
     sinFinal: rows.filter(r => !r.H_FINAL).length,
     // fracción de la semana laboral ya transcurrida (1 = semana completa)
@@ -3102,9 +3170,9 @@ function renderMsAvance(lunes, cfg) {
   const buenas = insights.filter(i => i.cls === 'bien').slice(0, 2), malas = insights.filter(i => i.cls === 'mal').slice(0, 2);
   document.getElementById('ms-insights').innerHTML = !previas.length
     ? '<div class="ms-insight">Todavía no hay semanas anteriores con OTs para comparar.</div>'
-    : (buenas.map(i => `<div class="ms-insight">✅ <b>Mejoró</b> — ${msEsc(i.txt)}.</div>`).join('')
-      + malas.map(i => `<div class="ms-insight">⚠️ <b>A revisar</b> — ${msEsc(i.txt)}.</div>`).join('')
-      || '<div class="ms-insight">➖ Semana estable: ningún indicador cambió más de 15% frente a las 4 semanas anteriores.</div>');
+    : (buenas.map(i => `<div class="ms-insight"><span data-icon="check-circle"></span> <b>Mejoró</b> — ${msEsc(i.txt)}.</div>`).join('')
+      + malas.map(i => `<div class="ms-insight"><span data-icon="alert"></span> <b>A revisar</b> — ${msEsc(i.txt)}.</div>`).join('')
+      || '<div class="ms-insight"><span data-icon="minus"></span> Semana estable: ningún indicador cambió más de 15% frente a las 4 semanas anteriores.</div>');
 }
 
 function renderMsOts(rows) {
@@ -3118,9 +3186,9 @@ function renderMsOts(rows) {
     const resp = r.H_INICIO && r.H_TECNICO ? fbMinutosEntre(r.H_INICIO, r.H_TECNICO) : null; // (5 oct 2026) cruza medianoche
     return `<div class="ms-ot ${msEsc(tipo)}">
       <div class="top"><span>${d ? MS_DIAS[(d.getDay() + 6) % 7] + ' ' + d.getDate() : msEsc(r.FECHA)} · ${msEsc(eq)}</span><span style="color:var(--muted);font-weight:600;">${msEsc(r.TIPO_MANTENIMIENTO || '')}</span></div>
-      <div class="meta">📍 ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · 🕐 ' + horas : ''} · ⏱ ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--color-warn-text)">sin hora final</span>' : ''}</div>
+      <div class="meta"><span data-icon="pin"></span> ${msEsc(r.LINEA_EQUIPO || '—')}${horas ? ' · <span data-icon="clock"></span> ' + horas : ''} · <span data-icon="timer"></span> ${Number(r.TOTAL_MIN_TECNICO) || 0} min${resp != null && resp >= 0 ? ' · respuesta ' + msHM(resp) : ''}${otros.length ? ' · con ' + msEsc(otros.join(', ')) : ''}${!r.H_FINAL ? ' · <span style="color:var(--color-warn-text)">sin hora final</span>' : ''}</div>
       <div class="meta" style="color:var(--text);margin-top:3px;">${r.CAUSA_FALLA ? '[' + msEsc(r.CAUSA_FALLA) + '] ' : ''}${msEsc(r.DESCRIPCION_FALLA || '')}</div>
-      ${r.DESCRIPCION_SOLUCION ? `<div class="sol">✓ ${msEsc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
+      ${r.DESCRIPCION_SOLUCION ? `<div class="sol"><span data-icon="check"></span> ${msEsc(r.DESCRIPCION_SOLUCION)}</div>` : ''}
     </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px 0;">Sin OTs registradas en esta semana.</div>';
 }
@@ -3196,15 +3264,20 @@ function actualizarBadgeAvisos() {
   const badge = document.getElementById('avisos-badge');
   if (!badge) return;
   // (28 oct 2026) + permisos de trabajo por autorizar (Supervisor / Encargado / Admin)
-  const n = avisos.filter(r => r.estado === 'pendiente').length + _misTrabajosLista().length + (typeof fbSegPorAutorizar === 'function' && esSupervisorB() ? fbSegPorAutorizar().length : 0);
+  // (v3 etapa 3a) Avisos = paradas pendientes + permisos por autorizar; Asignados = mis trabajos (antes todo en un número)
+  const n = avisos.filter(r => r.estado === 'pendiente').length + (typeof fbSegPorAutorizar === 'function' && esSupervisorB() ? fbSegPorAutorizar().length : 0);
+  const nAsig = _misTrabajosLista().length;
   badge.textContent = n;
   badge.style.display = n ? '' : 'none';
+  const ba = document.getElementById('asig-badge');
+  if (ba) { ba.textContent = nAsig; ba.style.display = nAsig ? '' : 'none'; }
+  vtQuizasAbrirAvisos(n, nAsig);
 }
 
 function alertarAviso(r) {
   const eq = avEquipo(r);
   const dup = avAvisoPrevioMismoEquipo(r) ? ' (posible duplicado)' : '';
-  const txt = `🚨 ${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${eq.nombre}${eq.localidad ? ' (' + eq.localidad + ')' : ''}${dup}`;
+  const txt = `${r.maquinaParada ? 'Máquina parada' : 'Falla reportada'}: ${eq.nombre}${eq.localidad ? ' (' + eq.localidad + ')' : ''}${dup}`;
   showToast(txt, 'error');
   avVibrarYSonar();
   avNotificacionSistema('Nueva parada reportada', `${eq.nombre}${dup} — ${r.descripcionFalla || ''}`, 'aviso-' + r.id);
@@ -3241,7 +3314,7 @@ async function activarAvisos() {
     try { const p = await Notification.requestPermission(); estado = p === 'granted' ? 'notificaciones y sonido activados' : 'sonido activado (el celular bloqueó las notificaciones)'; } catch (e) {}
   }
   try { localStorage.setItem('mant_avisos_on', '1'); } catch (e) {}
-  showToast('🔔 Avisos: ' + estado);
+  showToast('Avisos: ' + estado);
   renderAvisos();
 }
 // El navegador solo deja sonar audio después de un toque: se prepara con el primero.
@@ -3254,17 +3327,19 @@ function renderAvisos() {
   // (23 oct 2026) Arriba mis trabajos asignados; abajo (supervisión) los de todos.
   const segBox = document.getElementById('seg-avisos');
   if (segBox) segBox.innerHTML = typeof fbSegSeccionHtml === 'function' ? fbSegSeccionHtml() : '';
-  const nMios = renderAsignadosMios();
+  // (v3 etapa 3a) Los asignados se pintan en su propia sección (Asignados); se siguen poniendo al día desde aquí.
+  renderAsignadosMios();
   renderAsignadosTodos();
+  const nMios = 0;
   renderAnuladasWrap();
-  const cab = nMios ? '<div class="av-sec">🚨 Paradas y fallas de producción</div>' : '';
+  const cab = nMios ? '<div class="av-sec"><span data-icon="siren"></span> Paradas y fallas de producción</div>' : '';
   const orden = { pendiente: 0, en_atencion: 1 };
   const lista = [...avisos].sort((a, b) => (orden[a.estado] - orden[b.estado]) || ((b.maquinaParada ? 1 : 0) - (a.maquinaParada ? 1 : 0))
     || ({ alta: 0, media: 1, baja: 2 }[a.prioridad] ?? 1) - ({ alta: 0, media: 1, baja: 2 }[b.prioridad] ?? 1)
     // (28 oct 2026) Con la misma prioridad, primero los equipos críticos (A, luego B, C, sin evaluar).
     || (critOrden(critDeAviso(a)) - critOrden(critDeAviso(b)))
     || ((a.fechaReporte || '') + (a.horaParada || '')).localeCompare((b.fechaReporte || '') + (b.horaParada || '')));
-  if (!lista.length) { wrap.innerHTML = cab + `<div class="empty" style="padding:${nMios ? '16px' : '40px'} 10px;"><span class="emoji" style="font-size:${nMios ? '28px' : '40px'};display:block;margin-bottom:10px;">✅</span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>`; return; }
+  if (!lista.length) { wrap.innerHTML = cab + `<div class="empty" style="padding:${nMios ? '16px' : '40px'} 10px;"><span class="emoji" style="font-size:${nMios ? '28px' : '40px'};display:block;margin-bottom:10px;"><span data-icon="check-circle"></span></span><p style="color:var(--muted)">No hay paradas pendientes.</p></div>`; return; }
   const esSup = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
   // (23 oct 2026) Solo el Administrador anula solicitudes de producción.
   const esAdmin = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
@@ -3277,21 +3352,21 @@ function renderAvisos() {
     // (5 oct 2026) "Anular (duplicado)": pendiente, o en atención si es mío o soy supervisor+.
     // (23 oct 2026) Ahora SOLO el Administrador (pedido del dueño; la regla también lo exige).
     const puedeAnular = esAdmin;
-    const btnAnular = puedeAnular ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%;font-size:12px;" onclick="anularAviso('${esc(r.id)}')">🚫 Anular (duplicado)</button>` : '';
+    const btnAnular = puedeAnular ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%;font-size:12px;" onclick="anularAviso('${esc(r.id)}')"><span data-icon="ban"></span> Anular (duplicado)</button>` : '';
     const acciones = r.estado === 'pendiente'
-      ? `<button class="btn btn-primary" onclick="atenderAviso('${esc(r.id)}')">🏃 Voy a atenderlo</button>`
+      ? `<button class="btn btn-primary" onclick="atenderAviso('${esc(r.id)}')"><span data-icon="activity"></span> Voy a atenderlo</button>`
       // (5 oct 2026) Solo quien lo tomó (o Supervisor y más) puede cerrarlo:
       // a los demás se les dice quién lo atiende en vez de dejarles llenar
       // todo el formulario para que al final Firebase lo rechace.
       : (mio || esSup || !r.asignadoUid)
-        ? `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${esc(r.id)}')">✅ Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${esc(r.id)}')">↩ Soltar</button>` : ''}</div>`
-        : `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:8px;">🔧 Lo está atendiendo ${esc(r.asignadoA || 'otro técnico')}</div>`;
-    const badgeDup = previo ? `<div class="av-dup">⚠️ Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
+        ? `<div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:2" onclick="cerrarAviso('${esc(r.id)}')"><span data-icon="check-circle"></span> Terminé — registrar OT</button>${mio ? `<button class="btn btn-secondary" style="flex:1" onclick="soltarAviso('${esc(r.id)}')"><span data-icon="arrow-left"></span> Soltar</button>` : ''}</div>`
+        : `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:8px;"><span data-icon="wrench"></span> Lo está atendiendo ${esc(r.asignadoA || 'otro técnico')}</div>`;
+    const badgeDup = previo ? `<div class="av-dup"><span data-icon="alert"></span> Posible duplicado de ${esc(previo.folio || 'otro aviso abierto')}</div>` : '';
     return `<div class="av-card ${r.estado === 'pendiente' ? 'pendiente' : 'en_atencion'} ${r.maquinaParada ? 'parada' : ''}" data-aviso="${esc(r.id)}">
-      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')} ${critBadge(critDeAviso(r))}</div><div class="av-meta">📍 ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
-        <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '⛔ parada' : '⚠️ falla'}<b>${avFmt(min)}</b></div></div>
-      <div class="av-desc">${esc(r.descripcionFalla || '')}</div>
-      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + esc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + esc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--color-primary-text)">🔧 ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + esc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + esc(r.horaLlegada) : ''}</b>` : ''}</div>
+      <div class="av-top"><div><div class="av-eq">${esc(eq.nombre || '—')} ${critBadge(critDeAviso(r))}</div><div class="av-meta"><span data-icon="pin"></span> ${esc(eq.localidad || '—')} · ${esc(r.folio || '')} · reportó ${esc(r.creadoPor || '—')}</div>${badgeDup}</div>
+        <div class="av-timer ${min != null && min >= 30 ? 'tarde' : ''}">${r.maquinaParada ? '<span data-icon="stop"></span> parada' : '<span data-icon="alert"></span> falla'}<b>${avFmt(min)}</b></div></div>
+      <div class="av-desc">${typeof traductor !== 'undefined' ? traductor.html(r, 'descripcionFalla', { col: 'ots' }) : esc(r.descripcionFalla || '')}</div>
+      <div class="av-meta" style="margin-bottom:10px;">${r.prioridad ? 'Prioridad ' + esc(r.prioridad) + ' · ' : ''}${r.horaParada ? 'desde ' + esc(r.horaParada) : ''}${r.estado === 'en_atencion' ? ` · <b style="color:var(--color-primary-text)"><span data-icon="wrench"></span> ${mio ? 'Lo estás atendiendo' : 'Atendiendo: ' + esc(r.asignadoA || '—')}${r.horaLlegada ? ' desde ' + esc(r.horaLlegada) : ''}</b>` : ''}</div>
       ${r.estado === 'en_atencion' && mio ? segLineaAviso(r) : ''}
       ${acciones}
       ${btnAnular}
@@ -3309,19 +3384,19 @@ setInterval(() => { if (document.getElementById('screen-avisos').classList.conta
 function atenderAviso(id) {
   const r = avisos.find(x => x.id === id);
   if (r && r.estado !== 'pendiente') {
-    showToast(`⚠️ Este aviso ya lo tomó ${r.asignadoA || 'otro técnico'}`, 'error');
+    showToast(`Este aviso ya lo tomó ${r.asignadoA || 'otro técnico'}`, 'error');
     renderAvisos();
     return;
   }
-  if (!window.currentUser) { showToast('⚠️ Sesión no lista todavía, intenta de nuevo', 'error'); return; }
+  if (!window.currentUser) { showToast('Sesión no lista todavía, intenta de nuevo', 'error'); return; }
   db.collection('ots').doc(id).update({
     estado: 'en_atencion', asignadoA: avMiNombre(), asignadoUid: window.currentUser.uid,
     horaLlegada: avAhora(), atendidoEn: fbTimestamp(),
     editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
   }).catch(e => showToast(e && e.code === 'permission-denied'
-      ? '⚠️ Este aviso ya lo tomó otro técnico — revisa la lista'
-      : '❌ No se pudo tomar el aviso: ' + e.message, 'error', 8000));
-  showToast('🏃 Aviso tomado — producción ya ve que vas en camino');
+      ? 'Este aviso ya lo tomó otro técnico — revisa la lista'
+      : 'No se pudo tomar el aviso: ' + e.message, 'error', 8000));
+  showToast('Aviso tomado — producción ya ve que vas en camino');
   // (28 oct 2026) Antes de empezar: paso de seguridad (LOTO / permiso de trabajo).
   if (r) segPasoAviso(r.id);
 }
@@ -3330,8 +3405,8 @@ function soltarAviso(id) {
     estado: 'pendiente', asignadoA: null, asignadoUid: null, horaLlegada: null,
     editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
   }).catch(e => showToast(e && e.code === 'permission-denied'
-      ? '⚠️ Solo el técnico que tomó el aviso (o un supervisor) puede soltarlo'
-      : '❌ No se pudo soltar el aviso: ' + e.message, 'error', 8000));
+      ? 'Solo el técnico que tomó el aviso (o un supervisor) puede soltarlo'
+      : 'No se pudo soltar el aviso: ' + e.message, 'error', 8000));
 }
 // (5 oct 2026) Anular un aviso repetido (dos reportes de la misma parada).
 // Queda guardado como 'anulada' con quién, cuándo y por qué; no aparece en
@@ -3344,7 +3419,7 @@ let _anularId = null;
 function anularAviso(id) {
   const r = avisos.find(x => x.id === id);
   if (!r) return;
-  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) { showToast('⛔ Solo el Administrador puede anular avisos', 'error'); return; }
+  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) { showToast('Solo el Administrador puede anular avisos', 'error'); return; }
   const previo = avAvisoPrevioMismoEquipo(r);
   _anularId = id;
   document.getElementById('anular-sub').textContent = `${r.folio || 'Aviso'} · ${avEquipo(r).nombre || 'equipo'} — ${r.descripcionFalla || ''}`.slice(0, 220);
@@ -3367,9 +3442,9 @@ function confirmarAnular() {
     estado: 'anulada', anuladoPor: miNombreUsuario(), anuladoEn: fbTimestamp(), motivoAnulacion: motivo.slice(0, 300),
     editadoPor: miNombreUsuario(), editadoEn: fbTimestamp(),
   }).catch(e => showToast(e && e.code === 'permission-denied'
-      ? '⚠️ No se pudo anular: solo el Administrador puede anular, y el aviso no debe estar cerrado'
-      : '❌ No se pudo anular el aviso: ' + e.message, 'error', 8000));
-  showToast('🚫 Aviso anulado', 'warn');
+      ? 'No se pudo anular: solo el Administrador puede anular, y el aviso no debe estar cerrado'
+      : 'No se pudo anular el aviso: ' + e.message, 'error', 8000));
+  showToast('Aviso anulado', 'warn');
   if (_anuladasAbiertas) setTimeout(cargarAnuladas, 800);
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && _anularId) cerrarModalAnular(); });
@@ -3417,7 +3492,7 @@ function critDeAviso(r) {
   const e = _equiposCanonicos.find(x => x.id === r.equipoId);
   return critDeEq(e || r.equipoId);
 }
-const critSufijo = e => { const n = critDeEq(e); return n === 'A' ? ' · 🔴 A · Crítico' : n === 'B' ? ' · B · Importante' : ''; };
+const critSufijo = e => { const n = critDeEq(e); return n === 'A' ? ' · A · Crítico' : n === 'B' ? ' · B · Importante' : ''; };
 function renderEqCrit() {
   const el = document.getElementById('eq-crit');
   if (!el) return;
@@ -3459,14 +3534,14 @@ function renderSegForm() {
   document.getElementById('seg-crit').innerHTML = critBadge(critDeEq(e));
   let h;
   if (p) h = fbSegTarjetaHtml(p, { acciones: false }) + (p.estado !== 'cerrado' ? '<div class="nf-count">Al guardar te pedimos retirar el bloqueo.</div>' : '');
-  else if (ob.si) h = `<div class="fbs-card falta" id="seg-falta"><div class="t">⚠️ Falta el bloqueo (LOTO)</div><div class="m">Obligatorio: ${esc(ob.motivo)}. Hazlo antes de meter las manos.</div><div class="acc"><button type="button" class="fbsh-btn ok sm" onclick="segAbrirPasoForm()">🦺 Hacer LOTO ahora</button></div></div>`;
-  else h = `<div class="nf-row"><span class="nf-count">¿Vas a meter las manos o hay un riesgo especial?</span><button type="button" class="btn btn-secondary btn-sm" onclick="segAbrirPasoForm()">🦺 Antes de empezar</button></div>`;
+  else if (ob.si) h = `<div class="fbs-card falta" id="seg-falta"><div class="t"><span data-icon="alert"></span> Falta el bloqueo (LOTO)</div><div class="m">Obligatorio: ${esc(ob.motivo)}. Hazlo antes de meter las manos.</div><div class="acc"><button type="button" class="fbsh-btn ok sm" onclick="segAbrirPasoForm()"><span data-icon="shield"></span> Hacer LOTO ahora</button></div></div>`;
+  else h = `<div class="nf-row"><span class="nf-count">¿Vas a meter las manos o hay un riesgo especial?</span><button type="button" class="btn btn-secondary btn-sm" onclick="segAbrirPasoForm()"><span data-icon="shield"></span> Antes de empezar</button></div>`;
   document.getElementById('seg-body').innerHTML = h;
 }
 function segAbrirPasoForm() {
   if (!segPuede()) return;
   const e = segEquipoForm();
-  if (!e) { showToast('⚠️ Elige primero el equipo', 'error'); return; }
+  if (!e) { showToast('Elige primero el equipo', 'error'); return; }
   fbSegAbrirPaso({ equipo: e, ot: segJob(true), tipo: segTipo(), onListo: () => renderSegForm(), onCancelar: () => renderSegForm() });
 }
 function segPasoAviso(id) {
@@ -3483,8 +3558,8 @@ function segLineaAviso(r) {
   const p = fbSegPermisoDeOt(r.id, true);
   if (p) return fbSegTarjetaHtml(p, { acciones: false });
   const ob = fbSegLotoObligatorio(critDeAviso(r), 'Correctivo');
-  return `<div class="fbs-card ${ob.si ? 'falta' : ''}"><div class="t">${ob.si ? '⚠️ Falta el bloqueo (LOTO)' : '🦺 Seguridad'}</div><div class="m">${ob.si ? 'Obligatorio: ' + esc(ob.motivo) + '.' : 'Bloqueo y riesgos especiales antes de empezar.'}</div>
-    <div class="acc"><button type="button" class="fbsh-btn ${ob.si ? 'ok' : 'sec'} sm" onclick="segPasoAviso('${esc(r.id)}')">🦺 Antes de empezar</button></div></div>`;
+  return `<div class="fbs-card ${ob.si ? 'falta' : ''}"><div class="t">${ob.si ? '<span data-icon="alert"></span> Falta el bloqueo (LOTO)' : '<span data-icon="shield"></span> Seguridad'}</div><div class="m">${ob.si ? 'Obligatorio: ' + esc(ob.motivo) + '.' : 'Bloqueo y riesgos especiales antes de empezar.'}</div>
+    <div class="acc"><button type="button" class="fbsh-btn ${ob.si ? 'ok' : 'sec'} sm" onclick="segPasoAviso('${esc(r.id)}')"><span data-icon="shield"></span> Antes de empezar</button></div></div>`;
 }
 // Antes de guardar: { permiso, retiro } (o null = el técnico no completó el LOTO obligatorio).
 function segAntesDeGuardar() {
@@ -3501,10 +3576,10 @@ function segAntesDeGuardar() {
     };
     if (p) return conRetiro(p);
     if (!ob.si) return res(nada);
-    showToast('🦺 Este trabajo necesita bloqueo (LOTO): ' + ob.motivo, 'warn');
+    showToast('Este trabajo necesita bloqueo (LOTO): ' + ob.motivo, 'warn');
     fbSegAbrirPaso({ equipo: segEquipoForm(), ot: segJob(true), tipo: segTipo(),
       onListo: permiso => { renderSegForm(); conRetiro(permiso); },
-      onCancelar: () => { renderSegForm(); showToast('⚠️ El LOTO es obligatorio en este equipo: complétalo para guardar', 'error'); res(null); } });
+      onCancelar: () => { renderSegForm(); showToast('El LOTO es obligatorio en este equipo: complétalo para guardar', 'error'); res(null); } });
   }));
 }
 // Después de mandar la OT: cierra el permiso (retiro) o lo enlaza con la OT. Aparte de la OT:
@@ -3573,23 +3648,15 @@ function csvEscape(v){
 // exporta siempre TODAS las OTs, sin importar el filtro de búsqueda.
 function exportHistoryCSV(full) {
   const rows = full ? allRecords : ((window._historyCache && window._historyCache.length) ? window._historyCache : allRecords);
-  if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
+  if (!rows.length) { showToast('No hay registros para exportar', 'error'); return; }
   const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad','Repuestos','Herramientas'];
-  let csv = headers.join(',') + '\n';
-  rows.forEach(r=>{
-    csv += [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD,
+  const filas = rows.map(r => [r.Title, r.FECHA, r.SEMANA, r.PLANTA, r.LINEA_EQUIPO, r.LINEA, r.TIPO_MAQUINA, r.EQUIPO, r.PIEZA, r.TIPO_MANTENIMIENTO, r.ME, r.GENERA_OT, r.PARO_PLANTA, r.TECNICOS, r.H_INICIO, r.H_TECNICO, r.H_FINAL, r.TOTAL_MIN_MAQUINA, r.TOTAL_MIN_TECNICO, r.CAUSA_FALLA, r.DESCRIPCION_FALLA, r.DESCRIPCION_SOLUCION, r.PRIORIDAD,
       (Array.isArray(r.REPUESTOS) ? r.REPUESTOS : []).map(i => `${i.cantidad} x ${i.descripcion}${i.codigo ? ' (' + i.codigo + ')' : ''}`).join('; '), // (7 oct 2026)
-      (Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS : []).map(h => h.nombre || h.codigo).join('; ')]
-      .map(csvEscape).join(',') + '\n';
-  });
+      (Array.isArray(r.HERRAMIENTAS) ? r.HERRAMIENTAS : []).map(h => h.nombre || h.codigo).join('; ')]);
   const suffix = (!full && document.getElementById('search-input').value.trim()) ? '_filtrado' : '';
-  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'reporte_bitacora'+suffix+'_'+fbHoy()+'.csv'; // (5 oct 2026) fecha local, no UTC
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('📊 Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
+  // (v3 etapa 3a) Mismo archivo de siempre (comas, cada dato entre comillas), por el exportador común (filtros.js)
+  fbExportar({ nombre: 'reporte_bitacora' + suffix + '_' + fbHoy(), hojas: [{ nombre: 'Bitácora', columnas: headers.map(t => ({ t })), filas }], csv: true, csvFormato: 'comillas' }); // (5 oct 2026) fecha local, no UTC
+  showToast('Reporte exportado (' + rows.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ') — ábrelo con Excel');
 }
 
 // (25 oct 2026, Etapa 3) Excel (.xlsx) de lo que se ve en Historial (búsqueda
@@ -3597,7 +3664,7 @@ function exportHistoryCSV(full) {
 function exportHistoryExcel() {
   if (!document.getElementById('screen-historial').classList.contains('active') || !window._historyFiltrada) renderHistory();
   const rows = window._historyFiltrada || [];
-  if (!rows.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
+  if (!rows.length) { showToast('No hay registros para exportar', 'error'); return; }
   const headers = ['OT','Fecha','Semana','Planta','Área/Línea','Línea','Tipo Máquina','Equipo','Pieza','Tipo Mantenimiento','M/E','Genera OT','Paro Planta','Técnicos','Hora Inicio','Hora Técnico','Hora Final','Min Máquina Parada','Min Técnico','Causa','Falla','Solución','Prioridad','Repuestos','Herramientas'];
   const filtro = ubicHist ? ubicHist.partes() : [];
   const q = document.getElementById('search-input').value.trim();
@@ -3610,16 +3677,7 @@ function exportHistoryExcel() {
 }
 
 // ══════ RESPALDO ══════
-function exportBackup() {
-  if (!allRecords.length) { showToast('⚠️ No hay registros para exportar', 'error'); return; }
-  const blob = new Blob([JSON.stringify(allRecords, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'bitacora_respaldo_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('⬇ Respaldo descargado (' + allRecords.length + ' OTs' + (_historialCompleto ? '' : `, últimos ${diasCargados()} días — para todo usa "Cargar historial completo" en Historial`) + ')');
-}
+// (v3 etapa 3a) exportBackup() (JSON de las OTs cargadas) se quitó: el respaldo completo está en Administración → Respaldo.
 
 // ══════ CONFIG ══════
 // CORRECCIÓN: este botón solo borraba la persistencia offline de Firestore
@@ -3649,9 +3707,9 @@ async function clearLocal() {
       const keys = await caches.keys();
       await Promise.all(keys.map(k => caches.delete(k)));
     }
-    showToast('🗑 Caché local limpiado — recargando…', 'warn');
+    showToast('Caché local limpiado — recargando…', 'warn');
   } catch (e) {
-    showToast('⚠️ No se pudo limpiar del todo (cierra todas las pestañas de la app e intenta de nuevo): ' + e.message, 'error');
+    showToast('No se pudo limpiar del todo (cierra todas las pestañas de la app e intenta de nuevo): ' + e.message, 'error');
   }
   setTimeout(() => location.reload(), 1200);
 }
@@ -3660,6 +3718,7 @@ async function clearLocal() {
 let toastTimer;
 // (5 oct 2026) ms opcional: los errores importantes se quedan más tiempo.
 function showToast(msg, type='success', ms) {
+  if (window.vtToast) return vtToast(msg, { tipo: type, ms });
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'show ' + (type==='error'?'error':type==='warn'?'warn':'');

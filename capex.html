@@ -14,8 +14,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n/shell.js"></script>
 <script src="filtros.js"></script>
-<script src="capex-i18n.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/capex.js"></script>
 <script src="capex-calc.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -23,7 +27,7 @@
 <link rel="stylesheet" href="tema.css"/>
 <style>
 /* ══════════════════════════════════════════════════════════════════════
-   💼 CAPEX — proyectos de inversión (29 oct 2026)
+   <span data-icon="briefcase"></span> CAPEX — proyectos de inversión (29 oct 2026)
    Solo Administrador y Encargado de mantenimiento (también en firestore.rules).
    Datos:  /capex/{id}            un proyecto (ver "MODELO" en el script)
            /config/capex          tasa de cambio por defecto, contingencia, ITBIS, empresa (sin montos)
@@ -43,9 +47,10 @@ button, input, select, textarea { font-family: inherit; }
 #header h1 { font-size: 18px; font-weight: 800; margin: 0; letter-spacing: .01em; }
 #header small { display: block; font-size: 11.5px; color: var(--color-header-sub); font-weight: 700; margin-top: 2px; }
 .hctl { display: flex; gap: 8px; flex-wrap: wrap; }
-.seg { display: inline-flex; border: 1px solid rgba(255,255,255,.28); border-radius: 9px; overflow: hidden; }
-.seg button { background: transparent; color: var(--color-header-text); border: 0; min-height: 34px; padding: 4px 11px; font-size: 12.5px; font-weight: 800; cursor: pointer; }
-.seg button + button { border-left: 1px solid rgba(255,255,255,.2); }
+.seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: 9px; overflow: hidden; background: var(--color-surface); }
+.seg button { background: transparent; color: var(--color-text); border: 0; min-height: 36px; padding: 4px 11px; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--color-border); }
+.cx-tools { max-width: 1240px; margin: 0 auto; padding: 12px 16px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .seg button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 12px 16px 70px; min-width: 0; }
 .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; min-width: 0; box-shadow: var(--shadow); }
@@ -285,13 +290,8 @@ html.ficha-abierta, html.ficha-abierta body { overflow: hidden; }
 </style>
 </head>
 <body>
-<div id="header"><div class="hrow">
-  <div><h1 id="hTitle">💼 CAPEX</h1><small id="hSub"></small></div>
-  <div class="hctl">
-    <div class="seg" id="segLang" role="group"><button type="button" data-lang="es" lang="es">ES</button><button type="button" data-lang="en" lang="en">EN</button><button type="button" data-lang="tr" lang="tr">TR</button></div>
-    <div class="seg" id="segCur" role="group"><button type="button" data-cur="DOP">RD$</button><button type="button" data-cur="USD">US$</button><button type="button" data-cur="both">RD$ + US$</button></div>
-  </div>
-</div></div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
+<div class="cx-tools"><div class="seg" id="segCur" role="group"><button type="button" data-cur="DOP">RD$</button><button type="button" data-cur="USD">US$</button><button type="button" data-cur="both">RD$ + US$</button></div></div>
 <div class="wrap" id="portWrap" style="display:none;padding-bottom:0">
   <div id="portTools"></div>
   <div class="card" style="padding:10px;margin-bottom:12px"><div id="fUbic"></div></div>
@@ -305,8 +305,8 @@ html.ficha-abierta, html.ficha-abierta body { overflow: hidden; }
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-// 💼 CAPEX — pantalla (vistas, ventanas, lecturas/escrituras y exportes). El modelo de datos y
-// todos los cálculos de dinero y de tiempo están en capex-calc.js; los textos en capex-i18n.js.
+// <span data-icon="briefcase"></span> CAPEX — pantalla (vistas, ventanas, lecturas/escrituras y exportes). El modelo de datos y
+// todos los cálculos de dinero y de tiempo están en capex-calc.js; los textos en i18n/capex.js (sistema de idiomas i18n.js).
 const $ = id => document.getElementById(id);
 const esc = s => fbEsc(s);
 const quien = () => (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
@@ -319,8 +319,9 @@ const PALETA = { sol: '#3987e5', apr: '#d95926', real: '#199e70', comp: '#c98500
 // ══════ IDIOMA Y FORMATO (Intl) ══════
 const I18N = window.CAPEX_I18N;
 const LOCALES = { es: 'es-DO', en: 'en-US', tr: 'tr-TR' };
-let LANG = 'es', CUR = 'both';
-try { const v = localStorage.getItem('capexLang'); if (LOCALES[v]) LANG = v; } catch (e) {}
+// (v3) El idioma es el de toda la app (i18n.js: este celular y el perfil del usuario).
+let LANG = (window.i18n && LOCALES[i18n.getLang()]) ? i18n.getLang() : 'es', CUR = 'both';
+if (!window.i18n) { try { const v = localStorage.getItem('capexLang'); if (LOCALES[v]) LANG = v; } catch (e) {} }
 try { const v = localStorage.getItem('capexMoneda'); if (['DOP', 'USD', 'both'].includes(v)) CUR = v; } catch (e) {}
 window.__i18nFaltan = [];
 function t(k, p) {
@@ -367,8 +368,8 @@ const charts = {};
 window.__capexLecturas = 0;
 
 let _toastT;
-function toast(msg, tipo) { const el = $('toast'); el.textContent = msg; el.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => { el.className = ''; }, 3600); }
-const fallo = e => { console.warn(e); toast('❌ ' + (e && e.code === 'permission-denied' ? t('err_perm') : e && e.code === 'aborted' ? t('err_conflict') : (e && e.message) || 'Error'), 'error'); };
+function toast(msg, tipo) { if (window.vtToast) return vtToast(msg, tipo); const el = $('toast'); el.textContent = msg; el.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => { el.className = ''; }, 3600); }
+const fallo = e => { console.warn(e); toast('' + (e && e.code === 'permission-denied' ? t('err_perm') : e && e.code === 'aborted' ? t('err_conflict') : (e && e.message) || 'Error'), 'error'); };
 function abrirModal(html) { $('modal').innerHTML = html; $('mbg').classList.add('open'); const f = $('modal').querySelector('input,select,textarea,button'); if (f) setTimeout(() => f.focus({ preventScroll: true }), 30); }
 function cerrarModal() { $('mbg').classList.remove('open'); $('modal').innerHTML = ''; }
 $('mbg').addEventListener('click', e => { if (e.target.id === 'mbg') cerrarModal(); });
@@ -380,22 +381,29 @@ function conLimite(prom, ms) { return Promise.race([prom, new Promise(r => setTi
 function pintarCabecera() {
   document.documentElement.lang = LANG === 'es' ? 'es-DO' : LANG === 'en' ? 'en' : 'tr';
   document.title = 'CAPEX — ' + t('appTitle').split('·').pop().trim();
-  $('hTitle').textContent = '💼 ' + t('appTitle');
-  const u = window.currentUserRole || {};
-  $('hSub').innerHTML = esc(t('appSub')) + (u.nombre ? ' · <span class="ut">' + esc(u.nombre) + '</span>' : '');
-  $('segLang').setAttribute('aria-label', t('lang')); $('segCur').setAttribute('aria-label', t('currency'));
-  $('segLang').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === LANG)));
+  // (v3 etapa 3a) Sin encabezado propio: el título, el usuario y el idioma (ES · EN · TR) están en el de la app.
+  $('segCur').setAttribute('aria-label', t('currency'));
   $('segCur').querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.cur === CUR)); if (b.dataset.cur === 'both') b.title = t('both'); });
-  $('fClose').textContent = '← ' + t('a_closeWin'); $('fPrint').textContent = '🖨 ' + t('a_print'); $('fXls').textContent = '⬇ ' + t('a_xls');
+  $('fClose').textContent = '← ' + t('a_closeWin'); $('fPrint').textContent = '' + t('a_print'); $('fXls').textContent = '' + t('a_xls');
 }
-$('segLang').addEventListener('click', e => { const b = e.target.closest('[data-lang]'); if (!b) return; setLang(b.dataset.lang); });
 $('segCur').addEventListener('click', e => { const b = e.target.closest('[data-cur]'); if (!b) return; CUR = b.dataset.cur; try { localStorage.setItem('capexMoneda', CUR); } catch (er) {} pintarCabecera(); repintar(); });
+// (v3) El selector de CAPEX cambia el idioma de toda la app (i18n.setLang), que avisa
+// con el evento 'idioma-cambiado'; CAPEX se repinta al recibirlo (también si el idioma
+// cambia desde otra pestaña o llega del perfil al iniciar sesión).
 function setLang(l) {
-  if (!LOCALES[l]) return; LANG = l;
-  if ($('mbg').classList.contains('open')) cerrarModal();
+  if (!LOCALES[l]) return;
+  if (window.i18n) { if (l === i18n.getLang() && l === LANG) return; if (i18n.setLang(l) && LANG !== l) aplicarIdioma(l); return; }
+  aplicarIdioma(l);
   try { localStorage.setItem('capexLang', l); } catch (e) {}
-  pintarCabecera(); traducirFiltro(); repintar();
 }
+function aplicarIdioma(l) {
+  if (!LOCALES[l] || l === LANG) return;
+  LANG = l;
+  if ($('mbg').classList.contains('open')) cerrarModal();
+  pintarCabecera();
+  if (window.__capexListo) { traducirFiltro(); repintar(); } // antes de cargar (idioma del perfil): solo la cabecera
+}
+window.addEventListener('idioma-cambiado', e => aplicarIdioma(e.detail && e.detail.lang));
 // La barra de filtros compartida (filtros.js) escribe "Todas las naves/áreas": se traduce aquí.
 function traducirFiltro() {
   const el = $('fUbic'); if (!el) return;
@@ -460,7 +468,7 @@ function stockDe(r) {
   if (kd && STOCK.desc.has(kd)) return STOCK.desc.get(kd);
   return null;
 }
-const stockHtml = n => n == null ? '' : n > 0 ? `<span class="stock sem-ok">📦 ${esc(t('r_hay', { n: fmtNum(n, n % 1 ? 1 : 0) }))}</span>` : `<span class="stock sem-bad">${esc(t('r_nohay'))}</span>`;
+const stockHtml = n => n == null ? '' : n > 0 ? `<span class="stock sem-ok"><span data-icon="package"></span> ${esc(t('r_hay', { n: fmtNum(n, n % 1 ? 1 : 0) }))}</span>` : `<span class="stock sem-bad">${esc(t('r_nohay'))}</span>`;
 
 // ══════ RUTAS (#p=ID · #nuevo · #nuevo&equipo=ID · #nuevo&dup=ID · #editar=ID) ══════
 function leerHash() {
@@ -507,13 +515,13 @@ function pintarHerramientas() {
       <div><label class="f" for="tAnio">${esc(t('year'))}</label><select id="tAnio">${anios.map(y => `<option value="${y}"${y === UI.anio ? ' selected' : ''}>${y}</option>`).join('')}</select></div>
       <div><label class="f" for="tEst">${esc(t('f_estado'))}</label><select id="tEst"><option value="">${esc(t('allStates'))}</option>${ESTADOS.map(e => `<option value="${e}"${e === UI.estado ? ' selected' : ''}>${esc(t('st_' + e))}</option>`).join('')}</select></div>
       <div class="tipo"><label class="f" for="tTipo">${esc(t('f_tipo'))}</label><select id="tTipo"><option value="">${esc(t('allTypes'))}</option>${TIPOS.map(e => `<option value="${e}"${e === UI.tipo ? ' selected' : ''}>${esc(t('tp_' + e))}</option>`).join('')}</select></div>
-      <div class="full"><label class="f" for="tQ">🔎 ${esc(t('search'))}</label><input id="tQ" type="search" value="${esc(UI.q)}" autocomplete="off"></div>
+      <div class="full"><label class="f" for="tQ"><span data-icon="search"></span> ${esc(t('search'))}</label><input id="tQ" type="search" value="${esc(UI.q)}" autocomplete="off"></div>
     </div>
     <div class="btns" style="margin:4px 0 10px">
       <a class="btn" href="#nuevo" id="bNuevo">${esc(t('newCapex'))}</a>
-      <button type="button" class="btn sec" id="bXlsPort">⬇ ${esc(t('a_xlsPortfolio'))}</button>
-      ${esAdmin() ? `<button type="button" class="btn sec" id="bPres">💰 ${esc(t('budget'))}</button><button type="button" class="btn sec" id="bCfg">⚙️ ${esc(t('settings'))}</button>` : ''}
-      <button type="button" class="btn sec" id="bAct" aria-label="${esc(t('refresh'))}" title="${esc(t('refresh'))}">🔄</button>
+      <button type="button" class="btn sec" id="bXlsPort"><span data-icon="download"></span> ${esc(t('a_xlsPortfolio'))}</button>
+      ${esAdmin() ? `<button type="button" class="btn sec" id="bPres"><span data-icon="coins"></span> ${esc(t('budget'))}</button><button type="button" class="btn sec" id="bCfg"><span data-icon="settings"></span> ${esc(t('settings'))}</button>` : ''}
+      <button type="button" class="btn sec" id="bAct" aria-label="${esc(t('refresh'))}" title="${esc(t('refresh'))}"><span data-icon="refresh"></span></button>
     </div>`;
   $('tAnio').onchange = e => { UI.anio = Number(e.target.value); pintar(); };
   $('tEst').onchange = e => { UI.estado = e.target.value; pintar(); };
@@ -540,7 +548,7 @@ async function vistaPortafolio() {
   app.innerHTML = `<div class="card empty">${esc(t('loading'))}</div>`;
   let lista; const anio = UI.anio;
   try { lista = await cargarAnio(anio); }
-  catch (e) { if (UI.vista === 'port' && UI.anio === anio) app.innerHTML = `<div class="card empty">⚠️ ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
+  catch (e) { if (UI.vista === 'port' && UI.anio === anio) app.innerHTML = `<div class="card empty"><span data-icon="alert" class="ic-warn"></span> ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
   if (UI.vista !== 'port' || UI.anio !== anio) return; // se cambió de año mientras se leía
   const vis = lista.filter(p => fbEnNave(p) && (!ubic || ubic.coincide(p, accesoCapex)) && (!UI.estado || p.estado === UI.estado) && (!UI.tipo || p.tipo === UI.tipo) && coincideTexto(p, UI.q));
   const P = calcPortafolio(vis); PORT = P;
@@ -583,7 +591,7 @@ async function vistaPortafolio() {
     <div>${cardG('chTipo', t('byType'), tablaSer(tipos, t('f_tipo'), x => esc(t('tp_' + x.tipo))))}</div></div>`;
   // Ranking
   const rank = P.filas.filter(f => !['cancelado', 'rechazado', 'cerrado'].includes(f.est));
-  if (rank.length) h += `<div class="card"><div class="ct">🏁 ${esc(t('ranking'))}</div><div class="cs">${esc(t('rankingSub'))}</div><div class="tw"><table class="rk"><thead><tr>
+  if (rank.length) h += `<div class="card"><div class="ct"><span data-icon="flag"></span> ${esc(t('ranking'))}</div><div class="cs">${esc(t('rankingSub'))}</div><div class="tw"><table class="rk"><thead><tr>
     <th>#</th><th>${esc(t('f_codigo'))}</th><th>${esc(t('f_titulo'))}</th><th>${esc(t('f_nave'))}</th><th>${esc(t('f_criticidad'))}</th><th>${esc(t('f_prioridad'))}</th><th>${esc(t('f_estado'))}</th>
     <th class="n">${esc(t('f_total'))}</th><th class="n">${esc(t('fin_payback'))}</th><th class="n">${esc(t('fin_roi'))}</th><th class="n">${esc(t('g_pct'))}</th></tr></thead><tbody>
     ${rank.map((f, i) => `<tr class="click" data-go="${esc(f.p.id)}"><td>${i + 1}</td><td class="cod" style="font-family:var(--font-mono)">${esc(f.p.codigo || '')}</td><td class="ut tit">${esc(f.p.titulo || '')}</td><td class="ut nav">${esc(f.nave || t('noNave'))}</td>
@@ -640,7 +648,7 @@ async function vistaDetalle() {
   const app = $('app');
   app.innerHTML = `<div class="card empty">${esc(t('loading'))}</div>`;
   let p; const id = UI.id;
-  try { p = await proyecto(id); } catch (e) { if (UI.vista === 'det' && UI.id === id) app.innerHTML = `<div class="card empty">⚠️ ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
+  try { p = await proyecto(id); } catch (e) { if (UI.vista === 'det' && UI.id === id) app.innerHTML = `<div class="card empty"><span data-icon="alert" class="ic-warn"></span> ${esc(t('err_load', { e: e.code || e.message }))}</div>`; return; }
   if (UI.vista !== 'det' || UI.id !== id) return; // se cambió de proyecto mientras se leía
   if (!p) { app.innerHTML = `<div class="card empty">${esc(t('notFound'))}<br><br><a class="btn sec" href="#">${esc(t('a_back'))}</a></div>`; return; }
   ACTUAL = p;
@@ -650,11 +658,11 @@ async function vistaDetalle() {
   const crit = critDe(p);
   window.__capexDet = { id: p.id, codigo: p.codigo, estado: p.estado, tot, fin, ej, cr: { fechaInicio: cr.fechaInicio, fechaFinProyectada: cr.fechaFinProyectada, duracionDias: cr.duracionDias, leadTimeMax: cr.leadTimeMax } };
   let h = `<div class="btns" style="margin-bottom:10px"><a class="btn sec sm" href="#">${esc(t('a_back'))}</a></div>`;
-  if (ap && ej.pct != null && ej.pct > 100) h += `<div class="alert bad" id="alGasto">${esc(t('al_100', { p: fmtPct(ej.pct) }))}</div>`;
-  else if (ap && ej.pct != null && ej.pct >= 90) h += `<div class="alert warn" id="alGasto">${esc(t('al_90', { p: fmtPct(ej.pct) }))}</div>`;
+  if (ap && ej.pct != null && ej.pct > 100) h += `<div class="alert bad" id="alGasto"><span data-icon="ban" class="ic-bad"></span> ${esc(t('al_100', { p: fmtPct(ej.pct) }))}</div>`;
+  else if (ap && ej.pct != null && ej.pct >= 90) h += `<div class="alert warn" id="alGasto"><span data-icon="alert" class="ic-warn"></span> ${esc(t('al_90', { p: fmtPct(ej.pct) }))}</div>`;
   const ult = (p.historial || []).slice(-1)[0];
   if (['rechazado', 'en_espera'].includes(p.estado) && ult && ult.nota) h += `<div class="alert ${p.estado === 'rechazado' ? 'bad' : 'warn'}">${estBadge(p.estado)} ${esc(t('d_lastNote'))}: <span class="ut">${esc(ult.nota)}</span></div>`;
-  if (ap) h += `<div class="alert info">${esc(t('lockedAfter'))}</div>`;
+  if (ap) h += `<div class="alert info"><span data-icon="lock"></span> ${esc(t('lockedAfter'))}</div>`;
   // Cabecera
   const equipos = (p.equipos || []).map(e => `<span class="ut">${esc(e.nombre || e.id)}</span> ${critBadge(fbCriticidadDeEquipo(e.id) || e.criticidad || '')}`).join(', ') || esc(t('none'));
   h += `<div class="card"><div class="dhead"><div style="min-width:0"><span class="code" style="font-family:var(--font-mono);color:var(--color-muted)">${esc(p.codigo || '')}</span>
@@ -675,7 +683,7 @@ async function vistaDetalle() {
   // Resumen primero (inversión y evaluación); luego justificación y aprobación; las tablas a lo ancho.
   const j = p.justificacion || {};
   h += `<div class="cols2"><div>${cardTotales(tot)}${cardFinanzas(p, fin, tot)}</div><div>`;
-  h += `<div class="card"><div class="ct">🎯 ${esc(t('f_justificacion'))}</div>
+  h += `<div class="card"><div class="ct"><span data-icon="target"></span> ${esc(t('f_justificacion'))}</div>
     <label class="f">${esc(t('f_problema'))}</label><div class="ut">${esc(j.problema || '—')}</div>
     <label class="f">${esc(t('f_beneficio'))}</label><div class="ut">${esc(j.beneficio || '—')}</div></div>`;
   h += cardAprobacion(p) + `</div></div>`;
@@ -689,22 +697,23 @@ async function vistaDetalle() {
 }
 function botonesAccion(p) {
   const e = p.estado, b = [];
-  const btn = (id, txt, cls) => `<button type="button" class="btn ${cls || ''}" data-acc="${id}">${esc(txt)}</button>`;
-  if (EDITABLES.includes(e)) b.push(btn('editar', '✏️ ' + t('a_edit'), 'sec'));
-  if (EDITABLES.includes(e)) b.push(btn('enviar', '📤 ' + t('a_send')));
-  if (e === 'enviado') b.push(btn('retirar', '↩️ ' + t('a_withdraw'), 'sec'));
-  if (esAdmin() && ['enviado', 'en_espera'].includes(e)) b.push(btn('revisar', '✅ ' + t('a_review'), 'ok'));
-  if (e === 'aprobado') b.push(btn('iniciar', '▶️ ' + t('a_start')));
+  // txt: icono (<span data-icon>) + texto del diccionario (no viene de la gente)
+  const btn = (id, txt, cls) => `<button type="button" class="btn ${cls || ''}" data-acc="${id}">${txt}</button>`;
+  if (EDITABLES.includes(e)) b.push(btn('editar', '<span data-icon="pencil"></span> ' + t('a_edit'), 'sec'));
+  if (EDITABLES.includes(e)) b.push(btn('enviar', '<span data-icon="upload"></span> ' + t('a_send')));
+  if (e === 'enviado') b.push(btn('retirar', '<span data-icon="undo"></span> ' + t('a_withdraw'), 'sec'));
+  if (esAdmin() && ['enviado', 'en_espera'].includes(e)) b.push(btn('revisar', '<span data-icon="check-circle" class="ic-ok"></span> ' + t('a_review'), 'ok'));
+  if (e === 'aprobado') b.push(btn('iniciar', '<span data-icon="play"></span> ' + t('a_start')));
   if (['aprobado', 'en_ejecucion'].includes(e)) b.push(btn('gasto', t('g_add'), 'sec'));
-  if (e === 'en_ejecucion') b.push(btn('cerrar', '🏁 ' + t('a_close'), 'sec'));
-  if (esAdmin() && !['borrador', 'enviado'].includes(e)) b.push(btn('reabrir', '🔓 ' + t('a_reopen'), 'sec'));
-  if ((esAdmin() && !['cerrado', 'cancelado'].includes(e)) || e === 'borrador') b.push(btn('cancelar', '✖ ' + t('a_cancel'), 'sec'));
-  b.push(btn('ficha', '🖨 ' + t('a_print'), 'sec'), btn('xls', '⬇ ' + t('a_xls'), 'sec'), btn('compras', '🛒 ' + t('a_compras'), 'sec'), btn('dup', '⧉ ' + t('a_dup'), 'sec'));
+  if (e === 'en_ejecucion') b.push(btn('cerrar', '<span data-icon="flag"></span> ' + t('a_close'), 'sec'));
+  if (esAdmin() && !['borrador', 'enviado'].includes(e)) b.push(btn('reabrir', '<span data-icon="unlock"></span> ' + t('a_reopen'), 'sec'));
+  if ((esAdmin() && !['cerrado', 'cancelado'].includes(e)) || e === 'borrador') b.push(btn('cancelar', '<span data-icon="x"></span> ' + t('a_cancel'), 'sec'));
+  b.push(btn('ficha', '<span data-icon="printer"></span> ' + t('a_print'), 'sec'), btn('xls', '<span data-icon="download"></span> ' + t('a_xls'), 'sec'), btn('compras', '<span data-icon="cart"></span> ' + t('a_compras'), 'sec'), btn('dup', '⧉ ' + t('a_dup'), 'sec'));
   return b.join('');
 }
 function cardTotales(tot) {
   const fila = (txt, v, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(txt)}</td><td class="n">${esc(fmtMoney(conv(v, tot.B, 'DOP', tot.T), 'DOP'))}</td><td class="n">${esc(fmtMoney(conv(v, tot.B, 'USD', tot.T), 'USD'))}</td></tr>`;
-  return `<div class="card" id="cardTot"><div class="ct">💵 ${esc(t('sec_totales'))}</div><div class="cs">${esc(t('rateLine', { t: fmtNum(tot.T, 2) }))} · ${esc(t('tot_base', { b: SIM[tot.B] }))}</div>
+  return `<div class="card" id="cardTot"><div class="ct"><span data-icon="banknote"></span> ${esc(t('sec_totales'))}</div><div class="cs">${esc(t('rateLine', { t: fmtNum(tot.T, 2) }))} · ${esc(t('tot_base', { b: SIM[tot.B] }))}</div>
     <div class="tw"><table class="sm tt"><thead><tr><th></th><th class="n">RD$</th><th class="n">US$</th></tr></thead><tbody>
     ${fila(t('tot_trabajos'), tot.trabajos)}${fila(t('tot_repuestos'), tot.repuestos)}${fila(t('tot_otros'), tot.otros)}
     ${fila(t('tot_subtotal'), tot.subtotal, 'tot')}${fila(t('tot_cont', { p: fmtPct(tot.contPct) }), tot.contingencia)}
@@ -715,7 +724,7 @@ function cardTotales(tot) {
 function cardFinanzas(p, fin, tot) {
   const b = p.beneficios || {};
   const k = (n, v, sub, cls) => `<div class="kpi${cls ? ' ' + cls : ''}"><span>${esc(n)}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
-  return `<div class="card" id="cardFin"><div class="ct">📈 ${esc(t('sec_fin'))}</div>
+  return `<div class="card" id="cardFin"><div class="ct"><span data-icon="trend"></span> ${esc(t('sec_fin'))}</div>
     <div class="cs">${esc(t('b_total'))}: ${dinero(fin.A, tot.B, tot.T, true)} · ${esc(t('b_vida'))}: ${esc(fmtNum(fin.n, 0))} · ${esc(t('b_tasa'))}: ${esc(fmtNum(fin.r, 1))}</div>
     <div class="fin f2">${k(t('fin_payback'), esc(fin.payback == null ? t('naSavings') : fmtYears(fin.payback)))}${k(t('fin_roi'), esc(fmtPct(fin.roi)))}
       ${k(t('fin_npv'), fin.npv == null ? '—' : dinero(fin.npv, tot.B, tot.T), '', 'w')}${k(t('fin_irr'), esc(fin.irr == null ? (fin.irrNoConv ? t('noConv') : '—') : fmtPct(fin.irr)))}</div>
@@ -736,13 +745,13 @@ function tablasDetalle(p, tot, cr, papel) {
   const cab = (tit, ico) => papel ? `<h4>${esc(tit)}</h4>` : `<div class="ct">${ico} ${esc(tit)}</div>`;
   const nro = i => `<span class="nstk">#${i + 1} · </span>`;
   const sB = SIM[B];
-  let h = `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_trabajos'), '🛠')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('t_desc'))}</th><th>${esc(t('t_resp'))}</th><th>${esc(t('t_recurso'))}</th><th class="n">${esc(t('t_horas'))}</th><th class="n">${esc(t('t_dias'))}</th><th>${esc(t('t_dep'))}</th><th class="n">${esc(t('t_costo'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
+  let h = `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_trabajos'), '<span data-icon="wrench"></span>')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('t_desc'))}</th><th>${esc(t('t_resp'))}</th><th>${esc(t('t_recurso'))}</th><th class="n">${esc(t('t_horas'))}</th><th class="n">${esc(t('t_dias'))}</th><th>${esc(t('t_dep'))}</th><th class="n">${esc(t('t_costo'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
     ${ts.map((x, i) => `<tr>${TD('#', i + 1, 'hs')}${TD(t('t_desc'), nro(i) + `<span class="ut">${esc(x.descripcion || '')}</span>`, 'lead')}${TD(t('t_resp'), esc(lbl('resp_', x.responsable)))}${TD(t('t_recurso'), esc(lbl('rec_', x.tipoRecurso)))}${TD(t('t_horas'), x.horas ? esc(fmtNum(x.horas, 1)) : '', 'n')}${TD(t('t_dias'), esc(fmtNum((cr.items[i] || {}).dur || duracionTrabajo(x), 0)), 'n')}${TD(t('t_dep'), x.dependeDe != null && x.dependeDe !== '' ? '#' + (Number(x.dependeDe) + 1) : '—')}${TD(t('t_costo'), mon(num(x.costo), x.moneda), 'n')}${TD(sB, base(num(x.costo), x.moneda), 'n')}</tr>`).join('') || `<tr><td colspan="9">${esc(t('none'))}</td></tr>`}
     ${filaTotal(8, t('tot_trabajos'), esc(fmtMoney(tot.trabajos, B)))}</tbody></table>`) + '</div>';
-  h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_repuestos'), '📦')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('r_desc'))}</th><th>${esc(t('r_codigo'))}</th><th class="n">${esc(t('r_cant'))}</th><th>${esc(t('r_unidad'))}</th><th class="n">${esc(t('r_cu'))}</th><th class="n">${esc(t('r_importe'))} ${esc(sB)}</th><th>${esc(t('r_prov'))}</th><th class="n">${esc(t('r_lead'))}</th>${papel ? '' : `<th>${esc(t('r_stock'))}</th>`}</tr></thead><tbody>
+  h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_repuestos'), '<span data-icon="package"></span>')}` + wrap(`${tb()}<thead><tr><th>#</th><th>${esc(t('r_desc'))}</th><th>${esc(t('r_codigo'))}</th><th class="n">${esc(t('r_cant'))}</th><th>${esc(t('r_unidad'))}</th><th class="n">${esc(t('r_cu'))}</th><th class="n">${esc(t('r_importe'))} ${esc(sB)}</th><th>${esc(t('r_prov'))}</th><th class="n">${esc(t('r_lead'))}</th>${papel ? '' : `<th>${esc(t('r_stock'))}</th>`}</tr></thead><tbody>
     ${rs.map((x, i) => `<tr>${TD('#', i + 1, 'hs')}${TD(t('r_desc'), nro(i) + `<span class="ut">${esc(x.descripcion || '')}</span>`, 'lead')}${TD(t('r_codigo'), x.codigo ? `<span class="ut">${esc(x.codigo)}</span>` : '')}${TD(t('r_cant'), esc(fmtNum(num(x.cantidad), num(x.cantidad) % 1 ? 2 : 0)), 'n')}${TD(t('r_unidad'), esc(x.unidad ? lbl('u_', x.unidad) : ''))}${TD(t('r_cu'), mon(num(x.costoUnitario), x.moneda), 'n')}${TD(t('r_importe') + ' ' + sB, base(num(x.cantidad) * num(x.costoUnitario), x.moneda), 'n')}${TD(t('r_prov'), x.proveedor ? `<span class="ut">${esc(x.proveedor)}</span>` : '')}${TD(t('r_lead'), x.leadTimeDias ? esc(fmtNum(x.leadTimeDias, 0)) : '', 'n')}${papel ? '' : TD(t('r_stock'), stockHtml(stockDe(x)))}</tr>`).join('') || `<tr><td colspan="${papel ? 9 : 10}">${esc(t('none'))}</td></tr>`}
     ${filaTotal(6, t('tot_repuestos'), esc(fmtMoney(tot.repuestos, B)), papel ? 2 : 3)}</tbody></table>`) + '</div>';
-  if (os.length || !papel) h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_otros'), '🧾')}` + wrap(`${tb('sm')}<thead><tr><th>${esc(t('o_concepto'))}</th><th>${esc(t('o_detalle'))}</th><th class="n">${esc(t('o_monto'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
+  if (os.length || !papel) h += `<div class="${papel ? 'keep' : 'card'}">${cab(t('sec_otros'), '<span data-icon="receipt"></span>')}` + wrap(`${tb('sm')}<thead><tr><th>${esc(t('o_concepto'))}</th><th>${esc(t('o_detalle'))}</th><th class="n">${esc(t('o_monto'))}</th><th class="n">${esc(sB)}</th></tr></thead><tbody>
     ${os.map(x => `<tr>${TD(t('o_concepto'), esc(lbl('oc_', x.concepto || 'otro')), 'lead')}${TD(t('o_detalle'), x.detalle ? `<span class="ut">${esc(x.detalle)}</span>` : '')}${TD(t('o_monto'), mon(num(x.monto), x.moneda), 'n')}${TD(sB, base(num(x.monto), x.moneda), 'n')}</tr>`).join('') || `<tr><td colspan="4">${esc(t('none'))}</td></tr>`}
     ${filaTotal(3, t('tot_otros'), esc(fmtMoney(tot.otros, B)))}</tbody></table>`) + '</div>';
   return h;
@@ -757,7 +766,7 @@ function ganttHtml(p, cr, conReal, papel) {
   const marca = dHoy >= 0 && dHoy <= total ? `<i class="today" style="left:${pos(dHoy).toFixed(2)}%" title="${esc(t('c_today'))}"></i>` : '';
   const av = p.avance || {};
   let h = `<div class="gantt" role="img" aria-label="${esc(t('c_ganttAria'))}">`;
-  if (cr.leadTimeMax > 0) h += `<div class="gr"><div class="gl">📦 ${esc(t('c_lead'))}<small>${esc(fmtDate(cr.fechaInicio))} → ${esc(fmtDate(sumarDias(cr.fechaInicio, cr.leadTimeMax)))} · ${esc(fmtDays(cr.leadTimeMax))}</small></div><div class="gt">${marca}<i class="gb mat" style="left:0;width:${pos(cr.leadTimeMax).toFixed(2)}%"></i></div></div>`;
+  if (cr.leadTimeMax > 0) h += `<div class="gr"><div class="gl"><span data-icon="package"></span> ${esc(t('c_lead'))}<small>${esc(fmtDate(cr.fechaInicio))} → ${esc(fmtDate(sumarDias(cr.fechaInicio, cr.leadTimeMax)))} · ${esc(fmtDays(cr.leadTimeMax))}</small></div><div class="gt">${marca}<i class="gb mat" style="left:0;width:${pos(cr.leadTimeMax).toFixed(2)}%"></i></div></div>`;
   items.forEach(x => {
     const tr = (p.trabajos || [])[x.i] || {}, a = av[String(x.i)] || {}, pct = Math.min(100, Math.max(0, num(a.pct)));
     const late = conReal ? atrasoTrabajo(x, a, hoy) : 0;
@@ -779,8 +788,8 @@ function ganttHtml(p, cr, conReal, papel) {
 function cardCronograma(p, cr, ap) {
   const ej = ['en_ejecucion', 'cerrado'].includes(p.estado);
   const avt = avanceTotal(p, cr);
-  return `<div class="card" id="cardCrono"><div class="chead"><div><div class="ct">🗓 ${esc(t('sec_crono'))}</div><div class="cs">${esc(p.cronograma && p.cronograma.fechaInicio ? t('crono_base') : t('crono_proj'))}</div></div>
-      ${ap && esEnc() && p.estado !== 'cerrado' ? `<button type="button" class="btn sec sm" data-acc="fechaIni">📅 ${esc(t('c_editStart'))}</button>` : ''}</div>
+  return `<div class="card" id="cardCrono"><div class="chead"><div><div class="ct"><span data-icon="calendar"></span> ${esc(t('sec_crono'))}</div><div class="cs">${esc(p.cronograma && p.cronograma.fechaInicio ? t('crono_base') : t('crono_proj'))}</div></div>
+      ${ap && esEnc() && p.estado !== 'cerrado' ? `<button type="button" class="btn sec sm" data-acc="fechaIni"><span data-icon="calendar"></span> ${esc(t('c_editStart'))}</button>` : ''}</div>
     <div class="fin" style="margin-bottom:10px">
       <div class="kpi"><span>${esc(t('c_inicio'))}</span><b style="font-size:15px">${esc(fmtDate(cr.fechaInicio))}</b></div>
       <div class="kpi"><span>${esc(t('c_fin'))}</span><b style="font-size:15px" id="crFin">${esc(fmtDate(cr.fechaFinProyectada))}</b></div>
@@ -798,7 +807,7 @@ function cardGasto(p, tot, ej) {
   const k = (n, v, cls) => `<div class="kpi"><span>${esc(n)}</span><b class="${cls || ''}" style="font-size:16px">${v}</b></div>`;
   const plan = { trabajo: tot.trabajos, repuesto: tot.repuestos, otro: tot.otros + tot.contingencia + tot.itbis };
   const gs = (p.gastoReal || []).slice().reverse();
-  return `<div class="card" id="cardGasto"><div class="chead"><div><div class="ct">💸 ${esc(t('sec_gasto'))}</div><div class="cs">${esc(t('g_appendOnly'))}</div></div>
+  return `<div class="card" id="cardGasto"><div class="chead"><div><div class="ct"><span data-icon="coins"></span> ${esc(t('sec_gasto'))}</div><div class="cs">${esc(t('g_appendOnly'))}</div></div>
       ${['aprobado', 'en_ejecucion'].includes(p.estado) ? `<button type="button" class="btn sm" data-acc="gasto">${esc(t('g_add'))}</button>` : ''}</div>
     <div class="fin">${k(t('g_aprobado'), dinero(ej.aprobado, B, T))}${k(t('g_comp'), dinero(ej.comp, B, T))}${k(t('g_real'), dinero(ej.real, B, T), 'sem-' + ej.sem)}${k(t('g_disp'), dinero(ej.disponible, B, T), ej.disponible < 0 ? 'sem-bad' : '')}</div>
     <div class="meter" style="height:16px;margin-top:12px" role="img" aria-label="${esc(t('g_pct') + ' ' + fmtPct(ej.pct))}"><i class="r${ej.real > ej.aprobado ? ' over' : ''}" style="width:${Math.min(100, wr).toFixed(1)}%"></i><i style="left:${Math.min(100, wr).toFixed(1)}%;width:${Math.min(100 - Math.min(100, wr), wc).toFixed(1)}%;background:#c98500"></i><i style="left:${Math.min(99.5, wa).toFixed(1)}%;width:3px;background:var(--color-text)"></i></div>
@@ -812,11 +821,11 @@ function cardGasto(p, tot, ej) {
 function cardAprobacion(p) {
   const a = p.aprobacion, prev = p.aprobacionAnterior;
   const blk = (x, tit) => `<div class="ct" style="font-size:13.5px;margin-top:6px">${esc(tit)}</div><div>${esc(t('d_aprobadoPor', { n: x.por || '—', f: fmtDateTime(x.en) }))}</div><div><b>${esc(fmtMoney(num(x.montoAprobado), monLinea(x.moneda, 'DOP')))}</b> · ${esc(t('rateLine', { t: fmtNum(x.tasaCambio, 2) }))}</div>${x.nota ? `<div class="nota ut">${esc(x.nota)}</div>` : ''}`;
-  return `<div class="card" id="cardAprob"><div class="ct">✅ ${esc(t('d_aprobacion'))}</div>${a ? blk(a, t('st_aprobado')) : `<div class="nota">${esc(t('d_sinAprob'))}</div>`}${prev ? blk(prev, t('d_prevApproval')) : ''}</div>`;
+  return `<div class="card" id="cardAprob"><div class="ct"><span data-icon="check-circle" class="ic-ok"></span> ${esc(t('d_aprobacion'))}</div>${a ? blk(a, t('st_aprobado')) : `<div class="nota">${esc(t('d_sinAprob'))}</div>`}${prev ? blk(prev, t('d_prevApproval')) : ''}</div>`;
 }
 function cardHistorial(p) {
   const hs = (p.historial || []).slice().reverse();
-  return `<div class="card" id="cardHist"><div class="ct">🕑 ${esc(t('d_historial'))}</div><ul class="hist">${hs.map(x => `<li>${estBadge(x.estado)} ${x.accion === 'creado' ? esc(t('h_creado')) : x.accion === 'cronograma' ? esc(t('h_editado')) : ''}<small><span class="ut">${esc(x.por || '')}</span> · ${esc(fmtDateTime(x.en))}</small>${x.nota ? `<div class="ut">${esc(x.nota)}</div>` : ''}</li>`).join('')}</ul></div>`;
+  return `<div class="card" id="cardHist"><div class="ct"><span data-icon="clock"></span> ${esc(t('d_historial'))}</div><ul class="hist">${hs.map(x => `<li>${estBadge(x.estado)} ${x.accion === 'creado' ? esc(t('h_creado')) : x.accion === 'cronograma' ? esc(t('h_editado')) : ''}<small><span class="ut">${esc(x.por || '')}</span> · ${esc(fmtDateTime(x.en))}</small>${x.nota ? `<div class="ut">${esc(x.nota)}</div>` : ''}</li>`).join('')}</ul></div>`;
 }
 function enlazarDetalle(p, cr) {
   $('app').querySelectorAll('[data-acc]').forEach(b => b.onclick = () => accion(b.dataset.acc, p, cr));
@@ -902,7 +911,7 @@ function modalAprobacion(p) {
       <div><label class="f">${esc(t('c_fin'))}</label><div id="mFin" style="padding:10px 0;font-weight:800"></div></div></div>
     <label class="f" for="mNota">${esc(t('m_nota'))}</label><textarea id="mNota" maxlength="1000"></textarea>
     <div class="nota">${esc(t('m_approveHint'))} ${esc(t('m_notaReq'))}</div><div class="errbox" id="mErr"></div>
-    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn warn" data-dec="en_espera">⏸ ${esc(t('a_hold'))}</button><button type="button" class="btn mal" data-dec="rechazado">✖ ${esc(t('a_reject'))}</button><button type="button" class="btn ok" data-dec="aprobado">✅ ${esc(t('a_approve'))}</button></div>`);
+    <div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn warn" data-dec="en_espera"><span data-icon="pause"></span> ${esc(t('a_hold'))}</button><button type="button" class="btn mal" data-dec="rechazado"><span data-icon="x"></span> ${esc(t('a_reject'))}</button><button type="button" class="btn ok" data-dec="aprobado"><span data-icon="check-circle" class="ic-ok"></span> ${esc(t('a_approve'))}</button></div>`);
   const finTxt = () => { const c = calcCronograma(p, $('mIni').value || fbHoy()); $('mFin').textContent = fmtDate(c.fechaFinProyectada) + ' · ' + fmtDays(c.duracionDias); };
   finTxt(); $('mIni').oninput = finTxt;
   $('mNo').onclick = cerrarModal;
@@ -1092,7 +1101,7 @@ function sugerenciaRent(d) {
   const eqs = s && s.equipos ? d.equipoIds.map(id => s.equipos[id] && { id, ...s.equipos[id] }).filter(Boolean) : [];
   if (!eqs.length) return `<div class="sug nota">${esc(t('sugRentNone'))}</div>`;
   const sum = k => eqs.reduce((a, x) => a + (Number(x[k]) || 0), 0);
-  return `<div class="sug" id="sugRent"><b>💡 ${esc(t('sugRent'))}</b> <span class="nota">(${esc(s.periodo || '')} · ${esc(fmtDate(s.fecha))})</span><br>
+  return `<div class="sug" id="sugRent"><b><span data-icon="bulb"></span> ${esc(t('sugRent'))}</b> <span class="nota">(${esc(s.periodo || '')} · ${esc(fmtDate(s.fecha))})</span><br>
     ${eqs.map(x => esc(t('sugRentTxt', { eq: x.nombre, p: fmtMoney(x.paro, 'DOP'), r: fmtMoney(x.rep, 'DOP'), m: fmtMoney(x.mo, 'DOP') })) + (x.precio ? ' ' + esc(t('sugRentNueva', { n: fmtMoney(x.precio, 'DOP') })) : '')).join('<br>')}
     <div style="margin-top:8px"><button type="button" class="btn sm" id="bSug" data-paro="${sum('paro')}" data-rep="${sum('rep')}" data-mo="${sum('mo')}" data-mant="${eqs.reduce((a, x) => a + (Number(x.precio) || 0) * (Number(x.mantNuevaPct) || 0) / 100, 0)}">${esc(t('useSug'))}</button></div></div>`;
 }
@@ -1118,21 +1127,21 @@ function pintarEditor() {
       <div class="eqchips">${d.equipos.map(e => `<span><span class="ut">${esc(e.nombre)}</span> ${critBadge(fbCriticidadDeEquipo(e.id) || e.criticidad || '')}<button type="button" data-qeq="${esc(e.id)}" aria-label="${esc(t('a_remove'))} ${esc(e.nombre)}">✕</button></span>`).join('')}</div>
     </div>
     <div class="card"><div class="ct">${esc(t('f_justificacion'))}</div>${inp('justificacion.problema', d.justificacion.problema, { l: t('f_problema') + ' *', ta: 1 })}${inp('justificacion.beneficio', d.justificacion.beneficio, { l: t('f_beneficio') + ' *', ta: 1 })}</div>
-    <div class="card"><div class="ct">💱 ${esc(t('f_moneda'))}</div><div class="g2">${sel('moneda', B, MONEDAS, m => SIM[m], { l: t('f_moneda') })}${inp('tasaCambio', d.tasaCambio, { l: t('f_tasa') + ' *', n: 1, min: 0 })}</div></div>
-    <div class="card"><div class="ct">🛠 ${esc(t('sec_trabajos'))} *</div><div id="eTrab">${htmlTrabajos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="trabajos">${esc(t('addTrabajo'))}</button></div>
-    <div class="card"><div class="ct">📦 ${esc(t('sec_repuestos'))}</div><div id="eRep">${htmlRepuestos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="repuestos">${esc(t('addRepuesto'))}</button></div>
-    <div class="card"><div class="ct">🧾 ${esc(t('sec_otros'))}</div><div id="eOtr">${htmlOtros(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="otrosCostos">${esc(t('addOtro'))}</button>
+    <div class="card"><div class="ct"><span data-icon="arrow-left-right"></span> ${esc(t('f_moneda'))}</div><div class="g2">${sel('moneda', B, MONEDAS, m => SIM[m], { l: t('f_moneda') })}${inp('tasaCambio', d.tasaCambio, { l: t('f_tasa') + ' *', n: 1, min: 0 })}</div></div>
+    <div class="card"><div class="ct"><span data-icon="wrench"></span> ${esc(t('sec_trabajos'))} *</div><div id="eTrab">${htmlTrabajos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="trabajos">${esc(t('addTrabajo'))}</button></div>
+    <div class="card"><div class="ct"><span data-icon="package"></span> ${esc(t('sec_repuestos'))}</div><div id="eRep">${htmlRepuestos(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="repuestos">${esc(t('addRepuesto'))}</button></div>
+    <div class="card"><div class="ct"><span data-icon="receipt"></span> ${esc(t('sec_otros'))}</div><div id="eOtr">${htmlOtros(d)}</div><button type="button" class="btn sec" style="margin-top:10px;width:100%" data-add="otrosCostos">${esc(t('addOtro'))}</button>
       <div class="g3" style="margin-top:6px">${inp('contingenciaPct', d.contingenciaPct, { l: t('f_contPct'), n: 1, min: 0 })}${inp('itbisPct', d.itbisPct, { l: t('f_itbisPct'), n: 1, min: 0 })}
         <div><label class="f" for="e_itbisAplica">&nbsp;</label><label class="ck"><input type="checkbox" id="e_itbisAplica" data-f="itbisAplica"${d.itbisAplica ? ' checked' : ''}> ${esc(t('f_itbisAplica'))}</label></div></div>
       <div class="nota">${esc(t('itbisNote'))}</div></div>
-    <div class="card"><div class="ct">📈 ${esc(t('sec_benef'))}</div><div class="cs">${esc(SIM[B])}</div>
+    <div class="card"><div class="ct"><span data-icon="trend"></span> ${esc(t('sec_benef'))}</div><div class="cs">${esc(SIM[B])}</div>
       <div class="g4">${inp('beneficios.paroEvitado', d.beneficios.paroEvitado, { l: t('b_paro'), n: 1 })}${inp('beneficios.energia', d.beneficios.energia, { l: t('b_energia'), n: 1 })}${inp('beneficios.repuestos', d.beneficios.repuestos, { l: t('b_repuestos'), n: 1 })}
         ${inp('beneficios.manoObra', d.beneficios.manoObra, { l: t('b_mo'), n: 1 })}${inp('beneficios.otros', d.beneficios.otros, { l: t('b_otros'), n: 1 })}${inp('beneficios.vidaUtilAnios', d.beneficios.vidaUtilAnios, { l: t('b_vida'), n: 1, min: 0 })}
         ${inp('beneficios.tasaDescuentoPct', d.beneficios.tasaDescuentoPct, { l: t('b_tasa'), n: 1, min: 0 })}</div>${sugerenciaRent(d)}</div>
   </div>
   <div class="sticky"><div id="ePrev"></div>
     <div class="card"><div class="errbox" id="eErr" role="alert"></div>
-      <div class="btns" style="flex-direction:column"><button type="button" class="btn sec" id="eSave">💾 ${esc(t('a_save'))}</button><button type="button" class="btn" id="eSend">📤 ${esc(t('a_send'))}</button>
+      <div class="btns" style="flex-direction:column"><button type="button" class="btn sec" id="eSave"><span data-icon="save"></span> ${esc(t('a_save'))}</button><button type="button" class="btn" id="eSend"><span data-icon="upload"></span> ${esc(t('a_send'))}</button>
       <a class="btn sec" href="${EDIT.id ? '#p=' + encodeURIComponent(EDIT.id) : '#'}" id="eDiscard">${esc(t('a_discard'))}</a></div></div></div></div>`;
   previsualizar();
   const app = $('app');
@@ -1196,7 +1205,7 @@ function previsualizar() {
   const d = EDIT.d, tot = calcTotales(d), fin = calcFinanzas(d, tot), cr = calcCronograma(d, fbHoy());
   window.__capexEdit = { tot, fin, cr: { fechaFinProyectada: cr.fechaFinProyectada, duracionDias: cr.duracionDias, leadTimeMax: cr.leadTimeMax, items: cr.items } };
   $('ePrev').innerHTML = cardTotales(tot) + cardFinanzas(d, fin, tot)
-    + `<div class="card"><div class="ct">🗓 ${esc(t('sec_crono'))}</div><div class="cs">${esc(t('crono_proj'))} · ${esc(t('c_fin'))}: <b>${esc(fmtDate(cr.fechaFinProyectada))}</b> · ${esc(fmtDays(cr.duracionDias))}</div>${ganttHtml(d, cr, false)}${cr.leadTimeMax ? `<div class="nota" style="margin-top:6px">${esc(t('c_note'))}</div>` : ''}</div>`;
+    + `<div class="card"><div class="ct"><span data-icon="calendar"></span> ${esc(t('sec_crono'))}</div><div class="cs">${esc(t('crono_proj'))} · ${esc(t('c_fin'))}: <b>${esc(fmtDate(cr.fechaFinProyectada))}</b> · ${esc(fmtDays(cr.duracionDias))}</div>${ganttHtml(d, cr, false)}${cr.leadTimeMax ? `<div class="nota" style="margin-top:6px">${esc(t('c_note'))}</div>` : ''}</div>`;
 }
 function limpiar(d) {
   const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n || 300);
@@ -1268,12 +1277,12 @@ async function guardarEditor(enviar) {
         historial: [entradaHistorial('borrador', '', 'creado')], gastoReal: [], avance: {}, createdAt: fbTimestamp(), updatedAt: fbTimestamp(), actualizadoPor: quien() };
       const r = await conLimite(ref.set(doc));
       p = { ...doc, id: ref.id }; delete p.createdAt; delete p.updatedAt;
-      if (r === 'pendiente') toast(t('ok_saved') + ' 📵', 'warn');
+      if (r === 'pendiente') toast(t('ok_saved') + ' ', 'warn');
     } else {
       const ref = db.collection('capex').doc(EDIT.id);
       const r = await conLimite(ref.update({ ...d, updatedAt: fbTimestamp(), actualizadoPor: quien() }));
       p = { ...EDIT.orig, ...d };
-      if (r === 'pendiente') toast(t('ok_saved') + ' 📵', 'warn');
+      if (r === 'pendiente') toast(t('ok_saved') + ' ', 'warn');
     }
     guardarEnCache(p);
     EDIT.dirty = false;
@@ -1446,7 +1455,7 @@ function libroXls(hojas) {
   return wb;
 }
 function dialogoCsv(msg, alCsv) {
-  abrirModal(`<h3 id="mTitle">📵 Excel</h3><div>${esc(msg)}</div><div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mCsv">⬇ ${esc(t('a_csv'))}</button></div>`);
+  abrirModal(`<h3 id="mTitle"><span data-icon="wifi-off"></span> Excel</h3><div>${esc(msg)}</div><div class="macts"><button type="button" class="btn sec" id="mNo">${esc(t('a_closeWin'))}</button><button type="button" class="btn" id="mCsv"><span data-icon="download"></span> ${esc(t('a_csv'))}</button></div>`);
   $('mNo').onclick = cerrarModal; $('mCsv').onclick = () => { cerrarModal(); alCsv(); };
 }
 async function descargarHojas(base, hojas) {
@@ -1536,17 +1545,12 @@ async function exportarPortafolio() {
 }
 
 // ══════ ARRANQUE ══════
-function pintarBloqueo() {
-  $('portWrap').style.display = 'none';
-  $('segCur').style.display = 'none';
-  $('app').innerHTML = `<div class="card empty" id="capexBloqueo">${esc(t('locked'))}<br><span class="nota">${esc(t('lockedSub'))}</span></div>`;
-}
 window.CX = { critDe, conv, calcTotales, calcFinanzas, calcCronograma, calcEjecucion, calcPortafolio, vpn, tir, ahorroAnual, validar, limpiar, t, I18N, fmtMoney, fmtPct, fmtDate, fmtNum, setLang, atrasoTrabajo, duracionTrabajo, hojasProyecto };
 pintarCabecera();
 window.fbReady.then(async () => {
   pintarCabecera();
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('capex');
-  if (!esEnc()) { pintarBloqueo(); window.__capexListo = true; window.__capexVista = 'bloqueo'; return; } // sin lecturas para otros roles
+  // (v3 etapa 3a) Administrador y Encargado: el candado central no deja llegar aquí a otros roles (sin lecturas).
   try { prepararStock((await fbEquiposCatalogo(false)).docs); } catch (e) { console.warn('equipos:', e.message); }
   await cargarConfig();
   ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'capex', niveles: ['nave', 'area'], onChange: () => { traducirFiltro(); if (UI.vista === 'port') pintar(); } });

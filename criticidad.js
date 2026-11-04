@@ -145,7 +145,7 @@
       // El servidor lo rechazó: se deshace en este celular.
       previos.forEach(({ eq, ant, antIdx }) => { CAMPOS.forEach(k => { if (ant[k] === undefined) delete eq[k]; else eq[k] = ant[k]; }); if (typeof fbIndiceCriticidad === 'function') fbIndiceCriticidad(eq.id, antIdx); });
       avisarCambio(lista.map(x => x.eq.id));
-      aviso(err && err.code === 'permission-denied' ? '⛔ No se guardó la criticidad: solo el Encargado o el Administrador pueden cambiarla.' : '❌ No se guardó la criticidad: ' + ((err && err.message) || err), 'error');
+      aviso(err && err.code === 'permission-denied' ? 'No se guardó la criticidad: solo el Encargado o el Administrador pueden cambiarla.' : 'No se guardó la criticidad: ' + ((err && err.message) || err), 'error');
       throw err;
     });
   }
@@ -192,7 +192,7 @@
   }
   function abrirAsistente(equipo, opts) {
     opts = opts || {};
-    if (!puedeEvaluar()) { aviso('⛔ La criticidad la evalúa el Encargado de mantenimiento o el Administrador.', 'error'); return; }
+    if (!puedeEvaluar()) { aviso('La criticidad la evalúa el Encargado de mantenimiento o el Administrador.', 'error'); return; }
     const pedir = equipo && typeof equipo === 'object' ? Promise.resolve(equipo) : cargarCatalogo().then(() => buscarEquipo(equipo));
     pedir.then(eq => {
       if (!eq) { aviso('Equipo no encontrado', 'error'); return; }
@@ -218,15 +218,15 @@
     });
   }
   function cabecera(st) {
-    return `<div class="fbsh-head"><div><h3>🎯 Criticidad del equipo</h3><small>${esc(st.eq.nombre || '')}${st.eq.localidad ? ' · ' + esc(st.eq.localidad) : ''}</small></div>
-      <button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar">✕</button></div>`;
+    return `<div class="fbsh-head"><div><h3><span data-icon="target"></span> Criticidad del equipo</h3><small>${esc(st.eq.nombre || '')}${st.eq.localidad ? ' · ' + esc(st.eq.localidad) : ''}</small></div>
+      <button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar"><span data-icon="x"></span></button></div>`;
   }
   function htmlPregunta(st) {
     const p = PREGUNTAS[st.paso];
     const sel = st.det[p.k];
     let sug = '';
     if (p.k === 'frecuencia') {
-      sug = st.sug ? `<div class="fbsh-caja info" data-sug="${st.sug.valor}">📊 Según la Bitácora: <b>${st.sug.n} correctivo${st.sug.n === 1 ? '' : 's'}</b> en los últimos 12 meses → sugerido <b>${esc(p.ops.find(o => o[0] === st.sug.valor)[1])}</b>.</div>` : `<div class="fbsh-nota">Buscando cuántos correctivos tuvo en la Bitácora…</div>`;
+      sug = st.sug ? `<div class="fbsh-caja info" data-sug="${st.sug.valor}"><span data-icon="chart"></span> Según la Bitácora: <b>${st.sug.n} correctivo${st.sug.n === 1 ? '' : 's'}</b> en los últimos 12 meses → sugerido <b>${esc(p.ops.find(o => o[0] === st.sug.valor)[1])}</b>.</div>` : `<div class="fbsh-nota">Buscando cuántos correctivos tuvo en la Bitácora…</div>`;
     }
     const marcado = sel || (p.k === 'frecuencia' && st.sug ? st.sug.valor : 0);
     return cabecera(st)
@@ -241,7 +241,7 @@
   function htmlResultado(st) {
     const r = calcular(st.det);
     const final = st.cambio && st.cambio !== r.nivel ? st.cambio : r.nivel;
-    const filas = PREGUNTAS.map((p, i) => { const v = st.det[p.k]; const op = p.ops.find(o => o[0] === v); return `<tr><td>${esc(p.corto)}<br><span style="color:var(--color-muted)">${esc(op ? op[1] : '—')}</span></td><td class="n"><button type="button" class="fbsh-btn sec sm" data-a="ir" data-p="${i}" aria-label="Cambiar ${esc(p.corto)}">${v || '—'} pts ✎</button></td></tr>`; }).join('');
+    const filas = PREGUNTAS.map((p, i) => { const v = st.det[p.k]; const op = p.ops.find(o => o[0] === v); return `<tr><td>${esc(p.corto)}<br><span style="color:var(--color-muted)">${esc(op ? op[1] : '—')}</span></td><td class="n"><button type="button" class="fbsh-btn sec sm" data-a="ir" data-p="${i}" aria-label="Cambiar ${esc(p.corto)}">${v || '—'} pts <span data-icon="pencil"></span></button></td></tr>`; }).join('');
     const porque = r.regla === 'seguridad' ? 'porque hay riesgo grave para las personas o el ambiente' : r.regla === 'produccion' ? 'porque al fallar para la línea o la planta' : `por los puntos (${r.puntos} de 25)`;
     return cabecera(st)
       + `<div class="fbsh-res" data-resultado="${esc(final)}">${badge(final)}<div class="pts">${r.puntos} de 25 puntos · calculado ${esc(texto(r.nivel))} ${esc(porque)}</div>
@@ -252,7 +252,7 @@
         <select id="fbcCambio" aria-label="Cambiar el nivel"><option value="">Dejar el calculado (${esc(texto(r.nivel))})</option>${['A', 'B', 'C'].filter(n => n !== r.nivel).map(n => `<option value="${n}"${st.cambio === n ? ' selected' : ''}>Cambiar a ${esc(texto(n))}</option>`).join('')}</select>
         ${st.cambio && st.cambio !== r.nivel ? `<textarea id="fbcMotivo" maxlength="300" placeholder="Motivo del cambio (obligatorio)">${esc(st.motivo)}</textarea>` : ''}</div>` : ''}
       <div class="fbsh-err" id="fbcErr"></div>
-      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="atras">← Atrás</button><button type="button" class="fbsh-btn ok" data-a="guardar">💾 Guardar ${esc(texto(final))}</button></div>`;
+      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="atras">← Atrás</button><button type="button" class="fbsh-btn ok" data-a="guardar"><span data-icon="save"></span> Guardar ${esc(texto(final))}</button></div>`;
   }
   function guardarAsistente(st, s, opts) {
     const r = calcular(st.det);
@@ -266,8 +266,8 @@
     if (manual) detalle.motivo = motivo.slice(0, 300);
     if (st.sug) detalle.correctivos12m = st.sug.n;
     const sinSenal = typeof navigator !== 'undefined' && navigator.onLine === false;
-    guardarVarios([{ eq: st.eq, nivel, detalle }]).then(() => { if (sinSenal) aviso('☁️ Criticidad de ' + (st.eq.nombre || '') + ' subida al servidor'); }).catch(() => {});
-    aviso(sinSenal ? '💾 Criticidad guardada en el celular — se sube al volver la señal' : '✅ ' + (st.eq.nombre || 'Equipo') + ': ' + texto(nivel), sinSenal ? 'warn' : undefined);
+    guardarVarios([{ eq: st.eq, nivel, detalle }]).then(() => { if (sinSenal) aviso('Criticidad de ' + (st.eq.nombre || '') + ' subida al servidor'); }).catch(() => {});
+    aviso(sinSenal ? 'Criticidad guardada en el celular — se sube al volver la señal' : '' + (st.eq.nombre || 'Equipo') + ': ' + texto(nivel), sinSenal ? 'warn' : undefined);
     cerrarSheet(true);
     if (opts.onGuardado) { try { opts.onGuardado(nivel, st.eq); } catch (e) { console.error(e); } }
   }
@@ -283,7 +283,7 @@
   }
   function abrirLista(opts, st0) {
     opts = opts || {};
-    if (!puedeEvaluar()) { aviso('⛔ La criticidad la evalúa el Encargado de mantenimiento o el Administrador.', 'error'); return; }
+    if (!puedeEvaluar()) { aviso('La criticidad la evalúa el Encargado de mantenimiento o el Administrador.', 'error'); return; }
     const st = st0 || { filtro: 'todos', q: '', vista: 'lista', previa: null };
     const s = sheet('<div class="fbsh-nota">Cargando equipos…</div>', { id: 'fbCritLista', onClose: opts.onClose });
     const pintar = () => { if (_sheet !== s && !document.getElementById('fbCritLista')) return; s.set(st.vista === 'importar' ? htmlImportar(st) : htmlLista(st)); };
@@ -307,8 +307,8 @@
         const n = st.previa.listos.length;
         const sinSenal = navigator.onLine === false;
         guardarVarios(st.previa.listos.map(x => ({ eq: x.eq, nivel: x.nivel, detalle: x.motivo ? { origen: 'importado', motivo: x.motivo } : { origen: 'importado' } })))
-          .then(() => { if (sinSenal) aviso('☁️ Criticidad de ' + n + ' equipo(s) subida'); }).catch(() => {});
-        aviso(sinSenal ? `💾 Criticidad de ${n} equipo(s) guardada en el celular — se sube al volver la señal` : `✅ Criticidad de ${n} equipo(s) guardada`, sinSenal ? 'warn' : undefined);
+          .then(() => { if (sinSenal) aviso('Criticidad de ' + n + ' equipo(s) subida'); }).catch(() => {});
+        aviso(sinSenal ? `Criticidad de ${n} equipo(s) guardada en el celular — se sube al volver la señal` : `Criticidad de ${n} equipo(s) guardada`, sinSenal ? 'warn' : undefined);
         st.vista = 'lista'; st.previa = null; st.texto = '';
         return pintar();
       }
@@ -333,14 +333,14 @@
     const c = conteos(lista), tot = lista.length, ev = tot - c.N;
     const pct = tot ? Math.round(ev / tot * 100) : 0;
     const F = [['todos', 'Todos', tot], ['N', 'Sin evaluar', c.N], ['A', 'A', c.A], ['B', 'B', c.B], ['C', 'C', c.C]];
-    return `<div class="fbsh-head"><div><h3>🎯 Evaluar criticidad</h3><small>🏭 ${esc(typeof fbNaveTexto === 'function' ? fbNaveTexto() : '')}</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar">✕</button></div>
+    return `<div class="fbsh-head"><div><h3>Evaluar criticidad</h3><small>${esc(typeof fbNaveTexto === 'function' ? fbNaveTexto() : '')}</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar"><span data-icon="x"></span></button></div>
       <div style="font-weight:800;" id="fbcProgreso">${ev} de ${tot} evaluados</div>
       <div class="fbsh-prog"><i style="width:${pct}%"></i></div>
       <div class="fbsh-nota">A ${c.A} · B ${c.B} · C ${c.C} · Sin evaluar ${c.N}</div>
       <div class="fbsh-filtros">${F.map(([k, t, n]) => `<button type="button" data-a="f" data-f="${k}" class="${st.filtro === k ? 'sel' : ''}">${esc(t)} (${n})</button>`).join('')}</div>
       <input type="search" id="fbcBuscar" placeholder="Buscar equipo o área…" value="${esc(st.q)}" autocomplete="off" aria-label="Buscar equipo"/>
       <div id="fbcFilas">${filasLista(st)}</div>
-      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="imp">📥 Cargar desde Excel o pegar</button></div>
+      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="imp"><span data-icon="download"></span> Cargar desde Excel o pegar</button></div>
       <details style="margin-top:8px;"><summary style="cursor:pointer;font-weight:700;min-height:40px;display:flex;align-items:center;">¿Cómo se calcula?</summary>${umbralesHtml(null)}</details>`;
   }
   function filasLista(st) {
@@ -405,20 +405,20 @@
     const p = st.previa;
     let prev = '';
     if (p) {
-      prev += p.listos.length ? `<div class="fbsh-caja ok" data-listos="${p.listos.length}">✅ ${p.listos.length} equipo(s) listos para guardar</div>` + p.listos.slice(0, 200).map(x => `<div class="fbsh-fila"><div><b>${esc(x.eq.nombre)}</b><small>${x.antes ? 'Antes: ' + esc(texto(x.antes)) : 'Sin evaluar'}${x.motivo ? ' · ' + esc(x.motivo) : ''}</small></div>${badge(x.nivel)}</div>`).join('') : '<div class="fbsh-caja warn">Ningún equipo listo. Revisa los nombres (iguales a Inventario) y la criticidad (A, B o C).</div>';
-      if (p.noEnc.length) prev += `<div class="fbsh-caja warn">⚠️ No encontrados en Inventario (no se cargan): ${esc(p.noEnc.join(', '))}</div>`;
-      if (p.otraNave.length) prev += `<div class="fbsh-caja warn">⚠️ De otra nave (cambia la nave arriba para cargarlos): ${esc(p.otraNave.join(', '))}</div>`;
-      if (p.repetidos.length) prev += `<div class="fbsh-caja warn">⚠️ Nombre repetido en varios equipos (no se carga, evalúalo uno por uno): ${esc(p.repetidos.join(', '))}</div>`;
-      if (p.malos.length) prev += `<div class="fbsh-caja warn">⚠️ Criticidad no válida (usa A, B o C): ${esc(p.malos.join(', '))}</div>`;
+      prev += p.listos.length ? `<div class="fbsh-caja ok" data-listos="${p.listos.length}"><span data-icon="check-circle"></span> ${p.listos.length} equipo(s) listos para guardar</div>` + p.listos.slice(0, 200).map(x => `<div class="fbsh-fila"><div><b>${esc(x.eq.nombre)}</b><small>${x.antes ? 'Antes: ' + esc(texto(x.antes)) : 'Sin evaluar'}${x.motivo ? ' · ' + esc(x.motivo) : ''}</small></div>${badge(x.nivel)}</div>`).join('') : '<div class="fbsh-caja warn">Ningún equipo listo. Revisa los nombres (iguales a Inventario) y la criticidad (A, B o C).</div>';
+      if (p.noEnc.length) prev += `<div class="fbsh-caja warn"><span data-icon="alert"></span> No encontrados en Inventario (no se cargan): ${esc(p.noEnc.join(', '))}</div>`;
+      if (p.otraNave.length) prev += `<div class="fbsh-caja warn"><span data-icon="alert"></span> De otra nave (cambia la nave arriba para cargarlos): ${esc(p.otraNave.join(', '))}</div>`;
+      if (p.repetidos.length) prev += `<div class="fbsh-caja warn"><span data-icon="alert"></span> Nombre repetido en varios equipos (no se carga, evalúalo uno por uno): ${esc(p.repetidos.join(', '))}</div>`;
+      if (p.malos.length) prev += `<div class="fbsh-caja warn"><span data-icon="alert"></span> Criticidad no válida (usa A, B o C): ${esc(p.malos.join(', '))}</div>`;
     }
-    return `<div class="fbsh-head"><div><h3>📥 Cargar criticidad</h3><small>Columnas: Equipo · Criticidad (A, B o C) · Motivo (opcional)</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar">✕</button></div>
+    return `<div class="fbsh-head"><div><h3>Cargar criticidad</h3><small>Columnas: Equipo · Criticidad (A, B o C) · Motivo (opcional)</small></div><button type="button" class="fbsh-x" data-a="x" aria-label="Cerrar"><span data-icon="x"></span></button></div>
       <div class="fbsh-nota">Pega desde Excel (copiar y pegar las columnas) o abre un archivo .xlsx / .csv. El nombre del equipo debe ser igual al de Inventario. La carga masiva guarda solo el nivel; las 5 preguntas se pueden contestar después.</div>
-      <div class="fbsh-acc" style="margin-top:4px;"><button type="button" class="fbsh-btn sec sm" data-a="archivo">📂 Abrir archivo</button><button type="button" class="fbsh-btn sec sm" data-a="plantilla">⬇ Plantilla</button></div>
+      <div class="fbsh-acc" style="margin-top:4px;"><button type="button" class="fbsh-btn sec sm" data-a="archivo"><span data-icon="folder"></span> Abrir archivo</button><button type="button" class="fbsh-btn sec sm" data-a="plantilla"><span data-icon="download"></span> Plantilla</button></div>
       <input type="file" id="fbcArchivo" accept=".xlsx,.xls,.csv,.txt" style="display:none"/>
       <textarea id="fbcPegar" style="min-height:120px;font-family:var(--font-mono);font-size:13px;" placeholder="Equipo&#9;Criticidad&#10;WEAVING 5&#9;A&#10;COMPRESOR 2&#9;B">${esc(st.texto || '')}</textarea>
       <div id="fbcPrevia">${prev}</div>
-      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="volver">← Volver</button><button type="button" class="fbsh-btn sec" data-a="revisar">🔍 Revisar</button>
-        <button type="button" class="fbsh-btn ok" data-a="guardarImp" ${p && p.listos.length ? '' : 'disabled'}>💾 Guardar ${p && p.listos.length ? p.listos.length : ''}</button></div>`;
+      <div class="fbsh-acc"><button type="button" class="fbsh-btn sec" data-a="volver">← Volver</button><button type="button" class="fbsh-btn sec" data-a="revisar"><span data-icon="search"></span> Revisar</button>
+        <button type="button" class="fbsh-btn ok" data-a="guardarImp" ${p && p.listos.length ? '' : 'disabled'}><span data-icon="save"></span> Guardar ${p && p.listos.length ? p.listos.length : ''}</button></div>`;
   }
   async function leerArchivo(f) {
     if (/\.(xlsx|xls)$/i.test(f.name)) {
@@ -449,7 +449,7 @@
       h += `<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px;">${PREGUNTAS.map(p => { const op = p.ops.find(o => o[0] === Number(d[p.k])); return `<tr><td style="padding:4px 0;border-bottom:1px dashed var(--color-border);">${esc(p.corto)}</td><td style="padding:4px 0;border-bottom:1px dashed var(--color-border);">${esc(op ? op[1] : '—')}</td><td style="padding:4px 0;border-bottom:1px dashed var(--color-border);text-align:right;font-weight:800;">${esc(d[p.k])}</td></tr>`; }).join('')}
         <tr><td colspan="2" style="padding:4px 0;font-weight:800;">Total</td><td style="padding:4px 0;text-align:right;font-weight:800;">${esc(d.puntos)} / 25</td></tr></table>`;
     } else if (d.origen === 'importado') h += `<div style="font-size:12.5px;color:var(--color-muted);margin-top:6px;">Cargada desde Excel (sin las 5 preguntas).</div>`;
-    if (d.manual) h += `<div style="font-size:12.5px;margin-top:6px;">✋ Cambiado por el Administrador (calculado: ${esc(texto(d.calculada))})${d.motivo ? ': ' + esc(d.motivo) : ''}</div>`;
+    if (d.manual) h += `<div style="font-size:12.5px;margin-top:6px;"><span data-icon="hand"></span> Cambiado por el Administrador (calculado: ${esc(texto(d.calculada))})${d.motivo ? ': ' + esc(d.motivo) : ''}</div>`;
     else if (d.motivo) h += `<div style="font-size:12.5px;margin-top:6px;">Motivo: ${esc(d.motivo)}</div>`;
     h += `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">Evaluó ${esc(e.criticidadPor || '—')}${cuando ? ' · ' + esc(cuando) : ''}</div>`;
     return h;

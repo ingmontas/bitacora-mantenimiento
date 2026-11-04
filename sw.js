@@ -5,12 +5,12 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v57'; // (29 oct 2026) 💼 CAPEX: proyectos de inversión
+const CACHE = 'mantenimiento-v61'; // (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
 const ASSETS = [
   './',
   'index.html',
   'bitacora.html',
-  'inventario.html',
+  'inventario.html', // (v3 etapa 3a) dirección vieja: lleva a almacen.html#repuestos
   'analisis.html',
   'checklist.html',
   'hoja-vida.html',
@@ -23,8 +23,19 @@ const ASSETS = [
   'rentabilidad.html',
   'admin.html', // (25 oct 2026)
   'guia.html', // (26 oct 2026, Etapa 5) guía de inicio por rol
-  'capex.html', // (29 oct 2026) 💼 CAPEX (Admin y Encargado)
-  'capex-i18n.js', // (29 oct 2026) textos de CAPEX en español, inglés y turco
+  'capex.html', // (29 oct 2026) CAPEX (Admin y Encargado)
+  'i18n.js', // (v3) idiomas de toda la app: español, inglés y turco
+  'i18n/common.js', // (v3) textos comunes
+  'i18n/capex.js', // (v3) textos de CAPEX (antes capex-i18n.js)
+  'traductor.js', // (v3) traducción a pedido de lo que escribe la gente
+  'app-shell.js', // (v3) barra superior, barra inferior, menú Más, escáner y buscador
+  'hoy.js', // (v3) pantalla Hoy
+  'icons.js', // (v3) iconos SVG (reemplazan los emojis)
+  'i18n/shell.js', // (v3) textos de la estructura de la app
+  'i18n/hoy.js', // (v3) textos de Hoy
+  'catalogo.js', // (v3 etapa 3a) catálogo de equipos (movido de Inventario; lo usan Equipos y Almacén)
+  'kpis.js', // (v3 etapa 3a) indicadores comunes (MTBF, MTTR, disponibilidad, backlog…)
+  'ots-cola.js', // (v3 etapa 3a) cola de OTs por planificar / por validar (Trabajos)
   'capex-calc.js', // (29 oct 2026) cálculos de CAPEX (totales, finanzas, cronograma, gasto)
   'manifest.json',
   'firebase-config.js',
@@ -35,6 +46,10 @@ const ASSETS = [
   'seguridad.js', // (28 oct 2026) LOTO y permiso de trabajo
   'rca.js', // (28 oct 2026) análisis de causa raíz y ajustes de indicadores
   'tendencias.js', // (28 oct 2026) tendencias de mediciones de checklist
+  // (v3 etapa 3b) textos de cada pantalla en inglés y turco (se cargan solo si el idioma no es español)
+  'i18n/compartido.js', 'i18n/bitacora.js', 'i18n/checklist.js', 'i18n/hoja-vida.js', 'i18n/catalogo.js', 'i18n/almacen.js',
+  'i18n/herramientas.js', 'i18n/analisis.js', 'i18n/incentivos.js', 'i18n/rentabilidad.js', 'i18n/admin.js', 'i18n/reportar.js',
+  'i18n/login.js', 'i18n/guia.js',
   'login.html',
   'tecnicos.json',
   'icon-192.png',

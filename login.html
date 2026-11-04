@@ -4,49 +4,62 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="color-scheme" content="light dark"/>
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F1114"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
-<title>Iniciar sesión — Mantenimiento</title>
+<title>Iniciar sesión · VoidTech Mantenimiento</title>
+<script>try{var t=localStorage.getItem('vtTema');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
 <link rel="stylesheet" href="tema.css"/>
 <style>
   :root{--bg: var(--color-bg);--card: var(--color-surface);--accent: var(--color-accent);--text: var(--color-text);--muted: var(--color-muted);--border: var(--color-border);--red: var(--color-danger);}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{background:var(--bg);color:var(--text);font-family: var(--font-sans);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:30px 24px;max-width:360px;width:100%;}
-  .emoji{font-size:34px;margin-bottom:10px;text-align:center;}
-  h1{font-size:19px;margin-bottom:6px;text-align:center;}
-  p.sub{font-size:12.5px;color:var(--muted);margin-bottom:22px;text-align:center;line-height:1.5;}
-  label{font-size:10.5px;color:var(--color-accent-text);font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px;margin-top:14px;}
-  input{width:100%;background:var(--color-input-bg);border:1px solid var(--border);border-radius:8px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit;}
-  input:focus{outline:1px solid var(--accent);}
-  button{width:100%;margin-top:22px;padding:13px;border:none;border-radius:10px;background:var(--color-primary);color:var(--color-on-primary);font-weight:700;font-size:15px;cursor:pointer;}
-  button:disabled{opacity:.6;}
-  #msg{margin-top:14px;font-size:13px;color:var(--color-danger-text);min-height:18px;line-height:1.4;}
+  body{background:var(--bg);color:var(--text);font-family: var(--font-sans);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;box-shadow:inset 0 4px 0 var(--vt-red);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 24px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-2);}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:22px;}
+  .brand .vt-mono{width:44px;height:44px;}
+  .brand b{display:block;font-size:26px;font-weight:700;letter-spacing:-.025em;line-height:1;}
+  .brand b em{font-style:normal;color:var(--vt-red);}
+  .brand small{display:block;font-size:12.5px;color:var(--muted);margin-top:4px;letter-spacing:.02em;}
+  h1{font-size:19px;font-weight:600;margin-bottom:4px;}
+  p.sub{font-size:14px;color:var(--muted);margin-bottom:18px;line-height:1.5;}
+  label{font-size:13px;color:var(--color-text-2);font-weight:600;display:block;margin-bottom:6px;margin-top:14px;}
+  input{width:100%;min-height:48px;background:var(--color-input-bg);border:1px solid var(--color-border-strong);border-radius:10px;padding:0 14px;color:var(--text);font-size:16px;font-family:inherit;}
+  input:focus{outline:2px solid var(--color-focus);outline-offset:1px;}
+  button[type=submit]{width:100%;min-height:50px;margin-top:22px;border:none;border-radius:10px;background:var(--vt-red);color:#fff;font-weight:600;font-size:16px;cursor:pointer;font-family:inherit;}
+  button[type=submit]:disabled{opacity:.6;}
+  #msg{margin-top:14px;font-size:13.5px;color:var(--color-danger-text);min-height:18px;line-height:1.4;}
+  .pie{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:380px;width:100%;margin-top:16px;font-size:12.5px;color:var(--muted);}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="emoji">🔧</div>
-  <h1>Mantenimiento</h1>
-  <p class="sub">Inicia sesión con la cuenta que te asignó tu administrador.</p>
+  <div class="brand"><span id="vtMono"></span><span><b>Void<em>Tech</em></b><small data-i18n="shell.login_titulo">Mantenimiento</small></span></div>
+  <h1 data-i18n="shell.login_entrar">Iniciar sesión</h1>
+  <p class="sub" data-i18n="shell.login_sub">Inicia sesión con la cuenta que te asignó tu administrador.</p>
   <form id="loginForm">
-    <label for="email">Correo</label>
+    <label for="email" data-i18n="shell.login_correo">Correo</label>
     <input type="email" id="email" required autocomplete="username" inputmode="email"/>
-    <label for="password">Contraseña</label>
+    <label for="password" data-i18n="shell.login_clave">Contraseña</label>
     <input type="password" id="password" required autocomplete="current-password"/>
-    <div id="msg"></div>
-    <button type="submit" id="submitBtn">Iniciar sesión</button>
+    <div id="msg" role="alert"></div>
+    <button type="submit" id="submitBtn" data-i18n="shell.login_entrar">Iniciar sesión</button>
   </form>
-  <a href="#" id="olvide" style="display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">Olvidé mi contraseña</a>
+  <a href="#" id="olvide" style="display:flex;align-items:center;justify-content:center;min-height:44px;margin-top:8px;font-size:14px;color:var(--muted);" data-i18n="shell.login_olvide">Olvidé mi contraseña</a>
 </div>
+<div class="pie"><span>VoidTech © 2026</span><div data-i18n-selector></div></div>
 <script>
 firebase.initializeApp(firebaseConfig);
+document.getElementById('vtMono').innerHTML = window.VTIcons ? VTIcons.mono({ size: 44 }) : '';
+const L = (k, p) => (window.i18n && i18n.has('shell.' + k) ? i18n.t('shell.' + k, p) : k);
 const auth = firebase.auth();
 const params = new URLSearchParams(location.search);
 // (5 oct 2026) Solo se acepta volver a una página propia de la app
@@ -75,7 +88,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const btn = document.getElementById('submitBtn');
   const msg = document.getElementById('msg');
   msg.textContent = ''; msg.style.color = '';
-  btn.disabled = true; btn.textContent = 'Entrando…';
+  btn.disabled = true; btn.textContent = L('login_entrando');
   try {
     await auth.signInWithEmailAndPassword(
       document.getElementById('email').value.trim(),
@@ -84,17 +97,17 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     // La redirección la hace onAuthStateChanged arriba.
   } catch (err) {
     const map = {
-      'auth/invalid-email': 'Correo inválido.',
-      'auth/user-disabled': 'Esta cuenta está deshabilitada.',
-      'auth/user-not-found': 'No existe una cuenta con ese correo.',
-      'auth/wrong-password': 'Contraseña incorrecta.',
-      'auth/invalid-credential': 'Correo o contraseña incorrectos.',
-      'auth/too-many-requests': 'Demasiados intentos — espera unos minutos e intenta de nuevo.',
-      'auth/network-request-failed': 'Sin conexión a internet. Revisa la señal e intenta de nuevo.',
-      'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
+      'auth/invalid-email': 'login_e_invalido',
+      'auth/user-disabled': 'login_e_deshab',
+      'auth/user-not-found': 'login_e_noExiste',
+      'auth/wrong-password': 'login_e_clave',
+      'auth/invalid-credential': 'login_e_cred',
+      'auth/too-many-requests': 'login_e_intentos',
+      'auth/network-request-failed': 'login_e_red',
+      'auth/invalid-login-credentials': 'login_e_cred',
     };
-    msg.textContent = map[err.code] || ('Error: ' + err.message);
-    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+    msg.textContent = map[err.code] ? L(map[err.code]) : L('login_e_otro', { e: err.message });
+    btn.disabled = false; btn.textContent = L('login_entrar');
   }
 });
 
@@ -103,14 +116,14 @@ document.getElementById('olvide').addEventListener('click', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('msg');
   const email = document.getElementById('email').value.trim();
-  if (!email) { msg.textContent = 'Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'; return; }
+  if (!email) { msg.textContent = L('login_escribeCorreo'); return; }
   try {
     await auth.sendPasswordResetEmail(email);
     msg.style.color = 'var(--color-success-text)';
-    msg.textContent = 'Si ese correo tiene cuenta, te llegó un enlace para crear una contraseña nueva (revisa también spam).';
+    msg.textContent = L('login_enviado');
   } catch (err) {
     msg.style.color = '';
-    msg.textContent = err.code === 'auth/invalid-email' ? 'Correo inválido.' : err.code === 'auth/network-request-failed' ? 'Sin conexión a internet.' : 'No se pudo enviar el correo: ' + err.message;
+    msg.textContent = err.code === 'auth/invalid-email' ? L('login_e_invalido') : err.code === 'auth/network-request-failed' ? L('login_sinRed') : L('login_noEnviado', { e: err.message });
   }
 });
 </script>

@@ -30,8 +30,13 @@
        la cámara normal del celular ya reconoce QRs con una URL y ofrece
        abrirla sola). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- (v3, nov 2026) Diseño VoidTech: iconos SVG, idiomas y letra IBM Plex -->
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
   <style>
     /* ══════════════════════════════════════════════════════════════════
@@ -55,18 +60,18 @@
     #header h1 { font-size: 15px; font-weight: 800; }
     #header small { font-size: 10px; color: var(--color-header-sub); font-weight: 600; text-transform: uppercase; display: block; margin-top: 1px; }
     #sp-status { font-size: 20px; cursor: pointer; }
-    #nav { display: flex; background: var(--surface); border-top: 1px solid var(--border); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 200; }
-    .nav-btn { flex: 1; padding: 8px 4px 10px; background: none; border: none; color: var(--muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .2s; text-transform: uppercase; letter-spacing: .04em; }
-    .nav-btn.active { color: var(--color-accent-text); }
-    .nav-btn span { font-size: 22px; }
-    #content { padding: 14px 14px 80px; }
+    /* (v3) Secciones arriba como control segmentado (.vt-seg, tema.css): una sola barra inferior, la de la app. */
+    html:not(.vt-shell) #nav.vt-seg { top: 0; }
+    html.vt-shell #header { display: none; }
+    #content { padding: 14px 14px 24px; }
+    @media (min-width: 1024px) { body { max-width: 760px; } }
     .screen { display: none; }
     .screen.active { display: block; }
     .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
     .card-title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
     .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
     .field { margin-bottom: 13px; }
-    label { font-size: 10px; color: var(--color-accent-text); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
+    label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 5px; }
     input, select, textarea { width: 100%; background: var(--color-input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none; font-family: inherit; appearance: none; }
     textarea { resize: vertical; min-height: 55px; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
@@ -159,15 +164,17 @@
 </head>
 <body>
 
-<div id="offline-bar">📵 Sin conexión — se guarda en el celular y se sube solo al volver la señal</div>
+<div id="offline-bar"><span data-icon="wifi-off"></span> Sin conexión — se guarda en el celular y se sube solo al volver la señal</div>
 
-<div id="header">
-  <div>
-    <h1>🩺 Checklist Mantenimiento</h1>
-    <small id="header-sub">2026 · Cargando...</small>
-  </div>
-  <div id="sp-status" title="Estado de conexión">⚙️</div>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
+
+<nav id="nav" class="vt-seg" role="tablist" aria-label="Checklist">
+  <button class="nav-btn active" id="nav-hoy" role="tab" onclick="goTo('hoy',this)"><span data-icon="calendar-check"></span><b data-i18n="shell.c_hoy">Hoy</b></button>
+  <button class="nav-btn" id="nav-historial" role="tab" onclick="goTo('historial',this)"><span data-icon="history"></span><b data-i18n="shell.c_historial">Historial</b></button>
+  <!-- (v3 etapa 3a) "OTs por planificar / validar" se mudó a Trabajos (bitacora.html#planificar / #validar). checklist.html#ots lleva allá. -->
+  <button class="nav-btn" id="nav-btn-horometro" role="tab" style="display:none;" onclick="goTo('horometro',this)"><span data-icon="timer"></span><b data-i18n="shell.c_horometro">Horómetro</b></button>
+  <button class="nav-btn" id="nav-config" role="tab" onclick="goTo('config',this)"><span data-icon="settings"></span><b data-i18n="shell.c_config">Ajustes</b></button>
+</nav>
 
 <div id="content">
 
@@ -177,13 +184,12 @@
       <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo (vencidos y lista) -->
       <div class="card" id="fUbicHoyCard" style="display:none;padding:10px;"><div id="fUbicHoy"></div></div>
       <div class="card">
-        <div class="card-title">🔔 Hoy te toca</div>
-        <div class="card-sub">Equipos con checklist vencido o que vence hoy</div>
+        <div class="card-title">Hoy te toca</div>
+        <div class="card-sub">Vencidos o que vencen hoy</div>
         <div id="hoy-vencidos"></div>
       </div>
       <div class="card">
-        <div class="card-title">📋 Todos los equipos</div>
-        <div class="card-sub">Elige cualquiera para llenar su checklist ahora</div>
+        <div class="card-title">Todos los equipos</div>
         <input type="text" id="hoy-buscar" placeholder="Buscar equipo..." oninput="renderHoy()" style="margin-bottom:10px;"/>
         <div id="hoy-todos"></div>
       </div>
@@ -197,10 +203,10 @@
             <div class="card-title" id="cf-equipo-nombre">—</div>
             <div class="card-sub" id="cf-equipo-sub">—</div>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="cerrarFormChecklist()">✕ Cerrar</button>
+          <button class="btn btn-secondary btn-sm" onclick="cerrarFormChecklist()"><span data-icon="x"></span> Cerrar</button>
         </div>
-        <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()">📝 Agregar/editar puntos de este equipo</button>
-        <div class="cf-progreso"><span id="cf-progreso-txt"></span><button type="button" class="btn btn-secondary btn-sm" id="cf-todo-ok" onclick="marcarRestoConforme()">✅ El resto Conforme</button></div>
+        <button class="btn btn-secondary btn-sm" id="cf-btn-editar-puntos" style="display:none;margin-bottom:12px;" onclick="editarPuntosDesdeFormulario()"><span data-icon="pencil"></span> Agregar/editar puntos de este equipo</button>
+        <div class="cf-progreso"><span id="cf-progreso-txt"></span><button type="button" class="btn btn-secondary btn-sm" id="cf-todo-ok" onclick="marcarRestoConforme()"><span data-icon="check-circle"></span> El resto Conforme</button></div>
         <div id="cf-puntos"></div>
         <div class="field" id="cf-horometro-field" style="display:none;">
           <label>Lectura actual del horómetro (horas)</label>
@@ -210,96 +216,75 @@
           <label>Quién lo hizo</label>
           <div class="tec-grid" id="cf-tec-grid"></div>
         </div>
-        <button class="btn btn-primary" id="cf-submit-btn" onclick="submitChecklist()">✅ Guardar Checklist</button>
+        <button class="btn btn-primary" id="cf-submit-btn" onclick="submitChecklist()"><span data-icon="check-circle"></span> Guardar Checklist</button>
       </div>
     </div>
   </div>
 
   <!-- SCREEN: HISTORIAL -->
   <div class="screen" id="screen-historial">
-    <div class="card-title" style="margin-bottom:4px">📂 Historial de Checklists</div>
-    <div class="card-sub" style="margin-bottom:12px">Últimos checklists guardados</div>
+    <div class="card-title" style="margin-bottom:12px">Historial</div>
     <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo + Excel de lo que se ve -->
     <div class="card" id="fUbicHistCard" style="display:none;padding:10px;"><div id="fUbicHist"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="exportHistorialExcel()">⬇️ Excel de esta lista</button></div>
-    <button class="btn secondary sm" onclick="exportChecklistsBackup()" style="margin-bottom:12px;" title="Descarga TODO el historial de checklists, no solo los últimos 30 que se ven arriba">⬇ Exportar respaldo completo (JSON)</button>
+      <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="exportHistorialExcel()"><span data-icon="download"></span> Excel de esta lista</button></div>
+    <!-- (v3 etapa 3a) El respaldo completo (JSON) vive solo en Administración (Administrador) -->
+    <a class="btn btn-secondary btn-sm" id="respaldoAdm" href="admin.html#respaldo" style="display:none;margin-bottom:12px;text-decoration:none;"><span data-icon="download"></span> <span data-i18n="shell.t_respaldoAdm">Respaldo completo (Administración)</span></a>
     <div id="historial-lista"></div>
-  </div>
-
-  <!-- SCREEN: OTs PENDIENTES -->
-  <div class="screen" id="screen-ots">
-    <div class="card-title" style="margin-bottom:4px">🛠 OTs por Planificar</div>
-    <div class="card-sub" style="margin-bottom:12px">Fallas detectadas en un checklist (predictivo) y proyectos / mejoras que reporta producción. El técnico las registra en la Bitácora al terminar.</div>
-    <div id="ots-lista"></div>
   </div>
 
   <!-- SCREEN: HORÓMETRO (29 sep 2026) — mantenimiento por horas de uso, no
        solo por días calendario. Solo aparecen aquí los equipos que un
-       Encargado/Admin activó desde Config → "⏱ Horómetro" de ese equipo.
+       Encargado/Admin activó desde Config → "<span data-icon="timer"></span> Horómetro" de ese equipo.
        Cualquiera con acceso al checklist puede anotar la lectura actual sin
        tener que abrir el checklist completo — igual de rápido que pasar y
        apuntar el número en la máquina. -->
   <div class="screen" id="screen-horometro">
-    <div class="card-title" style="margin-bottom:4px">⏱ Horómetro</div>
-    <div class="card-sub" style="margin-bottom:12px">Anota la lectura actual de las máquinas que se revisan por horas de uso, no por días</div>
+    <div class="card-title" style="margin-bottom:4px">Horómetro</div>
+    <div class="card-sub" style="margin-bottom:12px">Lectura actual de las máquinas que se revisan por horas</div>
     <div id="horometro-lista"></div>
   </div>
 
   <!-- SCREEN: CONFIG -->
   <div class="screen" id="screen-config">
     <div class="card">
-      <div class="card-title">📝 Puntos del Checklist</div>
-      <div class="card-sub">La lista que se usa al llenar el checklist de cualquier equipo</div>
+      <div class="card-title">Puntos del checklist</div>
+      <div class="card-sub">Lista general para cualquier equipo</div>
       <div id="config-puntos-info"></div>
       <div id="config-puntos-lista"></div>
     </div>
 
     <!-- (28 oct 2026) Criticidad A/B/C: Encargado y Administrador -->
     <div class="card" id="card-criticidad" style="display:none;">
-      <div class="card-title">🎯 Criticidad de equipos</div>
+      <div class="card-title"><span data-icon="target"></span> Criticidad de equipos</div>
       <div class="card-sub" id="crit-progreso">A · Crítico, B · Importante, C · Normal. Los críticos salen primero en Avisos y llevan bloqueo (LOTO) siempre.</div>
-      <button class="btn btn-primary" onclick="fbCritAbrirLista({ onClose: () => { renderHoy(); renderConfig(); } })">🎯 Evaluar criticidad</button>
+      <!-- (v3 etapa 3a) La lista de criticidad vive en el catálogo de Equipos (misma función, mismos permisos) -->
+      <a class="btn btn-primary" href="hoja-vida.html#catalogo" style="display:block;text-align:center;text-decoration:none;"><span data-icon="target"></span> <span data-i18n="shell.e_evaluar">Evaluar criticidad</span> · <span data-i18n="shell.e_catalogo">Catálogo de equipos</span></a>
     </div>
 
     <div class="card" id="card-bulk-listas" style="display:none;">
-      <div class="card-title">📥 Listas por equipo — carga masiva</div>
-      <div class="card-sub">Sube desde Excel la lista de puntos propia de muchos equipos a la vez. Todos los usuarios la ven al momento.</div>
-      <button class="btn btn-primary" onclick="abrirModalBulkListas()">📥 Cargar listas por equipo</button>
+      <div class="card-title"><span data-icon="download"></span> Listas por equipo — carga masiva</div>
+      <div class="card-sub">Lista propia de muchos equipos desde Excel. <button type="button" class="vt-help" data-ayuda="Todos los usuarios ven la lista nueva al momento." aria-label="Ayuda">?</button></div>
+      <button class="btn btn-primary" onclick="abrirModalBulkListas()"><span data-icon="download"></span> Cargar listas por equipo</button>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
-      <div class="card-title" style="margin-bottom:0;">⚙️ Configurar Frecuencias</div>
-      <button class="btn btn-secondary btn-sm" id="btn-bulk-frecuencias" style="display:none;" onclick="abrirModalBulkFrecuencias()">📋 Carga masiva</button>
+      <div class="card-title" style="margin-bottom:0;"><span data-icon="settings"></span> Configurar Frecuencias</div>
+      <button class="btn btn-secondary btn-sm" id="btn-bulk-frecuencias" style="display:none;" onclick="abrirModalBulkFrecuencias()"><span data-icon="clipboard"></span> Carga masiva</button>
     </div>
-    <div class="card-sub" style="margin-bottom:12px">Cada cuántos días se debe revisar cada equipo</div>
+    <div class="card-sub" style="margin-bottom:12px">Cada cuántos días se revisa cada equipo <button type="button" class="vt-help" data-ayuda="Un equipo sin frecuencia no sale en Hoy te toca, pero se puede revisar cuando quieras. Con Horómetro, además se revisa por horas de uso (montacargas, compresores)." aria-label="Ayuda">?</button></div>
     <div id="config-info"></div>
     <div id="config-lista"></div>
   </div>
 
 </div>
 
-<!-- MODAL: anular OT con motivo obligatorio (23 oct 2026 — solo Administrador) -->
-<div class="modal-bg" id="modalAnularOt" onclick="if (event.target === this) cerrarModalAnularOt()">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="anularOtTitulo">
-    <h3 id="anularOtTitulo">🚫 Anular OT</h3>
-    <div class="modal-sub" id="anularOtSub"></div>
-    <div class="field" style="margin-bottom:6px;">
-      <label for="anularOtMotivo">Motivo (obligatorio)</label>
-      <textarea id="anularOtMotivo" maxlength="300" placeholder="Ej: duplicada, ya no aplica, reporte por error…"></textarea>
-    </div>
-    <div id="anularOtErr" style="font-size:12px;color:var(--color-danger-text);font-weight:700;margin-bottom:6px;"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="cerrarModalAnularOt()">Cancelar</button>
-      <button class="btn btn-primary" id="anularOtOk" style="background:var(--red);" onclick="confirmarAnularOt()">🚫 Anular</button>
-    </div>
-  </div>
-</div>
+
 
 <!-- MODAL: carga masiva de frecuencias (pegar tabla, igual que en Inventario) -->
 <div class="modal-bg" id="modalBulkFrecuencias">
   <div class="modal">
-    <h3>📋 Carga masiva de frecuencias</h3>
-    <div class="modal-sub">Pega filas separadas por tabulación (como copiar y pegar de Excel): el nombre del equipo tal como está guardado en Inventario, y cada cuántos días se debe revisar. Los nombres que no coincidan con ningún equipo se listan al final, sin tocar nada.</div>
+    <h3><span data-icon="clipboard"></span> Carga masiva de frecuencias</h3>
+    <div class="modal-sub">Copia y pega desde Excel: equipo y días. <button type="button" class="vt-help" data-ayuda="El nombre del equipo debe ser igual al del catálogo. Los que no coincidan se listan al final y no se cambia nada." aria-label="Ayuda">?</button></div>
     <div class="field">
       <label>Formato: Nombre del equipo · Días</label>
       <textarea id="bulkFrecPasteArea" style="min-height:200px;font-family:monospace;font-size:12px;" placeholder="COMPRESOR 1	7
@@ -316,11 +301,11 @@ BANDA TRANSPORTADORA A	15"></textarea>
 <!-- MODAL: carga masiva de listas propias por equipo (14 oct 2026) -->
 <div class="modal-bg" id="modalBulkListas">
   <div class="modal">
-    <h3>📥 Listas de checklist por equipo</h3>
-    <div class="modal-sub">Una fila por cada punto: en la primera columna el <b>nombre del equipo</b> (igual que en Inventario) y en la segunda el <b>punto a revisar</b>. Si el punto es una medición, llena también <b>Unidad, Mínimo y Máximo</b> (ver la plantilla). Repite el nombre del equipo en tantas filas como puntos tenga. También sirve una fila por equipo con los puntos en columnas seguidas. La lista de cada equipo del archivo <b>reemplaza</b> la que tenía; los equipos que no estén en el archivo no cambian.</div>
+    <h3><span data-icon="download"></span> Listas de checklist por equipo</h3>
+    <div class="modal-sub">Una fila por punto: equipo y punto. La lista del archivo reemplaza la del equipo. <button type="button" class="vt-help" data-ayuda="Si el punto es una medición, llena también Unidad, Mínimo y Máximo (ver la plantilla). Repite el equipo en cada fila, o pon todos sus puntos en columnas seguidas. Los equipos que no están en el archivo no cambian." aria-label="Ayuda">?</button></div>
     <div class="row" style="gap:8px;margin-bottom:10px;">
-      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bulkListasFile').click()">📂 Abrir Excel / CSV</button>
-      <button class="btn btn-secondary btn-sm" onclick="descargarPlantillaListas()">⬇️ Plantilla</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bulkListasFile').click()"><span data-icon="folder"></span> Abrir Excel / CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="descargarPlantillaListas()"><span data-icon="download"></span> Plantilla</button>
       <input type="file" id="bulkListasFile" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="leerArchivoListas(event)">
     </div>
     <div class="field">
@@ -334,8 +319,8 @@ WEAVING 5	Estado de lanzaderas"></textarea>
     <div id="bulkListasPreview" style="font-size:13px;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModalGeneric('modalBulkListas')">Cancelar</button>
-      <button class="btn btn-secondary" onclick="revisarBulkListas()">🔍 Revisar</button>
-      <button class="btn btn-primary" id="btnGuardarListas" disabled onclick="guardarBulkListas()">💾 Guardar listas</button>
+      <button class="btn btn-secondary" onclick="revisarBulkListas()"><span data-icon="search"></span> Revisar</button>
+      <button class="btn btn-primary" id="btnGuardarListas" disabled onclick="guardarBulkListas()"><span data-icon="save"></span> Guardar listas</button>
     </div>
   </div>
 </div>
@@ -343,14 +328,14 @@ WEAVING 5	Estado de lanzaderas"></textarea>
 <!-- MODAL: puntos del checklist propios de un equipo (no todos se revisan igual) -->
 <div class="modal-bg" id="modalPuntosEquipo">
   <div class="modal">
-    <h3>📝 Puntos de checklist — <span id="pe-equipo-nombre">—</span></h3>
-    <div class="modal-sub">Esta lista se usa SOLO para este equipo en vez de la lista general. Escribe, agrega o borra puntos, y toca "Guardar" al final. Los checklists ya guardados no cambian.</div>
+    <h3><span data-icon="pencil"></span> Puntos de checklist — <span id="pe-equipo-nombre">—</span></h3>
+    <div class="modal-sub">Solo para este equipo, en vez de la lista general. <button type="button" class="vt-help" data-ayuda="Los checklists ya guardados no cambian." aria-label="Ayuda">?</button></div>
     <div id="pe-lista"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModalGeneric('modalPuntosEquipo')">Cancelar</button>
-      <button class="btn btn-primary" onclick="guardarPuntosEquipo()">💾 Guardar</button>
+      <button class="btn btn-primary" onclick="guardarPuntosEquipo()"><span data-icon="save"></span> Guardar</button>
     </div>
-    <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="usarListaGeneralParaEquipo()">↩️ Usar la lista general (quitar la propia)</button>
+    <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="usarListaGeneralParaEquipo()"><span data-icon="arrow-left"></span> Usar la lista general (quitar la propia)</button>
   </div>
 </div>
 
@@ -362,27 +347,22 @@ WEAVING 5	Estado de lanzaderas"></textarea>
       <h3 id="qr-equipo-nombre" style="margin-bottom:2px;">—</h3>
       <div id="qr-equipo-sub" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
       <div id="qr-canvas-wrap" style="display:flex;justify-content:center;background:#fff;padding:14px;border-radius:10px;"></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR único de la máquina: al escanearlo se ofrece reportar parada, checklist, registrar trabajo, hoja de vida y repuestos, según quién lo escanee.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">QR de la máquina: abre lo que toca según quién lo escanee.</div>
     </div>
-    <a id="qr-etiqueta-parada" class="btn btn-secondary" style="display:block;margin-top:12px;text-decoration:none;font-size:13px;" href="etiquetas-qr.html">🏷️ Etiqueta "¿Máquina parada?" para producción</a>
+    <a id="qr-etiqueta-parada" class="btn btn-secondary" style="display:block;margin-top:12px;text-decoration:none;font-size:13px;" href="etiquetas-qr.html"><span data-icon="tag"></span> Etiqueta "¿Máquina parada?" para producción</a>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModalGeneric('modalQrEquipo')">Cerrar</button>
-      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+      <button class="btn btn-primary" onclick="window.print()"><span data-icon="printer"></span> Imprimir</button>
     </div>
   </div>
 </div>
 
-<nav id="nav">
-  <button class="nav-btn active" onclick="goTo('hoy',this)"><span>🔔</span>Hoy</button>
-  <button class="nav-btn" onclick="goTo('historial',this)"><span>📂</span>Historial</button>
-  <button class="nav-btn" onclick="goTo('ots',this)"><span>🛠</span>OTs</button>
-  <button class="nav-btn" id="nav-btn-horometro" style="display:none;" onclick="goTo('horometro',this)"><span>⏱</span>Horómetro</button>
-  <button class="nav-btn" onclick="goTo('config',this)"><span>⚙️</span>Config</button>
-</nav>
 
 <div id="toast"></div>
 <div id="loading"><div class="spinner"></div><div id="loading-text" style="font-size:13px;color:var(--muted)">Guardando...</div></div>
 
+<!-- (v3 etapa 3a) Cola de OTs + ayudas comunes (movidas de esta pantalla; la cola se ve en Trabajos) -->
+<script src="ots-cola.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // CHECKLIST + OTs PENDIENTES — módulo nuevo e independiente (17 sep 2026)
@@ -445,10 +425,10 @@ function inferirPrioridad(punto) {
 // con medición: { p: 'Temperatura del motor', unidad: '°C', min: 20, max: 80 }.
 // Si la lectura sale del rango, el punto queda "No conforme" solo.
 const RESULTADOS = {
-  ok:    { txt: 'Conforme',         ico: '✅', cls: 'sel-ok' },
-  falla: { txt: 'No conforme',      ico: '⚠️', cls: 'sel-falla' },
-  na:    { txt: 'No aplica',        ico: '➖', cls: 'sel-na' },
-  ni:    { txt: 'No inspeccionado', ico: '⏸', cls: 'sel-ni' },
+  ok:    { txt: 'Conforme',         ico: '', cls: 'sel-ok' },
+  falla: { txt: 'No conforme',      ico: '', cls: 'sel-falla' },
+  na:    { txt: 'No aplica',        ico: '', cls: 'sel-na' },
+  ni:    { txt: 'No inspeccionado', ico: '', cls: 'sel-ni' },
 };
 const numOk = v => v !== undefined && v !== null && v !== '' && !isNaN(Number(v));
 function puntoTexto(x) { return typeof x === 'string' ? x : ((x && x.p) || ''); }
@@ -490,8 +470,8 @@ function htmlEditorPuntos(lista, pref, fnDel, fnMed) {
     <div class="ed-punto">
       <div class="row" style="gap:6px;">
         <div class="field" style="margin-bottom:0;"><input type="text" id="${pref}-${idx}" value="${fbEsc(e.p || '')}" placeholder="Punto a revisar..."/></div>
-        <button type="button" class="btn btn-secondary btn-sm" title="Medición con límites" style="${e.med ? 'background:#3987e533;color:var(--color-primary-text);' : ''}" onclick="${fnMed}(${idx})">📏</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="${fnDel}(${idx})">🗑</button>
+        <button type="button" class="btn btn-secondary btn-sm" title="Medición con límites" style="${e.med ? 'background:#3987e533;color:var(--color-primary-text);' : ''}" onclick="${fnMed}(${idx})"><span data-icon="ruler"></span></button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="${fnDel}(${idx})"><span data-icon="trash"></span></button>
       </div>
       ${e.med ? `<div class="ed-med">
         <input type="text" id="${pref}-u-${idx}" value="${fbEsc(e.unidad || '')}" placeholder="Unidad (°C, bar…)"/>
@@ -519,14 +499,6 @@ let puntosEquipoEditId = null;    // id del equipo cuya lista de puntos propia s
 let puntosEquipoEditState = null; // copia de trabajo de esos puntos mientras se edita
 
 let currentEquipos = [];      // desde /equipos (onSnapshot)
-let currentOts = [];          // desde /ots: origen checklist + proyectos, estado en curso (onSnapshot)
-const currentOtsTodas = () => currentOts;
-// (25 oct 2026, Etapa 2) Técnico que puede tomar una OT: sin naves asignadas o de la nave de la OT.
-function tecParaOt(t, o) {
-  if (typeof fbNaveDe !== 'function' || !t || !Array.isArray(t.plantas) || !t.plantas.length) return true;
-  const n = fbNaveDe(o);
-  return !n || t.plantas.some(p => fbMismoNombre('plantas', p, n));
-}
 let currentChecklists = [];   // desde /checklists (onSnapshot, últimos 30)
 const currentChecklistsTodos = () => currentChecklists;
 let equipoSeleccionado = null; // {id, nombre, localidad}
@@ -534,8 +506,6 @@ let itemsFormState = [];       // [{punto, resultado:'ok'|'falla', nota}] mientr
 
 document.addEventListener('DOMContentLoaded', () => {
   window.fbReady.then(() => {
-    document.getElementById('header-sub').textContent =
-      (window.currentUserRole && window.currentUserRole.nombre) ? '2026 · ' + window.currentUserRole.nombre : '2026';
     // (25 oct 2026, Etapa 3) barras de filtro (sin lecturas: catálogo y listas ya guardados)
     ubicHoy = fbFiltroUbicacion({ el: document.getElementById('fUbicHoy'), pagina: 'checklist-hoy', onChange: () => renderHoy() });
     ubicHist = fbFiltroUbicacion({ el: document.getElementById('fUbicHist'), pagina: 'checklist-historial', onChange: () => renderHistorial() });
@@ -544,6 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadTecnicos();
     loadEquipos();
     loadOts();
+    { const ra = document.getElementById('respaldoAdm'); if (ra && userHasRole('ADMINISTRADOR')) ra.style.display = ''; } // (v3 etapa 3a)
     loadChecklists();
     loadChecklistPuntos();
     loadListasEquipos();
@@ -576,21 +547,29 @@ function cambioDeNaveCk() {
 if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(cambioDeNaveCk);
 
 function updateHeaderStatus() {
-  const bar = document.getElementById('offline-bar');
-  const icon = document.getElementById('sp-status');
-  if (navigator.onLine) { bar.classList.remove('show'); icon.textContent = '☁️'; }
-  else { bar.classList.add('show'); icon.textContent = '📵'; }
+  document.getElementById('offline-bar').classList.toggle('show', !navigator.onLine);
 }
 
+// (v3) Enlaces por sección: #hoy #historial #ots #horometro #config
+function vtRutaChecklist() {
+  const h = (location.hash || '').slice(1);
+  if (h === 'ots') { location.replace('bitacora.html#planificar'); return; } // (v3 etapa 3a) la cola de OTs vive en Trabajos
+  const sec = { hoy: 'hoy', historial: 'historial', horometro: 'horometro', config: 'config', ajustes: 'config' }[h];
+  if (sec) goTo(sec, document.getElementById(sec === 'horometro' ? 'nav-btn-horometro' : 'nav-' + sec));
+}
+window.addEventListener('hashchange', vtRutaChecklist);
+document.addEventListener('DOMContentLoaded', vtRutaChecklist);
 function goTo(screen, btn) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  document.querySelectorAll('#nav .nav-btn').forEach(b => b.setAttribute('aria-selected', String(b === btn)));
   if (screen === 'hoy') cerrarFormChecklist();
 }
 
 function showToast(msg, type) {
+  if (window.vtToast) return vtToast(msg, type);
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show' + (type ? ' ' + type : '');
@@ -608,32 +587,8 @@ function setLoading(on, texto) {
 // (.limit(30) en el listener de arriba), así que este botón hace su propia
 // consulta completa, sin límite, para que el respaldo sea de verdad
 // completo, no solo de lo que se ve en pantalla.
-async function exportChecklistsBackup(){
-  showToast('⏳ Generando respaldo completo de checklists…');
-  try{
-    await window.fbReady;
-    const snap = await db.collection('checklists').orderBy('createdAt', 'desc').get();
-    const rows = snap.docs.map(d => {
-      const data = d.data();
-      if (data.createdAt && typeof data.createdAt.toDate === 'function') data.createdAt = data.createdAt.toDate().toISOString();
-      return { id: d.id, ...data };
-    });
-    const blob = new Blob([JSON.stringify({ generadoEn: new Date().toISOString(), checklists: rows }, null, 2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'respaldo_checklists_' + fbHoy() + '.json'; // (5 oct 2026) fecha local, no UTC
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`⬇ Respaldo descargado — ${rows.length} checklists`);
-  }catch(err){
-    showToast('⚠️ No se pudo generar el respaldo: ' + err.message, 'error');
-  }
-}
+// (v3 etapa 3a) exportChecklistsBackup() se quitó: el respaldo completo está en Administración → Respaldo.
 
-function todayStr() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
 
 function addDaysStr(baseStr, dias) {
   const base = baseStr ? new Date(baseStr + 'T00:00:00') : new Date();
@@ -686,7 +641,7 @@ function loadEquipos() {
     renderConfig();
     renderHorometro();
     intentarAbrirDesdeQr();
-    // El tab "⏱ Horómetro" en la barra inferior solo se muestra si algún
+    // El tab "<span data-icon="timer"></span> Horómetro" en la barra inferior solo se muestra si algún
     // equipo lo tiene activado (29 sep 2026) — para no mostrar una pantalla
     // vacía a plantas donde nadie usa mantenimiento por horas todavía.
     const navBtnHorometro = document.getElementById('nav-btn-horometro');
@@ -704,7 +659,7 @@ function loadEquipos() {
 // desde Config, igual que ya se hace con los puntos propios (10.3).
 //
 // horometroActual: la última lectura conocida de la máquina (se actualiza
-// desde el checklist o desde la pantalla "⏱ Horómetro").
+// desde el checklist o desde la pantalla "<span data-icon="timer"></span> Horómetro").
 // horometroUltimoService: la lectura que tenía la máquina quando se hizo el
 // último checklist — el "cero" desde el que se cuentan las horas para el
 // próximo servicio. Se reinicia cada vez que se guarda un checklist de ese
@@ -730,7 +685,7 @@ function renderHoy() {
   );
   const wrapV = document.getElementById('hoy-vencidos');
   wrapV.innerHTML = vencidos.length ? vencidos.map(e => itemRowHtml(e, true)).join('') :
-    `<div class="empty" style="padding:20px 10px;"><span class="emoji">✅</span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
+    `<div class="empty" style="padding:20px 10px;"><span class="emoji"><span data-icon="check-circle"></span></span><p>Ningún equipo tiene checklist vencido hoy.</p></div>`;
 
   const todos = equiposDeNave().filter(enUbicHoy).filter(e => !busca || (e.nombre || '').toLowerCase().includes(busca) || (e.localidad || '').toLowerCase().includes(busca));
   const wrapT = document.getElementById('hoy-todos');
@@ -744,8 +699,8 @@ function itemRowHtml(e, marcarVencido) {
   if (e.checklistFrecuenciaHoras) {
     const horas = horasDesdeUltimoServicio(e);
     horometroTxt = horometroVencido(e)
-      ? ` · ⏱ Vencido por horómetro (${horas}/${e.checklistFrecuenciaHoras} h)`
-      : ` · ⏱ ${horas}/${e.checklistFrecuenciaHoras} h`;
+      ? ` · Vencido por horómetro (${horas}/${e.checklistFrecuenciaHoras} h)`
+      : ` · ${horas}/${e.checklistFrecuenciaHoras} h`;
   }
   return `
     <div class="item-row${marcarVencido ? ' due' : ''}" onclick="abrirFormChecklist('${e.id}')">
@@ -754,10 +709,10 @@ function itemRowHtml(e, marcarVencido) {
         <div style="display:flex;gap:6px;align-items:center;">
           ${typeof fbCritBadge === 'function' ? fbCritBadge(fbCritNivel(e)) : ''}
           ${marcarVencido ? '<span class="tag tag-falla">Vencido</span>' : ''}
-          <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR">📱</button>
+          <button type="button" class="btn btn-secondary btn-sm" style="width:auto;padding:5px 9px;" onclick="mostrarQrEquipo('${e.id}', event)" title="Ver código QR" aria-label="Código QR"><span data-icon="qr"></span></button>
         </div>
       </div>
-      <div class="item-sub">${e.localidad ? '📍 ' + fbEsc(e.localidad) + ' · ' : ''}${fbEsc(prox)}${fbEsc(horometroTxt)}</div>
+      <div class="item-sub">${e.localidad ? '<span data-icon="pin"></span> ' + fbEsc(e.localidad) + ' · ' : ''}${fbEsc(prox)}${fbEsc(horometroTxt)}</div>
     </div>`;
 }
 
@@ -773,7 +728,7 @@ function abrirFormChecklist(equipoId) {
   itemsFormState = puntosEfectivos(e).map(nuevoItemForm);
 
   document.getElementById('cf-equipo-nombre').textContent = e.nombre || '(sin nombre)';
-  document.getElementById('cf-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  document.getElementById('cf-equipo-sub').textContent = e.localidad ? '' + e.localidad : '';
   // (28 oct 2026) Criticidad del equipo junto a su nombre (texto escapado por fbCritBadge).
   if (typeof fbCritBadge === 'function' && fbCritNivel(e)) document.getElementById('cf-equipo-sub').insertAdjacentHTML('beforeend', ' ' + fbCritBadge(fbCritNivel(e)));
   renderPuntosForm();
@@ -840,14 +795,14 @@ function renderPuntosForm() {
           <div class="field" style="margin-bottom:0;max-width:130px;">
             <label>Prioridad</label>
             <select onchange="itemsFormState[${idx}].prioridad=this.value">
-              ${['alta','media','baja'].map(pr => `<option value="${pr}"${it.prioridad === pr ? ' selected' : ''}>${pr === 'alta' ? '🔴 Alta' : pr === 'media' ? '🟡 Media' : '🟢 Baja'}</option>`).join('')}
+              ${['alta','media','baja'].map(pr => `<option value="${pr}"${it.prioridad === pr ? ' selected' : ''}>${pr === 'alta' ? 'Alta' : pr === 'media' ? 'Media' : 'Baja'}</option>`).join('')}
             </select>
           </div>
         </div>
         <textarea placeholder="Describe la falla..." oninput="itemsFormState[${idx}].nota=this.value" style="margin-top:8px;">${fbEsc(it.nota || '')}</textarea>
         <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
-          ${it.fotoData ? `<img class="foto-mini" src="${it.fotoData}" alt="foto"/><button type="button" class="btn btn-secondary btn-sm" onclick="quitarFotoItem(${idx})">🗑 Quitar foto</button>`
-            : `<button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cf-foto-${idx}').click()">📷 Agregar foto</button><span class="item-sub">Opcional, ayuda a quien repare</span>`}
+          ${it.fotoData ? `<img class="foto-mini" src="${it.fotoData}" alt="foto"/><button type="button" class="btn btn-secondary btn-sm" onclick="quitarFotoItem(${idx})"><span data-icon="trash"></span> Quitar foto</button>`
+            : `<button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cf-foto-${idx}').click()"><span data-icon="camera"></span> Agregar foto</button><span class="item-sub">Opcional, ayuda a quien repare</span>`}
           <input type="file" accept="image/*" capture="environment" id="cf-foto-${idx}" style="display:none" onchange="tomarFotoItem(${idx}, this)"/>
         </div>` : ''}
       ${it.resultado === 'ni' ? `
@@ -903,14 +858,14 @@ function tendPunto(it) {
 function tendPuntoHtml(it, idx, fuera) {
   const a = tendPunto(it);
   if (!a || (fuera && a.nivel === 'fuera')) return '';
-  return `<div class="tend-aviso tend-${a.nivel}" data-tend-punto="${idx}">${fbTendBadge(a)} ${fbEsc(a.texto)}${it.resultado !== 'falla' ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="pedirOtTendencia(${idx})">🧾 Pedir OT predictiva</button>` : ''}</div>`;
+  return `<div class="tend-aviso tend-${a.nivel}" data-tend-punto="${idx}">${fbTendBadge(a)} ${fbEsc(a.texto)}${it.resultado !== 'falla' ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="pedirOtTendencia(${idx})"><span data-icon="file"></span> Pedir OT predictiva</button>` : ''}</div>`;
 }
 function pedirOtTendencia(idx) {
   const it = itemsFormState[idx]; const a = tendPunto(it); if (!a) return;
   it.resultado = 'falla'; it.tendencia = a.nivel;
   if (!(it.nota || '').trim()) it.nota = 'Tendencia: ' + a.texto;
   renderPuntosForm();
-  showToast('🧾 Punto marcado: la OT predictiva sale al guardar el checklist');
+  showToast('Punto marcado: la OT predictiva sale al guardar el checklist');
 }
 
 function quitarFotoItem(idx) { itemsFormState[idx].fotoData = ''; renderPuntosForm(); }
@@ -974,29 +929,6 @@ function validarLecturaHorometro(equipo, lectura) {
     if (!confirm(`La lectura (${lectura} h) es ${lectura - actual} h mayor que la actual (${actual} h). ¿Es correcta?`)) return false;
   }
   return true;
-}
-
-// (5 oct 2026) Traduce el "permission-denied" de Firestore a un mensaje en
-// español que diga QUIÉN puede hacer esa acción, en vez del texto en inglés.
-function mensajeErrorPermiso(e, accion) {
-  const esPermiso = e && (e.code === 'permission-denied' || /permission|insufficient/i.test(e.message || ''));
-  if (!esPermiso) return 'Error: ' + ((e && e.message) || e);
-  const porAccion = {
-    checklist: 'Tu usuario no tiene permiso para guardar checklists u OTs.',
-    planificar: 'Solo Administrador o Encargado puede planificar una OT.',
-    realizar: 'Solo Técnico, Supervisor, Encargado o Administrador puede marcar el trabajo como realizado.',
-    validar: 'Solo Supervisor, Encargado o Administrador puede validar una OT.',
-    rechazar: 'Solo Supervisor, Encargado o Administrador puede marcar una OT como no concluida.',
-    cerrar: 'Solo el Administrador puede cerrar una OT de checklist.',
-    anular: 'Solo el Administrador puede anular una OT (y no si ya está cerrada).',
-    configurar: 'Solo Administrador o Encargado puede cambiar la frecuencia o el horómetro.',
-    horometro: 'Tu usuario no tiene permiso para actualizar el horómetro.',
-  };
-  return '⛔ ' + (porAccion[accion] || 'No tienes permiso para esta acción.');
-}
-
-function nombreUsuarioActual() {
-  return (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '';
 }
 
 // (5 oct 2026) Guardado SIN quedarse colgado sin señal. Antes se hacía
@@ -1168,16 +1100,16 @@ async function submitChecklist() {
     let subido = false, avisoPendiente = false;
     const msgBase = (fallas.length
       ? `Checklist guardado. Se generaron ${fallas.length} OT(s) pendiente(s).`
-      : (repetidas ? 'Checklist guardado.' : 'Checklist guardado sin fallas ✅'))
+      : (repetidas ? 'Checklist guardado.' : 'Checklist guardado sin fallas '))
       + (repetidas ? ` ${repetidas} falla(s) ya tenían OT abierta (no se repitió).` : '');
     refrescarEquiposLocal();
     batch.commit().then(() => {
       subido = true;
-      if (avisoPendiente) showToast(`☁️ Checklist de ${nombreEquipo} subido al servidor ✅`);
+      if (avisoPendiente) showToast(`Checklist de ${nombreEquipo} subido al servidor `);
     }).catch((err) => {
       subido = true;
       console.error('Error al guardar checklist:', err);
-      showToast(`❌ El checklist de ${nombreEquipo} NO se guardó. ` + mensajeErrorPermiso(err, 'checklist'), 'error');
+      showToast(`El checklist de ${nombreEquipo} NO se guardó. ` + mensajeErrorPermiso(err, 'checklist'), 'error');
     });
 
     setLoading(false);
@@ -1185,7 +1117,7 @@ async function submitChecklist() {
     goTo('hoy', document.querySelectorAll('.nav-btn')[0]);
     if (!navigator.onLine) {
       avisoPendiente = true;
-      showToast(msgBase + ' 📵 Se subirá cuando haya señal.', 'warn');
+      showToast(msgBase + ' Se subirá cuando haya señal.', 'warn');
     } else {
       showToast(msgBase);
       setTimeout(() => {
@@ -1222,8 +1154,8 @@ function renderHistorial() {
   window._histCk = currentChecklists;
   if (!currentChecklists.length) {
     wrap.innerHTML = ubicHist && ubicHist.activo() && currentChecklistsTodos().some(enNave)
-      ? `<div class="empty"><span class="emoji">🔍</span><p>Ningún checklist de ${fbEsc(ubicHist.texto())} entre los últimos guardados.</p></div>`
-      : `<div class="empty"><span class="emoji">📂</span><p>Todavía no hay checklists guardados.</p></div>`;
+      ? `<div class="empty"><span class="emoji"><span data-icon="search"></span></span><p>Ningún checklist de ${fbEsc(ubicHist.texto())} entre los últimos guardados.</p></div>`
+      : `<div class="empty"><span class="emoji"><span data-icon="folder"></span></span><p>Todavía no hay checklists guardados.</p></div>`;
     return;
   }
   wrap.innerHTML = currentChecklists.map(c => {
@@ -1236,10 +1168,10 @@ function renderHistorial() {
         i.causa ? '[' + fbEsc(i.causa) + ']' : '',
         i.nota ? fbEsc(i.nota) : '',
         i.motivo ? 'Motivo: ' + fbEsc(i.motivo) : '',
-        i.otFolio ? '🧾 ' + fbEsc(i.otFolio) : '',
-        i.otExistente ? '🧾 ya tenía ' + fbEsc(i.otExistente) : '',
+        i.otFolio ? '' + fbEsc(i.otFolio) : '',
+        i.otExistente ? 'ya tenía ' + fbEsc(i.otExistente) : '',
       ].filter(Boolean).join(' · ');
-      return `<div class="hist-item">${r.ico} ${fbEsc(i.punto || '')}${med}${extra ? `<div class="item-sub">${extra}</div>` : ''}${i.foto ? `<div><button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(i.foto)}', this)">📷 Ver foto</button></div>` : ''}</div>`;
+      return `<div class="hist-item">${r.ico} ${fbEsc(i.punto || '')}${med}${extra ? `<div class="item-sub">${extra}</div>` : ''}${i.foto ? `<div><button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(i.foto)}', this)"><span data-icon="camera"></span> Ver foto</button></div>` : ''}</div>`;
     }).join('');
     return `
     <div class="item-row" onclick="this.classList.toggle('abierto')">
@@ -1248,7 +1180,7 @@ function renderHistorial() {
         <span class="tag ${c.tieneFallas ? 'tag-falla' : 'tag-ok'}">${c.tieneFallas ? 'Con fallas' : 'OK'}</span>
       </div>
       <div class="item-sub">${fbEsc(c.fecha || '')} · ${fbEsc((c.tecnicos || []).join(', '))}</div>
-      <div class="item-sub">✅ ${cnt('ok')} · ⚠️ ${cnt('falla')}${cnt('na') ? ' · ➖ ' + cnt('na') : ''}${cnt('ni') ? ' · ⏸ ' + cnt('ni') : ''} · toca para ver el detalle</div>
+      <div class="item-sub"><span data-icon="check-circle"></span> ${cnt('ok')} · <span data-icon="alert"></span> ${cnt('falla')}${cnt('na') ? ' · <span data-icon="minus"></span> ' + cnt('na') : ''}${cnt('ni') ? ' · <span data-icon="clock"></span> ' + cnt('ni') : ''} · toca para ver el detalle</div>
       <div class="hist-det">${det || '<div class="item-sub">Sin detalle.</div>'}</div>
     </div>`;
   }).join('');
@@ -1257,7 +1189,7 @@ function renderHistorial() {
 // (25 oct 2026, Etapa 3) Excel de los checklists que se ven (con el filtro). Sin costos.
 function exportHistorialExcel() {
   const lista = window._histCk || [];
-  if (!lista.length) { showToast('⚠️ No hay checklists en la lista', 'error'); return; }
+  if (!lista.length) { showToast('No hay checklists en la lista', 'error'); return; }
   const filtro = ubicHist ? ubicHist.partes() : [];
   const cnt = (c, k) => (Array.isArray(c.items) ? c.items : []).filter(i => i.resultado === k).length;
   const hojas = [{ nombre: 'Checklists', titulo: 'Checklists · ' + (filtro.join(' · ') || 'todas las naves') + ' · últimos guardados · generado ' + todayStr(),
@@ -1265,418 +1197,6 @@ function exportHistorialExcel() {
     filas: lista.map(c => [c.fecha || '', c.equipoNombre || '', c.equipoLocalidad || '', (c.tecnicos || []).join(', '), c.tieneFallas ? 'Con fallas' : 'OK', cnt(c, 'ok'), cnt(c, 'falla'), cnt(c, 'na'),
       (Array.isArray(c.items) ? c.items : []).filter(i => i.resultado === 'falla').map(i => (i.punto || '') + (i.nota ? ' (' + i.nota + ')' : '')).join(' | ')]) }];
   fbExportar({ nombre: fbNombreArchivo('checklist', filtro, todayStr().slice(0, 7)), hojas, aviso: m => showToast(m) });
-}
-
-// Foto guardada en /fotos_repuestos (se lee solo cuando alguien la pide).
-const _fotosChecklist = {};
-function verFotoChecklist(ref, btn) {
-  const id = String(ref || '').replace(/^foto:/, '');
-  if (!/^[A-Za-z0-9_-]{6,40}$/.test(id)) return;
-  const pinta = d => {
-    if (!d || !/^data:image\/(jpeg|png);base64,/.test(d)) { btn.textContent = 'Foto no disponible'; return; }
-    const img = document.createElement('img');
-    img.src = d; img.alt = 'foto'; img.style.cssText = 'max-width:100%;border-radius:8px;margin-top:6px;display:block;';
-    btn.replaceWith(img);
-  };
-  if (_fotosChecklist[id]) return pinta(_fotosChecklist[id]);
-  btn.textContent = 'Cargando…'; btn.disabled = true;
-  db.collection('fotos_repuestos').doc(id).get().then(s => { const d = s.exists ? s.data().data : ''; _fotosChecklist[id] = d; pinta(d); })
-    .catch(() => { btn.textContent = 'No se pudo cargar la foto'; });
-}
-
-// ══════ OTs PENDIENTES / PLANIFICADAS ══════
-function loadOts() {
-  // NOTA: se ordena en el cliente (no con .orderBy() en la consulta) para
-  // no depender de crear un índice compuesto en Firebase solo por combinar
-  // where('origen',...) con orderBy('createdAt',...) — con el volumen de
-  // OTs que maneja esta planta, ordenar en JS es más que suficiente.
-  //
-  // ESTADOS (21 sep 2026 — flujo de revisión/cierre):
-  //  pendiente → planificada (Encargado/Admin asigna técnico+fecha)
-  //  → en_revision (el técnico marca "trabajo realizado")
-  //  → rechazada (Supervisor/Encargado/Admin dice "no concluido", con nota;
-  //     el técnico corrige y la vuelve a marcar realizada) O
-  //  → validada (Supervisor/Encargado/Admin dice "buena y válida")
-  //  → completada (SOLO Administrador hace el cierre final)
-  // Administrador también puede "Cerrar directo" desde cualquier estado, sin
-  // pasar por los pasos intermedios (pedido explícito del usuario).
-  // (5 oct 2026) Cuota gratis de Firebase: antes se escuchaban TODAS las OTs de
-  // checklist de todos los años (también las completadas, que no se muestran).
-  // Ahora solo las que están en curso. '==' + 'in' son filtros de igualdad:
-  // no hace falta índice compuesto.
-  //
-  // (20 oct 2026) Segundo listener, igual de acotado: los proyectos / mejoras
-  // que reporta producción (tipoReporte 'proyecto', origen operador o QR) en
-  // los mismos estados. También son solo igualdades ('==' + 'in'): sin índice
-  // compuesto. Los dos se unen por id.
-  const ESTADOS = ['pendiente', 'planificada', 'en_revision', 'rechazada', 'validada'];
-  const partes = { checklist: [], proyecto: [] };
-  const unir = () => {
-    // Orden: primero por prioridad (alta arriba de todo), y dentro de cada
-    // prioridad, la más reciente primero — así una guarda de seguridad rota
-    // no se pierde debajo de diez limpiezas pendientes.
-    const rangoPrioridad = { alta: 0, media: 1, baja: 2 };
-    const porId = new Map();
-    partes.checklist.concat(partes.proyecto).forEach(o => porId.set(o.id, o));
-    currentOts = [...porId.values()]
-      .filter(o => ESTADOS.includes(o.estado))
-      .sort((a, b) => {
-        const rp = (rangoPrioridad[a.prioridad] ?? 1) - (rangoPrioridad[b.prioridad] ?? 1);
-        if (rp !== 0) return rp;
-        return (b.createdAt && b.createdAt.seconds || 0) - (a.createdAt && a.createdAt.seconds || 0);
-      });
-    renderOts();
-  };
-  db.collection('ots').where('origen', '==', 'checklist').where('estado', 'in', ESTADOS).onSnapshot((snap) => {
-    partes.checklist = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    unir();
-  }, (err) => console.warn('Error leyendo OTs:', err.message));
-  db.collection('ots').where('tipoReporte', '==', 'proyecto').where('estado', 'in', ESTADOS).onSnapshot((snap) => {
-    partes.proyecto = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    unir();
-  }, (err) => console.warn('Error leyendo proyectos:', err.message));
-}
-// (20 oct 2026) Proyecto / mejora de producción vs. falla de checklist (predictivo).
-const esProyectoOt = o => !!o && o.tipoReporte === 'proyecto';
-const fmtDdMm = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] : (f || ''); };
-// Resumen de lo que el técnico reportó en la Bitácora (para la revisión). Sin costos.
-function resumenBitacoraOt(o) {
-  if (!o.reportadoEnBitacora) return '';
-  const reps = (Array.isArray(o.REPUESTOS) ? o.REPUESTOS : []).filter(i => i && i.descripcion).map(i => fbEsc(i.cantidad) + ' × ' + fbEsc(i.descripcion));
-  return `<div class="ot-bita">📋 <b>Reportado en Bitácora</b>${o.FECHA ? ' el ' + fbEsc(fmtDdMm(o.FECHA)) : ''}${o.TECNICOS ? ' · ' + fbEsc(o.TECNICOS) : ''}
-    ${o.DESCRIPCION_SOLUCION ? `<div>✓ ${fbEsc(o.DESCRIPCION_SOLUCION)}</div>` : ''}
-    <div style="color:var(--muted);">${o.REPUESTOS_USADOS === 'si' ? 'Repuestos: ' + (reps.join(', ') || '—') : 'Sin repuestos'}${o.H_TECNICO && o.H_FINAL ? ' · ' + fbEsc(o.H_TECNICO) + '–' + fbEsc(o.H_FINAL) : ''}</div></div>`;
-}
-// (20 oct 2026) "Cerrar directo" de una OT que nadie reportó en la Bitácora:
-// se permite, pero primero se avisa aquí mismo (sin ventana del navegador).
-const _avisoCierreSinBitacora = new Set();
-
-// (23 oct 2026) Estados desde los que el Administrador puede anular (nunca 'completada').
-const ESTADOS_ANULABLES = ['pendiente', 'en_atencion', 'planificada', 'rechazada', 'en_revision', 'validada'];
-const OT_ESTADO_TAG = {
-  pendiente:   { clase: 'tag-pendiente',   texto: 'Pendiente' },
-  planificada: { clase: 'tag-planificada', texto: 'Planificada' },
-  en_revision: { clase: 'tag-planificada', texto: 'En revisión' },
-  rechazada:   { clase: 'tag-falla',       texto: 'No concluida' },
-  validada:    { clase: 'tag-completada',  texto: 'Validada · falta cierre' },
-};
-
-function renderOts() {
-  const wrap = document.getElementById('ots-lista');
-  const puedePlanificar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
-  const puedeRevisar = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
-  const puedeMarcarHecho = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
-  const esAdminCierre = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
-
-  const currentOts = currentOtsTodas().filter(enNave); // (25 oct 2026) nave elegida
-  if (!currentOts.length) {
-    wrap.innerHTML = `<div class="empty"><span class="emoji">✅</span><p>No hay OTs pendientes por planificar.</p></div>`;
-    return;
-  }
-  wrap.innerHTML = currentOts.map(o => {
-    const tag = OT_ESTADO_TAG[o.estado] || { clase: 'tag-pendiente', texto: fbEsc(o.estado || '—') };
-    let acciones = '';
-
-    if (o.estado === 'pendiente' && puedePlanificar) {
-      acciones = `
-        <div class="row" style="margin-top:10px;">
-          <div class="field" style="margin-bottom:0;">
-            <select id="ot-tec-${o.id}"><option value="">Asignar a...</option>${TECNICOS_LISTA.filter(t => tecParaOt(t, o)).map(t => `<option value="${fbEsc(t.nombre)}">${fbEsc(t.corto || t.nombre)}</option>`).join('')}</select>
-          </div>
-          <div class="field" style="margin-bottom:0;max-width:130px;">
-            <input type="date" id="ot-fecha-${o.id}" value="${todayStr()}"/>
-          </div>
-        </div>
-        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="planificarOt('${o.id}')">📅 Planificar</button>`;
-    } else if (o.estado === 'planificada' || o.estado === 'rechazada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · 📅 ${fbEsc(o.fechaPlanificada || '—')}</div>`;
-      if (o.estado === 'rechazada' && o.notaRevision) {
-        acciones += `<div class="item-sub" style="margin-top:4px;color:var(--color-danger-text);">⚠️ ${o.revisadoPor ? fbEsc(o.revisadoPor) + ': ' : ''}${fbEsc(o.notaRevision)}</div>`;
-      }
-      if (o.estado === 'rechazada') acciones += resumenBitacoraOt(o);
-      // (20 oct 2026) Todo trabajo realizado se reporta en la Bitácora: el
-      // botón abre el formulario de la Bitácora en modo "registrar esta OT"
-      // (mismo documento; al guardar pasa a revisión). Antes era "Marcar realizada".
-      if (puedeMarcarHecho) {
-        acciones += `<a class="btn btn-secondary btn-sm" style="margin-top:8px;display:inline-block;text-decoration:none;" href="bitacora.html#ot=${encodeURIComponent(o.id)}">${o.estado === 'rechazada' ? '📋 Corregir en Bitácora' : '📋 Registrar en Bitácora'}</a>`;
-      }
-    } else if (o.estado === 'en_revision') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Trabajo realizado, en espera de revisión</div>` + resumenBitacoraOt(o);
-      if (puedeRevisar) {
-        acciones += `
-          <div class="field" style="margin-top:8px;margin-bottom:6px;">
-            <label>Nota de revisión (obligatoria si no está concluido)</label>
-            <textarea id="ot-nota-rev-${o.id}" placeholder="Qué falta o qué se debe corregir..."></textarea>
-          </div>
-          <div class="row">
-            <button class="btn btn-primary btn-sm" onclick="validarOt('${o.id}')">✅ Buena y válida</button>
-            <button class="btn btn-secondary btn-sm" onclick="rechazarOt('${o.id}')">⚠️ No concluido</button>
-          </div>`;
-      }
-    } else if (o.estado === 'validada') {
-      acciones = `<div class="item-sub" style="margin-top:6px;">👤 ${fbEsc(o.asignadoA || '—')} · Validado por ${fbEsc(o.revisadoPor || '—')}</div>` + resumenBitacoraOt(o);
-      if (esAdminCierre) {
-        acciones += `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="cerrarOtFinal('${o.id}')">🔒 Cerrar OT</button>`;
-      }
-    }
-
-    // Atajo del Administrador: cerrar de una vez, sin pasar por revisión/validación.
-    if (esAdminCierre && o.estado !== 'completada') {
-      if (_avisoCierreSinBitacora.has(o.id) && !o.reportadoEnBitacora) {
-        acciones += `<div class="ot-aviso-cierre">⚠️ <b>Este trabajo no se reportó en la Bitácora.</b> Si la cierras así, queda sin solución, técnicos ni repuestos registrados, y en Incentivos cuenta como "no reportada en Bitácora".
-          <div class="row" style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="cerrarOtDirecto('${o.id}', true)">Cerrar de todas formas</button><button class="btn btn-secondary btn-sm" onclick="cancelarCierreDirecto('${o.id}')">Cancelar</button></div></div>`;
-      } else {
-        acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="cerrarOtDirecto('${o.id}')">⚡ Cerrar directo</button>`;
-      }
-    }
-    // (23 oct 2026) Solo el Administrador anula (borrado suave, con motivo) una
-    // OT de checklist o una solicitud / proyecto de producción.
-    if (esAdminCierre && ESTADOS_ANULABLES.includes(o.estado)) {
-      acciones += `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="abrirAnularOt('${fbEsc(o.id)}')">🚫 Anular</button>`;
-    }
-    const tagOrigen = esProyectoOt(o) ? '<span class="tag tag-origen-proy">📐 Proyecto</span>' : '<span class="tag tag-origen-check">🩺 Checklist (predictivo)</span>';
-
-    return `
-      <div class="item-row" style="cursor:default;">
-        <div class="item-header">
-          <div class="item-title">${fbEsc(o.folio || o.id)} · ${fbEsc(o.equipoNombre || '')}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
-            ${tagOrigen}
-            ${o.prioridad ? `<span class="tag tag-prioridad-${fbEsc(o.prioridad)}">${o.prioridad === 'alta' ? '🔴' : o.prioridad === 'baja' ? '🟢' : '🟡'} ${fbEsc(o.prioridad)}</span>` : ''}
-            <span class="tag ${tag.clase}">${tag.texto}</span>${typeof fbRcaBadge === 'function' ? fbRcaBadge(o) : ''}
-          </div>
-        </div>
-        <div class="item-sub">${o.equipoLocalidad ? '📍 ' + fbEsc(o.equipoLocalidad) + ' · ' : ''}${o.causaFalla ? '[' + fbEsc(o.causaFalla) + '] ' : ''}${fbEsc(o.descripcionFalla || '')}</div>${esProyectoOt(o) && o.creadoPor ? `<div class="item-sub">Pidió: ${fbEsc(o.creadoPor)}${o.fechaReporte ? ' · ' + fbEsc(fmtDdMm(o.fechaReporte)) : ''}</div>` : ''}${o.foto ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="event.stopPropagation();verFotoChecklist('${fbEsc(o.foto)}', this)">📷 Ver foto</button>` : ''}
-        ${acciones}
-        ${o.folio ? `
-        <div style="margin-top:8px;">
-          <button class="btn btn-secondary btn-sm" onclick="verCostoRepuestosOt('${o.id}')">💰 Ver costo de repuestos</button>
-          <div id="costo-ot-${o.id}" class="item-sub" style="margin-top:6px;"></div>
-        </div>` : ''}
-      </div>`;
-  }).join('');
-}
-
-// (5 oct 2026) Toda actualización de OT deja editadoPor/editadoEn, y si
-// Firestore la rechaza por permisos se dice en español quién sí puede.
-function camposEdicionOt() {
-  return { editadoPor: nombreUsuarioActual(), editadoEn: fbTimestamp() };
-}
-
-async function planificarOt(otId) {
-  const tec = document.getElementById('ot-tec-' + otId).value;
-  const fecha = document.getElementById('ot-fecha-' + otId).value;
-  if (!tec || !fecha) { showToast('Elige técnico y fecha', 'warn'); return; }
-  try {
-    await db.collection('ots').doc(otId).update({ estado: 'planificada', asignadoA: tec, fechaPlanificada: fecha, ...camposEdicionOt() });
-    showToast('OT planificada ✅');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'planificar'), 'error');
-  }
-}
-
-// (20 oct 2026) Ya no hay "Marcar realizada" aquí: el técnico registra el
-// trabajo en la Bitácora (bitacora.html#ot=<id>) y ese guardado pasa la OT a
-// revisión con todos los datos (solución, técnicos, repuestos, herramientas).
-
-async function validarOt(otId) {
-  const nota = (document.getElementById('ot-nota-rev-' + otId) || {}).value || '';
-  // (28 oct 2026) Una OT con análisis de causa raíz pendiente no se valida (también en firestore.rules).
-  const otV = (currentOts || []).find(o => o.id === otId);
-  if (otV && otV.rcaRequerido === true && !(typeof fbRcaLleno === 'function' && fbRcaLleno(otV.rca))) {
-    showToast('🔍 Falta el análisis de causa raíz (RCA) de esta OT. Se llena en la Bitácora (Historial); después se puede validar.', 'warn');
-    return;
-  }
-  try {
-    await db.collection('ots').doc(otId).update({
-      estado: 'validada',
-      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
-      revisadoEn: fbTimestamp(),
-      revisionResultado: 'buena',
-      notaRevision: nota.trim(),
-      ...camposEdicionOt(),
-    });
-    showToast('OT validada — falta el cierre ✅');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'validar'), 'error');
-  }
-}
-
-async function rechazarOt(otId) {
-  const nota = ((document.getElementById('ot-nota-rev-' + otId) || {}).value || '').trim();
-  if (!nota) { showToast('Escribe qué falta o qué se debe corregir', 'warn'); return; }
-  try {
-    await db.collection('ots').doc(otId).update({
-      estado: 'rechazada',
-      revisadoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
-      revisadoEn: fbTimestamp(),
-      revisionResultado: 'rechazada',
-      // (20 oct 2026) Contador para Incentivos: revisionResultado se pisa con
-      // 'buena' cuando después se valida; este número queda.
-      vecesRechazada: firebase.firestore.FieldValue.increment(1),
-      notaRevision: nota,
-      ...camposEdicionOt(),
-    });
-    showToast('OT regresada como no concluida', 'warn');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'rechazar'), 'error');
-  }
-}
-
-// ══════ CIERRE FINAL (Administrador) ══════
-// Al cerrar, además de marcar la OT como completada, se cargan los mismos
-// campos que usa Bitácora/Análisis (TIPO_MANTENIMIENTO, EQUIPO, TECNICOS...)
-// para que esta actividad aparezca en el panel de Análisis clasificada como
-// "Preventivo" (a favor, no como correctivo) y con su tiempo de respuesta —
-// desde que se creó la OT (por una falla detectada en el checklist) hasta
-// que se cerró. No se toca TOTAL_MIN_MAQUINA/TOTAL_MIN_TECNICO (quedan en 0)
-// para no alterar los cálculos de paro de máquina que ya existen en
-// Análisis — el tiempo de respuesta se guarda aparte, en su propio campo.
-function calcularTiempoRespuestaMin(ot) {
-  const creado = ot.createdAt && typeof ot.createdAt.toMillis === 'function' ? ot.createdAt.toMillis() : null;
-  if (!creado) return null;
-  return Math.max(0, Math.round((Date.now() - creado) / 60000));
-}
-
-// (5 oct 2026) Para que Análisis la cuente bien: FECHA es el día en que
-// el trabajo se HIZO (trabajoRealizadoEn), no el día del cierre (que puede
-// ser una semana después); si no se marcó como realizado, hoy. Se agregan
-// SEMANA (ISO, la misma de Análisis), PLANTA (la del equipo, si la tiene) y
-// equipoId (para la hoja de vida, aunque se renombre el equipo).
-function fechaTrabajoRealizado(ot) {
-  const ts = ot.trabajoRealizadoEn;
-  if (ts && typeof ts.toDate === 'function') return fbFechaLocal(ts.toDate());
-  return todayStr();
-}
-
-// (20 oct 2026) Solo se llenan los campos que FALTAN: si el técnico ya
-// reportó el trabajo en la Bitácora (fecha, horas, solución, técnicos,
-// repuestos…), el cierre no los pisa. Tipo: 'Predictivo' para las OTs de
-// checklist y 'Proyecto' para los proyectos (antes las de checklist se
-// cerraban como 'Preventivo').
-function camposParaAnalisis(ot, tiempoRespuestaMin) {
-  const base = camposAnalisisBase(ot, tiempoRespuestaMin);
-  const out = {};
-  Object.keys(base).forEach(k => { const v = ot[k]; if (v === undefined || v === null || v === '') out[k] = base[k]; });
-  return out;
-}
-function camposAnalisisBase(ot, tiempoRespuestaMin) {
-  const proy = esProyectoOt(ot);
-  const fecha = fechaTrabajoRealizado(ot);
-  const equipo = currentEquipos.find(x => x.id === ot.equipoId);
-  return {
-    Title: ot.folio || ot.id,
-    FECHA: fecha,
-    SEMANA: fbSemanaISO(fecha),
-    PLANTA: (equipo && (equipo.planta || equipo.plantaNombre)) || '',
-    equipoId: ot.equipoId || null,
-    LINEA_EQUIPO: ot.equipoLocalidad || '',
-    TIPO_MAQUINA: '',
-    EQUIPO: ot.equipoNombre || '',
-    TIPO_MANTENIMIENTO: proy ? 'Proyecto' : 'Predictivo',
-    TECNICOS: ot.asignadoA || ot.trabajoRealizadoPor || '',
-    DESCRIPCION_FALLA: ot.descripcionFalla || '',
-    DESCRIPCION_SOLUCION: ot.notaRevision || (proy ? 'Proyecto cerrado por el Administrador' : 'Verificado mediante checklist (predictivo)'),
-    ME: 'm',
-    GENERA_OT: 'no',
-    PARO_PLANTA: 'no',
-    TOTAL_MIN_MAQUINA: 0,
-    TOTAL_MIN_TECNICO: 0,
-    // Un proyecto se planifica: no tiene "tiempo de respuesta" de falla.
-    TIEMPO_RESPUESTA_MIN: proy ? null : tiempoRespuestaMin,
-  };
-}
-
-async function cerrarOtFinal(otId) {
-  const o = currentOts.find(x => x.id === otId);
-  if (!o) return;
-  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
-  try {
-    await db.collection('ots').doc(otId).set({
-      estado: 'completada',
-      cerradoPor: (window.currentUserRole && window.currentUserRole.nombre) || '',
-      cerradoEn: fbTimestamp(),
-      fechaCompletada: todayStr(),
-      tiempoRespuestaMin: esProyectoOt(o) ? null : tiempoRespuestaMin,
-      ...camposParaAnalisis(o, tiempoRespuestaMin),
-      ...camposEdicionOt(),
-      ...(o.reportadoEnBitacora ? {} : { cerradoSinBitacora: true }),
-    }, { merge: true });
-    showToast(esProyectoOt(o) ? 'Proyecto cerrado ✅' : 'OT cerrada ✅ — cuenta como predictivo en Análisis');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
-  }
-}
-
-// ══════ ANULAR OT (23 oct 2026 — solo Administrador) ══════
-// Pedido del dueño: "solo el administrador puede borrar las solicitudes hechas
-// por producción o algunas OT generadas". No se borra el documento: queda con
-// estado 'anulada', anuladoPor, anuladoEn y motivoAnulacion (igual que los
-// avisos duplicados de la Bitácora). firestore.rules también lo exige.
-let _anularOtId = null;
-function abrirAnularOt(otId) {
-  const o = currentOts.find(x => x.id === otId);
-  if (!o) return;
-  if (!(typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR'))) { showToast('⛔ Solo el Administrador puede anular una OT', 'error'); return; }
-  _anularOtId = otId;
-  document.getElementById('anularOtSub').textContent = `${o.folio || o.id} · ${o.equipoNombre || 'equipo'} — ${o.descripcionFalla || ''}`.slice(0, 220);
-  document.getElementById('anularOtMotivo').value = '';
-  document.getElementById('anularOtErr').textContent = '';
-  openModalGeneric('modalAnularOt');
-  setTimeout(() => document.getElementById('anularOtMotivo').focus(), 50);
-}
-function cerrarModalAnularOt() { _anularOtId = null; closeModalGeneric('modalAnularOt'); }
-async function confirmarAnularOt() {
-  const otId = _anularOtId;
-  if (!otId) return cerrarModalAnularOt();
-  const motivo = document.getElementById('anularOtMotivo').value.trim();
-  if (!motivo) { document.getElementById('anularOtErr').textContent = 'Escribe el motivo para poder anular.'; document.getElementById('anularOtMotivo').focus(); return; }
-  cerrarModalAnularOt();
-  try {
-    await db.collection('ots').doc(otId).update({
-      estado: 'anulada',
-      anuladoPor: nombreUsuarioActual(),
-      anuladoEn: fbTimestamp(),
-      motivoAnulacion: motivo.slice(0, 300),
-      ...camposEdicionOt(),
-    });
-    showToast('🚫 OT anulada', 'warn');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'anular'), 'error');
-  }
-}
-
-function cancelarCierreDirecto(otId) { _avisoCierreSinBitacora.delete(otId); renderOts(); }
-async function cerrarOtDirecto(otId, aunSinBitacora) {
-  const o = currentOts.find(x => x.id === otId);
-  if (!o) return;
-  // (20 oct 2026) Sin reporte en Bitácora: primero el aviso en la tarjeta.
-  if (!o.reportadoEnBitacora && !aunSinBitacora) { _avisoCierreSinBitacora.add(otId); renderOts(); return; }
-  _avisoCierreSinBitacora.delete(otId);
-  const nombreAdmin = (window.currentUserRole && window.currentUserRole.nombre) || '';
-  const tiempoRespuestaMin = calcularTiempoRespuestaMin(o);
-  const payload = {
-    estado: 'completada',
-    cerradoPor: nombreAdmin,
-    cerradoEn: fbTimestamp(),
-    fechaCompletada: todayStr(),
-    tiempoRespuestaMin: esProyectoOt(o) ? null : tiempoRespuestaMin,
-    ...camposParaAnalisis(o, tiempoRespuestaMin),
-    ...camposEdicionOt(),
-  };
-  if (!o.reportadoEnBitacora) payload.cerradoSinBitacora = true; // lo ve Incentivos
-  // Si nadie la había revisado todavía, el cierre directo también cuenta como la revisión.
-  if (!o.revisadoPor) {
-    payload.revisadoPor = nombreAdmin;
-    payload.revisadoEn = fbTimestamp();
-    payload.revisionResultado = 'buena';
-  }
-  try {
-    await db.collection('ots').doc(otId).set(payload, { merge: true });
-    showToast('OT cerrada directamente ✅');
-  } catch (e) {
-    showToast(mensajeErrorPermiso(e, 'cerrar'), 'error');
-  }
 }
 
 // ══════ PUNTOS DEL CHECKLIST (SOLO Administrador) ══════
@@ -1770,11 +1290,11 @@ function renderConfigPuntos() {
     return;
   }
 
-  info.innerHTML = `<div class="info-box">Escribe, agrega o borra puntos, y toca "Guardar lista" al final. Los checklists ya guardados no cambian — esto solo afecta a los que se llenen de ahora en adelante.</div>`;
+  info.innerHTML = `<div class="info-box">Los cambios valen para los checklists nuevos. <button type="button" class="vt-help" data-ayuda="Los checklists ya guardados no cambian." aria-label="Ayuda">?</button></div>`;
   const lista = puntosEditState || [];
   wrap.innerHTML = htmlEditorPuntos(lista, 'punto-edit', 'eliminarPuntoEdit', 'medPuntoEdit') +
-    `<button class="btn btn-secondary btn-sm" style="margin-bottom:10px;" onclick="agregarPuntoEdit()">➕ Agregar punto</button>` +
-    `<button class="btn btn-primary" onclick="guardarPuntosChecklist()">💾 Guardar lista</button>`;
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:10px;" onclick="agregarPuntoEdit()"><span data-icon="plus"></span> Agregar punto</button>` +
+    `<button class="btn btn-primary" onclick="guardarPuntosChecklist()"><span data-icon="save"></span> Guardar lista</button>`;
 }
 
 function agregarPuntoEdit() {
@@ -1829,9 +1349,9 @@ async function guardarPuntosChecklist() {
         [{ campo: 'Lista general de puntos', anterior: antes || '(vacía)', nuevo: despues }]);
     }
     puntosEditState = limpios.map(puntoAEdicion);
-    showToast('Lista de puntos guardada ✅');
+    showToast('Lista de puntos guardada ');
     warnIfDocChangedSinceLoad(db.collection('config').doc('checklistPuntos'), localActualizadoEn,
-      '⚠️ Otra persona había cambiado la lista general de puntos justo antes de tu guardado — revisa que quedó como querías.');
+      'Otra persona había cambiado la lista general de puntos justo antes de tu guardado — revisa que quedó como querías.');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1842,38 +1362,6 @@ async function guardarPuntosChecklist() {
 // (arriba) un equipo puede tener su propia lista guardada en
 // equipos/{id}.checklistPuntos. Si no la tiene, sigue usando la general —
 // abrirFormChecklist() decide cuál mostrar al llenar el checklist.
-// ══════ COSTO DE REPUESTOS POR OT (comparación con Maximo/SAP, 28 sep 2026) ══════
-// Lee /movimientos (misma colección que usa inventario.html para entradas/
-// salidas de stock) filtrando por el folio de esta OT. Solo cuenta las
-// salidas que tenían costo unitario cargado en Inventario — si un repuesto
-// no tiene precio, se avisa cuántos quedaron fuera en vez de mostrar un
-// total incompleto como si fuera el real.
-// (5 oct 2026) El botón ya no lleva el folio escrito dentro del onclick
-// (texto de Firestore dentro de JS en línea = riesgo de inyección): solo
-// pasa el id de la OT y aquí se busca su folio.
-async function verCostoRepuestosOt(otId) {
-  const el = document.getElementById('costo-ot-' + otId);
-  if (!el) return;
-  const otLocal = currentOts.find(x => x.id === otId);
-  const folio = otLocal && otLocal.folio;
-  if (!folio) { el.textContent = 'Esta OT no tiene folio.'; return; }
-  el.textContent = 'Buscando repuestos de esta OT...';
-  try {
-    const snap = await db.collection('movimientos').where('otFolio', '==', folio).get();
-    const movs = snap.docs.map(d => d.data()).filter(m => m.tipo === 'salida');
-    if (!movs.length) {
-      el.textContent = 'Sin repuestos registrados con este folio todavía (se cargan desde Inventario → Movimiento → Folio de OT).';
-      return;
-    }
-    let total = 0, sinPrecio = 0;
-    movs.forEach(m => { if (m.costoTotal != null) total += m.costoTotal; else sinPrecio++; });
-    el.innerHTML = `📦 ${movs.length} repuesto(s) · Total: $${total.toFixed(2)}` +
-      (sinPrecio ? ` <span style="color:var(--color-accent-text)">(${sinPrecio} sin costo unitario cargado)</span>` : '');
-  } catch (e) {
-    el.textContent = 'Error al buscar: ' + e.message;
-  }
-}
-
 // ══════ QR POR EQUIPO (comparación con Maximo/SAP, 28 sep 2026) ══════
 // La URL codificada en el QR apunta a este mismo archivo con ?equipo=<id> —
 // no hace falta ningún escáner dentro de la app: la cámara normal del
@@ -1883,7 +1371,7 @@ function mostrarQrEquipo(equipoId, ev) {
   const e = currentEquipos.find(x => x.id === equipoId);
   if (!e) return;
   document.getElementById('qr-equipo-nombre').textContent = e.nombre || '(sin nombre)';
-  document.getElementById('qr-equipo-sub').textContent = e.localidad ? '📍 ' + e.localidad : '';
+  document.getElementById('qr-equipo-sub').textContent = e.localidad ? '' + e.localidad : '';
   const wrap = document.getElementById('qr-canvas-wrap');
   wrap.innerHTML = '';
   // (4 oct 2026) Publica la ficha técnica para quien escanee sin usuario
@@ -1926,8 +1414,8 @@ function renderModalPuntosEquipo() {
   const wrap = document.getElementById('pe-lista');
   const lista = puntosEquipoEditState || [];
   wrap.innerHTML = htmlEditorPuntos(lista, 'pe-punto', 'eliminarPuntoEquipoEdit', 'medPuntoEquipoEdit') +
-    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()">➕ Agregar punto</button>
-     <div class="item-sub">📏 = punto con medición (ej. temperatura): se escribe la lectura y, si sale del rango, queda "No conforme" solo.</div>`;
+    `<button class="btn btn-secondary btn-sm" style="margin-bottom:6px;" onclick="agregarPuntoEquipoEdit()"><span data-icon="plus"></span> Agregar punto</button>
+     <div class="item-sub"><span data-icon="ruler"></span> = punto con medición (ej. temperatura): se escribe la lectura y, si sale del rango, queda "No conforme" solo.</div>`;
 }
 
 function agregarPuntoEquipoEdit() {
@@ -1970,11 +1458,11 @@ async function guardarPuntosEquipo() {
       logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
         [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: despues }]);
     }
-    showToast('Puntos guardados para este equipo ✅');
+    showToast('Puntos guardados para este equipo ');
     refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, limpios);
     closeModalGeneric('modalPuntosEquipo');
     warnIfDocChangedSinceLoad(db.collection('equipos').doc(puntosEquipoEditId), localUpdatedAt,
-      `⚠️ "${equipoActual ? equipoActual.nombre : 'Este equipo'}" fue editado por otra persona justo antes de tu guardado — revisa que no se haya perdido ningún cambio.`);
+      `"${equipoActual ? equipoActual.nombre : 'Este equipo'}" fue editado por otra persona justo antes de tu guardado — revisa que no se haya perdido ningún cambio.`);
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1992,7 +1480,7 @@ async function usarListaGeneralParaEquipo() {
       logAuditoria('puntos_checklist_equipo', puntosEquipoEditId, equipoActual ? equipoActual.nombre : null,
         [{ campo: 'Puntos propios del equipo', anterior: antes, nuevo: '(vuelve a usar la lista general)' }]);
     }
-    showToast('Este equipo vuelve a usar la lista general ✅');
+    showToast('Este equipo vuelve a usar la lista general ');
     refrescarFormChecklistSiEsElMismoEquipo(puntosEquipoEditId, checklistPuntosActuales);
     closeModalGeneric('modalPuntosEquipo');
   } catch (e) {
@@ -2040,7 +1528,7 @@ function renderConfig() {
     wrap.innerHTML = '';
     return;
   }
-  info.innerHTML = `<div class="info-box">Escribe cada cuántos días se debe revisar el equipo y toca "Guardar". Un equipo sin frecuencia no aparece en "Hoy te toca", pero se puede revisar manualmente cuando quieras. También puedes activar "⏱ Horómetro" en un equipo puntual (ej. montacargas, compresor de aire) para que además se revise por horas de uso, no solo por días.</div>`;
+  info.innerHTML = '';
 
   const puedeEditarPuntosEquipo = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
 
@@ -2059,13 +1547,13 @@ function renderConfig() {
           <input type="number" min="1" id="cfg-dias-${e.id}" value="${fbEsc(e.checklistFrecuenciaDias || '')}" placeholder="ej: 7"/>
         </div>
         <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
-          <button class="btn btn-secondary btn-sm" onclick="guardarFrecuencia('${e.id}')">💾 Guardar</button>
+          <button class="btn btn-secondary btn-sm" onclick="guardarFrecuencia('${e.id}')"><span data-icon="save"></span> Guardar</button>
         </div>
       </div>
       <div class="item-sub" style="margin-top:6px;">${e.checklistProximaFecha ? 'Próxima revisión: ' + fbEsc(e.checklistProximaFecha) : 'Todavía sin próxima fecha calculada'}</div>
 
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-        <label>⏱ Horómetro ${usaHorometro ? '<span class="tag tag-planificada" style="margin-left:4px;">Activado</span>' : ''}</label>
+        <label><span data-icon="timer"></span> Horómetro ${usaHorometro ? '<span class="tag tag-planificada" style="margin-left:4px;">Activado</span>' : ''}</label>
         <div class="row" style="margin-top:4px;">
           <div class="field" style="margin-bottom:0;">
             <label style="text-transform:none;font-weight:400;color:var(--muted);">Frecuencia (horas)</label>
@@ -2077,15 +1565,15 @@ function renderConfig() {
           </div>
         </div>
         <div class="row" style="margin-top:8px;gap:8px;">
-          <button class="btn btn-secondary btn-sm" onclick="guardarHorometroConfig('${e.id}')">💾 ${usaHorometro ? 'Actualizar' : 'Activar'} horómetro</button>
-          ${usaHorometro ? `<button class="btn btn-secondary btn-sm" onclick="desactivarHorometro('${e.id}')">✕ Desactivar</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="guardarHorometroConfig('${e.id}')"><span data-icon="save"></span> ${usaHorometro ? 'Actualizar' : 'Activar'} horómetro</button>
+          ${usaHorometro ? `<button class="btn btn-secondary btn-sm" onclick="desactivarHorometro('${e.id}')"><span data-icon="x"></span> Desactivar</button>` : ''}
         </div>
         ${usaHorometro ? `<div class="item-sub" style="margin-top:6px;">${fbEsc(horasDesdeUltimoServicio(e))}/${fbEsc(e.checklistFrecuenciaHoras)} h desde el último servicio</div>` : ''}
       </div>
 
       <div class="row" style="margin-top:10px;gap:8px;">
-        ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalPuntosEquipo('${e.id}')">📝 Puntos de este equipo</button>` : ''}
-        <button class="btn btn-secondary btn-sm" onclick="mostrarQrEquipo('${e.id}')">📱 Código QR</button>
+        ${puedeEditarPuntosEquipo ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalPuntosEquipo('${e.id}')"><span data-icon="pencil"></span> Puntos de este equipo</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="mostrarQrEquipo('${e.id}')"><span data-icon="phone"></span> Código QR</button>
       </div>
     </div>
   `; }).join('');
@@ -2093,7 +1581,7 @@ function renderConfig() {
 
 // ═══════════════ AUDITORÍA DE CAMBIOS EN DATOS MAESTROS (29 sep 2026) ═══════════════
 // Misma colección compartida "auditoria" que usa inventario.html (ver ese
-// archivo para la explicación completa y el visor "🕵️ Auditoría") — aquí
+// archivo para la explicación completa y el visor "<span data-icon="eye"></span> Auditoría") — aquí
 // solo se escribe, para las dos categorías que se editan desde esta
 // pantalla de Config: frecuencia de checklist y puntos de checklist
 // (general y por equipo). firestore.rules solo permite "create", nunca
@@ -2107,7 +1595,7 @@ function logAuditoria(categoria, equipoId, equipoNombre, cambios){
     fecha: fbTimestamp(),
   }).catch(err => {
     console.error('Error guardando auditoría:', err);
-    showToast('⚠️ El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message, 'warn'); // (29 sep 2026)
+    showToast('El cambio se guardó, pero no se pudo registrar en la auditoría: ' + err.message, 'warn'); // (29 sep 2026)
   });
 }
 
@@ -2133,7 +1621,7 @@ function refrescarEquiposLocal() { setTimeout(() => fbRefrescarEquipos(true).cat
 function guardarSinEsperar(promesa, msgOk, accion) {
   refrescarEquiposLocal();
   promesa.catch(e => showToast(mensajeErrorPermiso(e, accion), 'error'));
-  showToast(navigator.onLine ? msgOk : msgOk + ' 📵 Se subirá cuando haya señal.', navigator.onLine ? undefined : 'warn');
+  showToast(navigator.onLine ? msgOk : msgOk + ' Se subirá cuando haya señal.', navigator.onLine ? undefined : 'warn');
 }
 
 function guardarFrecuencia(equipoId) {
@@ -2145,7 +1633,7 @@ function guardarFrecuencia(equipoId) {
     checklistFrecuenciaDias: dias,
     checklistProximaFecha: proximaFechaChecklist(equipoActual, dias),
   }, { merge: true });
-  guardarSinEsperar(promesa, 'Frecuencia guardada ✅', 'configurar');
+  guardarSinEsperar(promesa, 'Frecuencia guardada ', 'configurar');
   // Auditoría (29 sep 2026): solo se registra si el número de días de
   // verdad cambió (evita ruido si alguien toca "Guardar" sin editar nada).
   if (diasAntes !== dias) {
@@ -2173,24 +1661,35 @@ async function guardarHorometroConfig(equipoId) {
     checklistFrecuenciaHoras: horas,
     horometroActual: lectura,
     horometroUltimoService: lectura,
-  }, { merge: true }), 'Horómetro activado ✅', 'configurar');
+  }, { merge: true }), 'Horómetro activado ', 'configurar');
 }
 
+// (v3 etapa 3b) Reversible: se quita ya y el aviso ofrece "Deshacer" (vuelve a poner los mismos
+// valores). Sin la estructura de la app (sin vtDeshacer) se pregunta como antes.
 async function desactivarHorometro(equipoId) {
-  if (!confirm('¿Quitar el mantenimiento por horómetro de este equipo? Sigue funcionando por días si tiene frecuencia configurada.')) return;
+  const e0 = (currentEquipos || []).find(x => x.id === equipoId) || {};
+  const antes = {};
+  ['checklistFrecuenciaHoras', 'horometroActual', 'horometroUltimoService'].forEach(k => { if (e0[k] != null) antes[k] = e0[k]; });
+  if (!window.vtDeshacer && !confirm('¿Quitar el mantenimiento por horómetro de este equipo? Sigue funcionando por días si tiene frecuencia configurada.')) return;
   try {
     await db.collection('equipos').doc(equipoId).update({
       checklistFrecuenciaHoras: firebase.firestore.FieldValue.delete(),
       horometroActual: firebase.firestore.FieldValue.delete(),
       horometroUltimoService: firebase.firestore.FieldValue.delete(),
     });
-    showToast('Horómetro desactivado ✅');
+    if (window.vtDeshacer && Object.keys(antes).length) {
+      vtDeshacer('Horómetro desactivado', () => {
+        db.collection('equipos').doc(equipoId).update(antes)
+          .then(() => showToast('Horómetro activado', 'success'))
+          .catch(err => showToast('Error: ' + err.message, 'error'));
+      });
+    } else showToast('Horómetro desactivado', 'success');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
 }
 
-// ══════ PANTALLA "⏱ HORÓMETRO" — actualizar solo la lectura, abierta a ══════
+// ══════ PANTALLA "<span data-icon="timer"></span> HORÓMETRO" — actualizar solo la lectura, abierta a ══════
 // cualquiera con acceso al checklist (no solo Encargado/Admin), para que
 // cualquiera que pase por la máquina pueda anotar el número sin tener que
 // hacer el checklist completo. A diferencia de guardarHorometroConfig(),
@@ -2202,7 +1701,7 @@ function renderHorometro() {
   if (!wrap) return;
   const equiposConHorometro = equiposDeNave().filter(e => e.checklistFrecuenciaHoras);
   if (!equiposConHorometro.length) {
-    wrap.innerHTML = `<div class="empty" style="padding:20px 10px;"><span class="emoji">⏱</span><p>Ningún equipo tiene horómetro activado todavía. Se activa por equipo desde "⚙️ Config".</p></div>`;
+    wrap.innerHTML = `<div class="empty" style="padding:20px 10px;"><span class="emoji"><span data-icon="timer"></span></span><p>Ningún equipo usa horómetro todavía. Se activa en cada equipo, en Ajustes.</p></div>`;
     return;
   }
   wrap.innerHTML = equiposConHorometro.map(e => {
@@ -2221,7 +1720,7 @@ function renderHorometro() {
           <input type="number" min="0" id="hm-lectura-${e.id}" value="${fbEsc(e.horometroActual ?? '')}"/>
         </div>
         <div class="field" style="margin-bottom:0;flex:0 0 auto;align-self:flex-end;">
-          <button class="btn btn-secondary btn-sm" onclick="guardarLecturaHorometro('${e.id}')">💾 Guardar</button>
+          <button class="btn btn-secondary btn-sm" onclick="guardarLecturaHorometro('${e.id}')"><span data-icon="save"></span> Guardar</button>
         </div>
       </div>
     </div>`;
@@ -2237,7 +1736,7 @@ async function guardarLecturaHorometro(equipoId) {
   // confirma — ver validarLecturaHorometro().
   if (!validarLecturaHorometro(currentEquipos.find(x => x.id === equipoId), lectura)) return;
   guardarSinEsperar(db.collection('equipos').doc(equipoId).set({ horometroActual: lectura }, { merge: true }),
-    'Lectura guardada ✅', 'horometro');
+    'Lectura guardada ', 'horometro');
 }
 
 // ══════ CARGA MASIVA DE FRECUENCIAS (Encargado/Admin) ══════
@@ -2245,8 +1744,6 @@ async function guardarLecturaHorometro(equipoId) {
 // se pega una tabla copiada de Excel (Nombre del equipo <TAB> Días) y se
 // procesa de una sola vez, en vez de tener que escribir y guardar equipo
 // por equipo en la lista de arriba.
-function openModalGeneric(id) { document.getElementById(id).classList.add('open'); }
-function closeModalGeneric(id) { document.getElementById(id).classList.remove('open'); }
 
 function abrirModalBulkFrecuencias() {
   document.getElementById('bulkFrecPasteArea').value = '';
@@ -2288,7 +1785,7 @@ async function bulkImportFrecuencias() {
   });
 
   if (!actualizados.length) {
-    status.innerHTML = '⚠️ Ningún nombre coincidió con un equipo existente.'
+    status.innerHTML = 'Ningún nombre coincidió con un equipo existente.'
       + (noEncontrados.length ? '<br>No encontrados: ' + fbEsc(noEncontrados.join(', ')) : '');
     return;
   }
@@ -2312,17 +1809,17 @@ async function bulkImportFrecuencias() {
     }
     let avisoPendiente = !navigator.onLine;
     Promise.all(commits).then(() => {
-      if (avisoPendiente) showToast(`☁️ Frecuencias de ${actualizados.length} equipo(s) subidas al servidor ✅`);
-    }).catch(e => showToast('❌ No se guardaron todas las frecuencias. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
+      if (avisoPendiente) showToast(`Frecuencias de ${actualizados.length} equipo(s) subidas al servidor `);
+    }).catch(e => showToast('No se guardaron todas las frecuencias. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
 
-    let msg = `✅ ${actualizados.length} equipo(s) actualizados`;
+    let msg = `${actualizados.length} equipo(s) actualizados`;
     if (noEncontrados.length) msg += `, ${noEncontrados.length} sin coincidencia`;
     if (invalidas.length) msg += `, ${invalidas.length} fila(s) con formato inválido`;
-    if (avisoPendiente) msg += ' 📵 Se subirá cuando haya señal.';
+    if (avisoPendiente) msg += ' Se subirá cuando haya señal.';
     showToast(msg, avisoPendiente ? 'warn' : undefined);
 
-    status.innerHTML = (noEncontrados.length ? '⚠️ No encontrados (revisa el nombre exacto en Inventario): ' + fbEsc(noEncontrados.join(', ')) + '<br>' : '')
-      + (invalidas.length ? '⚠️ Filas con formato inválido: ' + fbEsc(invalidas.join(' | ')) : '');
+    status.innerHTML = (noEncontrados.length ? 'No encontrados (revisa el nombre exacto en Inventario): ' + fbEsc(noEncontrados.join(', ')) + '<br>' : '')
+      + (invalidas.length ? 'Filas con formato inválido: ' + fbEsc(invalidas.join(' | ')) : '');
 
     if (!noEncontrados.length && !invalidas.length) closeModalGeneric('modalBulkFrecuencias');
   } catch (e) {
@@ -2424,7 +1921,7 @@ function revisarBulkListas() {
   });
   let html = '';
   if (orden.length) {
-    html += `<div style="font-weight:700;margin-bottom:6px;">✅ ${orden.length} equipo(s) listos para guardar</div>`;
+    html += `<div style="font-weight:700;margin-bottom:6px;"><span data-icon="check-circle"></span> ${orden.length} equipo(s) listos para guardar</div>`;
     html += orden.map(e => {
       const reemplaza = Array.isArray(e.checklistPuntos) && e.checklistPuntos.length;
       const pts = listas[e.id];
@@ -2434,7 +1931,7 @@ function revisarBulkListas() {
       </div>`;
     }).join('');
   }
-  if (noEncontrados.size) html += `<div class="info-box" style="margin-top:6px;">⚠️ No encontrados en Inventario (no se cargan): ${fbEsc([...noEncontrados].join(', '))}</div>`;
+  if (noEncontrados.size) html += `<div class="info-box" style="margin-top:6px;"><span data-icon="alert"></span> No encontrados en Inventario (no se cargan): ${fbEsc([...noEncontrados].join(', '))}</div>`;
   if (filasSinPunto) html += `<div class="item-sub" style="margin-top:6px;">${filasSinPunto} fila(s) sin punto se ignoraron.</div>`;
   if (recortados.size) html += `<div class="item-sub" style="margin-top:6px;">Algunos puntos muy largos se recortaron a ${BULK_MAX_LARGO} letras.</div>`;
   if (!orden.length) html += '<div class="info-box" style="margin-top:6px;">Ningún equipo coincidió. Revisa que el nombre sea igual al de Inventario.</div>';
@@ -2453,9 +1950,9 @@ function guardarBulkListas() {
   logAuditoria('puntos_checklist_equipo', null, 'Carga masiva',
     [{ campo: 'Listas propias (carga masiva)', anterior: '', nuevo: n + ' equipo(s): ' + Object.keys(listas).map(id => { const e = currentEquipos.find(x => x.id === id); return e ? e.nombre : id; }).join(', ').slice(0, 900) }]);
   const sinSenal = !navigator.onLine;
-  promesa.then(() => { if (sinSenal) showToast(`☁️ Listas de ${n} equipo(s) subidas al servidor ✅`); })
-    .catch(e => showToast('❌ No se guardaron las listas. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
-  showToast(sinSenal ? `📵 Listas de ${n} equipo(s) guardadas; se subirán cuando haya señal.` : `✅ Listas de ${n} equipo(s) guardadas. Todos las ven ya.`, sinSenal ? 'warn' : undefined);
+  promesa.then(() => { if (sinSenal) showToast(`Listas de ${n} equipo(s) subidas al servidor `); })
+    .catch(e => showToast('No se guardaron las listas. ' + mensajeErrorPermiso(e, 'configurar'), 'error'));
+  showToast(sinSenal ? `Listas de ${n} equipo(s) guardadas; se subirán cuando haya señal.` : `Listas de ${n} equipo(s) guardadas. Todos las ven ya.`, sinSenal ? 'warn' : undefined);
   bulkListasPrevia = null;
   closeModalGeneric('modalBulkListas');
 }

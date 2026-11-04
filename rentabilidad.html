@@ -14,6 +14,10 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
   <script src="filtros.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
@@ -123,14 +127,11 @@
 </head>
 <body>
 
-<div id="header">
-  <h1>📊 Rentabilidad de equipos</h1>
-  <small id="header-sub">Cargando...</small>
-</div>
+<!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
 
 <!-- (25 oct 2026, Etapa 3) Filtro Nave → Área → Línea → Equipo -->
 <div class="wrap" id="fUbicWrap" style="display:none;padding-bottom:0;"><div class="card" style="margin-bottom:0;padding:10px;"><div id="fUbic"></div></div></div>
-<div class="wrap" id="view"><div class="card empty">Cargando...</div></div>
+<div class="wrap" id="view"><div class="vt-sk-list" aria-busy="true" role="status"><span class="vt-sr">Cargando…</span><i></i><i></i><i></i></div></div>
 
 <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
 <div id="tip"></div>
@@ -171,17 +172,17 @@ const sinAcentos = s => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g
 const numOk = v => v != null && v !== '' && isFinite(Number(v));
 
 let _toastT = null;
-function toast(msg, tipo) { const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3400); }
+function toast(msg, tipo) { if (window.vtToast) return vtToast(msg, tipo); const t = $('toast'); t.textContent = msg; t.className = 'show' + (tipo ? ' ' + tipo : ''); clearTimeout(_toastT); _toastT = setTimeout(() => t.className = '', 3400); }
 function openModal(html) { $('modal').oninput = null; $('modal').innerHTML = html; $('modalBg').classList.add('open'); $('modalBg').scrollTop = 0; }
 function closeModal() { $('modalBg').classList.remove('open'); }
 $('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
-const fail = e => { console.error(e); toast('❌ ' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar costos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
+const fail = e => { console.error(e); toast('' + (e && e.code === 'permission-denied' ? 'Sin permiso: solo el Administrador puede guardar costos (revisa las reglas de Firebase).' : (e && e.message) || 'Error'), 'error'); };
 // Escritura sin bloquear (mismo patrón que Incentivos): sin señal, Firestore
 // la guarda en el celular y la sube sola al volver.
 function escribir(promesa, msgOk) {
   let listo = false, avisado = false;
-  promesa.then(() => { listo = true; if (avisado) toast('☁️ Costos subidos al servidor ✅'); }).catch(e => { listo = true; fail(e); });
-  if (!navigator.onLine) { avisado = true; toast(msgOk + ' 📵 Se subirá cuando haya señal.', 'warn'); }
+  promesa.then(() => { listo = true; if (avisado) toast('Costos subidos al servidor ', 'success'); }).catch(e => { listo = true; fail(e); });
+  if (!navigator.onLine) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); }
   else { toast(msgOk); setTimeout(() => { if (!listo) { avisado = true; toast(msgOk + ' Se subirá cuando haya señal.', 'warn'); } }, 3000); }
 }
 
@@ -448,10 +449,10 @@ function calcularPeriodo(per) {
   return { per, ots, porMes, meses, total, totalN: sumaC(total), paradas, equipos: lista, sinCostoRep, sinTecnicos, faltanSal: [...faltanSal.values()], ult3, prev3 };
 }
 const SEM = {
-  rojo: { i: '🔴', t: 'Evaluar reemplazo', c: '#d03b3b' },
-  amarillo: { i: '🟡', t: 'Vigilar', c: '#fab219' },
-  verde: { i: '🟢', t: 'Rentable', c: '#0ca30c' },
-  gris: { i: '⚪', t: 'Faltan datos de la máquina nueva', c: '#6b6a64' },
+  rojo: { i: '<span data-icon="stop" class="ic-bad"></span>', t: 'Evaluar reemplazo', c: '#d03b3b' },
+  amarillo: { i: '<span data-icon="alert" class="ic-warn"></span>', t: 'Vigilar', c: '#fab219' },
+  verde: { i: '<span data-icon="check-circle" class="ic-ok"></span>', t: 'Rentable', c: '#0ca30c' },
+  gris: { i: '<span data-icon="circle" class="ic-mut"></span>', t: 'Faltan datos de la máquina nueva', c: '#6b6a64' },
 };
 function evaluar(G, per) {
   const real = sumaC(G.c), d = G.d;
@@ -477,7 +478,7 @@ function evaluar(G, per) {
 // lecturas extra: todo ya está leído en esta pantalla (solo Administrador).
 // Referencia: clase mundial < 2–3 %, típico 3–6 %, alto > 6 %.
 const RAV_NIVEL = p => p == null ? '' : p < 3 ? 'clase' : p <= 6 ? 'tipico' : 'alto';
-const RAV_TXT = { clase: '🟢 Clase mundial (menos de 3 %)', tipico: '🟡 Típico (3 a 6 %)', alto: '🔴 Alto (más de 6 %)' };
+const RAV_TXT = { clase: 'Clase mundial (menos de 3 %)', tipico: 'Típico (3 a 6 %)', alto: 'Alto (más de 6 %)' };
 function calcRav(R) {
   const con = R.equipos.filter(E => (Number(E.d.precioNuevo) || 0) > 0);
   const costo = con.reduce((s, E) => s + E.mantener, 0), valor = con.reduce((s, E) => s + Number(E.d.precioNuevo), 0);
@@ -488,18 +489,18 @@ function calcRav(R) {
 }
 function ravHtml(V) {
   const pctTx = p => p == null ? '—' : p.toLocaleString('es-DO', { maximumFractionDigits: 2 }) + ' %';
-  return `<div class="card" id="ravCard"><div class="chead"><div><div class="ct">🏆 Costo de mantenimiento / valor de reposición (RAV)</div><div class="cs">Costo de mantener al año ÷ precio de las máquinas nuevas${V.parcial ? ' · costo proyectado a 12 meses' : ''}</div></div></div>
-    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 6px"><b style="font-size:26px" id="ravPct">${esc(pctTx(V.pct))}</b><span id="ravNivel">${esc(V.nivel ? RAV_TXT[V.nivel] : 'Falta el precio de las máquinas nuevas')}</span></div>
+  return `<div class="card" id="ravCard"><div class="chead"><div><div class="ct"><span data-icon="award"></span> Costo de mantenimiento / valor de reposición (RAV)</div><div class="cs">Costo de mantener al año ÷ precio de las máquinas nuevas${V.parcial ? ' · costo proyectado a 12 meses' : ''}</div></div></div>
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 6px"><b style="font-size:26px" id="ravPct">${esc(pctTx(V.pct))}</b><span id="ravNivel">${V.nivel ? '<span data-icon="' + ({ clase: 'check-circle', tipico: 'alert', alto: 'stop' })[V.nivel] + '" class="' + ({ clase: 'ic-ok', tipico: 'ic-warn', alto: 'ic-bad' })[V.nivel] + '"></span> ' : ''}${esc(V.nivel ? RAV_TXT[V.nivel] : 'Falta el precio de las máquinas nuevas')}</span></div>
     <div class="nota">${esc(moneyK(V.costo))} al año ÷ ${esc(moneyK(V.valor))} de valor de reposición · ${V.nCon} equipo(s) con precio${V.nSin ? ' · ' + V.nSin + ' sin precio (no cuentan)' : ''}.</div>
     <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:700;min-height:36px;display:inline-flex;align-items:center">¿Qué significa?</summary><div class="nota">Lo que cuesta mantener las máquinas en un año comparado con lo que costaría comprarlas nuevas. Clase mundial: menos de 2–3 %; típico 3–6 %; más de 6 % es alto: esas máquinas se están comiendo su valor en reparaciones.</div></details>
-    ${V.equipos.length ? `<div class="tw" style="margin-top:8px"><table><tr><th>Equipo</th><th class="r">Costo/año</th><th class="r">Precio nueva</th><th class="r">RAV</th></tr>${V.equipos.slice(0, 15).map(x => `<tr data-rav="${esc(x.key)}"><td>${esc(x.nombre)}</td><td class="r">${esc(corto(x.costo))}</td><td class="r">${esc(corto(x.precio))}</td><td class="r"><b>${esc(pctTx(x.pct))}</b> ${x.nivel === 'alto' ? '🔴' : x.nivel === 'tipico' ? '🟡' : '🟢'}</td></tr>`).join('')}</table></div>` : ''}
-    <button class="btn2" id="bXlsRav" style="width:100%;margin-top:8px">⬇️ Excel del RAV</button></div>`;
+    ${V.equipos.length ? `<div class="tw" style="margin-top:8px"><table><tr><th>Equipo</th><th class="r">Costo/año</th><th class="r">Precio nueva</th><th class="r">RAV</th></tr>${V.equipos.slice(0, 15).map(x => `<tr data-rav="${esc(x.key)}"><td>${esc(x.nombre)}</td><td class="r">${esc(corto(x.costo))}</td><td class="r">${esc(corto(x.precio))}</td><td class="r"><b>${esc(pctTx(x.pct))}</b> ${x.nivel === 'alto' ? '<span data-icon="stop" class="ic-bad"></span>' : x.nivel === 'tipico' ? '<span data-icon="alert" class="ic-warn"></span>' : '<span data-icon="check-circle" class="ic-ok"></span>'}</td></tr>`).join('')}</table></div>` : ''}
+    <button class="btn2" id="bXlsRav" style="width:100%;margin-top:8px"><span data-icon="download"></span> Excel del RAV</button></div>`;
 }
 function excelRav(V, R) {
   const titulo = 'RAV (costo de mantenimiento ÷ valor de reposición) · ' + ((ubic && ubic.texto()) || fbNaveTexto()) + ' · ' + R.per.label + ' · generado ' + fbHoy();
   fbExportar({ nombre: fbNombreArchivo('rav', ubic ? ubic.partes() : [], R.per.id.replace(':', '-')), aviso: m => toast(m), hojas: [
     { nombre: 'RAV', titulo, columnas: [{ t: 'Indicador', w: 34 }, { t: 'Valor', w: 16 }, { t: 'Detalle', w: 60 }], filas: [
-      ['RAV total (%)', V.pct == null ? '' : V.pct, V.nivel ? RAV_TXT[V.nivel].replace(/^\S+\s/, '') : 'sin precios'],
+      ['RAV total (%)', V.pct == null ? '' : V.pct, V.nivel ? RAV_TXT[V.nivel] : 'sin precios'],
       ['Costo de mantener al año', V.costo, V.parcial ? 'proyectado a 12 meses' : ''],
       ['Valor de reposición', V.valor, V.nCon + ' equipo(s) con precio de máquina nueva'],
       ['Equipos sin precio', V.nSin, 'no cuentan en el RAV'],
@@ -508,7 +509,7 @@ function excelRav(V, R) {
   ] });
 }
 
-// 💡 Déficit: el componente que más pesa, la causa de falla más cara entre
+// <span data-icon="bulb"></span> Déficit: el componente que más pesa, la causa de falla más cara entre
 // los correctivos (sin proyectos) y repuestos que se repiten 3 veces o más.
 function deficit(E) {
   const tot = E.real; if (!(tot > 0)) return 'Sin costos en el período.';
@@ -604,14 +605,9 @@ let RES = null; // resultado del último cálculo (para pruebas: window.__rent)
 
 window.fbReady.then(async () => {
   const u = window.currentUserRole || {};
-  $('header-sub').textContent = 'Solo Administrador · ' + (u.nombre || '');
   if (typeof fbRenderMiniNav === 'function') fbRenderMiniNav('rentabilidad');
-  fbOnNaveCambio(() => { if (userHasRole('ADMINISTRADOR')) pintar(); }); // (25 oct 2026, Etapa 2)
-  if (!userHasRole('ADMINISTRADOR')) {
-    // Sin lecturas de costos, salarios ni OTs para otros roles.
-    $('view').innerHTML = '<div class="card empty">🔒 Esta pantalla es solo para el Administrador.<br>Incluye costos, salarios y precios de máquinas.</div>';
-    return;
-  }
+  fbOnNaveCambio(() => pintar()); // (25 oct 2026, Etapa 2)
+  // (v3 etapa 3a) Solo Administrador: el candado central (firebase-init.js) no deja llegar aquí a otros roles (sin lecturas).
   const h = (location.hash || '').slice(1).split('/');
   if (['mes', 'anio', 'equipo', 'nave'].includes(h[0])) UI.tab = h[0];
   ubic = fbFiltroUbicacion({ el: $('fUbic'), pagina: 'rentabilidad', onChange: () => pintar() }); // (25 oct 2026, Etapa 3)
@@ -632,7 +628,7 @@ async function cargarBase() {
     db.collection('costos_repuestos').get().catch(e => ({ err: e })),
     fbEquiposCatalogo(false).catch(e => ({ err: e })),
   ]);
-  if (c.err) { console.warn('costos_config:', c.err.message); toast('⚠️ No se pudieron leer los datos de costos: se usan los de por defecto', 'warn'); }
+  if (c.err) { console.warn('costos_config:', c.err.message); toast('No se pudieron leer los datos de costos: se usan los de por defecto', 'warn'); }
   else { CFG = normCfg(c.exists ? c.data() : null); CFG_META = c.exists ? c.data() : null; }
   if (inc.err) console.warn('incentivos_config:', inc.err.message);
   else SALARIOS = ((inc.exists ? inc.data() : {}) || {}).tecnicos || {};
@@ -650,7 +646,7 @@ function cabecera() {
     sel = `<select id="selMes" aria-label="Mes">${ops.map(m => `<option value="${m}"${m === UI.mes ? ' selected' : ''}>${esc(nombreMes(m))}</option>`).join('')}</select>`;
   } else sel = `<select id="selPer" aria-label="Período">${opcionesPeriodo().map(p => `<option value="${esc(p.id)}"${p.id === per.id ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>`;
   return `<div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-tab="${k}" class="${UI.tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-    <div class="bar-tools">${sel}<button class="btn2" id="bCfg">⚙️ Datos de costos</button><button class="btn2" id="bRep">📥 Costos de repuestos</button><button class="btn2" id="bAct" aria-label="Actualizar">🔄</button></div>`;
+    <div class="bar-tools">${sel}<button class="btn2" id="bCfg"><span data-icon="settings"></span> Datos de costos</button><button class="btn2" id="bRep"><span data-icon="download"></span> Costos de repuestos</button><button class="btn2" id="bAct" aria-label="Actualizar"><span data-icon="refresh"></span></button></div>`;
 }
 function bindCabecera() {
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { UI.tab = b.dataset.tab; pintar(); });
@@ -658,13 +654,13 @@ function bindCabecera() {
   if ($('selMes')) $('selMes').onchange = e => { UI.mes = e.target.value; pintar(); };
   $('bCfg').onclick = () => modalDatos();
   $('bRep').onclick = () => modalRepuestos();
-  $('bAct').onclick = async () => { MES_DOCS.clear(); toast('🔄 Releyendo datos…'); await cargarBase(); pintar(); };
+  $('bAct').onclick = async () => { MES_DOCS.clear(); toast('Releyendo datos…', 'success'); await cargarBase(); pintar(); };
 }
 function avisosHtml(R) {
   let h = '';
-  if (R.faltanSal.length) h += `<div class="aviso">⚠️ <b>Faltan salarios</b> de ${R.faltanSal.length} técnico${R.faltanSal.length === 1 ? '' : 's'} (${esc(R.faltanSal.slice(0, 5).join(', '))}${R.faltanSal.length > 5 ? '…' : ''}): se usa el costo hora por defecto ${esc(money(CFG.defaults.costoHoraTecnicoDefault))}. Ponlos en 💰 Incentivos → Reglas y salarios.</div>`;
-  if (R.sinCostoRep) h += `<div class="aviso">📦 ${R.sinCostoRep} repuesto${R.sinCostoRep === 1 ? '' : 's'} sin costo (carga el inventario del mes). Se cuentan como RD$ 0.</div>`;
-  if (R.sinTecnicos) h += `<div class="aviso info">ℹ️ ${R.sinTecnicos} trabajo${R.sinTecnicos === 1 ? '' : 's'} sin técnico escrito: se cuenta una persona al costo hora por defecto.</div>`;
+  if (R.faltanSal.length) h += `<div class="aviso"><span data-icon="alert" class="ic-warn"></span> <b>Faltan salarios</b> de ${R.faltanSal.length} técnico${R.faltanSal.length === 1 ? '' : 's'} (${esc(R.faltanSal.slice(0, 5).join(', '))}${R.faltanSal.length > 5 ? '…' : ''}): se usa el costo hora por defecto ${esc(money(CFG.defaults.costoHoraTecnicoDefault))}. Ponlos en <span data-icon="coins"></span> Incentivos → Reglas y salarios.</div>`;
+  if (R.sinCostoRep) h += `<div class="aviso"><span data-icon="package"></span> ${R.sinCostoRep} repuesto${R.sinCostoRep === 1 ? '' : 's'} sin costo (carga el inventario del mes). Se cuentan como RD$ 0.</div>`;
+  if (R.sinTecnicos) h += `<div class="aviso info"><span data-icon="info"></span> ${R.sinTecnicos} trabajo${R.sinTecnicos === 1 ? '' : 's'} sin técnico escrito: se cuenta una persona al costo hora por defecto.</div>`;
   return h;
 }
 
@@ -690,13 +686,13 @@ async function pintar() {
     }
   } catch (e) {
     console.error(e);
-    if (n === _pintando) { $('view').innerHTML = cabecera() + `<div class="card empty">⚠️ No se pudieron leer las OTs (${esc(e.code || e.message)}).</div>`; bindCabecera(); }
+    if (n === _pintando) { $('view').innerHTML = cabecera() + `<div class="card empty"><span data-icon="alert" class="ic-warn"></span> No se pudieron leer las OTs (${esc(e.code || e.message)}).</div>`; bindCabecera(); }
   }
 }
 function publicar(R, extra) {
   const eq = E => ({ key: E.key, nombre: E.nombre, tipo: E.tipo, c: { tec: r2(E.c.tec), op: r2(E.c.op), arr: r2(E.c.arr), rep: r2(E.c.rep) }, total: r2(E.real), mantener: r2(E.mantener), nueva: E.nueva == null ? null : r2(E.nueva), estado: E.estado, tendencia: E.tendencia, ult3: r2(E.ult3), prev3: r2(E.prev3), paradas: E.paradas, deficit: E.deficit, d: E.d,
     ots: E.ots.map(x => ({ id: x.o.id, folio: folioDe(x.o), tec: r2(x.c.tec), op: r2(x.c.op), arr: r2(x.c.arr), rep: r2(x.c.rep), total: r2(x.total), sinCosto: x.sinCosto })) });
-  // (29 oct 2026) 💼 CAPEX: copia en ESTE celular del costo por año de cada equipo, para sugerir el
+  // (29 oct 2026) <span data-icon="briefcase"></span> CAPEX: copia en ESTE celular del costo por año de cada equipo, para sugerir el
   // ahorro al armar un CAPEX (solo la usa el Administrador; 0 lecturas; no cambia ningún cálculo).
   if (UI.tab === 'anio' || UI.tab === 'equipo') try {
     let prev = null; try { prev = JSON.parse(localStorage.getItem('capexRentSug') || 'null'); } catch (e) {}
@@ -712,14 +708,14 @@ function tarjetaEquipo(E, per) {
   const s = SEM[E.estado];
   const max = Math.max(E.mantener, E.nueva || 0);
   const cmp = `<div class="cmp"><span>Mantenerla</span>${svgCmp(E.mantener, max, 'var(--color-text-2)', 'Mantenerla: ' + money(E.mantener) + ' por año')}<b>${esc(moneyK(E.mantener))}</b></div>`
-    + (E.nueva != null ? `<div class="cmp"><span>Una nueva</span>${svgCmp(E.nueva, max, 'var(--color-border-strong)', 'Una nueva: ' + money(E.nueva) + ' por año')}<b>${esc(moneyK(E.nueva))}</b></div>` : `<div class="nota">Pon el precio de una nueva en ⚙️ Datos de costos para comparar.</div>`);
+    + (E.nueva != null ? `<div class="cmp"><span>Una nueva</span>${svgCmp(E.nueva, max, 'var(--color-border-strong)', 'Una nueva: ' + money(E.nueva) + ' por año')}<b>${esc(moneyK(E.nueva))}</b></div>` : `<div class="nota">Pon el precio de una nueva en <span data-icon="settings"></span> Datos de costos para comparar.</div>`);
   return `<div class="card eq" data-eq="${esc(E.key)}" style="border-left:4px solid ${s.c}">
     <div class="eqh"><b>${esc(E.nombre)}</b><span class="sem">${s.i} ${esc(s.t)}</span></div>
     <div class="cs">${E.paradas} ${E.paradas === 1 ? 'parada' : 'paradas'} · ${esc(Math.round(E.minParo / 60))} h de paro · ${E.ots.length} trabajo${E.ots.length === 1 ? '' : 's'}${per.parcial ? ' · proyectado a 12 meses' : ''}</div>
     ${cmp}
     <div class="lbl">En qué se fue el dinero (${esc(moneyK(E.real))} en el período)</div>${barraMezcla(E.c, 'Costo de ' + E.nombre + ' por componente')}
     <div class="pct">${esc(pctLinea(E.c))}</div>
-    <div class="def">💡 ${esc(E.deficit)}</div>${E.estado === 'rojo' && E.id ? `<a class="btn2" data-capex href="capex.html#nuevo&equipo=${encodeURIComponent(E.id)}" style="display:block;text-align:center;text-decoration:none;margin-top:8px">💼 Crear CAPEX de reemplazo</a>` : ''}</div>`;
+    <div class="def"><span data-icon="bulb"></span> ${esc(E.deficit)}</div>${E.estado === 'rojo' && E.id ? `<a class="btn2" data-capex href="capex.html#nuevo&equipo=${encodeURIComponent(E.id)}" style="display:block;text-align:center;text-decoration:none;margin-top:8px"><span data-icon="briefcase"></span> Crear CAPEX de reemplazo</a>` : ''}</div>`;
 }
 function columnasMes(meses, porMes, ancho) {
   return meses.map(m => ({ label: ancho ? mesCorto(m).charAt(0).toUpperCase() + mesCorto(m).slice(1) : mesCorto(m).charAt(0).toUpperCase(), tip: nombreMes(m), c: porMes[m] || cero() }));
@@ -732,7 +728,7 @@ function vistaAnio(R) {
   const kpis = `<div class="kpis">
     <div class="kpi"><span>Costo del período</span><b>${esc(moneyK(R.totalN))}</b><small>${per.parcial ? esc(moneyK(R.totalN * per.factor)) + ' proyectado a 12 meses' : '4 componentes'}</small></div>
     <div class="kpi"><span>Costo por parada</span><b>${R.paradas ? esc(moneyK(R.totalN / R.paradas)) : '—'}</b><small>${R.paradas} paradas</small></div>
-    <div class="kpi"><span>Semáforo</span><b style="font-size:15px;white-space:nowrap">🔴${cnt.rojo} 🟡${cnt.amarillo} 🟢${cnt.verde}</b><small>⚪${cnt.gris} sin datos · ${nEq} equipos</small></div>
+    <div class="kpi"><span>Semáforo</span><b style="font-size:15px;white-space:nowrap"><span data-icon="stop" class="ic-bad"></span>${cnt.rojo} <span data-icon="alert" class="ic-warn"></span>${cnt.amarillo} <span data-icon="check-circle" class="ic-ok"></span>${cnt.verde}</b><small><span data-icon="circle" class="ic-mut"></span>${cnt.gris} sin datos · ${nEq} equipos</small></div>
     <div class="kpi"><span>Faltan datos</span><b>${pctFalta} %</b><small>equipos sin precio de una nueva</small></div></div>`;
   const cols = columnasMes(R.meses, R.porMes, R.meses.length <= 7);
   const graf = cardGrafica('Costo de mantenimiento por mes', (ubic && ubic.activo() ? ubic.texto() : fbNavesFiltro() ? fbNaveTexto() : 'Toda la planta') + ' · ' + per.corto + ' · RD$', svgBarras(cols, { aria: 'Costo de mantenimiento por mes' }), tablaComp(cols, 'Mes'));
@@ -743,7 +739,7 @@ function vistaAnio(R) {
     + `<div class="ct" style="margin:6px 2px 8px">¿Seguir o reemplazar? <span style="font-weight:400;color:var(--muted);font-size:12px">· costo por año${per.parcial ? ', proyectado a 12 meses' : ''}</span></div>`
     + (nEq ? legendHtml() + cards + (nEq > lim ? `<button class="btn2" style="width:100%;margin-bottom:10px" id="bTodos">Ver los ${nEq} equipos</button>` : '') : '<div class="card empty">No hay trabajos registrados en este período.</div>')
     + btnExcel()
-    + `<div class="nota" style="margin-top:6px">«Una nueva» = precio de la máquina nueva ÷ años de vida útil + su mantenimiento esperado (% del precio). 🔴 cuando mantenerla cuesta igual o más que una nueva; 🟡 cuando llega al 70 % o el costo de los últimos 3 meses sube más de 25 %; 🟢 cuando cuesta mucho menos; ⚪ cuando falta el precio de la nueva. Los proyectos cuentan en el costo pero no en el análisis de fallas. Toca un equipo para ver su detalle.</div>`;
+    + `<div class="nota" style="margin-top:6px">«Una nueva» = precio de la máquina nueva ÷ años de vida útil + su mantenimiento esperado (% del precio). <span data-icon="stop" class="ic-bad"></span> cuando mantenerla cuesta igual o más que una nueva; <span data-icon="alert" class="ic-warn"></span> cuando llega al 70 % o el costo de los últimos 3 meses sube más de 25 %; <span data-icon="check-circle" class="ic-ok"></span> cuando cuesta mucho menos; <span data-icon="circle" class="ic-mut"></span> cuando falta el precio de la nueva. Los proyectos cuentan en el costo pero no en el análisis de fallas. Toca un equipo para ver su detalle.</div>`;
   bindCabecera(); bindExcel(R);
   if ($('bXlsRav')) $('bXlsRav').onclick = () => excelRav(V, R);
   if ($('bTodos')) $('bTodos').onclick = () => { UI.verTodos = true; vistaAnio(R); };
@@ -824,11 +820,11 @@ function vistaEquipo(R) {
   math += `<b>Mantenerla</b> = ${esc(money(E.real))} en el período` + (per.parcial ? ` × ${esc(per.diasAnio)} ÷ ${esc(per.dias)} días = <b>${esc(money(E.mantener))}</b> por año (proyectado a 12 meses)` : ` = <b>${esc(money(E.mantener))}</b> por año`) + '<br>';
   if (E.nueva != null) {
     math += `<b>Una nueva</b> = ${esc(money(d.precioNuevo))} ÷ ${esc(d.vidaUtilAnios)} años + ${esc(money(d.precioNuevo))} × ${esc(d.mantNuevaPct)} % = <b>${esc(money(E.nueva))}</b> por año<br>`;
-    math += `Mantenerla ÷ nueva = <b>${pctR(E.mantener, E.nueva)} %</b> (🔴 desde 100 %, 🟡 desde 70 %)<br>`;
-  } else math += `<b>Una nueva</b>: falta el precio de la máquina nueva (⚙️ Datos de costos).<br>`;
-  math += `Últimos 3 meses ${esc(money(E.ult3))} vs 3 anteriores ${esc(money(E.prev3))}` + (E.prev3 > 0 ? ` (${E.ult3 >= E.prev3 ? '+' : '−'}${Math.abs(Math.round((E.ult3 / E.prev3 - 1) * 100))} %${E.tendencia ? ', sube más de 25 % → 🟡' : ''})` : '') + '<br>';
+    math += `Mantenerla ÷ nueva = <b>${pctR(E.mantener, E.nueva)} %</b> (<span data-icon="stop" class="ic-bad"></span> desde 100 %, <span data-icon="alert" class="ic-warn"></span> desde 70 %)<br>`;
+  } else math += `<b>Una nueva</b>: falta el precio de la máquina nueva (<span data-icon="settings"></span> Datos de costos).<br>`;
+  math += `Últimos 3 meses ${esc(money(E.ult3))} vs 3 anteriores ${esc(money(E.prev3))}` + (E.prev3 > 0 ? ` (${E.ult3 >= E.prev3 ? '+' : '−'}${Math.abs(Math.round((E.ult3 / E.prev3 - 1) * 100))} %${E.tendencia ? ', sube más de 25 % → <span data-icon="alert" class="ic-warn"></span>' : ''})` : '') + '<br>';
   math += `<span class="nota">Datos: ${CAMPOS_EQ.map(c => `${esc(c.l)} <b>${d[c.k] == null ? '—' : esc(c.k === 'operadores' || c.k === 'vidaUtilAnios' || c.k === 'mantNuevaPct' ? d[c.k] : money(d[c.k]))}</b> (${esc(fuenteTxt(E, c.k))})`).join(' · ')}</span>`;
-  math += `</div><div class="def">💡 ${esc(E.deficit)}</div></div>`;
+  math += `</div><div class="def"><span data-icon="bulb"></span> ${esc(E.deficit)}</div></div>`;
   const ots = E.ots.slice().sort((a, b) => b.total - a.total);
   const tabla = `<div class="card"><div class="ct">Trabajos del período</div><div class="cs">${ots.length} trabajo${ots.length === 1 ? '' : 's'} · RD$ · del más caro al más barato</div><div class="tw"><table><tr><th>Folio · fecha</th>${COMP.map(x => `<th class="r">${esc(x.n.split(' ')[0].slice(0, 4))}.</th>`).join('')}<th class="r">Total</th></tr>`
     + ots.map(x => `<tr><td><b>${esc(folioDe(x.o))}</b> <span class="nota">${esc(x.o.FECHA)}</span><br><span class="nota">${esc(x.o.TIPO_MANTENIMIENTO || '')}${x.o.CAUSA_FALLA ? ' · ' + esc(x.o.CAUSA_FALLA) : ''}${x.proyecto ? ' · <span class="tag info">proyecto</span>' : ''}${x.sinCosto ? ' · <span class="tag">' + x.sinCosto + ' rep. sin costo</span>' : ''}</span></td>${COMP.map(cp => `<td class="r">${esc(corto(x.c[cp.k]))}</td>`).join('')}<td class="r"><b>${esc(corto(x.total))}</b></td></tr>`).join('')
@@ -887,7 +883,7 @@ function vistaNave(per) {
 // ══════ EXCEL (25 oct 2026, Etapa 3) ══════
 // Lo que se ve con el filtro (nave, área, línea, equipo) y el período. Solo
 // Administrador (es la única que entra a esta pantalla): sí lleva costos.
-const btnExcel = () => `<button class="btn2" id="bXls" style="width:100%;margin:2px 0 10px">⬇️ Descargar Excel</button>`;
+const btnExcel = () => `<button class="btn2" id="bXls" style="width:100%;margin:2px 0 10px"><span data-icon="download"></span> Descargar Excel</button>`;
 function hojasRentabilidad(R, E) {
   const per = R.per;
   const filtro = ubic ? ubic.texto() : '';
@@ -913,7 +909,7 @@ function bindExcel(R, E) {
   };
 }
 
-// ══════ ⚙️ DATOS DE COSTOS ══════
+// ══════ <span data-icon="settings"></span> DATOS DE COSTOS ══════
 let EDIT = null;
 function equiposParaConfig() {
   const m = new Map();
@@ -934,12 +930,12 @@ function bloqueEq(scope, key, nombre, sub, heredado) {
 function modalDatos() {
   EDIT = JSON.parse(JSON.stringify(CFG));
   const D = EDIT.defaults;
-  openModal(`<h3>⚙️ Datos de costos</h3>
+  openModal(`<h3><span data-icon="settings"></span> Datos de costos</h3>
     <div class="nota">Solo el Administrador ve y cambia esto. Cada equipo usa sus propios datos; si no tiene, los de su tipo de máquina; si no, los generales. Los campos vacíos heredan el valor gris.</div>
-    <button class="btn2" id="dImp" style="width:100%;margin-top:10px">📥 Importar desde Excel/CSV</button>
+    <button class="btn2" id="dImp" style="width:100%;margin-top:10px"><span data-icon="download"></span> Importar desde Excel/CSV</button>
     <div class="sec">Valores generales</div>
     <div class="g2">${CAMPOS_DEF.map(c => `<div><label class="f">${esc(c.l)}</label><input type="number" inputmode="decimal" min="0" step="any" data-s="defaults" data-f="${c.k}" value="${esc(D[c.k])}"/></div>`).join('')}</div>
-    <div class="nota" style="margin-top:6px">Costo hora del técnico = salario mensual (💰 Incentivos) ÷ horas al mes. 44 h/semana × 52 ÷ 12 = 190.67 h.</div>
+    <div class="nota" style="margin-top:6px">Costo hora del técnico = salario mensual (<span data-icon="coins"></span> Incentivos) ÷ horas al mes. 44 h/semana × 52 ÷ 12 = 190.67 h.</div>
     <div class="sec">Por tipo de máquina</div>
     <div id="dTipos">${tiposParaConfig().map(t => bloqueEq('porTipo', t.k, t.nombre, '', D)).join('') || '<div class="nota">No hay tipos de máquina en el catálogo de equipos.</div>'}</div>
     <div class="sec">Por equipo</div>
@@ -976,7 +972,7 @@ function modalDatos() {
   $('dImp').onclick = () => modalImportarDatos();
   $('dOk').onclick = () => {
     const err = validarCfg(EDIT); if (err) return toast(err, 'error');
-    guardarCfg(EDIT, '⚙️ Datos de costos guardados');
+    guardarCfg(EDIT, 'Datos de costos guardados');
     closeModal();
   };
 }
@@ -1059,7 +1055,7 @@ async function leerArchivo(f) {
 function htmlImportador(id, ayuda) {
   return `<div class="nota">${ayuda}</div>
     <input type="file" id="${id}File" accept=".xlsx,.xls,.csv,.txt" style="display:none"/>
-    <div class="g2" style="margin-top:10px"><button class="btn2" id="${id}Abrir">📂 Elegir archivo</button><button class="btn2" id="${id}Rev">🔎 Revisar</button></div>
+    <div class="g2" style="margin-top:10px"><button class="btn2" id="${id}Abrir"><span data-icon="folder"></span> Elegir archivo</button><button class="btn2" id="${id}Rev"><span data-icon="search"></span> Revisar</button></div>
     <label class="f" for="${id}Txt">…o pega aquí las celdas copiadas de Excel</label><textarea id="${id}Txt" spellcheck="false"></textarea>
     <div class="nota" id="${id}St" style="margin-top:6px"></div><div id="${id}Prev" style="margin-top:8px"></div>`;
 }
@@ -1070,7 +1066,7 @@ function bindImportador(id, revisar) {
     const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!f) return;
     $(id + 'St').textContent = 'Leyendo archivo…';
     try { $(id + 'Txt').value = await leerArchivo(f); $(id + 'St').textContent = `Archivo «${f.name}» leído.`; window['_fuente_' + id] = f.name; revisar(); }
-    catch (e) { $(id + 'St').textContent = '⚠️ ' + e.message; }
+    catch (e) { $(id + 'St').textContent = '' + e.message; }
   };
 }
 
@@ -1117,17 +1113,17 @@ function interpretarDatos(texto) {
   return { filas };
 }
 function modalImportarDatos() {
-  openModal(`<h3>📥 Importar datos de costos</h3>
+  openModal(`<h3><span data-icon="download"></span> Importar datos de costos</h3>
     ${htmlImportador('iD', 'Columnas: <b>Equipo o Tipo de máquina</b>, Aplica a (Equipo / Tipo de máquina; vacío = se detecta solo), Operadores, Costo hora operador, Costo de arranque, Precio máquina nueva, Vida útil (años), % mantenimiento nueva. Las celdas vacías no cambian lo que ya hay. Las filas que empiezan con «EJEMPLO» se ignoran.')}
     <div class="modal-actions"><button class="btn2" id="iDVolver">Volver</button><button class="btn" id="iDOk" disabled>Guardar</button></div>`);
   const revisar = () => {
     const r = interpretarDatos($('iDTxt').value);
     IMP_DATOS = r.filas || [];
-    if (r.error) { $('iDSt').textContent = '⚠️ ' + r.error; $('iDPrev').innerHTML = ''; $('iDOk').disabled = true; return; }
+    if (r.error) { $('iDSt').textContent = '' + r.error; $('iDPrev').innerHTML = ''; $('iDOk').disabled = true; return; }
     const n = s => IMP_DATOS.filter(x => x.estado === s).length;
     $('iDSt').innerHTML = `<span class="tag ok">${n('ok')} para guardar</span> <span class="tag bad">${n('sin')} sin coincidencia</span> ${n('error') ? `<span class="tag bad">${n('error')} con errores</span> ` : ''}${n('sinvalores') ? `<span class="tag">${n('sinvalores')} sin valores</span> ` : ''}${n('ejemplo') ? `<span class="tag info">${n('ejemplo')} de ejemplo (ignorada)</span>` : ''}`;
-    const est = x => ({ ok: '<span class="tag ok">✓</span>', sin: '<span class="tag bad">❌ no es un equipo ni un tipo</span>', error: '<span class="tag bad">⚠️ ' + esc(x.errores.join(', ')) + '</span>', sinvalores: '<span class="tag">sin valores</span>', ejemplo: '<span class="tag info">ejemplo</span>' }[x.estado]);
-    $('iDPrev').innerHTML = `<div class="tw"><table><tr><th>Fila</th><th>Nombre → aplica a</th><th>Valores</th></tr>${IMP_DATOS.map(x => `<tr><td>${x.fila}</td><td><b>${esc(x.nombre)}</b><br>${x.scope ? (x.scope === 'porTipo' ? '🏷 Tipo: ' : '⚙️ Equipo: ') + esc(x.destino) : ''} ${est(x)}</td><td>${Object.entries(x.vals).map(([k, v]) => esc((CAMPOS_EQ.find(c => c.k === k) || {}).l + ' ' + v)).join('<br>') || '—'}</td></tr>`).join('')}</table></div>`;
+    const est = x => ({ ok: '<span class="tag ok">✓</span>', sin: '<span class="tag bad"><span data-icon="x-circle" class="ic-bad"></span> no es un equipo ni un tipo</span>', error: '<span class="tag bad"><span data-icon="alert" class="ic-warn"></span> ' + esc(x.errores.join(', ')) + '</span>', sinvalores: '<span class="tag">sin valores</span>', ejemplo: '<span class="tag info">ejemplo</span>' }[x.estado]);
+    $('iDPrev').innerHTML = `<div class="tw"><table><tr><th>Fila</th><th>Nombre → aplica a</th><th>Valores</th></tr>${IMP_DATOS.map(x => `<tr><td>${x.fila}</td><td><b>${esc(x.nombre)}</b><br>${x.scope ? (x.scope === 'porTipo' ? '<span data-icon="tag"></span> Tipo: ' : '<span data-icon="settings"></span> Equipo: ') + esc(x.destino) : ''} ${est(x)}</td><td>${Object.entries(x.vals).map(([k, v]) => esc((CAMPOS_EQ.find(c => c.k === k) || {}).l + ' ' + v)).join('<br>') || '—'}</td></tr>`).join('')}</table></div>`;
     $('iDOk').disabled = !n('ok');
   };
   bindImportador('iD', revisar);
@@ -1136,12 +1132,12 @@ function modalImportarDatos() {
     const c = JSON.parse(JSON.stringify(CFG)); let n = 0;
     IMP_DATOS.filter(x => x.estado === 'ok').forEach(x => { c[x.scope][x.key] = { ...(c[x.scope][x.key] || {}), nombre: x.destino, ...x.vals }; n++; });
     const err = validarCfg(c); if (err) return toast(err, 'error');
-    guardarCfg(c, `📥 ${n} fila${n === 1 ? '' : 's'} de datos de costos guardada${n === 1 ? '' : 's'}`);
+    guardarCfg(c, `${n} fila${n === 1 ? '' : 's'} de datos de costos guardada${n === 1 ? '' : 's'}`);
     closeModal();
   };
 }
 
-// ══════ 📥 COSTOS DE REPUESTOS ══════
+// ══════ <span data-icon="download"></span> COSTOS DE REPUESTOS ══════
 const COLS_REP = [
   { k: 'codigo', alias: ['codigo', 'item', 'itemcode', 'item code', 'netsuite id', 'id netsuite', 'codigo netsuite', 'cod', 'sku', 'code', 'part number'] },
   { k: 'descripcion', alias: ['descripcion', 'producto', 'material', 'description', 'articulo', 'nombre', 'item description'] },
@@ -1172,14 +1168,14 @@ function interpretarRepuestos(texto) {
 }
 function modalRepuestos() {
   const act = REP.actualizadoEn && REP.actualizadoEn.toDate ? fbFechaLocal(REP.actualizadoEn.toDate()) : null;
-  openModal(`<h3>📥 Cargar costos de repuestos (Excel/CSV)</h3>
+  openModal(`<h3><span data-icon="download"></span> Cargar costos de repuestos (Excel/CSV)</h3>
     <div class="aviso info">Catálogo actual: <b>${REP.n}</b> repuesto${REP.n === 1 ? '' : 's'} con costo${act ? ` · cargado el ${esc(act)}${REP.fuente ? ' desde «' + esc(REP.fuente) + '»' : ''}${REP.actualizadoPor ? ' por ' + esc(REP.actualizadoPor) : ''}` : ' · todavía no se ha cargado'}.</div>
     ${htmlImportador('iR', 'Usa el Excel del inventario del mes. Columnas: <b>código</b> (o Item, ItemCode, NetSuite ID), <b>descripción</b> (o Producto, Material), <b>costo unitario</b> (o Costo, Precio, Unit cost) y unidad (UM, UOM). Al guardar se <b>reemplaza</b> el catálogo completo. Los repuestos de las OTs se buscan por código y, si no, por descripción.')}
     <div class="modal-actions"><button class="btn2" onclick="closeModal()">Cancelar</button><button class="btn" id="iROk" disabled>Guardar catálogo</button></div>`);
   const revisar = () => {
     const r = interpretarRepuestos($('iRTxt').value);
     IMP_REP = r.filas || [];
-    if (r.error) { $('iRSt').textContent = '⚠️ ' + r.error; $('iRPrev').innerHTML = ''; $('iROk').disabled = true; return; }
+    if (r.error) { $('iRSt').textContent = '' + r.error; $('iRPrev').innerHTML = ''; $('iROk').disabled = true; return; }
     const n = s => IMP_REP.filter(x => x.estado === s).length;
     $('iRSt').innerHTML = `<span class="tag ok">${n('ok')} con costo</span> ${n('sincosto') ? `<span class="tag">${n('sincosto')} sin costo (se ignoran)</span> ` : ''}${n('error') ? `<span class="tag bad">${n('error')} con costo no válido</span> ` : ''}${n('repetido') ? `<span class="tag info">${n('repetido')} repetidos (vale la última fila)</span>` : ''}`;
     const vis = IMP_REP.slice(0, 30);
@@ -1207,7 +1203,7 @@ function guardarRepuestos() {
   const docsLocales = partes.map((p, i) => ({ id: ids[i], data: () => { const it = {}; p.forEach(x => { it[x.key] = { codigo: x.codigo, descripcion: x.descripcion, costo: x.costo, unidad: x.unidad }; }); return { items: it, fuente, actualizadoPor: quien(), actualizadoEn: firebase.firestore.Timestamp.now() }; } }));
   prepararRepuestos(docsLocales);
   closeModal();
-  escribir(batch.commit(), `📥 ${items.length} costos de repuestos guardados`);
+  escribir(batch.commit(), `${items.length} costos de repuestos guardados`);
   pintar();
 }
 </script>

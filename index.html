@@ -2,202 +2,120 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="color-scheme" content="light dark"/>
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#181B20"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="Mantenimiento"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="VoidTech"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
-<title>Mantenimiento 2026</title>
+<title>Hoy · VoidTech Mantenimiento</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
+<!-- (v3, nov 2026) Pantalla Hoy: estructura VoidTech, iconos, idiomas y traductor a pedido -->
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n/common.js"></script>
+<script src="i18n/shell.js"></script>
+<script src="i18n/hoy.js"></script>
+<script src="traductor.js"></script>
+<script src="kpis.js"></script>
+<script src="hoy.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
 <style>
-  :root{
-    --bg: var(--color-bg); --surface: var(--color-surface-2); --card: var(--color-surface); --accent: var(--color-accent);
-    --green: var(--color-success); --red: var(--color-danger); --blue: var(--color-primary); --text: var(--color-text); --muted: var(--color-muted); --border: var(--color-border);
-  }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{background:var(--bg);color:var(--text);font-family: var(--font-sans);min-height:100vh;}
-  .wrap{max-width:520px;margin:0 auto;padding:32px 20px 60px;}
-  .hero{text-align:center;margin-bottom:28px;}
-  .hero .emoji{font-size:44px;margin-bottom:10px;}
-  .hero h1{font-size:22px;font-weight:800;margin-bottom:6px;}
-  .hero p{font-size:13px;color:var(--muted);line-height:1.6;}
-  .tiles{display:flex;flex-direction:column;gap:14px;}
-  .tile{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;text-decoration:none;color:var(--text);transition:border-color .15s,transform .1s;}
-  .tile:active{transform:scale(0.98);}
-  .tile:hover{border-color:var(--accent);}
-  .tile .icon{font-size:30px;width:52px;height:52px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--surface);}
-  .tile .info h2{font-size:16px;font-weight:700;margin-bottom:3px;}
-  .tile .info p{font-size:12.5px;color:var(--muted);line-height:1.5;}
-  /* (25 oct 2026) aviso de respaldo para el Administrador */
-  .aviso{display:none;background:#F59E0B14;border:1px solid #F59E0B66;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.5;color:var(--text);text-decoration:none;}
-  .aviso b{color:var(--color-accent-text);}
-  .status{margin-top:26px;text-align:center;font-size:12px;color:var(--muted);font-family:monospace;}
-  .status b{color:var(--text);}
-  footer{margin-top:40px;text-align:center;font-size:11px;color:var(--muted);line-height:1.7;}
-  footer a{color:var(--color-accent-text);text-decoration:none;}
+  html,body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);min-height:100vh;}
+  .wrap{max-width:720px;margin:0 auto;padding:16px 16px 32px;}
+  /* Hoy */
+  .hoy-hi{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:6px 0 14px;}
+  .hoy-hi h1{font-size:var(--fs-2xl);font-weight:700;letter-spacing:-.02em;line-height:1.15;}
+  .hoy-hi p{font-size:14px;color:var(--color-muted);margin-top:4px;}
+  .hoy-hi p::first-letter{text-transform:uppercase;}
+  .hoy-off{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;border-radius:var(--radius);background:var(--color-warn-soft);color:var(--color-warn-text);font-size:13.5px;font-weight:500;}
+  .hoy-cards{display:grid;grid-template-columns:1fr;gap:12px;}
+  @media (min-width:1024px){ .wrap{max-width:1100px;padding:24px 28px 40px;} .hoy-cards{grid-template-columns:1fr 1fr;align-items:start;} }
+  .hoy-card{position:relative;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px 14px 6px;box-shadow:var(--shadow-1);overflow:hidden;min-width:0;}
+  .hoy-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:transparent;}
+  .hoy-card.danger::before{background:var(--color-danger);}
+  .hoy-card.warn::before{background:var(--color-warn);}
+  .hoy-card.info::before{background:var(--color-info);}
+  .hoy-card header{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .hoy-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--color-surface-2);color:var(--color-text);flex:0 0 auto;}
+  .hoy-card.danger .hoy-ic{background:var(--color-danger-soft);color:var(--color-danger-text);}
+  .hoy-card.warn .hoy-ic{background:var(--color-warn-soft);color:var(--color-warn-text);}
+  .hoy-card.info .hoy-ic{background:var(--color-info-soft);color:var(--color-info-text);}
+  .hoy-ic .vt-ico{width:19px;height:19px;}
+  .hoy-card h2{flex:1;font-size:16px;font-weight:600;letter-spacing:-.005em;min-width:0;}
+  .hoy-n{min-width:28px;height:26px;padding:0 9px;border-radius:13px;background:var(--color-surface-2);color:var(--color-text);font:700 14px var(--font-sans);line-height:26px;text-align:center;font-variant-numeric:tabular-nums;}
+  .hoy-card.danger .hoy-n{background:var(--color-danger);color:#fff;}
+  .hoy-it{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 2px;border-top:1px solid var(--color-border);color:var(--color-text);text-decoration:none;}
+  .hoy-card header + .hoy-it{border-top:0;}
+  .hoy-it > .vt-ico{color:var(--color-muted);flex:0 0 auto;}
+  .hoy-it-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .hoy-it-t{font-size:15px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:6px;overflow-wrap:anywhere;}
+  .hoy-it small{font-size:12.5px;color:var(--color-muted);overflow-wrap:anywhere;}
+  .hoy-it-d{font-size:13.5px;color:var(--color-text-2);line-height:1.4;overflow-wrap:anywhere;}
+  .hoy-mas{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-height:44px;border-top:1px solid var(--color-border);color:var(--color-text);font-size:13.5px;font-weight:600;text-decoration:none;}
+  .hoy-p{font-size:14px;color:var(--color-text-2);line-height:1.5;margin:2px 0 10px;}
+  .hoy-p.sm{font-size:12.5px;color:var(--color-muted);}
+  .hoy-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .hoy-card > .vt-btn{margin-bottom:10px;}
+  .hoy-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin:4px 0 8px;}
+  .hoy-kpi{padding:10px;border-radius:var(--radius);background:var(--color-surface-2);}
+  .hoy-kpi b{display:block;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
+  .hoy-kpi small{display:block;font-size:12px;color:var(--color-muted);margin-top:2px;}
+  .hoy-ok{text-align:center;padding:36px 18px;margin-bottom:12px;border:1px dashed var(--color-border-strong);border-radius:var(--radius-lg);background:var(--color-surface);}
+  .hoy-ok .vt-ico{color:var(--color-success);}
+  .hoy-ok h2{font-size:19px;margin-top:10px;}
+  .hoy-ok p{font-size:14px;color:var(--color-muted);margin-top:4px;}
+  .hoy-ts{text-align:center;font-size:12.5px;color:var(--color-muted);margin-top:18px;}
+  .hoy-ts a{color:inherit;font-weight:600;}
+  .hoy-sk{height:120px;border-radius:var(--radius-lg);background:linear-gradient(90deg,var(--color-surface) 0%,var(--color-surface-2) 50%,var(--color-surface) 100%);background-size:200% 100%;animation:sk 1.2s linear infinite;margin-bottom:12px;border:1px solid var(--color-border);}
+  @keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
+  @media (prefers-reduced-motion:reduce){.hoy-sk{animation:none}}
+  /* Todas las pantallas (v3 etapa 3a): los mismos grupos del menú Más (una sola lista: app-shell.js) */
+  #todo h1{font-size:var(--fs-xl);font-weight:700;margin:6px 0 12px;}
+  #todo .vt-grp{margin-bottom:6px;}
+  [hidden]{display:none !important;}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="hero">
-    <div class="emoji">🔧</div>
-    <h1>Mantenimiento 2026</h1>
-    <p>Bitácora, inventario de repuestos y análisis predictivo — sincronizados en la nube entre todos los celulares.</p>
-    <!-- (25 oct 2026, Etapa 2) Nave con la que se abren las pantallas (solo si ve más de una). -->
-    <div id="nave-ini" style="display:flex;justify-content:center;margin-top:12px;font-size:13px;"></div>
-  </div>
-
-  <!-- (25 oct 2026) Solo Administrador: aviso si el último respaldo tiene más de 30 días. -->
-  <a class="aviso" id="avisoRespaldo" href="admin.html#respaldo"></a>
-
-  <div class="tiles">
-    <a class="tile" href="bitacora.html">
-      <div class="icon">📋</div>
-      <div class="info">
-        <h2>Bitácora</h2>
-        <p>Registrar órdenes de trabajo, fallas y soluciones del día a día.</p>
-      </div>
-    </a>
-    <a class="tile" href="reportar.html">
-      <div class="icon">🚨</div>
-      <div class="info">
-        <h2>Reportar parada</h2>
-        <p>Producción avisa una máquina parada o con falla; el técnico recibe el aviso al momento.</p>
-      </div>
-    </a>
-    <a class="tile" href="herramientas.html">
-      <div class="icon">🧰</div>
-      <div class="info">
-        <h2>Herramientas</h2>
-        <p>Herramientas a cargo de cada técnico, arqueos y cargos para Recursos Humanos.</p>
-      </div>
-    </a>
-    <a class="tile" href="almacen.html" id="tile-almacen">
-      <div class="icon">📦</div>
-      <div class="info">
-        <h2>Almacén</h2>
-        <p>Solicitudes de repuestos de los técnicos: entregar o rechazar.</p>
-      </div>
-    </a>
-    <!-- (20 oct 2026) Incentivos: oculto hasta saber que es Administrador. -->
-    <a class="tile" href="incentivos.html" id="tile-incentivos" style="display:none">
-      <div class="icon">💰</div>
-      <div class="info">
-        <h2>Incentivos</h2>
-        <p>Cumplimiento semanal de cada técnico y monto del incentivo (solo Administrador).</p>
-      </div>
-    </a>
-    <!-- (22 oct 2026) Rentabilidad: oculto hasta saber que es Administrador. -->
-    <a class="tile" href="rentabilidad.html" id="tile-rentabilidad" style="display:none">
-      <div class="icon">📊</div>
-      <div class="info">
-        <h2>Rentabilidad de equipos</h2>
-        <p>Cuánto cuesta mantener cada máquina y si conviene comprar una nueva (solo Administrador).</p>
-      </div>
-    </a>
-    <!-- (29 oct 2026) CAPEX: proyectos de inversión (Administrador y Encargado de mantenimiento). -->
-    <a class="tile" href="capex.html" id="tile-capex" style="display:none">
-      <div class="icon">💼</div>
-      <div class="info">
-        <h2>CAPEX</h2>
-        <p>Proyectos de inversión: trabajos, repuestos, presupuesto vs gasto real y cronograma (Administrador y Encargado).</p>
-      </div>
-    </a>
-    <!-- (25 oct 2026) Administración: usuarios, respaldo y uso del plan gratis (solo Administrador). -->
-    <a class="tile" href="admin.html" id="tile-admin" style="display:none">
-      <div class="icon">⚙️</div>
-      <div class="info">
-        <h2>Administración</h2>
-        <p>Usuarios y naves, lista de técnicos, respaldo completo y uso del plan gratis (solo Administrador).</p>
-      </div>
-    </a>
-    <a class="tile" href="etiquetas-qr.html">
-      <div class="icon">🏷️</div>
-      <div class="info">
-        <h2>Etiquetas QR</h2>
-        <p>Imprime los stickers "¿Máquina parada?" para que producción reporte escaneando la máquina.</p>
-      </div>
-    </a>
-    <a class="tile" href="inventario.html">
-      <div class="icon">🧰</div>
-      <div class="info">
-        <h2>Inventario</h2>
-        <p>Repuestos por equipo, stock, fotos, manuales y movimientos.</p>
-      </div>
-    </a>
-    <a class="tile" href="analisis.html">
-      <div class="icon">📊</div>
-      <div class="info">
-        <h2>Análisis</h2>
-        <p>MTBF, riesgo por equipo, desempeño de técnicos y mejora continua — en vivo.</p>
-      </div>
-    </a>
-    <a class="tile" href="checklist.html">
-      <div class="icon">🩺</div>
-      <div class="info">
-        <h2>Checklist</h2>
-        <p>Inspecciones por equipo y generación automática de OT cuando algo falla.</p>
-      </div>
-    </a>
-    <!-- (26 oct 2026, Etapa 5) Guía de inicio por rol: visible para todos. -->
-    <a class="tile" href="guia.html" id="tile-guia">
-      <div class="icon">📘</div>
-      <div class="info">
-        <h2>Guía</h2>
-        <p>Cómo usar la app paso a paso según tu puesto, y la lista para abrir una nave nueva.</p>
-      </div>
-    </a>
-  </div>
-
-  <div class="status" id="fbStatus">⚪ Conectando a Firebase…</div>
-
-  <footer>
-    Instálala en tu celular: menú del navegador → "Agregar a pantalla de inicio".<br/>
-    Los módulos comparten la misma base de datos en la nube.
-  </footer>
-</div>
+<main class="wrap">
+  <div id="hoy" aria-live="polite"></div>
+  <section id="todo" hidden>
+    <h1 data-i18n="shell.p_todo">Todas las pantallas</h1>
+    <div class="vt-todo" id="tiles"></div>
+  </section>
+</main>
 
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-window.fbReady.then(()=>{
+// (v3) Hoy es la pantalla de inicio. "Todas las pantallas" = index.html#todo: los mismos grupos del menú Más
+// (VTShell.htmlGrupos; la lista de pantallas vive SOLO en app-shell.js).
+function pintarTodo() {
+  const todo = location.hash === '#todo';
+  document.getElementById('todo').hidden = !todo;
+  document.getElementById('hoy').hidden = todo;
+  if (!todo || !window.VTShell || !window.currentUserRole) return;
+  document.getElementById('tiles').innerHTML = VTShell.htmlGrupos('todo', 't');
+}
+window.addEventListener('hashchange', () => { pintarTodo(); if (location.hash !== '#todo' && window.VTHoy && window.currentUserRole) VTHoy.mostrar(false); });
+window.addEventListener('idioma-cambiado', pintarTodo);
+window.fbReady.then(() => {
   // Producción (rol Operador) solo puede reportar paradas: va directo ahí.
   if (window.currentUserRole && window.currentUserRole.rol === 'OPERADOR') { location.replace('reportar.html'); return; }
-  // Recursos Humanos solo usa la pestaña de cargos por herramientas.
-  if (window.currentUserRole && window.currentUserRole.rol === 'RRHH') { location.replace('herramientas.html#rrhh'); return; }
-  fbRenderSelectorNave(document.getElementById('nave-ini'));
-  fbOnNaveCambio(() => {}); // aquí no hay listas que filtrar: no hace falta recargar
-  if (userHasRole('ADMINISTRADOR')) { document.getElementById('tile-incentivos').style.display = ''; document.getElementById('tile-rentabilidad').style.display = ''; } // (22 oct 2026) + Rentabilidad
-  if (userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO')) document.getElementById('tile-capex').style.display = ''; // (29 oct 2026) CAPEX
-  if (userHasRole('ADMINISTRADOR')) {
-    // (25 oct 2026) Administración + aviso de respaldo (1 lectura: /config/respaldo).
-    document.getElementById('tile-admin').style.display = '';
-    db.collection('config').doc('respaldo').get().then(s => {
-      const t = s.exists && s.data().ultimo;
-      const d = t && typeof t.toDate === 'function' ? t.toDate() : null;
-      const dias = d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
-      if (d && dias <= 30) return;
-      const a = document.getElementById('avisoRespaldo');
-      a.innerHTML = '💾 <b>' + (d ? 'El último respaldo es de hace ' + dias + ' días.' : 'Todavía no hay ningún respaldo de la base de datos.') + '</b> Toca aquí para descargar uno (Administración → Respaldo).';
-      a.style.display = 'block';
-    }).catch(e => console.warn('config/respaldo:', e.message));
-  }
-  document.getElementById('fbStatus').innerHTML = `🟢 Conectado a Firebase (proyecto <b>${firebaseConfig.projectId}</b>)`;
-}).catch((err)=>{
-  // (5 oct 2026) Muestra la causa real (antes decía siempre "revisa firebase-config.js").
-  document.getElementById('fbStatus').textContent = '🔴 ' + ((err && err.message) || 'No se pudo conectar a Firebase');
-});
+  fbOnNaveCambio(() => VTHoy.mostrar(true)); // la nave de arriba cambia lo que se ve, sin recargar
+  const empezar = () => { pintarTodo(); if (location.hash !== '#todo') VTHoy.mostrar(false); };
+  if (window.VTShell) empezar(); else { let n = 0; const t = setInterval(() => { if (window.VTShell || ++n > 40) { clearInterval(t); empezar(); } }, 50); }
+}).catch(() => {});
 </script>
 </body>
 </html>

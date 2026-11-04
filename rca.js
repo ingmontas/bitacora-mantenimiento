@@ -156,7 +156,7 @@
     hoy = hoy || fbHoy();
     return r.fechaCompromiso && r.fechaCompromiso < hoy ? 'vencida' : 'abierta';
   }
-  const ESTADO_TXT = { pendiente: '🔍 RCA pendiente', por_validar: '🔍 RCA por validar', validada: '✅ RCA validado' };
+  const ESTADO_TXT = { pendiente: '<span data-icon="search-check"></span> RCA pendiente', por_validar: '<span data-icon="search-check"></span> RCA por validar', validada: '<span data-icon="check-circle"></span> RCA validado' };
   function badge(o) {
     const e = estado(o); if (!e) return '';
     const cls = e === 'pendiente' ? 'rca-pend' : e === 'por_validar' ? 'rca-val' : 'rca-ok';
@@ -177,7 +177,7 @@
     window.__fbRcaForm = st;
     const s = fbSheet('', { id: 'fbRcaSheet', fijo: true });
     const pintar = () => {
-      s.set(`<div class="fbsh-head"><div><h3>🔍 Análisis de causa raíz</h3><small>${esc((ot && (ot.EQUIPO || ot.equipoNombre)) || '')}${ot && (ot.folio || ot.Title) ? ' · ' + esc(ot.folio || ot.Title) : ''}</small></div></div>
+      s.set(`<div class="fbsh-head"><div><h3><span data-icon="search"></span> Análisis de causa raíz</h3><small>${esc((ot && (ot.EQUIPO || ot.equipoNombre)) || '')}${ot && (ot.folio || ot.Title) ? ' · ' + esc(ot.folio || ot.Title) : ''}</small></div></div>
         ${opts.motivo ? `<div class="fbsh-caja warn" data-rca-motivo>${esc(opts.motivo)}</div>` : ''}
         <div class="fbsh-nota">Pregunta <b>¿por qué?</b> una y otra vez hasta llegar al origen. Mínimo 3 respuestas. Ejemplo: se rompió la correa → ¿por qué? estaba floja → ¿por qué? nadie la tensa → ¿por qué? no está en el preventivo.</div>
         ${st.porques.map((v, i) => `<label class="fbsh-t" style="font-size:13.5px;margin:8px 0 0;" for="fbRcaP${i}">${i + 1}. ¿Por qué?${i < 3 ? ' *' : ''}</label><input type="text" id="fbRcaP${i}" data-pq="${i}" maxlength="200" value="${esc(v)}" placeholder="${i === 0 ? '¿Por qué pasó la falla?' : '¿Y por qué pasó eso?'}"/>`).join('')}
@@ -188,7 +188,7 @@
           <label class="fbsh-t" style="font-size:13.5px;margin:8px 0 0;" for="fbRcaResp">Responsable *</label><input type="text" id="fbRcaResp" maxlength="100" value="${esc(st.responsable)}"/>
           <label class="fbsh-t" style="font-size:13.5px;margin:8px 0 0;" for="fbRcaFecha">Fecha compromiso *</label><input type="date" id="fbRcaFecha" value="${esc(st.fechaCompromiso)}"/></div>
         <div class="fbsh-err" id="fbRcaErr">${esc(st.err)}</div>
-        <div class="fbsh-acc">${opts.onVolver ? '<button type="button" class="fbsh-btn sec" data-a="volver">← Volver</button>' : ''}${opts.despues ? `<button type="button" class="fbsh-btn sec" data-a="despues">${esc(opts.despues)}</button>` : '<button type="button" class="fbsh-btn sec" data-a="cerrar">Cancelar</button>'}<button type="button" class="fbsh-btn ok" data-a="guardar">💾 Guardar análisis</button></div>`);
+        <div class="fbsh-acc">${opts.onVolver ? '<button type="button" class="fbsh-btn sec" data-a="volver">← Volver</button>' : ''}${opts.despues ? `<button type="button" class="fbsh-btn sec" data-a="despues">${esc(opts.despues)}</button>` : '<button type="button" class="fbsh-btn sec" data-a="cerrar">Cancelar</button>'}<button type="button" class="fbsh-btn ok" data-a="guardar"><span data-icon="save"></span> Guardar análisis</button></div>`);
     };
     s.el.addEventListener('input', ev => {
       const t = ev.target;
@@ -232,8 +232,8 @@
   // ── Escrituras (sin esperar al servidor) ──
   function escribir(otId, cambios, ok, accion) {
     const p = db.collection('ots').doc(otId).update(cambios);
-    p.catch(e => aviso(e && e.code === 'permission-denied' ? '⛔ Firebase no dejó ' + accion + ' (revisa tu rol o que el análisis esté lleno).' : '❌ No se pudo ' + accion + ': ' + ((e && e.message) || e), 'error'));
-    aviso(sinSenal() ? '💾 Guardado en el celular — se sube al volver la señal' : ok, sinSenal() ? 'warn' : undefined);
+    p.catch(e => aviso(e && e.code === 'permission-denied' ? 'Firebase no dejó ' + accion + ' (revisa tu rol o que el análisis esté lleno).' : 'No se pudo ' + accion + ': ' + ((e && e.message) || e), 'error'));
+    aviso(sinSenal() ? 'Guardado en el celular — se sube al volver la señal' : ok, sinSenal() ? 'warn' : undefined);
     return p;
   }
   // Guarda (o corrige) el análisis de una OT ya guardada. Conserva validada/cumplida.
@@ -243,20 +243,20 @@
     if (ot.rca && ot.rca.validada) { c['rca.validada'] = false; } // si se cambia, hay que volver a validarlo
     c.editadoPor = miNombre(); c.editadoEn = fbTimestamp();
     ot.rca = { ...(ot.rca || {}), ...rca, ...(ot.rca && ot.rca.validada ? { validada: false } : {}) };
-    return escribir(ot.id, c, '✅ Análisis de causa raíz guardado', 'guardar el análisis');
+    return escribir(ot.id, c, '<span data-icon="check-circle"></span> Análisis de causa raíz guardado', 'guardar el análisis');
   }
   function validar(ot) {
-    if (!esSupervisor()) { aviso('⛔ El análisis lo valida un Supervisor, Encargado o Administrador.', 'error'); return Promise.resolve(false); }
-    if (!lleno(ot.rca)) { aviso('⚠️ Todavía falta llenar el análisis de causa raíz: no se puede validar.', 'warn'); return Promise.resolve(false); }
+    if (!esSupervisor()) { aviso('El análisis lo valida un Supervisor, Encargado o Administrador.', 'error'); return Promise.resolve(false); }
+    if (!lleno(ot.rca)) { aviso('Todavía falta llenar el análisis de causa raíz: no se puede validar.', 'warn'); return Promise.resolve(false); }
     const c = { 'rca.validada': true, 'rca.validadaPor': miNombre().slice(0, 100), 'rca.validadaPorUid': uid(), 'rca.validadaEn': new Date().toISOString() };
     ot.rca = { ...ot.rca, validada: true, validadaPor: c['rca.validadaPor'] };
-    return escribir(ot.id, c, '✅ Análisis validado', 'validar el análisis');
+    return escribir(ot.id, c, '<span data-icon="check-circle"></span> Análisis validado', 'validar el análisis');
   }
   function marcarCumplida(ot) {
     if (!lleno(ot.rca)) return Promise.resolve(false);
     const c = { 'rca.cumplida': true, 'rca.cumplidaEn': fbHoy(), 'rca.cumplidaPor': miNombre().slice(0, 100) };
     ot.rca = { ...ot.rca, cumplida: true, cumplidaEn: c['rca.cumplidaEn'], cumplidaPor: c['rca.cumplidaPor'] };
-    return escribir(ot.id, c, '✅ Acción marcada como cumplida', 'marcar la acción');
+    return escribir(ot.id, c, '<span data-icon="check-circle"></span> Acción marcada como cumplida', 'marcar la acción');
   }
 
   // ── Pareto (conteo de mayor a menor + % acumulado) ──
@@ -276,8 +276,8 @@
     return `<div class="rca-det"><div><b>Tipo:</b> ${esc(catTexto(r.categoria))}</div>
       <ol class="rca-pq">${(r.porques || []).filter(x => String(x || '').trim()).map(x => `<li>${esc(x)}</li>`).join('')}</ol>
       <div><b>Causa raíz:</b> ${esc(r.causa)}</div><div><b>Acción:</b> ${esc(r.accion)}</div>
-      <div class="rca-meta">👤 ${esc(r.responsable || '—')} · 📅 ${esc(r.fechaCompromiso || '—')} ·
-        <span class="rca-acc rca-acc-${ea}" data-accion="${ea}">${ea === 'cumplida' ? '✅ Cumplida' + (r.cumplidaEn ? ' ' + esc(r.cumplidaEn) : '') : ea === 'vencida' ? '⏰ Vencida' : '⏳ Abierta'}</span>${r.validada ? ' · validó ' + esc(r.validadaPor || '') : ''}</div></div>`;
+      <div class="rca-meta"><span data-icon="user"></span> ${esc(r.responsable || '—')} · <span data-icon="calendar"></span> ${esc(r.fechaCompromiso || '—')} ·
+        <span class="rca-acc rca-acc-${ea}" data-accion="${ea}">${ea === 'cumplida' ? '<span data-icon="check-circle"></span> Cumplida' + (r.cumplidaEn ? ' ' + esc(r.cumplidaEn) : '') : ea === 'vencida' ? '<span data-icon="clock"></span> Vencida' : '<span data-icon="clock"></span> Abierta'}</span>${r.validada ? ' · validó ' + esc(r.validadaPor || '') : ''}</div></div>`;
   }
 
   window.FB_RCA_CATS = CATS;
