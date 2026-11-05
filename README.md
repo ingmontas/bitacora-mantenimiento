@@ -24,4 +24,5 @@ Lo que escribe la gente no se traduce (botón «Traducir»). Prueba: `t_i18n_ful
 
 Al subir cambios, sube también el número de `CACHE` en `sw.js`.
 
-Actualizado 3 nov 2026
+Actualizado 5 nov 2026
+
