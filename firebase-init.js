@@ -41,7 +41,7 @@ firebase.initializeApp(firebaseConfig);
 //    Se aplica aquí, antes de pintar, para que no parpadee.
 //  - En todas las pantallas (menos equipo.html y etiquetas-qr.html, que no
 //    cambian, y login.html, que no carga este archivo) se cargan al terminar
-//    el HTML: icons.js, i18n.js + i18n/common.js + i18n/shell.js (si la
+//    el HTML: icons.js, i18n.js + i18n-common.js + i18n-shell.js (si la
 //    pantalla no los trae) y app-shell.js, que pinta la barra superior, la
 //    barra inferior / menú lateral y el menú Más.
 //  - Si app-shell.js no carga (sin señal y sin copia), se pinta la barra de
@@ -75,8 +75,8 @@ function fbConShell() { return !FB_SIN_SHELL.includes(location.pathname.split('/
     const lista = [];
     if (!hay('icons.js') && !window.VTIcons) lista.push('icons.js');
     if (!hay('i18n.js') && !window.i18n) lista.push('i18n.js');
-    if (!hay('i18n/common.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.common)) lista.push('i18n/common.js');
-    if (!hay('i18n/shell.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.shell)) lista.push('i18n/shell.js');
+    if (!hay('i18n-common.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.common)) lista.push('i18n-common.js');
+    if (!hay('i18n-shell.js') && !(window.i18n && window.i18n.dicts && window.i18n.dicts.shell)) lista.push('i18n-shell.js');
     if (!hay('app-shell.js') && !window.VTShell) lista.push('app-shell.js');
     lista.forEach(src => {
       const s = document.createElement('script');
@@ -134,7 +134,7 @@ const FB_ACCESO_PAGINA = {
   'capex.html': ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'],
   'herramientas.html': FB_MANT.concat(['ALMACEN', 'RRHH']),
 };
-// Texto de la tarjeta "Sin acceso" de cada pantalla (i18n/shell.js).
+// Texto de la tarjeta "Sin acceso" de cada pantalla (i18n-shell.js).
 const FB_ACCESO_CLAVE = {
   'inventario.html': 'shell.lock_inv', 'almacen.html': 'shell.lock_almMod', 'incentivos.html': 'shell.lock_inc',
   'rentabilidad.html': 'shell.lock_rent', 'admin.html': 'shell.lock_adm', 'capex.html': 'shell.lock_capex', 'herramientas.html': 'shell.lock_herr',

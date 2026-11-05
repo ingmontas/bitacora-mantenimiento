@@ -17,11 +17,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="firebase-init.js"></script>
-<script src="i18n/guia.js"></script>
+<script src="i18n-guia.js"></script>
 <script src="icons.js"></script>
 <script src="i18n.js"></script>
-<script src="i18n/common.js"></script>
-<script src="i18n/shell.js"></script>
+<script src="i18n-common.js"></script>
+<script src="i18n-shell.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
@@ -128,7 +128,7 @@
 </head>
 <body>
 <!-- (v3 etapa 3a) Un solo encabezado por pantalla: el de la app (título, usuario, nave, idioma). -->
-<!-- (v3 etapa 3b) El contenido de la guía viene de i18n/guia.js en el idioma elegido (es · en · tr). -->
+<!-- (v3 etapa 3b) El contenido de la guía viene de i18n-guia.js en el idioma elegido (es · en · tr). -->
 <div class="gtools no-print">
   <small id="header-sub"></small>
   <a class="hbtn" id="volver" href="index.html" style="display:none"></a>
@@ -149,7 +149,7 @@
 </div>
 
 <script>
-// ══════ Contenido por idioma (i18n/guia.js) ══════
+// ══════ Contenido por idioma (i18n-guia.js) ══════
 const ROL_SECCION = { OPERADOR: 'sec-operador', TECNICO: 'sec-tecnico', SUPERVISOR: 'sec-supervisor', ENCARGADO_MANTENIMIENTO: 'sec-supervisor', ALMACEN: 'sec-almacen', RRHH: 'sec-rrhh', ADMINISTRADOR: 'sec-admin' };
 const $ = id => document.getElementById(id);
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

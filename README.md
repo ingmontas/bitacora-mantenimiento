@@ -14,12 +14,12 @@ App de mantenimiento VoidTech (español · English · Türkçe). HTML/JS sin com
 ## Archivos compartidos
 `app-shell.js` (estructura, lista única de pantallas, candado por rol) · `firebase-init.js` · `filtros.js` (filtros y exportar a Excel/CSV) ·
 `kpis.js` (MTBF, MTTR, disponibilidad, backlog, cumplimiento, vencidas, reincidencia) · `catalogo.js` (catálogo de equipos) ·
-`ots-cola.js` (OTs por planificar / validar) · `criticidad.js` · `seguridad.js` · `rca.js` · `tendencias.js` · `i18n.js` + `i18n/*` · `icons.js` · `tema.css`.
+`ots-cola.js` (OTs por planificar / validar) · `criticidad.js` · `seguridad.js` · `rca.js` · `tendencias.js` · `i18n.js` + `i18n-*` · `icons.js` · `tema.css`.
 
 ### Idiomas (v3 etapa 3b)
-Las pantallas se escriben en español. `i18n/<pantalla>.js` trae filas `[español, English, Türkçe]` (con `{x}` para valores y `{n}` para números);
+Las pantallas se escriben en español. `i18n-<pantalla>.js` trae filas `[español, English, Türkçe]` (con `{x}` para valores y `{n}` para números);
 `i18n.js` cambia los textos en la pantalla al elegir EN o TR (sin recargar ni leer de Firebase) y los devuelve al volver a ES.
-`i18n/compartido.js` = textos de los scripts compartidos; `i18n/guia.js` = la Guía completa en los tres idiomas.
+`i18n-compartido.js` = textos de los scripts compartidos; `i18n-guia.js` = la Guía completa en los tres idiomas.
 Lo que escribe la gente no se traduce (botón «Traducir»). Prueba: `t_i18n_full.js`.
 
 Al subir cambios, sube también el número de `CACHE` en `sw.js`.

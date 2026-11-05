@@ -3,8 +3,8 @@
 // ══════════════════════════════════════════════════════════════════════
 // USO EN UNA PANTALLA
 //   <script src="i18n.js"></script>
-//   <script src="i18n/common.js"></script>      textos comunes (menú, botones, estados…)
-//   <script src="i18n/<pantalla>.js"></script>  textos propios (o i18n.cargar('<pantalla>'))
+//   <script src="i18n-common.js"></script>      textos comunes (menú, botones, estados…)
+//   <script src="i18n-<pantalla>.js"></script>  textos propios (o i18n.cargar('<pantalla>'))
 //
 //   t('guardar')                      → "Guardar" / "Save" / "Kaydet"   (módulo common)
 //   t('capex.appTitle')               → texto del módulo "capex"
@@ -20,7 +20,7 @@
 //   window.addEventListener('idioma-cambiado', e => repintar(e.detail.lang))
 //   i18n.selector(el)                 botones ES · EN · TR (o <div data-i18n-selector></div>)
 //
-// DICCIONARIOS: i18n/<modulo>.js llama a i18n.registrar('<modulo>', { es:{…}, en:{…}, tr:{…} }).
+// DICCIONARIOS: i18n-<modulo>.js llama a i18n.registrar('<modulo>', { es:{…}, en:{…}, tr:{…} }).
 // Un valor puede ser texto o, para plurales, { one: '…', other: '…' } (y zero/few/many/'=0').
 // Si falta una clave en en/tr se usa el español (y se anota en i18n.faltan). Revisión para
 // desarrolladores: i18n.revisar() (o abrir la pantalla con ?i18ndev / localStorage i18nDev=1).
@@ -57,14 +57,14 @@
     if (document.readyState !== 'loading') aplicarPronto();
   }
   function drenar() { const p = window.__i18nPend; if (Array.isArray(p)) while (p.length) { const x = p.shift(); if (x[0] === '@frases') registrarFrases(x[1], x[2]); else registrar(x[0], x[1]); } }
-  // Carga perezosa: i18n.cargar('bitacora') agrega <script src="i18n/bitacora.js">.
+  // Carga perezosa: i18n.cargar('bitacora') agrega <script src="i18n-bitacora.js">.
   // Sin señal y sin copia en el celular resuelve false (los textos quedan en español).
   function cargar(mod) {
     if (dicts[mod] || frMods.has(mod)) return Promise.resolve(true);
     if (cargando[mod]) return cargando[mod];
     cargando[mod] = new Promise(res => {
       const s = document.createElement('script');
-      s.src = 'i18n/' + encodeURIComponent(mod) + '.js';
+      s.src = 'i18n-' + encodeURIComponent(mod) + '.js';
       s.onload = () => { drenar(); res(!!dicts[mod] || frMods.has(mod)); };
       s.onerror = () => { delete cargando[mod]; res(false); };
       document.head.appendChild(s);
@@ -319,7 +319,7 @@
 
   // ══════════════════════════════════════════════════════════════════
   // FRASES (v3 etapa 3b): textos de las pantallas escritos en español en el
-  // HTML / JS. Cada módulo i18n/<pantalla>.js trae filas [español, English, Türkçe]:
+  // HTML / JS. Cada módulo i18n-<pantalla>.js trae filas [español, English, Türkçe]:
   //   (window.__i18nPend = window.__i18nPend || []).push(['@frases', 'almacen', [
   //     ['Guardar cambios', 'Save changes', 'Değişiklikleri kaydet'],
   //     ['Hace {n} días', '{n} days ago', '{n} gün önce'],      ← {x} = valor variable ({n}, {n2}… = solo números)
