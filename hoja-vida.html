@@ -765,10 +765,25 @@ function renderE360() {
     + tile('loto', 'shield', lotoAb == null ? esc(E3('e_cargando')) : esc(lotoAb.length ? E3N('e_nPend', lotoAb.length) : E3('e_ninguno')), '', lotoAb && lotoAb.length ? 'atn' : '', '#cardPermisos')
     + tile('rca', 'search-check', esc(rcaPend.length ? E3N('e_nPend', rcaPend.length) : E3('e_ninguno')), '', rcaPend.length ? 'mal' : '', '#cardRca')
     + tile('tend', 'trend', !Array.isArray(_ckPorEquipo.get(e.id)) ? esc(E3(_ckPorEquipo.get(e.id) && _ckPorEquipo.get(e.id).err ? 'e_ninguno' : 'e_cargando')) : esc(tend.length ? E3N('e_nAlertas', tend.length) : E3('e_tendOk')), '', tend.length ? 'mal' : '', '#cardTend')
+    + (function () { // (6 nov 2026) de qué interruptor se alimenta (diagrama unifilar): 1 consulta por equipo, en memoria
+        const el = _elecPorEquipo.get(e.id);
+        if (el === undefined) cargarElec(e.id);
+        const partes = el && el.ruta ? String(el.ruta).split(' → ') : [];
+        const val = el === undefined || el === null ? esc(E3('e_cargando')) : partes.length > 1 ? esc(E3('e_elecInt', { i: partes[partes.length - 2] })) : esc(E3('e_elecNo'));
+        return tile('elec', 'zap', val, partes.length > 1 ? esc(el.ruta) : '', '', 'unifilar.html?equipo=' + id);
+      })()
     + tile('crit', 'target', esc(crit ? (window.i18n ? i18n.t('crit_' + crit) : crit) : (window.i18n ? i18n.t('crit_N') : '—')), '', '', '#cardCrit')
     + `</div>`;
 }
 window.addEventListener('idioma-cambiado', () => { try { renderE360(); } catch (e) {} });
+const _elecPorEquipo = new Map();
+function cargarElec(id) {
+  _elecPorEquipo.set(id, null);
+  db.collection('electrico').where('equipoId', '==', id).limit(1).get()
+    .then(s => { _elecPorEquipo.set(id, s.empty ? false : s.docs[0].data()); })
+    .catch(() => { _elecPorEquipo.set(id, false); }) // reglas sin publicar o sin permiso: "sin registrar"
+    .then(() => { if (equipoActual && equipoActual.id === id) { try { renderE360(); } catch (e) {} } });
+}
 
 // ══════ (28 oct 2026) Criticidad y permisos de trabajo del equipo ══════
 // Criticidad: del catálogo (0 lecturas). Permisos: 1 consulta por equipo

@@ -39,6 +39,7 @@
     { id: 'reportar', href: 'reportar.html', ic: 'siren', k: 'p_reportar', d: 'd_reportar', g: 'g_operacion', roles: MANT.concat([OP]) },
     { id: 'checklist', href: 'checklist.html', ic: 'clipboard-check', k: 'p_checklist', d: 'd_checklist', g: 'g_operacion', roles: MANT },
     { id: 'hoja-vida', href: 'hoja-vida.html', ic: 'cog', k: 'p_hojaVida', d: 'd_hojaVida', g: 'g_equipos', roles: MANT },
+    { id: 'unifilar', href: 'unifilar.html', ic: 'zap', k: 'p_unifilar', d: 'd_unifilar', g: 'g_equipos', roles: MANT, alias: ['electrico', 'tablero', 'breaker', 'interruptor', 'single-line'] },
     { id: 'etiquetas', href: 'etiquetas-qr.html', ic: 'qr', k: 'p_etiquetas', d: 'd_etiquetas', g: 'g_equipos', roles: [ADM, ENC, SUP] },
     // (v3 etapa 3a) Inventario + Almacén = UN módulo "Almacén" (Repuestos · Solicitudes · Movimientos · Compras).
     // inventario.html sigue abriendo (lleva a almacen.html#repuestos); "inventario" se sigue encontrando en el buscador.

@@ -419,6 +419,30 @@ service cloud.firestore {
     }
     // Presupuesto anual (por año y por nave): SOLO Administrador (no va en /config, que leen los técnicos).
     match /capex_config/{id} { allow read, write: if esAdmin(); }
+    // ══════ Diagrama unifilar (6 nov 2026) ══════
+    // Un documento por elemento eléctrico (acometida, planta, transformador,
+    // transferencia, tablero, interruptor o carga), unido por padreId. Lo leen
+    // los de mantenimiento (lo necesitan para LOTO); lo editan Encargado y
+    // Administrador. Forma cerrada: solo estos campos, textos con largo máximo,
+    // y quién / cuándo los pone Firebase.
+    function txtOk(d, k, max) { return d.get(k, '') is string && d.get(k, '').size() <= max; }
+    function electricoValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['tipo', 'nombre', 'padreId', 'respaldoId', 'orden', 'planta', 'capacidad', 'voltaje', 'calibre',
+             'ubicacion', 'cargaTipo', 'equipoId', 'ruta', 'notas', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])
+        && d.tipo in ['acometida', 'generador', 'transformador', 'transferencia', 'tablero', 'interruptor', 'carga']
+        && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 80
+        && txtOk(d, 'padreId', 100) && txtOk(d, 'respaldoId', 100) && txtOk(d, 'equipoId', 100) && txtOk(d, 'planta', 80)
+        && txtOk(d, 'capacidad', 40) && txtOk(d, 'voltaje', 40) && txtOk(d, 'calibre', 60) && txtOk(d, 'ubicacion', 80)
+        && txtOk(d, 'cargaTipo', 20) && txtOk(d, 'ruta', 600) && txtOk(d, 'notas', 500) && txtOk(d, 'actualizadoPor', 100)
+        && d.get('orden', 0) is number
+        && d.actualizadoPorUid == request.auth.uid && d.actualizadoEn == request.time;
+    }
+    match /electrico/{id} {
+      allow read: if esTecnicoOMas();
+      allow create, update: if esEncargado() && electricoValido();
+      allow delete: if esEncargado();
+    }
     // Contador de folios CAPEX-AAAA-001…: como el de las OTs, solo se le suma 1.
     match /config/capexFolio {
       allow read: if esEncargado();

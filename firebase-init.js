@@ -133,6 +133,7 @@ const FB_ACCESO_PAGINA = {
   'incentivos.html': ['ADMINISTRADOR'], 'rentabilidad.html': ['ADMINISTRADOR'], 'admin.html': ['ADMINISTRADOR'],
   'capex.html': ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'],
   'herramientas.html': FB_MANT.concat(['ALMACEN', 'RRHH']),
+  'unifilar.html': FB_MANT, // (6 nov 2026) diagrama unifilar: lo ven los de mantenimiento (LOTO)
 };
 // Texto de la tarjeta "Sin acceso" de cada pantalla (i18n-shell.js).
 const FB_ACCESO_CLAVE = {
