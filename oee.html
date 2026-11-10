@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Paros y OEE — Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n-common.js"></script>
+<script src="i18n-shell.js"></script>
+<script src="i18n-oee.js"></script>
+<script src="oee-calc.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+/* ═════════════════════════════════════════════════════════════════
+   PAROS Y OEE — (10 nov 2026)
+   Ahora: paros abiertos con su tiempo, "Registrar paro" y "Terminó".
+   Turno: producción por equipo, fecha y turno (total, malas, ritmo ideal).
+   OEE: disponibilidad × rendimiento × calidad por equipo y de la nave,
+        dónde se fue el tiempo, Pareto de paros y tendencia por día.
+   Historial: los paros del período (Supervisor+ corrige o anula).
+   Datos nuevos: /paros y /produccion. Los minutos de máquina parada por
+   falla se leen de /ots (TOTAL_MIN_MAQUINA): no se anotan dos veces y no
+   se cambia nada de las OTs ni de sus indicadores.
+   Lo usan Operador (Ahora, Turno, Historial) y mantenimiento (todo).
+   ═════════════════════════════════════════════════════════════════ */
+#oe [hidden], .oe-form [hidden], #nav [hidden] { display: none !important; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+#oe { max-width: 1200px; margin: 0 auto; padding: 14px 14px 110px; }
+.oe-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.oe-top h1 { font-size: 20px; margin: 0 auto 0 0; letter-spacing: -.01em; }
+.oe-sec { display: none; }
+.oe-sec.on { display: block; }
+.oe-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.oe-card h2 { font-size: 15px; margin: 0 0 10px; }
+.oe-card h2 small { display: block; font-weight: 500; font-size: 12.5px; color: var(--color-muted); margin-top: 2px; }
+.oe-note { font-size: 13px; color: var(--color-muted); margin: 6px 0 0; line-height: 1.45; }
+.oe-big { width: 100%; min-height: 56px; font-size: 16px; }
+.oe-paro { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--color-border); border-left: 4px solid var(--color-danger); border-radius: var(--radius); background: var(--color-surface); margin-bottom: 8px; }
+.oe-paro.plan { border-left-color: var(--color-warn); }
+.oe-paro.fuera { border-left-color: var(--color-border-strong); }
+.oe-paro .t { flex: 1; min-width: 0; }
+.oe-paro .t b { display: block; font-size: 15px; }
+.oe-paro .t small { display: block; color: var(--color-muted); font-size: 12.5px; margin-top: 2px; }
+.oe-paro .reloj { font: 600 20px var(--font-mono); min-width: 74px; text-align: right; }
+.oe-paro .vt-btn { flex: 0 0 auto; }
+.oe-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+@media (min-width: 760px) { .oe-tiles { grid-template-columns: 1.4fr 1fr 1fr 1fr; } }
+.oe-tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 12px 14px; }
+.oe-tile .l { font-size: 12.5px; color: var(--color-muted); font-weight: 600; }
+.oe-tile .v { font: 600 30px var(--font-mono); letter-spacing: -.02em; margin-top: 2px; }
+.oe-tile.hero .v { font-size: 40px; }
+.oe-tile .s { font-size: 12.5px; color: var(--color-muted); margin-top: 2px; }
+.oe-nivel { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border-radius: var(--radius-pill); font: 600 12px var(--font-sans); border: 1px solid var(--color-border); }
+.oe-nivel.mundial { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.oe-nivel.tipico { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
+.oe-nivel.bajo { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.oe-nivel.critico { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.oe-nivel .vt-ico { width: 14px; height: 14px; }
+.oe-per { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+/* barra apilada "dónde se fue el tiempo" */
+.oe-stack { display: flex; height: 28px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--color-surface); }
+.oe-stack span { display: block; height: 100%; min-width: 2px; }
+.oe-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
+.oe-leg i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.oe-leg b { font-family: var(--font-mono); font-weight: 600; margin-left: 4px; }
+.c-ok { background: var(--color-success); } .c-cal { background: var(--color-purple); } .c-ren { background: var(--color-info); }
+.c-par { background: var(--color-danger); } .c-fue { background: var(--color-border-strong); }
+/* Pareto */
+.oe-bar { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'n m' 'b b'; gap: 4px 10px; align-items: center; padding: 6px 0; font-size: 13.5px; }
+.oe-bar .n { grid-area: n; } .oe-bar .b { grid-area: b; } .oe-bar .m { grid-area: m; }
+@media (min-width: 760px) { .oe-bar { grid-template-columns: minmax(180px, 32%) 1fr auto; grid-template-areas: 'n b m'; } }
+.oe-bar .n small { display: block; color: var(--color-muted); font-size: 11.5px; }
+.oe-bar .b { height: 14px; background: var(--color-surface-2, var(--color-bg)); border-radius: 4px; overflow: hidden; }
+.oe-bar .b span { display: block; height: 100%; background: var(--color-info); border-radius: 0 4px 4px 0; }
+.oe-bar .m { font: 600 12.5px var(--font-mono); text-align: right; white-space: nowrap; }
+/* tendencia */
+.oe-trend { box-sizing: border-box; display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 18px; border-bottom: 1px solid var(--color-border); overflow-x: auto; }
+.oe-trend .d { flex: 1 0 18px; max-width: 46px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; position: relative; }
+.oe-trend .d span { width: 100%; background: var(--color-info); border-radius: 4px 4px 0 0; min-height: 2px; }
+.oe-trend .d em { position: absolute; top: -16px; font: 600 10.5px var(--font-mono); font-style: normal; color: var(--color-muted); }
+.oe-trend-x { display: flex; gap: 4px; overflow: hidden; font: 500 10.5px var(--font-mono); color: var(--color-muted); margin-top: 4px; }
+.oe-trend-x span { flex: 1 0 18px; max-width: 46px; text-align: center; }
+.oe-meta { position: relative; height: 0; border-top: 1px dashed var(--color-success); margin-top: -1px; }
+/* tablas */
+.oe-tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.oe-tabla th { text-align: left; font-size: 12px; color: var(--color-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.oe-tabla td { padding: 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.oe-tabla td.n { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+.oe-tabla th.n { text-align: right; }
+.oe-scroll { overflow-x: auto; }
+.oe-fila { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+.oe-fila:last-child { border-bottom: 0; }
+.oe-fila .t { flex: 1; min-width: 0; }
+.oe-fila .t b { display: block; font-size: 14.5px; }
+.oe-fila .t small { display: block; color: var(--color-muted); font-size: 12.5px; }
+.oe-fila .m { font: 600 14px var(--font-mono); }
+.oe-fila.anulado { opacity: .55; }
+.oe-fila.anulado b { text-decoration: line-through; }
+/* formularios */
+.oe-form label { display: block; font-size: 13px; font-weight: 600; color: var(--color-muted); margin: 12px 0 5px; }
+.oe-form input, .oe-form select, .oe-form textarea { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 16px var(--font-sans); }
+.oe-form textarea { min-height: 70px; padding: 10px 12px; resize: vertical; }
+.oe-form .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.oe-form .g2 > div { min-width: 0; }
+.oe-form input[type="datetime-local"] { min-width: 0; max-width: 100%; }
+@media (max-width: 520px) { .oe-form .g2.dt { grid-template-columns: 1fr; } }
+.oe-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.oe-cats button { min-height: 52px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color: var(--color-text); font: 600 13.5px var(--font-sans); text-align: left; cursor: pointer; line-height: 1.25; }
+.oe-cats button[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-soft); }
+.oe-grp { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--color-muted); margin: 14px 0 6px; text-transform: uppercase; }
+.oe-turnos { display: flex; gap: 8px; }
+.oe-turnos button { flex: 1; min-height: 48px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color: var(--color-text); font: 600 15px var(--font-sans); cursor: pointer; }
+.oe-turnos button[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-soft); }
+.oe-prev { margin-top: 12px; padding: 12px; border-radius: var(--radius); background: var(--color-info-soft); color: var(--color-info-text); font-size: 13.5px; line-height: 1.5; }
+.oe-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.oe-acts .vt-btn { flex: 1 1 auto; }
+.oe-aviso { padding: 10px 12px; border-radius: var(--radius); background: var(--color-warn-soft); color: var(--color-warn-text); font-size: 13px; margin-top: 10px; line-height: 1.45; }
+.oe-aviso a { color: inherit; font-weight: 700; }
+</style>
+</head>
+<body>
+<nav id="nav" class="vt-seg" role="tablist" aria-label="Paros y OEE">
+  <button type="button" class="nav-btn active" data-sec="ahora" role="tab" aria-selected="true"><span data-icon="timer"></span><b>Ahora</b><b class="nav-badge" id="oeBadge" style="display:none">0</b></button>
+  <button type="button" class="nav-btn" data-sec="turno" role="tab" aria-selected="false"><span data-icon="clipboard"></span><b>Turno</b></button>
+  <button type="button" class="nav-btn" data-sec="oee" role="tab" aria-selected="false" id="oeTabOee" hidden><span data-icon="gauge"></span><b>OEE</b></button>
+  <button type="button" class="nav-btn" data-sec="historial" role="tab" aria-selected="false"><span data-icon="history"></span><b>Historial</b></button>
+</nav>
+<main id="oe">
+  <div class="oe-top"><h1>Paros y OEE</h1></div>
+
+  <!-- AHORA -->
+  <section class="oe-sec on" id="sec-ahora">
+    <button type="button" class="vt-btn cta oe-big" id="oeNuevoParo"><span data-icon="stop"></span>Registrar paro</button>
+    <p class="oe-note">Anota cuando la máquina se detiene por algo que no es una falla: falta de material, cambio de producto, comida… Si la máquina se dañó, repórtala como falla en <a href="reportar.html">Reportar</a>: ese tiempo entra solo.</p>
+    <div class="oe-card" style="margin-top:12px">
+      <h2>Paros abiertos</h2>
+      <div id="oeAbiertos"><div class="vt-empty">Cargando…</div></div>
+    </div>
+  </section>
+
+  <!-- TURNO -->
+  <section class="oe-sec" id="sec-turno">
+    <div class="oe-card oe-form">
+      <h2>Producción del turno<small>Una vez por máquina y turno, al terminar. Si ya existe, se corrige.</small></h2>
+      <div class="g2">
+        <div><label for="tFecha">Fecha</label><input type="date" id="tFecha"/></div>
+        <div><label>Turno</label><div class="oe-turnos" id="tTurno"><button type="button" data-t="1" aria-pressed="true">1</button><button type="button" data-t="2" aria-pressed="false">2</button><button type="button" data-t="3" aria-pressed="false">3</button></div></div>
+      </div>
+      <label for="tEquipo">Equipo</label><select id="tEquipo"></select>
+      <div class="g2">
+        <div><label for="tMin">Minutos del turno</label><input type="number" id="tMin" inputmode="numeric" min="1" max="1440" value="480"/></div>
+        <div><label for="tUnidad">Unidad</label><select id="tUnidad"></select></div>
+      </div>
+      <label for="tRitmo">Ritmo ideal (unidades por hora)</label><input type="number" id="tRitmo" inputmode="decimal" min="0" step="any" placeholder="Ej: 120"/>
+      <p class="oe-note" style="margin-top:4px">Lo máximo que produce la máquina en una hora trabajando sin parar, según el fabricante o el mejor turno real.</p>
+      <div class="g2">
+        <div><label for="tTotal">Producción total</label><input type="number" id="tTotal" inputmode="numeric" min="0" placeholder="Ej: 800"/></div>
+        <div><label for="tMalas">Malas o rechazo</label><input type="number" id="tMalas" inputmode="numeric" min="0" placeholder="Ej: 12"/></div>
+      </div>
+      <label for="tNota">Nota (opcional)</label><input id="tNota" maxlength="300"/>
+      <div class="oe-prev" id="tPrev" hidden></div>
+      <div class="oe-acts"><button type="button" class="vt-btn pri" id="tGuardar"><span data-icon="check"></span>Guardar turno</button></div>
+    </div>
+    <div class="oe-card"><h2>Turnos registrados hoy</h2><div id="tLista"></div></div>
+  </section>
+
+  <!-- OEE -->
+  <section class="oe-sec" id="sec-oee">
+    <div class="oe-per">
+      <div class="vt-seg2" id="oePer" role="group" aria-label="Período">
+        <button type="button" data-p="hoy" aria-pressed="false">Hoy</button>
+        <button type="button" data-p="7" aria-pressed="true">7 días</button>
+        <button type="button" data-p="30" aria-pressed="false">30 días</button>
+        <button type="button" data-p="mes" aria-pressed="false">Este mes</button>
+      </div>
+      <button type="button" class="vt-btn" id="oeComo"><span data-icon="help"></span>Cómo se calcula</button>
+    </div>
+    <div id="oeVista"><div class="vt-empty">Cargando…</div></div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="oe-sec" id="sec-historial">
+    <div class="oe-per">
+      <div class="vt-seg2" id="hPer" role="group" aria-label="Período">
+        <button type="button" data-p="hoy" aria-pressed="false">Hoy</button>
+        <button type="button" data-p="7" aria-pressed="true">7 días</button>
+        <button type="button" data-p="30" aria-pressed="false">30 días</button>
+      </div>
+    </div>
+    <div class="oe-card"><h2>Paros</h2><div id="hLista"><div class="vt-empty">Cargando…</div></div></div>
+  </section>
+</main>
+
+<script>
+'use strict';
+// ── Ayudas ──
+const $ = id => document.getElementById(id);
+const esc = s => (typeof fbEsc === 'function' ? fbEsc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const ic = (n, c) => (window.VTIcons ? VTIcons.icon(n, { cls: c || '' }) : '');
+const tx = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+const toast = (m, t) => (window.vtToast ? vtToast(m, t) : alert(m));
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const fmtN = (v, d) => (window.i18n && i18n.fmtNum ? i18n.fmtNum(v, { maximumFractionDigits: d == null ? 0 : d }) : String(Math.round(v * Math.pow(10, d || 0)) / Math.pow(10, d || 0)));
+const pct = v => (v == null ? '—' : fmtN(v * 100, v * 100 < 10 && v > 0 ? 1 : 0) + '\u202F%');
+const pad = n => String(n).padStart(2, '0');
+const fechaDe = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const hoyF = () => fechaDe(new Date());
+const ahoraLocal = () => { const d = new Date(); return fechaDe(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const durTxt = m => { m = Math.max(0, Math.round(m)); const h = Math.floor(m / 60); return h ? h + ' h ' + pad(m % 60) + ' min' : m + ' min'; };
+const reloj = m => { m = Math.max(0, Math.floor(m)); return Math.floor(m / 60) + ':' + pad(m % 60); };
+const yo = () => (window.currentUserRole && (window.currentUserRole.nombre || window.currentUserRole.email)) || '';
+const C = window.OEECalc;
+const CLASE_TXT = { noplan: 'No planificados', plan: 'Planificados (bajan el OEE)', fuera: 'Fuera del tiempo de producción (no bajan el OEE)' };
+const NIVEL_TXT = { mundial: 'Clase mundial', tipico: 'Típico', bajo: 'Bajo', critico: 'Crítico' };
+const NIVEL_IC = { mundial: 'award', tipico: 'check', bajo: 'alert', critico: 'x-circle' };
+const UNIDADES = ['piezas', 'metros', 'kg', 'rollos', 'sacos', 'cajas', 'litros'];
+
+let EQUIPOS = [], EQ = new Map(), ABIERTOS = [], PAROS = [], PRODS = [], OTS = [], DESDE = '', CARGANDO = null;
+let ES_MANT = false, ES_SUP = false, SEC = 'ahora', PER = '7', HPER = '7';
+
+const nombreEq = id => (EQ.get(id) || {}).nombre || id;
+const lugarEq = id => { const e = EQ.get(id) || {}; return [e.localidad, e.linea].filter(Boolean).join(' · '); };
+const naveEq = id => { const e = EQ.get(id); return e && typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(e) : ((e || {}).planta || ''); };
+const enMiNave = d => typeof fbEnNave !== 'function' || fbEnNave(d);
+
+function opcionesEquipo(sel) {
+  const grupos = new Map();
+  EQUIPOS.forEach(e => { const g = e.localidad || tx('Sin área'); if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(e); });
+  let h = `<option value="">${esc(tx('Elige la máquina'))}</option>`;
+  [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es')).forEach(g => {
+    h += `<optgroup label="${esc(g)}">` + grupos.get(g).map(e => `<option value="${esc(e.id)}"${e.id === sel ? ' selected' : ''}>${esc(e.nombre)}</option>`).join('') + '</optgroup>';
+  });
+  return h;
+}
+
+// ══════ Hoja (ventana desde abajo) ══════
+function hoja(titulo, sub, cuerpo) {
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh oe-form" role="dialog" aria-modal="true" aria-labelledby="oeHt"><div class="fbsh-head"><div><h3 id="oeHt">${esc(titulo)}</h3>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>${cuerpo}</div>`;
+  document.body.appendChild(bg);
+  const previo = document.activeElement;
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); try { if (previo && previo.focus) previo.focus(); } catch (e) {} };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
+  return { bg, q: s => bg.querySelector(s), cerrar };
+}
+
+// ══════ Escritura ══════
+function datosParo(p) {
+  const min = p.estado === 'cerrado' ? (C.duracion(p.inicio, p.fin) || 0) : 0;
+  return {
+    equipoId: String(p.equipoId).slice(0, 80), equipo: String(nombreEq(p.equipoId)).slice(0, 100), planta: String(naveEq(p.equipoId) || '').slice(0, 80),
+    linea: String((EQ.get(p.equipoId) || {}).linea || '').slice(0, 80),
+    fecha: String(p.inicio).slice(0, 10), inicio: String(p.inicio).slice(0, 16), fin: p.estado === 'cerrado' ? String(p.fin).slice(0, 16) : '',
+    min: Math.min(20160, Math.max(0, Math.round(min))), categoria: p.categoria, nota: String(p.nota || '').slice(0, 500),
+    estado: p.estado, creadoPor: String(p.creadoPor || yo()).slice(0, 100), creadoPorUid: p.creadoPorUid || window.currentUser.uid,
+    actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+const ponLocal = (lista, id, d) => { const i = lista.findIndex(x => x.id === id); const n = Object.assign({ id }, d); if (i >= 0) lista[i] = n; else lista.push(n); };
+
+// ══════ Registrar / editar paro ══════
+function abrirParo(p) {
+  const nuevo = !p;
+  p = p || { equipoId: lsGet('oeEquipo') || '', categoria: '', inicio: ahoraLocal(), fin: '', nota: '', estado: 'abierto' };
+  const grupos = ['noplan', 'plan', 'fuera'].map(cl => `<div class="oe-grp">${esc(tx(CLASE_TXT[cl]))}</div><div class="oe-cats">` +
+    C.CATEGORIAS.filter(c => c.clase === cl && !c.ot).map(c => `<button type="button" data-cat="${c.k}" aria-pressed="${p.categoria === c.k}">${esc(tx(c.t))}</button>`).join('') + '</div>').join('');
+  const H = hoja(tx(nuevo ? 'Registrar paro' : 'Corregir paro'), nuevo ? '' : nombreEq(p.equipoId), `
+    <label for="pEquipo">${esc(tx('Equipo'))}</label><select id="pEquipo">${opcionesEquipo(p.equipoId)}</select>
+    <label>${esc(tx('¿Por qué se paró?'))}</label>${grupos}
+    <div class="oe-aviso" id="pFalla">${esc(tx('¿La máquina se dañó? No la anotes aquí: repórtala como falla y mantenimiento la atiende. El tiempo que estuvo parada entra solo al OEE.'))} <a href="reportar.html">${esc(tx('Reportar falla'))}</a></div>
+    <div class="g2 dt"><div><label for="pIni">${esc(tx('Empezó'))}</label><input type="datetime-local" id="pIni" value="${esc(p.inicio)}"/></div>
+    <div><label for="pFin">${esc(tx('Terminó'))}</label><input type="datetime-local" id="pFin" value="${esc(p.fin || '')}"/></div></div>
+    <p class="oe-note">${esc(tx('Deja "Terminó" vacío si la máquina sigue parada: el reloj corre hasta que toques "Terminó".'))}</p>
+    <label for="pNota">${esc(tx('Nota (opcional)'))}</label><textarea id="pNota" maxlength="500">${esc(p.nota || '')}</textarea>
+    <div class="oe-acts">${!nuevo && ES_SUP && p.estado !== 'anulado' ? `<button type="button" class="vt-btn" id="pAnular">${ic('ban')}${esc(tx('Anular'))}</button>` : ''}<button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="pOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  let cat = p.categoria;
+  H.bg.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { cat = b.dataset.cat; H.bg.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  H.q('#pOk').onclick = async () => {
+    const eq = H.q('#pEquipo').value, ini = H.q('#pIni').value, fin = H.q('#pFin').value;
+    if (!eq) { toast(tx('Elige la máquina.'), 'warn'); return; }
+    if (!cat) { toast(tx('Elige por qué se paró.'), 'warn'); return; }
+    if (!ini) { toast(tx('Pon la hora en que empezó.'), 'warn'); return; }
+    if (fin && C.minutosDe(fin) < C.minutosDe(ini)) { toast(tx('La hora de terminar es antes de la de empezar.'), 'warn'); return; }
+    if (C.minutosDe(ini) > Math.floor(Date.now() / 60000) + 5) { toast(tx('La hora de empezar no puede ser en el futuro.'), 'warn'); return; }
+    const d = datosParo(Object.assign({}, p, { equipoId: eq, categoria: cat, inicio: ini, fin, nota: H.q('#pNota').value.trim(), estado: fin ? 'cerrado' : 'abierto' }));
+    H.q('#pOk').disabled = true;
+    try {
+      const ref = nuevo ? db.collection('paros').doc() : db.collection('paros').doc(p.id);
+      await ref.set(d);
+      lsSet('oeEquipo', eq);
+      ponLocal(PAROS, ref.id, d); H.cerrar(); toast(tx('Guardado'), 'ok'); pintar();
+    } catch (e) { H.q('#pOk').disabled = false; toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+  };
+  const an = H.q('#pAnular');
+  if (an) an.onclick = async () => {
+    try { const d = datosParo(Object.assign({}, p, { estado: 'anulado', fin: p.fin || '' })); d.min = p.min || 0; d.fin = p.fin || ''; await db.collection('paros').doc(p.id).set(d); ponLocal(PAROS, p.id, d); H.cerrar(); toast(tx('Anulado'), 'ok'); pintar(); }
+    catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+  };
+}
+async function terminar(p) {
+  let fin = ahoraLocal(); if (C.minutosDe(fin) < C.minutosDe(p.inicio)) fin = p.inicio;
+  // solo se cambian estos campos (así cualquiera puede darle "Terminó" a un paro abierto de otro)
+  const cambio = { fin, min: Math.min(20160, C.duracion(p.inicio, fin) || 0), estado: 'cerrado', actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() };
+  const d = Object.assign({}, p, cambio); delete d.id;
+  try {
+    await db.collection('paros').doc(p.id).update(cambio);
+    ponLocal(PAROS, p.id, d);
+    toast(tx('Paro terminado') + ': ' + nombreEq(p.equipoId) + ' · ' + durTxt(d.min), 'ok'); pintar();
+  } catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+}
+
+// ══════ Ahora ══════
+function pintarAhora() {
+  const l = ABIERTOS.filter(enMiNave).sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
+  const b = $('oeBadge'); b.textContent = l.length; b.style.display = l.length ? '' : 'none';
+  if (!l.length) { $('oeAbiertos').innerHTML = `<div class="vt-empty">${ic('check-circle')} ${esc(tx('No hay máquinas paradas ahora.'))}</div>`; return; }
+  $('oeAbiertos').innerHTML = l.map(p => {
+    const c = C.CAT[p.categoria] || {};
+    return `<div class="oe-paro ${c.clase || ''}" data-id="${esc(p.id)}"><div class="t"><b>${esc(nombreEq(p.equipoId) || p.equipo)}</b><small>${esc(tx(c.t || ''))} · ${esc(tx('desde'))} ${esc(String(p.inicio).slice(11, 16))}${p.creadoPor ? ' · ' + esc(p.creadoPor) : ''}</small></div>
+      <div class="reloj" data-ini="${esc(p.inicio)}">${reloj(C.minParo(p))}</div><button type="button" class="vt-btn pri" data-fin="${esc(p.id)}">${ic('check')}${esc(tx('Terminó'))}</button></div>`;
+  }).join('');
+  $('oeAbiertos').querySelectorAll('[data-fin]').forEach(btn => btn.onclick = () => { const p = ABIERTOS.find(x => x.id === btn.dataset.fin); if (p) { btn.disabled = true; terminar(p); } });
+  $('oeAbiertos').querySelectorAll('.oe-paro .t').forEach(t => t.onclick = () => { const p = ABIERTOS.find(x => x.id === t.parentNode.dataset.id); if (p && (ES_SUP || p.creadoPorUid === window.currentUser.uid)) abrirParo(p); });
+}
+setInterval(() => document.querySelectorAll('#oeAbiertos .reloj').forEach(r => { r.textContent = reloj(C.minParo({ estado: 'abierto', inicio: r.dataset.ini })); }), 20000);
+
+// ══════ Turno ══════
+let TURNO = lsGet('oeTurno') || '1';
+const idProd = (eq, f, t) => eq + '_' + f + '_' + t;
+function llenarTurno() {
+  const eq = $('tEquipo').value, f = $('tFecha').value;
+  const p = PRODS.find(x => x.id === idProd(eq, f, TURNO));
+  const ult = PRODS.filter(x => x.equipoId === eq).sort((a, b) => (b.fecha + b.turno).localeCompare(a.fecha + a.turno))[0];
+  const base = p || ult || {};
+  $('tMin').value = base.minTurno || lsGet('oeMin') || 480;
+  $('tUnidad').value = base.unidad || lsGet('oeUnidad') || 'piezas';
+  $('tRitmo').value = base.ritmoIdeal || '';
+  $('tTotal').value = p ? p.total : ''; $('tMalas').value = p ? p.malas : ''; $('tNota').value = p ? (p.nota || '') : '';
+  $('tGuardar').innerHTML = ic('check') + esc(tx(p ? 'Corregir turno' : 'Guardar turno'));
+  previa();
+}
+function previa() {
+  const eq = $('tEquipo').value, f = $('tFecha').value;
+  const total = +$('tTotal').value || 0, malas = +$('tMalas').value || 0, min = +$('tMin').value || 0, r = +$('tRitmo').value || 0;
+  if (!eq || !f || !min || !$('tTotal').value) { $('tPrev').hidden = true; return; }
+  const prod = { equipoId: eq, fecha: f, turno: TURNO, minTurno: min, ritmoIdeal: r, total, malas };
+  const otros = PRODS.filter(x => x.equipoId === eq && x.fecha === f && x.turno !== TURNO);
+  const res = C.calcular({ desde: f, hasta: f, produccion: otros.concat([prod]), paros: PAROS.concat(ABIERTOS), ots: OTS });
+  const x = res.equipos.find(e => e.equipoId === eq) || {};
+  $('tPrev').hidden = false;
+  $('tPrev').innerHTML = `<b>${esc(tx('OEE del día'))}: ${pct(x.oee)}</b> · ${esc(tx('Disponibilidad'))} ${pct(x.A)} · ${esc(tx('Rendimiento'))} ${pct(x.P)} · ${esc(tx('Calidad'))} ${pct(x.Q)}` +
+    (x.perdido ? `<br>${esc(tx('Paros del día'))}: ${durTxt(x.perdido)}` : '') + (ES_MANT ? '' : `<br><small>${esc(tx('Las fallas de mantenimiento se suman al calcular el OEE completo.'))}</small>`) +
+    (x.rendimientoAlto ? `<br>${esc(tx('Ojo: produjo más que el ritmo ideal. Revisa el ritmo ideal.'))}` : '');
+}
+async function guardarTurno() {
+  const eq = $('tEquipo').value, f = $('tFecha').value;
+  const min = parseInt($('tMin').value, 10), total = parseInt($('tTotal').value, 10), malas = parseInt($('tMalas').value || '0', 10), r = parseFloat($('tRitmo').value || '0');
+  if (!eq) { toast(tx('Elige la máquina.'), 'warn'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) { toast(tx('Pon la fecha.'), 'warn'); return; }
+  if (f > hoyF()) { toast(tx('La fecha no puede ser en el futuro.'), 'warn'); return; }
+  if (!(min > 0 && min <= 1440)) { toast(tx('Los minutos del turno van de 1 a 1440.'), 'warn'); return; }
+  if (!(total >= 0)) { toast(tx('Pon la producción total (puede ser 0).'), 'warn'); return; }
+  if (!(malas >= 0) || malas > total) { toast(tx('Las malas no pueden ser más que la producción total.'), 'warn'); return; }
+  if (!(r >= 0)) { toast(tx('El ritmo ideal no es un número.'), 'warn'); return; }
+  const id = idProd(eq, f, TURNO), viejo = PRODS.find(x => x.id === id);
+  const d = {
+    equipoId: eq, equipo: String(nombreEq(eq)).slice(0, 100), planta: String(naveEq(eq) || '').slice(0, 80), fecha: f, turno: TURNO,
+    minTurno: min, unidad: $('tUnidad').value, ritmoIdeal: Math.round(r * 100) / 100, total, malas, nota: $('tNota').value.trim().slice(0, 300),
+    creadoPorUid: viejo ? viejo.creadoPorUid : window.currentUser.uid, actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid,
+    actualizadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  $('tGuardar').disabled = true;
+  try {
+    await db.collection('produccion').doc(id).set(d);
+    ponLocal(PRODS, id, d); lsSet('oeEquipo', eq); lsSet('oeMin', String(min)); lsSet('oeUnidad', d.unidad);
+    toast(tx('Guardado'), 'ok'); llenarTurno(); pintar();
+  } catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+  $('tGuardar').disabled = false;
+}
+function pintarTurno() {
+  const l = PRODS.filter(p => p.fecha === $('tFecha').value && enMiNave(p)).sort((a, b) => (a.turno + nombreEq(a.equipoId)).localeCompare(b.turno + nombreEq(b.equipoId), 'es'));
+  $('tLista').innerHTML = l.length ? l.map(p => `<div class="oe-fila" data-eq="${esc(p.equipoId)}" data-t="${esc(p.turno)}"><div class="t"><b>${esc(nombreEq(p.equipoId))}</b><small>${esc(tx('Turno'))} ${esc(p.turno)} · ${fmtN(p.total)} ${esc(tx(p.unidad || 'piezas'))} · ${esc(tx('malas'))} ${fmtN(p.malas)}${p.actualizadoPor ? ' · ' + esc(p.actualizadoPor) : ''}</small></div><span class="m">${fmtN(p.minTurno)} min</span></div>`).join('')
+    : `<div class="vt-empty">${esc(tx('Todavía no hay turnos registrados para esta fecha.'))}</div>`;
+  $('tLista').querySelectorAll('.oe-fila').forEach(r => r.onclick = () => { $('tEquipo').value = r.dataset.eq; ponTurno(r.dataset.t); llenarTurno(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+}
+function ponTurno(t) { TURNO = t; lsSet('oeTurno', t); $('tTurno').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t))); }
+
+// ══════ OEE ══════
+function rango(p) {
+  const h = new Date(); h.setHours(0, 0, 0, 0); const hasta = fechaDe(h);
+  if (p === 'hoy') return { desde: hasta, hasta };
+  if (p === 'mes') return { desde: hasta.slice(0, 8) + '01', hasta };
+  const d = new Date(h); d.setDate(d.getDate() - (+p - 1)); return { desde: fechaDe(d), hasta };
+}
+function nivelHtml(n) { return n ? `<span class="oe-nivel ${n}">${ic(NIVEL_IC[n])}${esc(tx(NIVEL_TXT[n]))}</span>` : ''; }
+function pintarOee() {
+  const r = rango(PER);
+  const res = C.calcular({ desde: r.desde, hasta: r.hasta, produccion: PRODS.filter(enMiNave), paros: PAROS.concat(ABIERTOS).filter(enMiNave), ots: OTS.filter(enMiNave) });
+  const P = res.planta;
+  const pareto = res.pareto.length ? (() => {
+    const max = res.pareto[0].min, tot = res.pareto.reduce((a, x) => a + x.min, 0);
+    return `<div class="oe-card"><h2>${esc(tx('Tiempo perdido por causa'))}<small>${esc(tx('Todos los paros del período, con o sin turno registrado.'))}</small></h2>` + res.pareto.map(x => `<div class="oe-bar" title="${esc(tx(C.CAT[x.cat].t))}: ${durTxt(x.min)}"><div class="n">${esc(tx(C.CAT[x.cat].t))}<small>${esc(tx(x.clase === 'fuera' ? 'No baja el OEE' : x.clase === 'plan' ? 'Planificado' : 'No planificado'))}</small></div><div class="b"><span style="width:${Math.max(2, x.min / max * 100)}%"></span></div><div class="m">${durTxt(x.min)} · ${fmtN(x.min / tot * 100)} %</div></div>`).join('') + '</div>';
+  })() : '';
+  if (!P.turnos) {
+    $('oeVista').innerHTML = `<div class="oe-card"><h2>${esc(tx('Todavía no hay turnos registrados en este período.'))}</h2><p class="oe-note">${esc(tx('El OEE necesita la producción de cada turno: cuánto se produjo, cuánto salió malo y el ritmo ideal de la máquina. Regístralo en la pestaña Turno.'))}</p><div class="oe-acts"><button type="button" class="vt-btn pri" id="oeIrTurno">${ic('clipboard')}${esc(tx('Registrar turno'))}</button></div></div>` + pareto;
+    const b = $('oeIrTurno'); if (b) b.onclick = () => irSec('turno');
+    return;
+  }
+  // dónde se fue el tiempo
+  const ideal = Math.min(P.operativo, P.idealMin);
+  const bueno = P.total ? ideal * (P.total - P.malas) / P.total : 0;
+  const partes = [['c-ok', 'Producción buena', bueno], ['c-cal', 'Pérdida por calidad', ideal - bueno], ['c-ren', 'Pérdida por velocidad', Math.max(0, P.operativo - ideal)], ['c-par', 'Paros', P.perdido], ['c-fue', 'Fuera del tiempo de producción', P.fuera]];
+  const tot = partes.reduce((a, x) => a + x[2], 0) || 1;
+  const stack = `<div class="oe-card"><h2>${esc(tx('Dónde se fue el tiempo'))}<small>${esc(tx('Tiempo de turnos registrados'))}: ${durTxt(P.minTurno)}</small></h2><div class="oe-stack" role="img" aria-label="${esc(tx('Dónde se fue el tiempo'))}">${partes.filter(x => x[2] > 0).map(x => `<span class="${x[0]}" style="flex:${x[2]}" title="${esc(tx(x[1]))}: ${durTxt(x[2])}"></span>`).join('')}</div>
+    <div class="oe-leg">${partes.map(x => `<span><i class="${x[0]}"></i>${esc(tx(x[1]))}<b>${durTxt(x[2])}</b> (${fmtN(x[2] / tot * 100)} %)</span>`).join('')}</div></div>`;
+  // tendencia
+  const dias = res.dias.filter(d => d.oee != null);
+  const trend = dias.length > 1 ? `<div class="oe-card"><h2>${esc(tx('OEE por día'))}<small>${esc(tx('La línea verde es la clase mundial (85 %).'))}</small></h2><div style="position:relative"><div class="oe-trend">${dias.map(d => `<div class="d" title="${esc(d.fecha)}: OEE ${pct(d.oee)}"><em>${fmtN(d.oee * 100)}</em><span style="height:${Math.max(1, d.oee * 100)}%"></span></div>`).join('')}</div><div class="oe-meta" style="position:absolute;left:0;right:0;bottom:${Math.round(0.85 * 122)}px"></div></div><div class="oe-trend-x">${dias.map(d => `<span>${esc(d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7))}</span>`).join('')}</div></div>` : '';
+  // tabla por equipo
+  const filas = res.equipos.filter(e => e.turnos);
+  const tabla = `<div class="oe-card"><h2>${esc(tx('Por máquina'))}<small>${esc(tx('De menor a mayor OEE: arriba están las que más necesitan atención.'))}</small></h2><div class="oe-scroll"><table class="oe-tabla"><thead><tr><th>${esc(tx('Equipo'))}</th><th class="n">OEE</th><th class="n">${esc(tx('Disp.'))}</th><th class="n">${esc(tx('Rend.'))}</th><th class="n">${esc(tx('Cal.'))}</th><th class="n">${esc(tx('Paros'))}</th><th>${esc(tx('Causa principal'))}</th></tr></thead><tbody>` +
+    filas.map(e => `<tr><td><b>${esc(nombreEq(e.equipoId))}</b><br><small style="color:var(--color-muted)">${esc(lugarEq(e.equipoId))} · ${e.turnos} ${esc(tx(e.turnos === 1 ? 'turno' : 'turnos'))}</small>${e.rendimientoAlto ? `<br><small style="color:var(--color-warn-text)">${esc(tx('Revisa el ritmo ideal'))}</small>` : ''}${e.sinRitmo ? `<br><small style="color:var(--color-warn-text)">${esc(tx('Falta el ritmo ideal'))}</small>` : ''}</td><td class="n"><b>${pct(e.oee)}</b></td><td class="n">${pct(e.A)}</td><td class="n">${pct(e.P)}</td><td class="n">${pct(e.Q)}</td><td class="n">${durTxt(e.perdido)}</td><td>${e.topCat ? esc(tx(C.CAT[e.topCat].t)) : '—'}</td></tr>`).join('') + '</tbody></table></div></div>';
+  $('oeVista').innerHTML = `<div class="oe-tiles">
+      <div class="oe-tile hero"><div class="l">OEE</div><div class="v">${pct(P.oee)}</div><div class="s">${nivelHtml(P.nivel)}</div></div>
+      <div class="oe-tile"><div class="l">${esc(tx('Disponibilidad'))}</div><div class="v">${pct(P.A)}</div><div class="s">${esc(tx('Paros'))}: ${durTxt(P.perdido)}</div></div>
+      <div class="oe-tile"><div class="l">${esc(tx('Rendimiento'))}</div><div class="v">${pct(P.P)}</div><div class="s">${esc(tx('Velocidad contra el ritmo ideal'))}</div></div>
+      <div class="oe-tile"><div class="l">${esc(tx('Calidad'))}</div><div class="v">${pct(P.Q)}</div><div class="s">${esc(tx('Malas'))}: ${fmtN(P.malas)}</div></div>
+    </div>` + stack + tabla + pareto + trend +
+    (res.sinTurnoMin ? `<p class="oe-note">${esc(tx('Hay {t} de paros en días sin turno registrado: salen en "Tiempo perdido por causa" pero no entran en el OEE.').replace('{t}', durTxt(res.sinTurnoMin)))}</p>` : '');
+}
+function comoSeCalcula() {
+  hoja(tx('Cómo se calcula el OEE'), '', `<div style="font-size:14px;line-height:1.55">
+    <p><b>OEE = ${esc(tx('Disponibilidad'))} × ${esc(tx('Rendimiento'))} × ${esc(tx('Calidad'))}</b></p>
+    <p>${esc(tx('Disponibilidad: del tiempo que la máquina debía producir, cuánto estuvo funcionando. Bajan la disponibilidad las fallas (de las órdenes de trabajo de mantenimiento), los cambios de producto, la limpieza y los paros por falta de material, operador, calidad o servicios.'))}</p>
+    <p>${esc(tx('Rendimiento: lo que produjo comparado con lo que habría producido a su ritmo ideal en el tiempo que estuvo funcionando.'))}</p>
+    <p>${esc(tx('Calidad: de todo lo producido, cuánto salió bueno.'))}</p>
+    <p>${esc(tx('No bajan el OEE: comida o descanso, sin programa de producción, reuniones y el mantenimiento preventivo programado.'))}</p>
+    <p>${esc(tx('Referencia: 85 % o más es clase mundial; 60 % es lo típico en la industria; menos de 40 % es crítico.'))}</p></div>
+    <div class="oe-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cerrar'))}</button></div>`);
+}
+
+// ══════ Historial ══════
+function pintarHistorial() {
+  const r = rango(HPER);
+  const l = PAROS.filter(p => p.fecha >= r.desde && p.fecha <= r.hasta && enMiNave(p)).sort((a, b) => String(b.inicio).localeCompare(String(a.inicio)));
+  $('hLista').innerHTML = l.length ? l.map(p => {
+    const c = C.CAT[p.categoria] || {}; const puede = ES_SUP || p.creadoPorUid === window.currentUser.uid;
+    return `<div class="oe-fila ${p.estado === 'anulado' ? 'anulado' : ''}" data-id="${esc(p.id)}"${puede ? ' style="cursor:pointer"' : ''}><div class="t"><b>${esc(nombreEq(p.equipoId) || p.equipo)}</b><small>${esc(tx(c.t || p.categoria))} · ${esc(String(p.inicio).slice(8, 10) + '/' + String(p.inicio).slice(5, 7) + ' ' + String(p.inicio).slice(11, 16))}${p.fin ? '–' + esc(String(p.fin).slice(11, 16)) : ''}${p.creadoPor ? ' · ' + esc(p.creadoPor) : ''}${p.estado === 'anulado' ? ' · ' + esc(tx('Anulado')) : ''}${p.nota ? '<br>' + esc(p.nota) : ''}</small></div><span class="m">${p.estado === 'abierto' ? esc(tx('Abierto')) : durTxt(p.min || 0)}</span></div>`;
+  }).join('') : `<div class="vt-empty">${esc(tx('No hay paros en este período.'))}</div>`;
+  $('hLista').querySelectorAll('.oe-fila').forEach(f => f.onclick = () => { const p = PAROS.find(x => x.id === f.dataset.id); if (p && (ES_SUP || p.creadoPorUid === window.currentUser.uid)) abrirParo(p); });
+}
+
+// ══════ Carga ══════
+function pintar() {
+  pintarAhora();
+  if (SEC === 'turno') { pintarTurno(); previa(); }
+  if (SEC === 'oee') pintarOee();
+  if (SEC === 'historial') pintarHistorial();
+}
+function irSec(s) {
+  if (s === 'oee' && !ES_MANT) s = 'ahora';
+  SEC = s;
+  document.querySelectorAll('#nav [data-sec]').forEach(b => { const on = b.dataset.sec === s; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+  document.querySelectorAll('.oe-sec').forEach(x => x.classList.toggle('on', x.id === 'sec-' + s));
+  if (location.hash !== '#' + s) history.replaceState(null, '', '#' + s);
+  if (s !== 'ahora') cargarPeriodo(); else pintar();
+}
+// Lecturas: paros, producción (y OTs para mantenimiento) desde el inicio del período más largo que se vea.
+async function cargarPeriodo(forzar) {
+  const meses = new Date(); meses.setHours(0, 0, 0, 0); meses.setDate(1);
+  const d30 = new Date(); d30.setHours(0, 0, 0, 0); d30.setDate(d30.getDate() - 29);
+  const desde = fechaDe(d30 < meses ? d30 : meses);
+  if (!forzar && DESDE && DESDE <= desde) { pintar(); return; }
+  if (CARGANDO) { await CARGANDO; pintar(); return; }
+  CARGANDO = (async () => {
+    const [p, pr, o] = await Promise.all([
+      db.collection('paros').where('fecha', '>=', desde).get(),
+      db.collection('produccion').where('fecha', '>=', desde).get(),
+      ES_MANT ? db.collection('ots').where('FECHA', '>=', desde).get() : Promise.resolve({ docs: [] }),
+    ]);
+    PAROS = p.docs.map(x => Object.assign({ id: x.id }, x.data())).filter(x => x.estado !== 'abierto');
+    PRODS = pr.docs.map(x => Object.assign({ id: x.id }, x.data()));
+    OTS = o.docs.map(x => Object.assign({ id: x.id }, x.data()));
+    DESDE = desde;
+  })();
+  try { await CARGANDO; } catch (e) { toast(tx('No se pudo cargar: {e}').replace('{e}', e.message), 'error'); }
+  CARGANDO = null;
+  pintar();
+}
+function oirAbiertos() {
+  db.collection('paros').where('estado', '==', 'abierto').onSnapshot(s => {
+    ABIERTOS = s.docs.map(x => Object.assign({ id: x.id }, x.data()));
+    PAROS = PAROS.filter(p => !ABIERTOS.some(a => a.id === p.id) && p.estado !== 'abierto');
+    pintar();
+  }, e => { $('oeAbiertos').innerHTML = `<div class="vt-empty">${esc(tx('No se pudo cargar: {e}').replace('{e}', e.message))}</div>`; });
+}
+
+// ══════ Arranque ══════
+document.getElementById('nav').addEventListener('click', ev => { const b = ev.target.closest('button[data-sec]'); if (b) irSec(b.dataset.sec); });
+$('oeNuevoParo').onclick = () => abrirParo(null);
+window.addEventListener('hashchange', () => { const h = (location.hash || '').slice(1); if (['ahora', 'turno', 'oee', 'historial'].includes(h) && h !== SEC && window.currentUser) { irSec(h); if (h === 'turno') llenarTurno(); } });
+$('oeComo').onclick = comoSeCalcula;
+$('oePer').addEventListener('click', ev => { const b = ev.target.closest('[data-p]'); if (!b) return; PER = b.dataset.p; $('oePer').querySelectorAll('[data-p]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); pintarOee(); });
+$('hPer').addEventListener('click', ev => { const b = ev.target.closest('[data-p]'); if (!b) return; HPER = b.dataset.p; $('hPer').querySelectorAll('[data-p]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); pintarHistorial(); });
+$('tTurno').addEventListener('click', ev => { const b = ev.target.closest('[data-t]'); if (b) { ponTurno(b.dataset.t); llenarTurno(); } });
+$('tFecha').addEventListener('change', () => { llenarTurno(); pintarTurno(); });
+$('tEquipo').addEventListener('change', llenarTurno);
+['tTotal', 'tMalas', 'tMin', 'tRitmo'].forEach(id => $(id).addEventListener('input', previa));
+$('tGuardar').onclick = guardarTurno;
+window.addEventListener('idioma-cambiado', () => { $('tUnidad').innerHTML = UNIDADES.map(u => `<option value="${u}">${esc(tx(u))}</option>`).join(''); llenarTurno(); pintar(); });
+window.fbReady.then(async () => {
+  ES_MANT = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+  ES_SUP = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  $('oeTabOee').hidden = !ES_MANT;
+  try { const c = await fbEquiposCatalogo(false); EQUIPOS = (c && c.docs ? c.docs.map(x => Object.assign({ id: x.id }, x.data())) : []).filter(e => e.activo !== false); } catch (e) { EQUIPOS = []; }
+  EQUIPOS.forEach(e => EQ.set(e.id, e));
+  EQUIPOS = EQUIPOS.filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e)).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
+  $('tEquipo').innerHTML = opcionesEquipo(lsGet('oeEquipo') || '');
+  $('tUnidad').innerHTML = UNIDADES.map(u => `<option value="${u}">${esc(tx(u))}</option>`).join('');
+  $('tFecha').value = hoyF(); $('tFecha').max = hoyF();
+  ponTurno(TURNO);
+  if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => location.reload());
+  oirAbiertos();
+  const h = (location.hash || '').slice(1);
+  irSec(['turno', 'oee', 'historial'].includes(h) ? h : 'ahora');
+  if (h === 'turno' || SEC === 'turno') llenarTurno();
+  cargarPeriodo().then(() => { if (SEC === 'turno') llenarTurno(); });
+}).catch(() => {});
+</script>
+</body>
+</html>

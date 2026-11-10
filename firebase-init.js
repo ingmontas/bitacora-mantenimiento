@@ -134,6 +134,8 @@ const FB_ACCESO_PAGINA = {
   'capex.html': ['ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'],
   'herramientas.html': FB_MANT.concat(['ALMACEN', 'RRHH']),
   'unifilar.html': FB_MANT, // (6 nov 2026) diagrama unifilar: lo ven los de mantenimiento (LOTO)
+  'programa.html': FB_MANT, // (10 nov 2026) programa semanal
+  'oee.html': FB_MANT.concat(['OPERADOR']), // (10 nov 2026) paros y OEE: el operador anota paros y producción
 };
 // Texto de la tarjeta "Sin acceso" de cada pantalla (i18n-shell.js).
 const FB_ACCESO_CLAVE = {

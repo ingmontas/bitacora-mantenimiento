@@ -221,6 +221,17 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
 .tend-item .tend-chart{margin-top:8px;}
 .tend-item .gl-meta{font-size:12px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere;}
 @media(max-width:900px){.filterbar{position:static;}.grid2,.grid2.even,.grid3{grid-template-columns:1fr;}.wrap{padding:16px 14px 60px;}#clearSelBtn{margin-left:0;}.prio-item{grid-template-columns:76px 1fr;}.prio-when{grid-column:2;text-align:left;}}
+  /* (10 nov 2026) Fallas por código ISO 14224 */
+  #codSel { gap: 6px; flex-wrap: wrap; }
+  .chip-btn { min-height: 40px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-muted); font: 600 13px var(--font-sans); cursor: pointer; }
+  .chip-btn.on { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
+  .cod-tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .cod-tabla th { text-align: left; font-size: 12px; color: var(--color-muted); padding: 6px 8px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+  .cod-tabla td { padding: 7px 8px; border-bottom: 1px solid var(--color-border); }
+  .cod-tabla .num { text-align: right; font-family: var(--font-mono); white-space: nowrap; }
+  .cod-tabla tr.vital td:first-child { font-weight: 700; }
+  .cod-tabla .barcell { width: 30%; min-width: 80px; }
+  .cod-tabla .barcell span { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--color-info); }
 </style>
 </head>
 <body>
@@ -355,6 +366,15 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <h2>Oportunidades de mejora continua</h2>
       <div class="cardsub">Piezas que se repiten en varios correctivos del mismo equipo. Ciclo PDCA/Kaizen: Plan → Do → Check → Act.</div>
       <div id="kaizenList"></div>
+    </div>
+    <!-- (10 nov 2026) Códigos de falla ISO 14224: Pareto de correctivos por modo, causa, acción o pieza -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Fallas por código (ISO 14224)</h2>
+      <div class="cardsub">Correctivos del período y filtros elegidos. De mayor a menor; el % acumulado muestra dónde está el 80 %.</div>
+      <div class="toolbar" id="codSel" role="group" aria-label="Agrupar por">
+        <button type="button" class="chip-btn on" data-cod="modo">Modo de falla</button><button type="button" class="chip-btn" data-cod="causa">Causa</button><button type="button" class="chip-btn" data-cod="accion">Acción</button><button type="button" class="chip-btn" data-cod="pieza">Pieza</button><button type="button" class="chip-btn" data-cod="eqmodo">Equipo y modo</button>
+      </div>
+      <div id="codPareto"></div>
     </div>
   </section>
 
@@ -931,6 +951,7 @@ function render(){
   renderTable();
   renderTecnicos(scopeRows);
   renderKaizen(scopeRows);
+  renderCodigos(scopeRows);
   renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, areaSorted, weeksSorted, weekCounts});
   renderGestion(); // (14 oct 2026) indicadores de gestión
   renderCritKpis(rowsExcept('crit'), ref); // (28 oct 2026)
@@ -1747,6 +1768,28 @@ function renderTecTable(){
 }
 
 /* ---------- kaizen ---------- */
+// (10 nov 2026) Pareto de fallas por código ISO 14224 (modo / causa / acción / pieza / equipo y modo).
+let _codPor = 'modo', _codRows = [];
+function renderCodigos(rows){
+  if (rows) _codRows = rows;
+  const cont = $('codPareto'); if (!cont) return;
+  document.querySelectorAll('#codSel [data-cod]').forEach(b=>b.classList.toggle('on', b.dataset.cod===_codPor));
+  const corr = _codRows.filter(isCorr);
+  const val = r => _codPor==='eqmodo' ? (r.modo ? canonEquipo(r)+' · '+r.modo : '') : String(r[_codPor]||'').trim();
+  const g = {}; let sin = 0;
+  corr.forEach(r=>{ const k = val(r); if (!k){ sin++; return; } (g[k] = g[k] || {k, n:0, min:0}); g[k].n++; g[k].min += r.minMaquina||0; });
+  const items = Object.values(g).sort((a,b)=>b.n-a.n || b.min-a.min);
+  const tot = items.reduce((s,x)=>s+x.n,0);
+  if (!items.length){ cont.innerHTML = '<div class="empty">'+(corr.length ? 'Ningún correctivo de este alcance tiene este código todavía. Se llena al registrar el trabajo en Trabajos (Modo de falla y Acción).' : 'No hay correctivos en el alcance actual.')+'</div>'; return; }
+  const max = items[0].n; let acum = 0;
+  cont.innerHTML = '<div style="overflow-x:auto;"><table class="cod-tabla"><thead><tr><th>'+esc({modo:'Modo de falla',causa:'Causa',accion:'Acción',pieza:'Pieza',eqmodo:'Equipo y modo'}[_codPor])+'</th><th class="num">N°</th><th></th><th class="num">%</th><th class="num">% acumulado</th><th class="num">Paro (min)</th></tr></thead><tbody>'
+    + items.slice(0,15).map(x=>{ acum += x.n; const p = x.n/tot*100, pa = acum/tot*100;
+      return '<tr'+(pa - p < 80 ? ' class="vital"' : '')+'><td>'+esc(x.k)+'</td><td class="num">'+x.n+'</td><td class="barcell"><span style="width:'+Math.max(3, x.n/max*100)+'%"></span></td><td class="num">'+Math.round(p)+' %</td><td class="num">'+Math.round(pa)+' %</td><td class="num">'+Math.round(x.min)+'</td></tr>'; }).join('')
+    + '</tbody></table></div>'
+    + (sin ? '<p class="cardsub" style="margin-top:8px;">'+(sin===1 ? '1 correctivo sin este código (no entra en la tabla).' : sin+' correctivos sin este código (no entran en la tabla).')+'</p>' : '')
+    + '<p class="cardsub" style="margin-top:4px;">En negrita, los pocos códigos que suman el 80 % de las fallas: ahí conviene atacar primero.</p>';
+}
+document.addEventListener('click', ev=>{ const b = ev.target.closest && ev.target.closest('#codSel [data-cod]'); if (b){ _codPor = b.dataset.cod; renderCodigos(); } });
 function renderKaizen(rows){
   const groups = {};
   rows.filter(r=>isCorr(r)&&r.pieza).forEach(r=>{
@@ -2092,6 +2135,7 @@ function otRecordToRow(doc){
     minMaquina:Number(doc.TOTAL_MIN_MAQUINA)||0, minTecnico:Number(doc.TOTAL_MIN_TECNICO)||0,
     falla:doc.DESCRIPCION_FALLA||'', solucion:doc.DESCRIPCION_SOLUCION||'',
     causa:doc.CAUSA_FALLA||doc.causaFalla||'',
+    modo:doc.MODO_FALLA||'', accion:doc.ACCION_MANT||'', // (10 nov 2026) códigos de falla ISO 14224 (no entran en ningún indicador)
     tiempoRespuestaMin:(doc.TIEMPO_RESPUESTA_MIN!=null && doc.TIEMPO_RESPUESTA_MIN!=='')?Number(doc.TIEMPO_RESPUESTA_MIN):null
   };
 }

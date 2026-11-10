@@ -36,7 +36,9 @@
   const PAGINAS = [
     { id: 'index', href: 'index.html', ic: 'home', k: 'p_index', g: 'g_operacion', roles: [ADM, ENC, SUP, TEC, ALM, RH] },
     { id: 'bitacora', href: 'bitacora.html', ic: 'clipboard', k: 'p_bitacora', d: 'd_bitacora', g: 'g_operacion', roles: MANT },
+    { id: 'programa', href: 'programa.html', ic: 'calendar', k: 'p_programa', d: 'd_programa', g: 'g_operacion', roles: MANT, alias: ['semana', 'planificacion', 'capacidad', 'schedule', 'cumplimiento'] },
     { id: 'reportar', href: 'reportar.html', ic: 'siren', k: 'p_reportar', d: 'd_reportar', g: 'g_operacion', roles: MANT.concat([OP]) },
+    { id: 'oee', href: 'oee.html', ic: 'gauge', k: 'p_oee', d: 'd_oee', g: 'g_operacion', roles: MANT.concat([OP]), alias: ['paros', 'paradas', 'produccion', 'disponibilidad', 'downtime'] },
     { id: 'checklist', href: 'checklist.html', ic: 'clipboard-check', k: 'p_checklist', d: 'd_checklist', g: 'g_operacion', roles: MANT },
     { id: 'hoja-vida', href: 'hoja-vida.html', ic: 'cog', k: 'p_hojaVida', d: 'd_hojaVida', g: 'g_equipos', roles: MANT },
     { id: 'unifilar', href: 'unifilar.html', ic: 'zap', k: 'p_unifilar', d: 'd_unifilar', g: 'g_equipos', roles: MANT, alias: ['electrico', 'tablero', 'breaker', 'interruptor', 'single-line'] },

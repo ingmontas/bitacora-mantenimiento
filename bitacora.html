@@ -478,6 +478,11 @@
         <label class="box-sel">Causa<select id="f-causa" aria-label="Causa de la falla"><option value="">Elegir…</option></select></label>
         <input type="text" id="f-pieza" placeholder="Pieza / componente" aria-label="Pieza o componente"/>
       </div>
+      <!-- (10 nov 2026) Códigos de falla ISO 14224: modo de falla y acción (opcionales) -->
+      <div class="grid2">
+        <label class="box-sel">Modo<select id="f-modo" aria-label="Modo de falla"><option value="">Elegir…</option></select></label>
+        <label class="box-sel">Acción<select id="f-accion" aria-label="Acción de mantenimiento"><option value="">Elegir…</option></select></label>
+      </div>
       <textarea id="f-falla" placeholder="Falla: ¿qué pasó? *" aria-label="Descripción de la falla"></textarea>
       <textarea id="f-solucion" placeholder="Solución: ¿cómo se resolvió?" aria-label="Descripción de la solución"></textarea>
       <div class="tboxes">
@@ -825,6 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(cambioDeNave);
   prefillEquipoDesdeQR();
   renderCausasOptions('');
+  renderCodigosFalla('', '');
   renderBorradorBanner();
   document.getElementById('f-fecha').addEventListener('change', syncSemanaDesdeFecha);
   document.getElementById('f-fecha').addEventListener('input', syncSemanaDesdeFecha);
@@ -1030,8 +1036,31 @@ function cambioDeNave() {
 const CAUSAS_FALLA = [
   'Fuga', 'Desgaste', 'Falta de lubricación', 'Cuerpo extraño / contaminación',
   'Eléctrico', 'Descalibración', 'Sobrecalentamiento', 'Corrosión',
-  'Rotura de pieza', 'Error de operación', 'Otro',
+  'Rotura de pieza', 'Error de operación',
+  // (10 nov 2026) agregadas (ISO 14224: mecanismo / causa); las de arriba no cambian
+  'Desalineación', 'Fatiga del material', 'Montaje o instalación incorrecta', 'Mantenimiento deficiente', 'Fin de vida útil',
+  'Otro',
 ];
+// (10 nov 2026) Códigos de falla según ISO 14224: además de la causa, el MODO de falla
+// (qué dejó de hacer el equipo) y la ACCIÓN de mantenimiento. Campos nuevos MODO_FALLA y
+// ACCION_MANT (texto simple, opcionales). No cambian ningún indicador existente.
+const MODOS_FALLA = [
+  'No arranca', 'Se detiene sola', 'No para o no responde', 'Ruido anormal', 'Vibración', 'Fuga', 'Sobrecalentamiento',
+  'Baja producción o velocidad', 'Produce defectos', 'Parámetro fuera de rango', 'Funciona a ratos (errática)',
+  'Rotura o daño visible', 'Falla de control o sensor', 'Falla eléctrica (disparo, corto)', 'Otro',
+];
+const ACCIONES_MANT = [
+  'Reemplazo de pieza', 'Reparación', 'Ajuste o calibración', 'Limpieza', 'Lubricación', 'Apriete', 'Reinicio o restablecer',
+  'Modificación o mejora', 'Inspección: no se encontró falla', 'Otro',
+];
+function renderListaOpts(id, lista0, valorActual) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const lista = lista0.slice();
+  if (valorActual && !lista.includes(valorActual)) lista.unshift(valorActual);
+  sel.innerHTML = '<option value="">Elegir…</option>' + lista.map(c => `<option${c === valorActual ? ' selected' : ''}>${esc(c)}</option>`).join('');
+}
+function renderCodigosFalla(modo, accion) { renderListaOpts('f-modo', MODOS_FALLA, modo || ''); renderListaOpts('f-accion', ACCIONES_MANT, accion || ''); }
 function renderCausasOptions(valorActual) {
   const sel = document.getElementById('f-causa');
   if (!sel) return;
@@ -2375,6 +2404,7 @@ function fillFormFromRecord(r) {
   updateEquipoDatalist();
   document.getElementById('f-pieza').value = r.PIEZA || '';
   renderCausasOptions(r.CAUSA_FALLA || '');
+  renderCodigosFalla(r.MODO_FALLA || '', r.ACCION_MANT || '');
   document.getElementById('f-falla').value = r.DESCRIPCION_FALLA || '';
   document.getElementById('f-solucion').value = r.DESCRIPCION_SOLUCION || '';
   document.getElementById('f-hinicio').value = r.H_INICIO || '';
@@ -2525,6 +2555,8 @@ async function submitForm() {
     EQUIPO: equipoNombre,
     PIEZA: document.getElementById('f-pieza').value.trim(),
     CAUSA_FALLA: document.getElementById('f-causa').value,
+    MODO_FALLA: document.getElementById('f-modo').value, // (10 nov 2026) ISO 14224
+    ACCION_MANT: document.getElementById('f-accion').value,
     DESCRIPCION_FALLA: falla,
     DESCRIPCION_SOLUCION: document.getElementById('f-solucion').value.trim(),
     H_INICIO: hInicio,
@@ -2860,6 +2892,7 @@ function resetForm() {
   actualizarPills();
   updateEquipoDatalist();
   renderCausasOptions('');
+  renderCodigosFalla('', '');
   const t = d.toTimeString().slice(0,5);
   document.getElementById('f-hinicio').value = t;
   document.getElementById('f-htecnico').value = t;

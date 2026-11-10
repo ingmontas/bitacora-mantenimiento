@@ -468,6 +468,64 @@ service cloud.firestore {
       allow update: if esEncargado() && diagramaValido() && request.resource.data.creadoPorUid == resource.data.creadoPorUid;
       allow delete: if false;
     }
+    // ══════ Paros y OEE (10 nov 2026) ══════
+    // /paros: cuando una máquina se detiene por algo que no es una falla (las fallas
+    // ya cuentan con los minutos de las OTs). Lo anota el operador o mantenimiento;
+    // cualquiera puede darle "Terminó" a un paro abierto; corregir: quien lo creó o
+    // Supervisor+; anular: Supervisor+. Nadie lo borra.
+    function paroValido() {
+      let d = request.resource.data;
+      let fh = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$';
+      return d.keys().hasOnly(['equipoId', 'equipo', 'planta', 'linea', 'fecha', 'inicio', 'fin', 'min', 'categoria', 'nota', 'estado',
+             'creadoPor', 'creadoPorUid', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])
+        && d.equipoId is string && d.equipoId.size() > 0 && d.equipoId.size() <= 80
+        && txtOk(d, 'equipo', 100) && txtOk(d, 'planta', 80) && txtOk(d, 'linea', 80) && txtOk(d, 'nota', 500)
+        && txtOk(d, 'creadoPor', 100) && txtOk(d, 'actualizadoPor', 100)
+        && d.fecha is string && d.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.inicio is string && d.inicio.matches(fh) && d.inicio.matches(d.fecha + 'T.*')
+        && d.fin is string && (d.fin == '' || d.fin.matches(fh))
+        && d.min is int && d.min >= 0 && d.min <= 20160
+        && d.categoria in ['material', 'operador', 'calidad', 'servicios', 'otro', 'cambio', 'limpieza', 'comida', 'sinprograma', 'reunion']
+        && d.estado in ['abierto', 'cerrado', 'anulado']
+        && (d.estado != 'cerrado' || d.fin != '')
+        && d.creadoPorUid is string
+        && d.actualizadoPorUid == request.auth.uid && d.actualizadoEn == request.time;
+    }
+    match /paros/{id} {
+      allow read: if esOperadorOMas();
+      allow create: if esOperadorOMas() && paroValido() && request.resource.data.creadoPorUid == request.auth.uid
+        && request.resource.data.estado != 'anulado';
+      allow update: if esOperadorOMas() && paroValido() && request.resource.data.creadoPorUid == resource.data.creadoPorUid
+        && (request.resource.data.estado != 'anulado' || esSupervisorOMas())
+        && (resource.data.creadoPorUid == request.auth.uid || esSupervisorOMas()
+            || (resource.data.estado == 'abierto' && request.resource.data.estado == 'cerrado'
+                && soloCambia(['fin', 'min', 'estado', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])));
+      allow delete: if false;
+    }
+    // /produccion: un documento por equipo, fecha y turno (id = equipoId_fecha_turno).
+    function produccionValida(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['equipoId', 'equipo', 'planta', 'fecha', 'turno', 'minTurno', 'unidad', 'ritmoIdeal', 'total', 'malas', 'nota',
+             'creadoPorUid', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])
+        && d.equipoId is string && d.equipoId.size() > 0 && d.equipoId.size() <= 80
+        && txtOk(d, 'equipo', 100) && txtOk(d, 'planta', 80) && txtOk(d, 'unidad', 20) && txtOk(d, 'nota', 300) && txtOk(d, 'actualizadoPor', 100)
+        && d.fecha is string && d.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.turno in ['1', '2', '3']
+        && id == d.equipoId + '_' + d.fecha + '_' + d.turno
+        && d.minTurno is int && d.minTurno > 0 && d.minTurno <= 1440
+        && (d.ritmoIdeal is int || d.ritmoIdeal is float) && d.ritmoIdeal >= 0 && d.ritmoIdeal <= 10000000
+        && d.total is int && d.total >= 0 && d.total <= 100000000
+        && d.malas is int && d.malas >= 0 && d.malas <= d.total
+        && d.creadoPorUid is string
+        && d.actualizadoPorUid == request.auth.uid && d.actualizadoEn == request.time;
+    }
+    match /produccion/{id} {
+      allow read: if esOperadorOMas();
+      allow create: if esOperadorOMas() && produccionValida(id) && request.resource.data.creadoPorUid == request.auth.uid;
+      allow update: if esOperadorOMas() && produccionValida(id) && request.resource.data.creadoPorUid == resource.data.creadoPorUid
+        && (resource.data.creadoPorUid == request.auth.uid || esSupervisorOMas());
+      allow delete: if esSupervisorOMas();
+    }
     // Contador de folios CAPEX-AAAA-001…: como el de las OTs, solo se le suma 1.
     match /config/capexFolio {
       allow read: if esEncargado();
