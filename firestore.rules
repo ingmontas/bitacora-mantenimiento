@@ -526,6 +526,33 @@ service cloud.firestore {
         && (resource.data.creadoPorUid == request.auth.uid || esSupervisorOMas());
       allow delete: if esSupervisorOMas();
     }
+    // ══════ AMEF y matriz de habilidades (10 nov 2026) ══════
+    // /amef/{equipoId}: un documento por equipo con sus modos de falla (filas). Lo llenan
+    // los de mantenimiento; solo Supervisor+ puede quitar filas; solo el Encargado lo borra.
+    function amefValido(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['equipoId', 'equipo', 'planta', 'filas', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])
+        && d.equipoId == id && txtOk(d, 'equipo', 100) && txtOk(d, 'planta', 80) && txtOk(d, 'actualizadoPor', 100)
+        && d.filas is list && d.filas.size() <= 80
+        && d.actualizadoPorUid == request.auth.uid && d.actualizadoEn == request.time;
+    }
+    match /amef/{id} {
+      allow read: if esTecnicoOMas();
+      allow create: if esTecnicoOMas() && amefValido(id);
+      allow update: if esTecnicoOMas() && amefValido(id)
+        && (esSupervisorOMas() || request.resource.data.filas.size() >= resource.data.filas.size());
+      allow delete: if esEncargado();
+    }
+    // /habilidades/matriz: qué sabe cada técnico y cuándo vencen sus certificaciones.
+    // La ven los de mantenimiento; la editan Supervisor, Encargado y Administrador.
+    match /habilidades/{id} {
+      allow read: if esTecnicoOMas();
+      allow write: if esSupervisorOMas() && id == 'matriz'
+        && request.resource.data.keys().hasOnly(['skills', 'datos', 'actualizadoPor', 'actualizadoPorUid', 'actualizadoEn'])
+        && request.resource.data.skills is list && request.resource.data.skills.size() <= 40
+        && request.resource.data.datos is map
+        && request.resource.data.actualizadoPorUid == request.auth.uid && request.resource.data.actualizadoEn == request.time;
+    }
     // Contador de folios CAPEX-AAAA-001…: como el de las OTs, solo se le suma 1.
     match /config/capexFolio {
       allow read: if esEncargado();

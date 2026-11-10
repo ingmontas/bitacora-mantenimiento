@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>AMEF — Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n-common.js"></script>
+<script src="i18n-shell.js"></script>
+<script src="i18n-amef.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+/* ═════════════════════════════════════════════════════════════════
+   AMEF — Análisis de modo y efecto de falla (10 nov 2026)
+   Por equipo: qué puede fallar (modo), qué pasa si falla (efecto), por
+   qué (causa), cómo se detecta hoy, y la prioridad NPR = Severidad ×
+   Ocurrencia × Detección (1–10 cada una). La ocurrencia se sugiere con el
+   historial real de OTs del equipo. De aquí salen las acciones y el plan
+   preventivo de los equipos críticos (base de RCM).
+   Datos: /amef/{equipoId} (un documento por equipo, filas[]). Lo ven y lo
+   llenan los de mantenimiento; lo borra solo el Encargado.
+   ═════════════════════════════════════════════════════════════════ */
+#am [hidden], .am-form [hidden] { display: none !important; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+#am { max-width: 1300px; margin: 0 auto; padding: 14px 14px 110px; }
+.am-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.am-top h1 { font-size: 20px; margin: 0 auto 0 0; letter-spacing: -.01em; }
+.am-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.am-card h2 { font-size: 15px; margin: 0 0 10px; }
+.am-card h2 small { display: block; font-weight: 500; font-size: 12.5px; color: var(--color-muted); margin-top: 2px; }
+.am-note { font-size: 13px; color: var(--color-muted); line-height: 1.45; margin: 6px 0 0; }
+.am-sel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.am-sel select { flex: 1 1 260px; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 16px var(--font-sans); }
+.am-tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.am-tabla th { text-align: left; font-size: 12px; color: var(--color-muted); padding: 6px 8px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.am-tabla td { padding: 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.am-tabla td.n, .am-tabla th.n { text-align: center; font-family: var(--font-mono); white-space: nowrap; }
+.am-tabla tr[data-i] { cursor: pointer; }
+.am-tabla tr[data-i]:hover td { background: var(--color-surface-2, var(--color-bg)); }
+.am-npr { display: inline-block; min-width: 42px; padding: 2px 6px; border-radius: 6px; font: 600 13px var(--font-mono); text-align: center; border: 1px solid var(--color-border); }
+.am-npr.alto { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.am-npr.medio { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.am-npr.bajo { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.am-est { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.am-est.hecha { color: var(--color-success-text); }
+.am-scroll { overflow-x: auto; }
+.am-resumen { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+@media (min-width: 900px) { .am-resumen { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+.am-tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 12px 14px; }
+.am-tile .l { font-size: 12.5px; color: var(--color-muted); font-weight: 600; } .am-tile .v { font: 600 26px var(--font-mono); margin-top: 2px; }
+.am-form label { display: block; font-size: 13px; font-weight: 600; color: var(--color-muted); margin: 12px 0 5px; }
+.am-form input, .am-form select, .am-form textarea { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 16px var(--font-sans); }
+.am-form textarea { min-height: 64px; padding: 10px 12px; resize: vertical; }
+.am-form .g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 8px; }
+.am-form .g2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 8px; }
+.am-form .g3 > div, .am-form .g2 > div { min-width: 0; }
+.am-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.am-acts .vt-btn { flex: 1 1 auto; }
+.am-prev { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--color-surface-2, var(--color-bg)); font-size: 13.5px; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body { background: #fff; color: #000; }
+  .vt-hdr, .vt-tabbar, .vt-side, .vt-fab, .am-noprint { display: none !important; }
+  #am { padding: 0; max-width: none; } .am-card { border: 0; padding: 0; } .am-tabla { font-size: 10.5px; }
+}
+</style>
+</head>
+<body>
+<main id="am">
+  <div class="am-top"><h1>AMEF</h1>
+    <button type="button" class="vt-btn am-noprint" id="amPrint"><span data-icon="printer"></span>Imprimir</button></div>
+  <p class="am-note am-noprint" style="margin:-4px 0 12px">Análisis de modo y efecto de falla: qué puede fallar en cada equipo, qué tan grave sería, qué tan seguido pasa y si se detecta a tiempo. Empieza por los equipos A · Crítico.</p>
+  <div class="am-sel am-noprint"><select id="amEquipo" aria-label="Equipo"></select></div>
+  <div class="am-resumen" id="amRes"></div>
+  <div class="am-card"><h2 id="amTit">Modos de falla</h2>
+    <div class="am-acts am-noprint" id="amActs"></div>
+    <div class="am-scroll" id="amTabla"></div></div>
+  <div class="am-card am-noprint"><h2>Equipos con AMEF<small>Ordenados por el NPR más alto que falta atender.</small></h2><div class="am-scroll" id="amLista"></div></div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => (typeof fbEsc === 'function' ? fbEsc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const ic = (n, c) => (window.VTIcons ? VTIcons.icon(n, { cls: c || '' }) : '');
+const tx = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+const toast = (m, t) => (window.vtToast ? vtToast(m, t) : alert(m));
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const yo = () => (window.currentUserRole && (window.currentUserRole.nombre || window.currentUserRole.email)) || '';
+const hoyF = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+// Escalas 1–10 (versión corta de AIAG, en palabras de planta)
+const ESC_S = [[1, 'Sin efecto que se note'], [3, 'Molestia: no para la producción'], [5, 'Baja la producción o la calidad'], [7, 'Para la línea o sale producto malo'], [8, 'Para la planta o daña el equipo'], [9, 'Riesgo para personas o ambiente, con aviso'], [10, 'Riesgo para personas o ambiente, sin aviso']];
+const ESC_O = [[1, 'Casi nunca (menos de 1 vez en 5 años)'], [2, 'Rara (1 vez en 2 a 5 años)'], [3, '1 vez cada 1 a 2 años'], [4, '1 vez al año'], [5, '2 a 3 veces al año'], [6, '4 a 5 veces al año'], [7, 'Cada 1 a 2 meses'], [8, 'Cada mes'], [9, 'Cada 2 semanas'], [10, 'Cada semana o más']];
+const ESC_D = [[1, 'Una alarma o sensor lo avisa siempre antes'], [3, 'El checklist lo detecta con seguridad'], [5, 'El checklist a veces lo detecta'], [7, 'Solo se nota con la máquina andando'], [9, 'Se nota cuando ya falló'], [10, 'No hay forma de verlo antes']];
+const nivelNpr = n => (n >= 200 ? 'alto' : n >= 100 ? 'medio' : 'bajo');
+// Ocurrencia sugerida con las fallas por año del historial
+function ocurrenciaDe(porAnio) {
+  const t = [[52, 10], [24, 9], [12, 8], [6, 7], [4, 6], [2, 5], [1, 4], [0.5, 3], [0.2, 2]];
+  for (const [f, o] of t) if (porAnio >= f) return o;
+  return 1;
+}
+const MODOS = ['No arranca', 'Se detiene sola', 'No para o no responde', 'Ruido anormal', 'Vibración', 'Fuga', 'Sobrecalentamiento', 'Baja producción o velocidad', 'Produce defectos', 'Parámetro fuera de rango', 'Funciona a ratos (errática)', 'Rotura o daño visible', 'Falla de control o sensor', 'Falla eléctrica (disparo, corto)', 'Otro'];
+
+let EQUIPOS = [], EQ = new Map(), AMEF = new Map(), SEL = '', OTS_EQ = new Map(), PUEDE = false, PUEDE_BORRAR = false;
+
+function hoja(titulo, sub, cuerpo) {
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh am-form" role="dialog" aria-modal="true" aria-labelledby="amHt"><div class="fbsh-head"><div><h3 id="amHt">${esc(titulo)}</h3>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>${cuerpo}</div>`;
+  document.body.appendChild(bg);
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
+  return { bg, q: s => bg.querySelector(s), cerrar };
+}
+const escala = (id, lista, v) => `<select id="${id}">${lista.map(([n, t]) => `<option value="${n}"${+v === n ? ' selected' : ''}>${n} · ${esc(tx(t))}</option>`).join('')}</select>`;
+const npr = f => (+f.S || 0) * (+f.O || 0) * (+f.D || 0);
+const nprDespues = f => (f.S2 && f.O2 && f.D2) ? f.S2 * f.O2 * f.D2 : null;
+
+function filasDe(id) { return ((AMEF.get(id) || {}).filas || []).slice(); }
+function pintar() {
+  const e = EQ.get(SEL);
+  const filas = filasDe(SEL).map((f, i) => Object.assign({ _i: i, _npr: npr(f) }, f)).sort((a, b) => (a.estado === 'hecha') - (b.estado === 'hecha') || b._npr - a._npr);
+  $('amTit').innerHTML = esc(tx('Modos de falla')) + (e ? ' · ' + esc(e.nombre) : '') + `<small>${esc(tx('NPR = Severidad × Ocurrencia × Detección. 200 o más: actuar ya; 100 a 199: planificar.'))}</small>`;
+  const abiertas = filas.filter(f => f.estado !== 'hecha');
+  $('amRes').innerHTML = !e ? '' : `<div class="am-tile"><div class="l">${esc(tx('Modos de falla'))}</div><div class="v">${filas.length}</div></div>
+    <div class="am-tile"><div class="l">${esc(tx('NPR 200 o más'))}</div><div class="v">${abiertas.filter(f => f._npr >= 200).length}</div></div>
+    <div class="am-tile"><div class="l">${esc(tx('Acciones abiertas'))}</div><div class="v">${abiertas.filter(f => f.accion).length}</div></div>
+    <div class="am-tile"><div class="l">${esc(tx('Fallas en 12 meses'))}</div><div class="v">${OTS_EQ.has(SEL) ? histDe(SEL).n12 : '…'}</div></div>`;
+  $('amActs').innerHTML = !e || !PUEDE ? '' : `<button type="button" class="vt-btn pri" id="amAdd">${ic('plus')}${esc(tx('Agregar modo de falla'))}</button><button type="button" class="vt-btn" id="amSug">${ic('history')}${esc(tx('Sugerir desde el historial'))}</button>`;
+  if ($('amAdd')) $('amAdd').onclick = () => abrirFila(null);
+  if ($('amSug')) $('amSug').onclick = sugerir;
+  $('amTabla').innerHTML = !e ? `<div class="vt-empty">${esc(tx('Elige un equipo arriba.'))}</div>` : !filas.length ? `<div class="vt-empty">${esc(tx('Este equipo todavía no tiene AMEF. Toca "Sugerir desde el historial" para empezar con las fallas que ya tuvo.'))}</div>`
+    : `<table class="am-tabla"><thead><tr><th>${esc(tx('Modo de falla'))}</th><th>${esc(tx('Efecto'))}</th><th>${esc(tx('Causa'))}</th><th>${esc(tx('Cómo se detecta hoy'))}</th><th class="n">S</th><th class="n">O</th><th class="n">D</th><th class="n">NPR</th><th>${esc(tx('Acción'))}</th><th>${esc(tx('Responsable · fecha'))}</th><th class="n">${esc(tx('Después'))}</th></tr></thead><tbody>` +
+      filas.map(f => { const d2 = nprDespues(f); return `<tr data-i="${f._i}"><td><b>${esc(tx(f.modo))}</b>${f.funcion ? `<br><small style="color:var(--color-muted)">${esc(f.funcion)}</small>` : ''}</td><td>${esc(f.efecto || '')}</td><td>${esc(f.causa || '')}</td><td>${esc(f.controles || '')}</td><td class="n">${f.S}</td><td class="n">${f.O}</td><td class="n">${f.D}</td><td class="n"><span class="am-npr ${nivelNpr(f._npr)}">${f._npr}</span></td><td>${esc(f.accion || '—')}${f.estado === 'hecha' ? `<br><span class="am-est hecha">✓ ${esc(tx('Hecha'))}</span>` : ''}</td><td>${esc([f.responsable, f.fecha ? f.fecha.slice(8, 10) + '/' + f.fecha.slice(5, 7) + '/' + f.fecha.slice(0, 4) : ''].filter(Boolean).join(' · ') || '—')}</td><td class="n">${d2 == null ? '—' : `<span class="am-npr ${nivelNpr(d2)}">${d2}</span>`}</td></tr>`; }).join('') + '</tbody></table>';
+  $('amTabla').querySelectorAll('tr[data-i]').forEach(tr => tr.onclick = () => { if (PUEDE) abrirFila(+tr.dataset.i); });
+  pintarLista();
+  if (window.VTIcons) VTIcons.hydrate($('am'));
+}
+function pintarLista() {
+  const l = [...AMEF.values()].filter(a => EQ.has(a.equipoId)).map(a => { const ab = (a.filas || []).filter(f => f.estado !== 'hecha'); return { a, n: (a.filas || []).length, max: ab.reduce((m, f) => Math.max(m, npr(f)), 0), alto: ab.filter(f => npr(f) >= 200).length }; }).sort((x, y) => y.max - x.max);
+  $('amLista').innerHTML = l.length ? `<table class="am-tabla"><thead><tr><th>${esc(tx('Equipo'))}</th><th class="n">${esc(tx('Modos'))}</th><th class="n">${esc(tx('NPR más alto abierto'))}</th><th class="n">${esc(tx('NPR 200 o más'))}</th></tr></thead><tbody>` +
+    l.map(x => `<tr data-eq="${esc(x.a.equipoId)}" style="cursor:pointer"><td><b>${esc(EQ.get(x.a.equipoId).nombre)}</b></td><td class="n">${x.n}</td><td class="n"><span class="am-npr ${nivelNpr(x.max)}">${x.max}</span></td><td class="n">${x.alto}</td></tr>`).join('') + '</tbody></table>'
+    : `<div class="vt-empty">${esc(tx('Todavía ningún equipo tiene AMEF.'))}</div>`;
+  $('amLista').querySelectorAll('tr[data-eq]').forEach(tr => tr.onclick = () => elegir(tr.dataset.eq));
+}
+// historial del equipo: correctivos por modo/causa y fallas por año
+function histDe(id) {
+  const ots = (OTS_EQ.get(id) || []).filter(o => o.estado !== 'anulada' && String(o.TIPO_MANTENIMIENTO || '').toLowerCase() === 'correctivo' && /^\d{4}-\d{2}-\d{2}/.test(o.FECHA || ''));
+  const hace = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
+  const n12 = ots.filter(o => o.FECHA >= hace(365)).length;
+  const fechas = ots.map(o => o.FECHA).sort();
+  const anios = fechas.length ? Math.max(1, (Date.now() - new Date(fechas[0]).getTime()) / (365 * 86400000)) : 1;
+  const g = {};
+  ots.forEach(o => { const m = o.MODO_FALLA || ''; const c = o.CAUSA_FALLA || ''; const k = (m || c || o.PIEZA || tx('Sin código')) + '|' + c; (g[k] = g[k] || { modo: m, causa: c, pieza: o.PIEZA || '', n: 0, min: 0, sol: '' }); g[k].n++; g[k].min += +o.TOTAL_MIN_MAQUINA || 0; if (o.DESCRIPCION_SOLUCION) g[k].sol = o.DESCRIPCION_SOLUCION; });
+  return { n12, anios, grupos: Object.values(g).sort((a, b) => b.n - a.n) };
+}
+async function cargarOts(id) {
+  if (OTS_EQ.has(id)) return;
+  try { const s = await db.collection('ots').where('equipoId', '==', id).get(); OTS_EQ.set(id, s.docs.map(d => d.data())); }
+  catch (e) { OTS_EQ.set(id, []); }
+}
+async function sugerir() {
+  await cargarOts(SEL);
+  const H = histDe(SEL), filas = filasDe(SEL);
+  const ya = new Set(filas.map(f => (f.modo + '|' + (f.causa || '')).toLowerCase()));
+  const nuevas = H.grupos.filter(g => !ya.has(((g.modo || 'Otro') + '|' + (g.causa || '')).toLowerCase())).slice(0, 10).map(g => ({
+    id: Math.random().toString(36).slice(2, 10), funcion: '', modo: g.modo || 'Otro', efecto: g.min ? tx('Máquina parada {h} h en total').replace('{h}', Math.round(g.min / 6) / 10) : '', causa: g.causa || (g.pieza ? g.pieza : ''),
+    controles: '', S: g.min >= 240 ? 7 : 5, O: ocurrenciaDe(g.n / H.anios), D: 5, accion: '', responsable: '', fecha: '', estado: 'abierta' }));
+  if (!nuevas.length) { toast(tx('No hay fallas nuevas en el historial para sugerir.'), 'warn'); return; }
+  await guardar(filas.concat(nuevas));
+  toast(tx('{n} modos de falla sugeridos: revisa la severidad y la detección.').replace('{n}', nuevas.length), 'ok');
+}
+function abrirFila(i) {
+  const filas = filasDe(SEL), f = i == null ? { modo: '', S: 5, O: 3, D: 5, estado: 'abierta' } : filas[i];
+  const H = hoja(tx(i == null ? 'Agregar modo de falla' : 'Editar modo de falla'), (EQ.get(SEL) || {}).nombre || '', `
+    <label for="fFun">${esc(tx('Función o parte'))}</label><input id="fFun" maxlength="120" value="${esc(f.funcion || '')}" placeholder="${esc(tx('Ej: Motor principal, sistema hidráulico'))}"/>
+    <label for="fModo">${esc(tx('Modo de falla'))}</label><select id="fModo">${MODOS.concat(f.modo && !MODOS.includes(f.modo) ? [f.modo] : []).map(m => `<option value="${esc(m)}"${m === f.modo ? ' selected' : ''}>${esc(tx(m))}</option>`).join('')}</select>
+    <label for="fEfe">${esc(tx('Efecto: qué pasa si falla'))}</label><textarea id="fEfe" maxlength="300">${esc(f.efecto || '')}</textarea>
+    <label for="fCau">${esc(tx('Causa'))}</label><input id="fCau" maxlength="200" value="${esc(f.causa || '')}"/>
+    <label for="fCon">${esc(tx('Cómo se detecta hoy'))}</label><input id="fCon" maxlength="200" value="${esc(f.controles || '')}" placeholder="${esc(tx('Ej: checklist semanal de vibración'))}"/>
+    <label for="fS">${esc(tx('Severidad (S)'))}</label>${escala('fS', ESC_S, f.S)}
+    <label for="fO">${esc(tx('Ocurrencia (O)'))}</label>${escala('fO', ESC_O, f.O)}
+    <label for="fD">${esc(tx('Detección (D)'))}</label>${escala('fD', ESC_D, f.D)}
+    <div class="am-prev" id="fNpr"></div>
+    <label for="fAcc">${esc(tx('Acción recomendada'))}</label><textarea id="fAcc" maxlength="300">${esc(f.accion || '')}</textarea>
+    <div class="g2"><div><label for="fRes">${esc(tx('Responsable'))}</label><input id="fRes" maxlength="80" value="${esc(f.responsable || '')}"/></div><div><label for="fFec">${esc(tx('Fecha compromiso'))}</label><input type="date" id="fFec" value="${esc(f.fecha || '')}"/></div></div>
+    <label><input type="checkbox" id="fHecha" style="width:auto;min-height:0;margin-right:8px"${f.estado === 'hecha' ? ' checked' : ''}/>${esc(tx('Acción hecha'))}</label>
+    <div id="fDesp"${f.estado === 'hecha' ? '' : ' hidden'}><div class="am-note">${esc(tx('Después de la acción: vuelve a calificar para ver cuánto bajó el riesgo.'))}</div>
+      <div class="g3"><div><label for="fS2">S</label>${escala('fS2', ESC_S, f.S2 || f.S)}</div><div><label for="fO2">O</label>${escala('fO2', ESC_O, f.O2 || f.O)}</div><div><label for="fD2">D</label>${escala('fD2', ESC_D, f.D2 || f.D)}</div></div></div>
+    <div class="am-acts">${i != null && PUEDE_BORRAR ? `<button type="button" class="vt-btn" id="fDel">${ic('trash')}${esc(tx('Quitar'))}</button>` : ''}<button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="fOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  const prev = () => { const n = +H.q('#fS').value * +H.q('#fO').value * +H.q('#fD').value; H.q('#fNpr').innerHTML = `NPR: <span class="am-npr ${nivelNpr(n)}">${n}</span> · ${esc(tx(n >= 200 ? 'Actuar ya' : n >= 100 ? 'Planificar una acción' : 'Vigilar'))}`; };
+  ['#fS', '#fO', '#fD'].forEach(s => H.q(s).addEventListener('change', prev)); prev();
+  H.q('#fHecha').addEventListener('change', () => { H.q('#fDesp').hidden = !H.q('#fHecha').checked; });
+  H.q('#fOk').onclick = async () => {
+    const hecha = H.q('#fHecha').checked;
+    const n = { id: f.id || Math.random().toString(36).slice(2, 10), funcion: H.q('#fFun').value.trim(), modo: H.q('#fModo').value, efecto: H.q('#fEfe').value.trim(), causa: H.q('#fCau').value.trim(), controles: H.q('#fCon').value.trim(),
+      S: +H.q('#fS').value, O: +H.q('#fO').value, D: +H.q('#fD').value, accion: H.q('#fAcc').value.trim(), responsable: H.q('#fRes').value.trim(), fecha: H.q('#fFec').value, estado: hecha ? 'hecha' : 'abierta' };
+    if (hecha) { n.S2 = +H.q('#fS2').value; n.O2 = +H.q('#fO2').value; n.D2 = +H.q('#fD2').value; }
+    const l = filasDe(SEL); if (i == null) l.push(n); else l[i] = n;
+    H.q('#fOk').disabled = true;
+    try { await guardar(l); H.cerrar(); toast(tx('Guardado'), 'ok'); } catch (e) { H.q('#fOk').disabled = false; }
+  };
+  const del = H.q('#fDel'); if (del) del.onclick = async () => { const l = filasDe(SEL); l.splice(i, 1); try { await guardar(l); H.cerrar(); } catch (e) {} };
+}
+async function guardar(filas) {
+  const e = EQ.get(SEL);
+  const d = { equipoId: SEL, equipo: String(e.nombre || '').slice(0, 100), planta: String((typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(e) : e.planta) || '').slice(0, 80),
+    filas: filas.slice(0, 80).map(f => { const o = { id: String(f.id).slice(0, 20), funcion: String(f.funcion || '').slice(0, 120), modo: String(f.modo || 'Otro').slice(0, 80), efecto: String(f.efecto || '').slice(0, 300), causa: String(f.causa || '').slice(0, 200), controles: String(f.controles || '').slice(0, 200),
+      S: Math.max(1, Math.min(10, +f.S | 0)), O: Math.max(1, Math.min(10, +f.O | 0)), D: Math.max(1, Math.min(10, +f.D | 0)), accion: String(f.accion || '').slice(0, 300), responsable: String(f.responsable || '').slice(0, 80), fecha: /^\d{4}-\d{2}-\d{2}$/.test(f.fecha || '') ? f.fecha : '', estado: f.estado === 'hecha' ? 'hecha' : 'abierta' };
+      if (f.estado === 'hecha' && f.S2) { o.S2 = Math.max(1, Math.min(10, +f.S2 | 0)); o.O2 = Math.max(1, Math.min(10, +f.O2 | 0)); o.D2 = Math.max(1, Math.min(10, +f.D2 | 0)); }
+      return o; }),
+    actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() };
+  try { await db.collection('amef').doc(SEL).set(d); AMEF.set(SEL, d); pintar(); }
+  catch (err) { toast(tx('No se pudo guardar: {e}').replace('{e}', err.message), 'error'); throw err; }
+}
+async function elegir(id) {
+  SEL = id; $('amEquipo').value = id; lsSet('amEquipo', id);
+  if (history.replaceState) history.replaceState(null, '', '?equipo=' + encodeURIComponent(id));
+  pintar(); await cargarOts(id); pintar();
+}
+$('amEquipo').addEventListener('change', () => elegir($('amEquipo').value));
+$('amPrint').onclick = () => window.print();
+window.addEventListener('idioma-cambiado', () => pintar());
+window.fbReady.then(async () => {
+  PUEDE = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+  PUEDE_BORRAR = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  try { const c = await fbEquiposCatalogo(false); EQUIPOS = (c && c.docs ? c.docs.map(x => Object.assign({ id: x.id }, x.data())) : []).filter(e => e.activo !== false && (typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e))); } catch (e) { EQUIPOS = []; }
+  const crit = e => ({ A: 0, B: 1, C: 2 }[e.criticidad] ?? 3);
+  EQUIPOS.sort((a, b) => crit(a) - crit(b) || String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
+  EQUIPOS.forEach(e => EQ.set(e.id, e));
+  $('amEquipo').innerHTML = `<option value="">${esc(tx('Elige el equipo'))}</option>` + EQUIPOS.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}${e.criticidad ? ' · ' + esc(e.criticidad) : ''}</option>`).join('');
+  try { const s = await db.collection('amef').get(); s.docs.forEach(d => AMEF.set(d.id, d.data())); } catch (e) { console.warn('AMEF:', e.message); }
+  if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(() => location.reload());
+  const q = new URLSearchParams(location.search).get('equipo') || lsGet('amEquipo') || '';
+  if (q && EQ.has(q)) elegir(q); else pintar();
+}).catch(() => {});
+</script>
+</body>
+</html>

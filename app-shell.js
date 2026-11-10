@@ -42,6 +42,8 @@
     { id: 'checklist', href: 'checklist.html', ic: 'clipboard-check', k: 'p_checklist', d: 'd_checklist', g: 'g_operacion', roles: MANT },
     { id: 'hoja-vida', href: 'hoja-vida.html', ic: 'cog', k: 'p_hojaVida', d: 'd_hojaVida', g: 'g_equipos', roles: MANT },
     { id: 'unifilar', href: 'unifilar.html', ic: 'zap', k: 'p_unifilar', d: 'd_unifilar', g: 'g_equipos', roles: MANT, alias: ['electrico', 'tablero', 'breaker', 'interruptor', 'single-line'] },
+    { id: 'amef', href: 'amef.html', ic: 'layers', k: 'p_amef', d: 'd_amef', g: 'g_equipos', roles: MANT, alias: ['fmea', 'modo de falla', 'rcm', 'npr', 'rpn'] },
+    { id: 'habilidades', href: 'habilidades.html', ic: 'award', k: 'p_habilidades', d: 'd_habilidades', g: 'g_gestion', roles: MANT, alias: ['competencias', 'certificaciones', 'skills', 'capacitacion'] },
     { id: 'etiquetas', href: 'etiquetas-qr.html', ic: 'qr', k: 'p_etiquetas', d: 'd_etiquetas', g: 'g_equipos', roles: [ADM, ENC, SUP] },
     // (v3 etapa 3a) Inventario + Almacén = UN módulo "Almacén" (Repuestos · Solicitudes · Movimientos · Compras).
     // inventario.html sigue abriendo (lleva a almacen.html#repuestos); "inventario" se sigue encontrando en el buscador.

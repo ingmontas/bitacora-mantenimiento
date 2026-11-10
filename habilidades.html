@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Habilidades — Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n-common.js"></script>
+<script src="i18n-shell.js"></script>
+<script src="i18n-habilidades.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+/* ═════════════════════════════════════════════════════════════════
+   MATRIZ DE HABILIDADES — (10 nov 2026)
+   Qué sabe hacer cada técnico (0 no sabe · 1 en formación · 2 competente ·
+   3 puede enseñar) y cuándo vencen sus certificaciones (alturas, espacios
+   confinados, montacargas…). Avisa de las habilidades que dependen de una
+   sola persona y de las certificaciones vencidas o por vencer.
+   Datos: /habilidades/matriz (un documento). La ven los de mantenimiento;
+   la editan Supervisor, Encargado y Administrador.
+   ═════════════════════════════════════════════════════════════════ */
+#hb [hidden], .hb-form [hidden] { display: none !important; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+#hb { max-width: 1400px; margin: 0 auto; padding: 14px 14px 110px; }
+.hb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.hb-top h1 { font-size: 20px; margin: 0 auto 0 0; }
+.hb-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.hb-card h2 { font-size: 15px; margin: 0 0 10px; }
+.hb-card h2 small { display: block; font-weight: 500; font-size: 12.5px; color: var(--color-muted); margin-top: 2px; }
+.hb-note { font-size: 13px; color: var(--color-muted); line-height: 1.45; margin: 6px 0 0; }
+.hb-scroll { overflow-x: auto; }
+.hb-m { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.hb-m th, .hb-m td { border-bottom: 1px solid var(--color-border); padding: 6px; text-align: center; }
+.hb-m th { font-size: 11.5px; color: var(--color-muted); font-weight: 600; vertical-align: bottom; min-width: 64px; max-width: 90px; white-space: normal; line-height: 1.2; }
+.hb-m td:first-child, .hb-m th:first-child { text-align: left; position: sticky; left: 0; background: var(--color-surface); z-index: 1; min-width: 130px; max-width: 170px; }
+.hb-m td:first-child b { font-size: 13.5px; }
+.hb-c { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 48px; min-height: 44px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--color-text); font: 600 13px var(--font-mono); cursor: pointer; }
+.hb-c small { font: 500 10px var(--font-sans); color: var(--color-muted); }
+.hb-c.n0 { color: var(--color-muted); }
+.hb-c.n1 { background: var(--color-warn-soft); color: var(--color-warn-text); }
+.hb-c.n2 { background: var(--color-info-soft); color: var(--color-info-text); }
+.hb-c.n3 { background: var(--color-success-soft); color: var(--color-success-text); }
+.hb-c.venc { outline: 2px solid var(--color-danger); }
+.hb-c.venc small { color: var(--color-danger-text); font-weight: 700; }
+.hb-c.pronto small { color: var(--color-warn-text); font-weight: 700; }
+.hb-c[disabled] { cursor: default; }
+.hb-m tr.cob td { font-size: 12px; color: var(--color-muted); }
+.hb-m tr.cob td.riesgo { color: var(--color-danger-text); font-weight: 700; }
+.hb-ley { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; margin-top: 10px; }
+.hb-ley span { display: inline-flex; align-items: center; gap: 6px; }
+.hb-ley i { display: inline-block; width: 22px; height: 16px; border-radius: 4px; font-style: normal; text-align: center; font: 600 11px var(--font-mono); }
+.hb-li.n0 { color: var(--color-muted); } .hb-li.n1 { background: var(--color-warn-soft); color: var(--color-warn-text); } .hb-li.n2 { background: var(--color-info-soft); color: var(--color-info-text); } .hb-li.n3 { background: var(--color-success-soft); color: var(--color-success-text); }
+.hb-ley i { line-height: 16px; }
+.hb-lista { display: flex; flex-direction: column; gap: 6px; }
+.hb-lista div { font-size: 13.5px; padding: 8px 10px; border-radius: 8px; background: var(--color-surface-2, var(--color-bg)); }
+.hb-lista div.mal { background: var(--color-danger-soft); color: var(--color-danger-text); }
+.hb-lista div.atn { background: var(--color-warn-soft); color: var(--color-warn-text); }
+.hb-form label { display: block; font-size: 13px; font-weight: 600; color: var(--color-muted); margin: 12px 0 5px; }
+.hb-form input, .hb-form select { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 16px var(--font-sans); }
+.hb-niv { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+.hb-niv button { min-height: 56px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color: var(--color-text); font: 600 12.5px var(--font-sans); cursor: pointer; line-height: 1.2; }
+.hb-niv button[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-soft); }
+.hb-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.hb-acts .vt-btn { flex: 1 1 auto; }
+</style>
+</head>
+<body>
+<main id="hb">
+  <div class="hb-top"><h1>Matriz de habilidades</h1><button type="button" class="vt-btn" id="hbAddSk" hidden><span data-icon="plus"></span>Agregar habilidad</button></div>
+  <div class="hb-card"><h2>Quién sabe hacer qué<small>Toca una casilla para poner el nivel y, si es una certificación, cuándo vence.</small></h2>
+    <div class="hb-scroll" id="hbMatriz"><div class="vt-empty">Cargando…</div></div>
+    <div class="hb-ley"><span><i class="hb-li n0">—</i> No sabe</span><span><i class="hb-li n1">1</i> En formación</span><span><i class="hb-li n2">2</i> Competente</span><span><i class="hb-li n3">3</i> Puede enseñar</span></div></div>
+  <div class="hb-card"><h2>Alertas<small>Habilidades que dependen de una sola persona y certificaciones vencidas o que vencen en 30 días.</small></h2><div id="hbAlertas"></div></div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => (typeof fbEsc === 'function' ? fbEsc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const ic = (n, c) => (window.VTIcons ? VTIcons.icon(n, { cls: c || '' }) : '');
+const tx = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+const toast = (m, t) => (window.vtToast ? vtToast(m, t) : alert(m));
+const yo = () => (window.currentUserRole && (window.currentUserRole.nombre || window.currentUserRole.email)) || '';
+const hoyF = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const masDias = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const ddmmaa = f => f ? f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(2, 4) : '';
+// [id, nombre, ¿certificación que vence?]
+const SK_BASE = [['mec', 'Mecánica', 0], ['ele', 'Electricidad', 0], ['neu', 'Neumática', 0], ['hid', 'Hidráulica', 0], ['sol', 'Soldadura', 0], ['plc', 'PLC y automatización', 0], ['ref', 'Refrigeración', 0], ['pre', 'Predictivo (vibración, termografía)', 0], ['loto', 'Bloqueo y etiquetado (LOTO)', 1], ['alt', 'Trabajo en alturas', 1], ['conf', 'Espacios confinados', 1], ['mont', 'Montacargas', 1]];
+const NIV = ['No sabe', 'En formación', 'Competente', 'Puede enseñar'];
+let TECS = [], M = { skills: SK_BASE.map(([id, n, c]) => ({ id, n, cert: !!c })), datos: {} }, PUEDE = false;
+const kT = n => String(n || '').trim().toUpperCase().replace(/\//g, ' ').replace(/\s+/g, ' ').slice(0, 80);
+const celda = (t, s) => ((M.datos[kT(t)] || {})[s] || {});
+
+function hoja(titulo, sub, cuerpo) {
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh hb-form" role="dialog" aria-modal="true" aria-labelledby="hbHt"><div class="fbsh-head"><div><h3 id="hbHt">${esc(titulo)}</h3>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>${cuerpo}</div>`;
+  document.body.appendChild(bg);
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
+  return { bg, q: s => bg.querySelector(s), cerrar };
+}
+function estadoVence(v) { if (!v) return ''; return v < hoyF() ? 'venc' : v <= masDias(30) ? 'pronto' : ''; }
+function pintar() {
+  const tecs = TECS.filter(t => typeof fbTecnicoEnNave !== 'function' || fbTecnicoEnNave(t));
+  if (!tecs.length) { $('hbMatriz').innerHTML = `<div class="vt-empty">${esc(tx('No hay técnicos en la lista. El Administrador los agrega en Administración → Usuarios.'))}</div>`; $('hbAlertas').innerHTML = ''; return; }
+  const S = M.skills;
+  const cob = S.map(s => tecs.filter(t => (celda(t.nombre, s.id).n || 0) >= 2 && estadoVence(celda(t.nombre, s.id).v) !== 'venc').length);
+  $('hbMatriz').innerHTML = `<table class="hb-m"><thead><tr><th>${esc(tx('Técnico'))}</th>${S.map(s => `<th>${esc(tx(s.n))}</th>`).join('')}</tr></thead><tbody>` +
+    tecs.map(t => `<tr><td><b>${esc(t.corto || t.nombre)}</b></td>${S.map(s => { const c = celda(t.nombre, s.id), n = c.n || 0, ev = s.cert ? estadoVence(c.v) : '';
+      return `<td><button type="button" class="hb-c n${n} ${ev}" data-t="${esc(t.nombre)}" data-s="${esc(s.id)}"${PUEDE ? '' : ' disabled'} aria-label="${esc(t.corto || t.nombre)} · ${esc(tx(s.n))}: ${esc(tx(NIV[n]))}">${n ? n : '—'}${s.cert && c.v ? `<small>${esc(ddmmaa(c.v))}</small>` : ''}</button></td>`; }).join('')}</tr>`).join('') +
+    `<tr class="cob"><td>${esc(tx('Competentes'))}</td>${cob.map(n => `<td class="${n <= 1 ? 'riesgo' : ''}">${n}</td>`).join('')}</tr></tbody></table>`;
+  $('hbMatriz').querySelectorAll('.hb-c[data-t]').forEach(b => b.onclick = () => { if (!b.disabled) editar(b.dataset.t, b.dataset.s); });
+  // alertas
+  const al = [];
+  S.forEach((s, i) => { if (cob[i] === 0) al.push(['mal', tx('Nadie es competente en {s}.').replace('{s}', tx(s.n))]); else if (cob[i] === 1) al.push(['atn', tx('Solo una persona sabe {s}: si falta, no hay quien lo haga. Formar a otra.').replace('{s}', tx(s.n))]); });
+  tecs.forEach(t => S.filter(s => s.cert).forEach(s => { const c = celda(t.nombre, s.id); const ev = estadoVence(c.v); if ((c.n || 0) && ev) al.push([ev === 'venc' ? 'mal' : 'atn', tx(ev === 'venc' ? '{t}: {s} venció el {f}.' : '{t}: {s} vence el {f}.').replace('{t}', t.corto || t.nombre).replace('{s}', tx(s.n)).replace('{f}', ddmmaa(c.v))]); }));
+  $('hbAlertas').innerHTML = al.length ? `<div class="hb-lista">${al.map(([c, x]) => `<div class="${c}">${esc(x)}</div>`).join('')}</div>` : `<div class="vt-empty">${esc(tx('Sin alertas.'))}</div>`;
+}
+function editar(tec, sid) {
+  const s = M.skills.find(x => x.id === sid), c = celda(tec, sid); let n = c.n || 0;
+  const t = TECS.find(x => x.nombre === tec) || { corto: tec };
+  const H = hoja(tx(s.n), t.corto || tec, `<label>${esc(tx('Nivel'))}</label><div class="hb-niv">${NIV.map((x, i) => `<button type="button" data-n="${i}" aria-pressed="${i === n}">${i ? i + ' · ' : ''}${esc(tx(x))}</button>`).join('')}</div>
+    ${s.cert ? `<label for="hbV">${esc(tx('Certificación vence'))}</label><input type="date" id="hbV" value="${esc(c.v || '')}"/>` : ''}
+    <div class="hb-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="hbOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  H.bg.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { n = +b.dataset.n; H.bg.querySelectorAll('[data-n]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  H.q('#hbOk').onclick = async () => {
+    const k = kT(tec), d = Object.assign({}, M.datos); d[k] = Object.assign({}, d[k] || {});
+    const v = s.cert ? H.q('#hbV').value : '';
+    if (n || v) d[k][sid] = Object.assign({ n }, v ? { v } : {}); else delete d[k][sid];
+    try { await guardar({ skills: M.skills, datos: d }); H.cerrar(); toast(tx('Guardado'), 'ok'); } catch (e) {}
+  };
+}
+function agregarSkill() {
+  const H = hoja(tx('Agregar habilidad'), '', `<label for="skN">${esc(tx('Nombre'))}</label><input id="skN" maxlength="60" placeholder="${esc(tx('Ej: Calderas'))}"/>
+    <label><input type="checkbox" id="skC" style="width:auto;min-height:0;margin-right:8px"/>${esc(tx('Es una certificación que vence'))}</label>
+    <div class="hb-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="skOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  H.q('#skOk').onclick = async () => {
+    const n = H.q('#skN').value.trim(); if (!n) { toast(tx('Ponle un nombre.'), 'warn'); return; }
+    if (M.skills.length >= 40) { toast(tx('Máximo 40 habilidades.'), 'warn'); return; }
+    const id = 'x' + Date.now().toString(36);
+    try { await guardar({ skills: M.skills.concat([{ id, n: n.slice(0, 60), cert: H.q('#skC').checked }]), datos: M.datos }); H.cerrar(); } catch (e) {}
+  };
+}
+async function guardar(m) {
+  const d = { skills: m.skills.slice(0, 40), datos: m.datos, actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() };
+  try { await db.collection('habilidades').doc('matriz').set(d); M = { skills: d.skills, datos: d.datos }; pintar(); }
+  catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); throw e; }
+}
+$('hbAddSk').onclick = agregarSkill;
+window.addEventListener('idioma-cambiado', pintar);
+window.fbReady.then(async () => {
+  PUEDE = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  $('hbAddSk').hidden = !PUEDE;
+  try { TECS = await fbTecnicos(); } catch (e) { TECS = []; }
+  try { const s = await db.collection('habilidades').doc('matriz').get(); if (s.exists) { const d = s.data(); if (Array.isArray(d.skills) && d.skills.length) M.skills = d.skills; M.datos = d.datos && typeof d.datos === 'object' ? d.datos : {}; } } catch (e) { console.warn('habilidades:', e.message); }
+  if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(pintar);
+  pintar();
+}).catch(() => {});
+</script>
+</body>
+</html>

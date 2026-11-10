@@ -20,7 +20,7 @@
 <script src="i18n-common.js"></script>
 <script src="i18n-shell.js"></script>
 <script src="filtros.js"></script>
-<script src="weibull.js"></script><!-- (10 nov 2026) patrón de falla (Weibull) -->
+<script src="weibull.js"></script><script src="spc.js"></script><!-- (10 nov 2026) control estadístico de lecturas --><!-- (10 nov 2026) patrón de falla (Weibull) -->
 <script src="kpis.js"></script><!-- (v3 etapa 3a) indicadores (MTBF, MTTR, disponibilidad, backlog, cumplimiento, vencidas, reincidencia) -->
 <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C -->
 <script src="seguridad.js"></script><!-- (28 oct 2026) permisos de trabajo / LOTO (reporte) -->
@@ -566,6 +566,13 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <div class="cardsub" id="tendSub"></div>
       <details class="que-sig" style="margin-bottom:8px;"><summary>¿Qué significa?</summary><p><span data-icon="alert" class="ic-warn"></span> Tendencia: las últimas 3 lecturas van hacia el límite y, si siguen igual, lo pasan antes de 2 checklists más. <span data-icon="alert" class="ic-warn"></span> Cerca: la última lectura está a 10 % o menos del límite. <span data-icon="ban" class="ic-bad"></span> Fuera: ya se salió del rango. Toca una alerta para ver su gráfica.</p></details>
       <div id="tendList"></div>
+    </div>
+    <!-- (10 nov 2026) Control estadístico: cambios raros aunque la lectura siga dentro del rango -->
+    <div class="card mb">
+      <h2>Cambios anormales (control estadístico)</h2>
+      <div class="cardsub">Lecturas que todavía están dentro del mínimo y el máximo, pero se salen de lo normal para ese equipo. Es el aviso más temprano de que algo empezó a cambiar.</div>
+      <details class="que-sig" style="margin-bottom:8px;"><summary>¿Qué significa?</summary><p>Con la historia de cada equipo y punto se calcula su valor normal y cuánto varía normalmente (σ). Se avisa cuando: la última lectura se aleja más de 3 σ; 2 de las últimas 3 se alejan más de 2 σ hacia el mismo lado; o las últimas 8 quedan todas del mismo lado (el valor se corrió). Hacen falta 8 lecturas o más.</p></details>
+      <div id="spcList"></div>
     </div>
     <div class="feed-actions"><button onclick="exportTendExcel()"><span data-icon="chart"></span> Exportar a Excel</button><span class="feed-status" id="tendStatus"></span></div>
   </section>
@@ -1323,6 +1330,19 @@ function datosTend(){
   const puntos = fbTendAgrupar(cks).size;
   return {alertas, puntos, desde, cks};
 }
+// (10 nov 2026) Control estadístico (spc.js) con las mismas lecturas de Tendencias; 0 lecturas extra.
+const SPC_TXT = { R1: 'Una lectura muy lejos de lo normal', R2: 'Dos de las últimas tres lejos de lo normal', R3: 'El valor se corrió: 8 lecturas seguidas del mismo lado' };
+function renderSpcAn(D){
+  const cont = $('spcList'); if (!cont || !window.VTSpc) return;
+  const l = VTSpc.senales(fbTendAgrupar(D.cks));
+  l.forEach(s=>{ if (!s.equipoNombre) s.equipoNombre = _equiposCat[s.equipoId] || 'Equipo'; });
+  window._spcAn = l;
+  const f = v => fbTendFmt(Math.round(v*100)/100);
+  cont.innerHTML = l.length ? '<div style="overflow-x:auto;"><table class="cod-tabla"><thead><tr><th>Equipo</th><th>Punto</th><th>Señal</th><th class="num">Última</th><th class="num">Normal</th><th class="num">Rango normal (±3σ)</th><th class="num">Especificación</th></tr></thead><tbody>'
+    + l.map(s=>{ const u = s.unidad ? ' '+s.unidad : ''; return '<tr><td><b>'+esc(s.equipoNombre)+'</b></td><td>'+esc(s.punto)+'</td><td><span class="wb-pat '+(s.regla==='R1'?'wb-temprana':'wb-desgaste')+'">'+esc(SPC_TXT[s.regla])+'</span> '+(s.lado==='sube'?'▲':'▼')+'</td><td class="num">'+esc(f(s.ultimo)+u)+'</td><td class="num">'+esc(f(s.media)+u)+'</td><td class="num">'+esc(f(s.lci)+' – '+f(s.lcs))+'</td><td class="num">'+esc((s.min!=null?f(s.min):'—')+' – '+(s.max!=null?f(s.max):'—'))+'</td></tr>'; }).join('')
+    + '</tbody></table></div><p class="cardsub" style="margin-top:8px;">Revisa estos puntos en el próximo checklist: todavía no son falla, pero algo cambió.</p>'
+    : '<div class="empty">Sin cambios anormales: las lecturas se comportan como siempre (o aún no hay 8 lecturas de un mismo punto).</div>';
+}
 function renderTendAn(){
   if (!$('tab-tend')) return;
   const listoCk = !!_ckAn.desde && _ckAn.desde <= desdeDias(diasTend()) && !_ckAn.err;
@@ -1331,6 +1351,7 @@ function renderTendAn(){
   if (!listoCk && !_ckAn.err) { cargarChecklistsAn(diasTend()); $('tendList').innerHTML = '<div class="empty"><span data-icon="hourglass"></span> Cargando lecturas de checklist…</div>'; $('tendKpis').innerHTML=''; return; }
   if (_ckAn.err){ $('tendList').innerHTML = '<div class="empty"><span data-icon="alert" class="ic-warn"></span> No se pudieron leer los checklists.</div>'; return; }
   const D = datosTend(); window._tendAn = D;
+  renderSpcAn(D);
   const n = k => D.alertas.filter(a=>a.alerta.nivel===k).length;
   const c = $('tabTendCnt'); const nn = n('fuera')+n('tendencia'); c.textContent = nn; c.style.display = nn?'':'none';
   $('tendKpis').innerHTML = `<div class="kpi ${n('fuera')?'accent-red':''}"><div class="lbl">Fuera de rango</div><div class="val">${n('fuera')}</div><div class="foot">última lectura</div></div>

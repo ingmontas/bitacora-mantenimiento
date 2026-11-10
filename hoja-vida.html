@@ -744,6 +744,7 @@ function renderE360() {
     `<a href="reportar.html?equipo=${id}" data-e360-act="reportar">${e3i('siren')}${esc(E3('e_reportar'))}</a>`,
     `<a href="bitacora.html?equipo=${id}&rep=1#nuevo" data-e360-act="repuesto">${e3i('package')}${esc(E3('e_repuesto'))}</a>`,
     `<a href="#hv-historial" data-e360-act="historial">${e3i('history')}${esc(E3('e_historial'))}</a>`,
+    `<a href="amef.html?equipo=${id}" data-e360-act="amef">${e3i('layers')}${esc(E3('e_amef'))}</a>`, // (10 nov 2026)
     puedeCapex ? `<a href="capex.html#nuevo&equipo=${id}" data-e360-act="capex">${e3i('briefcase')}${esc(E3('e_capex'))}</a>` : '',
   ].filter(Boolean).join('');
   // Último trabajo
