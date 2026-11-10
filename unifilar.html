@@ -19,6 +19,7 @@
 <script src="i18n-common.js"></script>
 <script src="i18n-shell.js"></script>
 <script src="i18n-unifilar.js"></script>
+<script src="unifilar-calc.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="tema.css"/>
@@ -112,13 +113,38 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .uf-revs th { text-align: left; font-size: 12px; color: var(--color-muted); border-bottom: 1px solid var(--color-border); padding: 6px 4px; }
 .uf-revs td { border-bottom: 1px solid var(--color-border); padding: 6px 4px; vertical-align: top; }
 
+/* ══════ Validación ══════ */
+.uf-val { border: 1px solid var(--color-border); border-radius: var(--radius-lg, 14px); background: var(--color-surface); padding: 12px 14px; margin-top: 12px; }
+.uf-val h3 { margin: 0 0 8px; font-size: 15px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.uf-pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 9px; border-radius: var(--radius-pill); font: 600 12px var(--font-sans); }
+.uf-pill.err { background: var(--color-danger-soft); color: var(--color-danger-text); }
+.uf-pill.av { background: var(--color-warn-soft); color: var(--color-warn-text); }
+.uf-pill.ok { background: var(--color-success-soft); color: var(--color-success-text); }
+.uf-val button { display: flex; gap: 10px; width: 100%; text-align: left; min-height: 48px; padding: 8px 10px; margin: 6px 0 0; border-radius: 10px; border: 1px solid transparent; font: 14px var(--font-sans); cursor: pointer; }
+.uf-val button.err { background: var(--color-danger-soft); color: var(--color-danger-text); }
+.uf-val button.av { background: var(--color-warn-soft); color: var(--color-warn-text); }
+.uf-val button b { white-space: nowrap; }
+.uf-svg .bad { fill: var(--color-danger); }
+.uf-svg .badt { fill: #fff; font: 700 11px var(--font-sans); }
+.uf-svg .icc { font-family: var(--font-mono); font-size: 10px; font-weight: 600; fill: var(--color-text); }
+
 /* ══════ Plano impreso (solo al imprimir) ══════ */
-.uf-hoja { display: none; }
+.uf-hojas { display: none; }
 @media print {
   html, body { background: #fff !important; }
-  body > *:not(.uf-hoja) { display: none !important; }
-  .uf-hoja { display: grid !important; }
+  body > *:not(.uf-hojas) { display: none !important; }
+  .uf-hojas { display: block !important; }
+  .uf-hoja { display: grid !important; break-after: page; page-break-after: always; }
+  .uf-hoja:last-child { break-after: auto; page-break-after: auto; }
 }
+.uf-hoja .h-t2 { width: 100%; border-collapse: collapse; font: 500 7pt 'IBM Plex Mono', monospace; margin-bottom: 6px; }
+.uf-hoja .h-t2 th { text-align: left; font: 600 6.5pt 'IBM Plex Sans', sans-serif; border-bottom: 1px solid #000; background: #f0f0f0; padding: 2px 3px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.uf-hoja .h-t2 td { border-bottom: 1px solid #bbb; padding: 1.5px 3px; }
+.uf-hoja .h-t2 .n { text-align: right; }
+.uf-hoja .h-t2 tr.tot td { border-top: 1px solid #000; font-weight: 600; }
+.uf-hoja .h-t2 tr.mal td { font-weight: 700; }
+.uf-hoja .h-cc { padding: 6px 8px; overflow: hidden; min-height: 0; }
+.uf-hoja .h-cc h5 { font: 700 7.5pt 'IBM Plex Sans', sans-serif; letter-spacing: .06em; margin: 4px 0 3px; }
 .uf-hoja { box-sizing: border-box; color: #000; background: #fff; font-family: 'IBM Plex Sans', Arial, sans-serif; position: relative;
   grid-template-columns: minmax(0, 1fr) var(--col); grid-template-rows: auto minmax(0, 1fr) var(--caj); gap: 0;
   border: 2px solid #000; outline: 1px solid #000; outline-offset: -6px; padding: 10px; }
@@ -185,6 +211,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
   <div class="uf-res" id="ufRes" role="listbox" aria-label="Resultados"></div>
   <div id="ufBanner"></div>
   <div class="uf-main">
+    <div style="min-width:0">
     <div class="uf-lienzo" id="ufLienzo">
       <div class="uf-zoom" id="ufZoom" hidden>
         <button type="button" id="ufZmenos" aria-label="Alejar">−</button>
@@ -193,10 +220,12 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
       </div>
       <div id="ufDibujo"><div class="vt-sk-list" aria-busy="true"><i></i><i></i><i></i></div></div>
     </div>
+    <section class="uf-val" id="ufVal" aria-label="Validación del plano" hidden></section>
+    </div>
     <aside class="uf-panel" id="ufPanel" aria-live="polite"></aside>
   </div>
 </main>
-<div class="uf-hoja tabloide" id="ufHoja" aria-hidden="true"></div>
+<div class="uf-hojas" id="ufHojas" aria-hidden="true"></div>
 
 <script>
 'use strict';
@@ -244,18 +273,19 @@ const CAMPOS = ['tipo', 'nombre', 'padreId', 'respaldoId', 'orden', 'planta', 'c
 
 // Dos líneas de datos para el dibujo, a partir de los datos eléctricos (o del texto libre de antes).
 function lineas(n) {
-  const e = n.e || {}, u = (v, s) => (v !== undefined && v !== null && String(v).trim() !== '' ? String(v).trim() + s : '');
+  const e = n.e || {}, u = (v, s) => { const x = String(v == null ? '' : v).trim(); if (!x) return ''; return /[a-zA-Z%]/.test(x) ? x : x + s; },
+    kv = v => { const x = String(v == null ? '' : v).trim(), f = parseFloat(x.replace(',', '.')); return /^[\d.,\s]+$/.test(x) && f >= 1000 ? String(+(f / 1000).toFixed(2)) + ' kV' : u(x, ' kV'); };
   const j = (...a) => a.filter(Boolean).join(' · ');
   let a = '', b = '';
   switch (n.tipo) {
-    case 'acometida': a = j(u(e.kv, ' kV'), e.fases); b = j(e.empresa, e.tipoAc); break;
+    case 'acometida': a = j(kv(e.kv), e.fases); b = j(e.empresa, e.tipoAc); break;
     case 'medidor': a = j(e.tc ? 'TC ' + e.tc : ''); b = e.num ? 'N.º ' + e.num : ''; break;
-    case 'fusible': a = j(u(e.amp, ' A'), u(e.kv, ' kV')); break;
+    case 'fusible': a = j(u(e.amp, ' A'), kv(e.kv)); break;
     case 'generador': a = j(u(e.kw, ' kW'), u(e.kva, ' kVA')); b = j(e.v, e.comb); break;
-    case 'transformador': a = j(u(e.kva, ' kVA'), e.vp && e.vs ? e.vp + ' – ' + e.vs : (e.vp || e.vs)); b = j(e.con, u(e.z, '') ? 'Z ' + e.z + ' %' : '', e.tipoTx); break;
+    case 'transformador': a = j(u(e.kva, ' kVA'), e.vp && e.vs ? e.vp + ' – ' + e.vs : (e.vp || e.vs)); b = j(e.con, u(e.z, '') ? 'Z ' + u(e.z, ' %') : '', e.tipoTx); break;
     case 'transferencia': a = j(u(e.amp, ' A'), u(e.polos, 'P')); b = e.modo || ''; break;
     case 'tablero': case 'ccm': a = j(e.amp ? tx('Barra') + ' ' + e.amp + ' A' : '', e.v, e.fases); b = e.kaic ? e.kaic + ' kAIC' : ''; break;
-    case 'interruptor': a = j(e.polos ? e.polos + 'P ' + (e.amp ? e.amp + ' AT' : '') + (e.marco ? '/' + e.marco + ' AF' : '') : u(e.amp, ' A'), u(e.kaic, ' kA')); b = e.disparo || ''; break;
+    case 'interruptor': a = j(e.polos ? e.polos + 'P ' + u(e.amp, ' AT') + (e.marco ? '/' + e.marco + ' AF' : '') : u(e.amp, ' A'), u(e.kaic, ' kA')); b = e.disparo || ''; break;
     case 'vfd': a = j(u(e.hp, ' HP'), e.v); break;
     case 'capacitor': a = j(u(e.kvar, ' kVAR'), e.pasos ? e.pasos + ' ' + tx('pasos') : ''); b = e.modo || ''; break;
     case 'ups': a = j(u(e.kva, ' kVA'), u(e.min, ' min')); break;
@@ -279,6 +309,7 @@ let PUEDE_EDITAR = false;
 let SEL = null, ZOOM = 1;
 let EQUIPOS = [];
 let CARGADO = false, ERROR = '';
+let CALC = null;            // resultados de UnifilarCalc para el plano abierto
 
 // ══════ Ejemplo (en memoria) ══════
 function datosEjemplo() {
@@ -305,6 +336,8 @@ function datosEjemplo() {
     n('ex_ts', 'tablero', 'TD-SER — Servicios', 'ex_i2', { amp: '225', v: '480 V', kaic: '22' }),
     n('ex_ts1', 'interruptor', 'SER-1', 'ex_ts', { polos: '3', amp: '125', kaic: '22' }, { orden: 1 }),
     n('ex_c4', 'carga', 'Compresor GA-37', 'ex_ts1', { hp: '50', v: '480 V', fla: '65' }, { cargaTipo: 'motor' }),
+    n('ex_ts2', 'interruptor', 'SER-2', 'ex_ts', { polos: '3', amp: '20', kaic: '10' }, { orden: 2 }),
+    n('ex_c5', 'carga', 'Secador de aire', 'ex_ts2', { kw: '5', v: '480 V' }, { cargaTipo: 'otro' }),
     n('ex_tx2', 'transformador', 'TX-2', 'ex_i3', { kva: '75', vp: '480 V', vs: '208Y/120 V', z: '4.5', tipoTx: 'Seco' }),
     n('ex_tl', 'tablero', 'TL — Alumbrado y tomas', 'ex_tx2', { amp: '225', v: '208Y/120 V', kaic: '10' }),
     n('ex_bc', 'capacitor', 'BC-1', 'ex_i4', { kvar: '150', pasos: '6', modo: 'Automático' }),
@@ -312,6 +345,23 @@ function datosEjemplo() {
   ];
 }
 const PLANO_EJEMPLO = () => ({ id: 'ex_plano', nombre: 'Unifilar general (ejemplo)', codigo: 'E-001', planta: '', estado: 'borrador', rev: 0, revisiones: [{ rev: 0, fecha: hoyTxt(), desc: 'Emisión inicial', por: '' }], cajetin: { empresa: 'VoidTech Dominicana', proyecto: 'Instalación eléctrica', titulo: 'Diagrama unifilar general' }, notas: NOTAS_DEF, tamano: 'tabloide', sistema: '480Y/277 V · 3F 4H · 60 Hz' });
+
+// ══════ Cálculos (unifilar-calc.js) ══════
+const PROB_TXT = {
+  kaic: 'La falla posible aquí es {ka} kA y el equipo aguanta {cap} kA. Cámbialo por uno de mayor capacidad.',
+  sobrecarga: 'Sobrecargado: {uso} % de su capacidad.',
+  uso80: 'Al {uso} % de su capacidad (recomendado hasta 80 %).',
+  vd3: 'Caída de tensión del tramo: {vd} % (recomendado hasta 3 %).',
+  vd5: 'Caída de tensión total: {vd} % (recomendado hasta 5 %).',
+  gen: 'La planta cubre solo el {pct} % de la carga de su transferencia.',
+};
+function textoProb(p) { let s = tx(PROB_TXT[p.clave] || p.clave); Object.keys(p.p || {}).forEach(k => { s = s.split('{' + k + '}').join(String(p.p[k])); }); return s; }
+function recalcular() {
+  try { CALC = window.UnifilarCalc ? UnifilarCalc.calcular(Array.from(NODOS.values()), { sistema: (planoActual() || {}).sistema }) : null; } catch (e) { console.error('cálculo:', e); CALC = null; }
+}
+const res = id => (CALC && CALC.R.get(id)) || null;
+const kA = a => (a > 0 ? (Math.round(a / 100) / 10).toFixed(1) + ' kA' : '—');
+const fmt1 = v => (window.i18n && i18n.fmtNum ? i18n.fmtNum(v, { maximumFractionDigits: 1 }) : String(Math.round(v * 10) / 10));
 
 // ══════ Árbol ══════
 function hijos(id) {
@@ -429,11 +479,17 @@ function svgPlano(o) {
       ? `<text x="${bx}" y="${y - 22}" text-anchor="${banc}" font-size="12.5" font-weight="700">${nombre}</text>${a ? `<text class="sub" x="${bx}" y="${y - 9}" text-anchor="${banc}">${a}${b ? ' · ' + b : ''}</text>` : ''}`
       : `<text x="${x + dx}" y="${y - 6}" font-size="12.5" font-weight="700">${nombre}</text>${a ? `<text class="sub" x="${x + dx}" y="${y + 8}">${a}</text>` : ''}${b ? `<text class="sub" x="${x + dx}" y="${y + 20}">${b}</text>` : ''}`;
     const sym = ES_BARRA(n.tipo) ? (hs.length ? '' : `<rect class="bus" x="${x - 30}" y="${y - 4}" width="60" height="8" rx="2"/>`) : simbolo(n, x, y);
+    const r = res(n.id);
+    let extra = '';
+    if (r && r.isc > 0 && (ES_BARRA(n.tipo) || n.tipo === 'transformador')) {
+      extra += ES_BARRA(n.tipo) ? `<text class="icc" x="${bx}" y="${y + 18}">Icc ${kA(r.isc)}${r.i ? ' · ' + Math.round(r.i) + ' A' : ''}</text>` : `<text class="icc" x="${x + dx}" y="${y + 32}">Icc ${kA(r.isc)}</text>`;
+    }
+    if (r && r.problemas.some(q => q.nivel === 'error')) extra += `<circle class="bad" cx="${x - 16}" cy="${y - 18}" r="8"/><text class="badt" x="${x - 18.5}" y="${y - 14}">!</text>`;
     const tierraTx = n.tipo === 'transformador' ? `<path class="sym" d="M${x - 13} ${y + 9}H${x - 26}"/>` + tierra(x - 26, y + 9) : '';
-    if (!o.vivo) { nodos.push(`<g>${sym}${tierraTx}${etiqueta}</g>`); return; }
+    if (!o.vivo) { nodos.push(`<g>${sym}${tierraTx}${etiqueta}${extra}</g>`); return; }
     const hit = ES_BARRA(n.tipo) ? `<rect class="hit" x="${x - 84}" y="${y - 28}" width="168" height="56" rx="8"/>` : `<rect class="hit" x="${x - 26}" y="${y - 28}" width="${SX - 8}" height="56" rx="8"/>`;
     const tLabel = tx(TIPO_TXT[n.tipo] || n.tipo) + ': ' + n.nombre;
-    nodos.push(`<g class="nd${n.id === SEL ? ' sel' : ''}${est(n.id)}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(tLabel)}"><title>${esc(tLabel + (L.a ? ' · ' + L.a : ''))}</title>${hit}${sym}${tierraTx}${etiqueta}</g>`);
+    nodos.push(`<g class="nd${n.id === SEL ? ' sel' : ''}${est(n.id)}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(tLabel)}"><title>${esc(tLabel + (L.a ? ' · ' + L.a : ''))}</title>${hit}${sym}${tierraTx}${etiqueta}${extra}</g>`);
   });
   return { W, H, html: lineasS.join('') + buses.join('') + nodos.join('') };
 }
@@ -490,6 +546,20 @@ function panel() {
   const dato = (k, v) => (v ? `<dt>${esc(tx(k))}</dt><dd>${esc(v)}</dd>` : '');
   let h = `<div class="tipo">${esc(tx(TIPO_TXT[n.tipo] || n.tipo))}${n.tipo === 'carga' && n.cargaTipo ? ' · ' + esc(tx(CARGA_TXT[n.cargaTipo] || '')) : ''}</div><h2>${n.tipo === 'carga' ? linkEquipo(n) : esc(n.nombre)}</h2>`;
   h += `<dl class="uf-datos">${filas || (dato('Capacidad', n.capacidad) + dato('Voltaje', n.voltaje))}${dato('Conductor', n.calibre)}${dato('Ubicación', n.ubicacion)}${dato('Notas', n.notas)}</dl>`;
+  const r = res(SEL);
+  if (r) {
+    const calc = [];
+    if (r.v) calc.push(['Tensión', fmt1(r.v) + ' V']);
+    if (r.kva) calc.push(['Carga conectada', fmt1(r.kva) + ' kVA']);
+    if (r.i) calc.push(['Corriente', fmt1(r.i) + ' A']);
+    if (r.uso !== null && r.kva) calc.push(['Uso de su capacidad', Math.round(r.uso) + ' %']);
+    if (r.isc) calc.push(['Corriente de cortocircuito', kA(r.isc)]);
+    if (r.vd) calc.push(['Caída de tensión del tramo', fmt1(r.vd) + ' %']);
+    if (r.vdTot && n.tipo === 'carga') calc.push(['Caída de tensión total', fmt1(r.vdTot) + ' %']);
+    if (r.cubre) calc.push(['Cubre de la carga', Math.round(r.cubre) + ' %']);
+    if (calc.length) h += `<div class="tipo" style="margin-top:6px">${esc(tx('Calculado'))}</div><dl class="uf-datos">${calc.map(([k, v]) => `<dt>${esc(tx(k))}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+    r.problemas.forEach(q => { h += `<div class="uf-caja ${q.nivel === 'error' ? 'off' : ''}" style="${q.nivel === 'aviso' ? 'background:var(--color-warn-soft);border-color:var(--color-warn);color:var(--color-warn-text)' : ''}"><b>${ic(q.nivel === 'error' ? 'x-circle' : 'alert')}${esc(tx(q.nivel === 'error' ? 'No cumple' : 'Aviso'))}</b><div>${esc(textoProb(q))}</div></div>`; });
+  }
   if (n.ref && DIAGS.has(n.ref)) h += `<div class="uf-acts"><button type="button" class="vt-btn" data-act="ref">${ic('layers')}${esc(tx('Abrir plano de detalle'))}: ${esc(DIAGS.get(n.ref).codigo || DIAGS.get(n.ref).nombre)}</button></div>`;
   if (n.tipo !== 'carga') {
     h += `<div class="uf-caja off"><b>${ic('zap')}${esc(tx('Si se abre, se quedan sin energía'))}: ${cargas.length}</b>`;
@@ -503,11 +573,10 @@ function panel() {
   if (PUEDE_EDITAR && !EJEMPLO) {
     if (PUEDE_HIJOS(n.tipo)) acts.push(`<button type="button" class="vt-btn pri" data-act="hijo">${ic('plus')}${esc(tx('Agregar debajo'))}</button>`);
     acts.push(`<button type="button" class="vt-btn" data-act="editar">${ic('pencil')}${esc(tx('Editar'))}</button>`);
-    if (!hijos(SEL).length) acts.push(`<button type="button" class="vt-btn" data-act="borrar">${ic('trash')}${esc(tx('Quitar'))}</button>`);
+    acts.push(`<button type="button" class="vt-btn" data-act="borrar">${ic('trash')}${esc(tx('Quitar'))}</button>`);
   }
   acts.push(`<button type="button" class="vt-btn" data-act="cerrar">${ic('x')}${esc(tx('Cerrar'))}</button>`);
   h += `<div class="uf-acts">${acts.join('')}</div>`;
-  if (PUEDE_EDITAR && !EJEMPLO && hijos(SEL).length) h += `<p style="font-size:12.5px;color:var(--color-muted);margin:8px 0 0">${esc(tx('Para quitarlo, primero mueve o quita lo que tiene debajo.'))}</p>`;
   box.innerHTML = h + ley;
   box.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
     const a = b.dataset.act;
@@ -559,13 +628,27 @@ function pintarBarraPlano() {
   sel.disabled = EJEMPLO;
   const d = planoActual();
   $('ufPlanoMeta').innerHTML = d ? `${esc(d.codigo || '')} · Rev. ${esc(d.rev || 0)} · <span class="uf-est ${esc(d.estado)}">${esc(tx(ESTADO_TXT[d.estado] || d.estado))}</span>${d.sistema ? ' · ' + esc(d.sistema) : ''}${d.planta ? ' · ' + esc(d.planta) : ''}` : '';
+  if (d && CALC && NODOS.size) $('ufPlanoMeta').innerHTML += ' · ' + (CALC.errores ? `<span class="uf-pill err">${esc(CALC.errores)} ${esc(tx(CALC.errores === 1 ? 'error' : 'errores'))}</span> ` : '') + (CALC.avisos ? `<span class="uf-pill av">${esc(CALC.avisos)} ${esc(tx(CALC.avisos === 1 ? 'aviso' : 'avisos'))}</span>` : '') + (!CALC.errores && !CALC.avisos ? `<span class="uf-pill ok">${esc(tx('Cumple'))}</span>` : '');
   $('ufBtnDatos').hidden = !(PUEDE_EDITAR && !EJEMPLO && d);
   $('ufBtnPlano').hidden = !(PUEDE_EDITAR && !EJEMPLO);
   $('ufBtnRevs').hidden = !d;
 }
 
+// ══════ Validación del plano ══════
+function pintarValidacion() {
+  const box = $('ufVal');
+  if (!CALC || !NODOS.size || ERROR) { box.hidden = true; return; }
+  box.hidden = false;
+  const l = CALC.problemas;
+  box.innerHTML = `<h3>${esc(tx('Validación del plano'))} ${CALC.errores ? `<span class="uf-pill err">${CALC.errores} ${esc(tx(CALC.errores === 1 ? 'error' : 'errores'))}</span>` : ''}${CALC.avisos ? `<span class="uf-pill av">${CALC.avisos} ${esc(tx(CALC.avisos === 1 ? 'aviso' : 'avisos'))}</span>` : ''}${!l.length ? `<span class="uf-pill ok">${esc(tx('Cumple'))}</span>` : ''}</h3>`
+    + (l.length ? l.slice(0, 30).map(q => `<button type="button" class="${q.nivel === 'error' ? 'err' : 'av'}" data-id="${esc(q.id)}"><b>${esc(q.nombre)}</b><span>${esc(textoProb(q))}</span></button>`).join('') : `<div style="font-size:14px;color:var(--color-muted)">${esc(tx('Sin problemas con los datos cargados. Mientras más datos tenga cada elemento (kVA, %Z, kA, conductor, largo), más completo es el cálculo.'))}</div>`)
+    + `<div style="font-size:12.5px;color:var(--color-muted);margin-top:8px">${esc(tx('Cálculo aproximado (método punto a punto). Debe revisarlo el ingeniero responsable.'))}</div>`;
+  box.querySelectorAll('button[data-id]').forEach(b => b.onclick = () => { elegir(b.dataset.id); centrar(b.dataset.id); });
+}
+
 // ══════ Pintar todo ══════
 function pintarTodo() {
+  recalcular();
   const ban = $('ufBanner');
   pintarBarraPlano();
   let bh = '';
@@ -576,16 +659,16 @@ function pintarTodo() {
   if ($('ufUsarEj')) $('ufUsarEj').onclick = usarEjemplo;
   if ($('ufAsignar')) $('ufAsignar').onclick = () => abrirFormPlano(null, { asignarHuerfanos: true });
   $('ufBtnNuevo').hidden = !(PUEDE_EDITAR && !EJEMPLO && (DIAG || DIAGS.size === 0));
-  if (ERROR) { $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('alert')}<p>${esc(ERROR)}</p></div>`; $('ufZoom').hidden = true; panel(); return; }
+  if (ERROR) { $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('alert')}<p>${esc(ERROR)}</p></div>`; $('ufZoom').hidden = true; panel(); pintarValidacion(); return; }
   if (!NODOS.size) {
     $('ufZoom').hidden = true;
     const hayPlanos = DIAGS.size > 0;
     $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('zap')}<p><b>${esc(tx(hayPlanos ? 'Este plano todavía está vacío.' : 'Todavía no hay diagrama de esta nave.'))}</b></p><p>${esc(tx(PUEDE_EDITAR ? 'Empieza por la acometida (la entrada de energía) y ve agregando lo que cuelga de ella.' : 'El Encargado de mantenimiento lo puede cargar.'))}</p><div class="uf-acts">${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufEmpezar">${ic('plus')}${esc(tx('Agregar acometida'))}</button>` : ''}<button type="button" class="vt-btn" id="ufVerEj">${ic('eye')}${esc(tx('Ver ejemplo'))}</button></div></div>`;
     if ($('ufEmpezar')) $('ufEmpezar').onclick = () => (DIAG ? abrirForm(null, '', 'acometida') : abrirFormPlano(null, { luegoAcometida: true }));
     $('ufVerEj').onclick = verEjemplo;
-    panel(); return;
+    panel(); pintarValidacion(); return;
   }
-  dibujar(); panel();
+  dibujar(); panel(); pintarValidacion();
 }
 function verEjemplo() {
   EJEMPLO = true; SEL = null; NODOS = new Map(datosEjemplo().map(n => [n.id, n]));
@@ -670,13 +753,32 @@ async function usarEjemplo() {
   cargar();
 }
 async function borrar(id) {
-  const n = NODOS.get(id); if (!n || hijos(id).length) return;
-  const copia = Object.assign({}, n);
-  NODOS.delete(id); TODOS.delete(id); SEL = n.padreId && NODOS.has(n.padreId) ? n.padreId : null; pintarTodo();
+  const n = NODOS.get(id); if (!n) return;
+  const abajo = descendientes(id), directos = hijos(id);
+  if (!abajo.length) return quitar(n, [n], []);
+  const padre = NODOS.get(n.padreId);
+  const H = hoja(tx('Quitar') + ': ' + n.nombre, tx('Tiene {n} elementos debajo.').replace('{n}', abajo.length), `
+    <button type="button" class="fbsh-op" id="qSubir"><b>${esc(tx('Quitar solo este elemento'))}</b><small>${esc(padre ? tx('Lo que tiene debajo pasa a colgar de: {p}').replace('{p}', padre.nombre) : tx('Lo que tiene debajo queda como fuente de energía, sin conexión arriba.'))}</small></button>
+    <button type="button" class="fbsh-op" id="qTodo"><b>${esc(tx('Quitar este y todo lo de abajo'))}</b><small>${esc(tx('{n} elementos en total. Se puede deshacer.').replace('{n}', abajo.length + 1))}</small></button>
+    <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button></div>`);
+  H.q('#qSubir').onclick = () => { H.cerrar(); const movidos = directos.map(h => Object.assign({}, h)); directos.forEach(h => { h.padreId = padre ? padre.id : ''; }); quitar(n, [n], directos, movidos); };
+  H.q('#qTodo').onclick = () => { H.cerrar(); quitar(n, [n].concat(abajo), []); };
+}
+// Quita elementos (con "Deshacer"). movidos = copias de antes de los que cambiaron de padre.
+async function quitar(n, fuera, cambiados, movidos) {
+  const copias = fuera.map(x => Object.assign({}, x));
+  fuera.forEach(x => { NODOS.delete(x.id); TODOS.delete(x.id); });
+  SEL = n.padreId && NODOS.has(n.padreId) ? n.padreId : null; pintarTodo();
+  const restaurar = async () => {
+    copias.forEach(x => { NODOS.set(x.id, x); TODOS.set(x.id, x); });
+    (movidos || []).forEach(x => { NODOS.set(x.id, x); TODOS.set(x.id, x); });
+    try { await escribir(copias.concat(movidos || [])); } catch (e) { toast(e.message, 'error'); }
+    SEL = n.id; pintarTodo();
+  };
   try {
-    await escribir([], [id]);
-    if (window.vtDeshacer) vtDeshacer(tx('Quitado') + ': ' + copia.nombre, async () => { NODOS.set(copia.id, copia); TODOS.set(copia.id, copia); try { await escribir([copia]); } catch (e) { toast(e.message, 'error'); } SEL = copia.id; pintarTodo(); });
-  } catch (e) { NODOS.set(id, copia); TODOS.set(id, copia); pintarTodo(); toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+    await escribir(cambiados, fuera.map(x => x.id));
+    if (window.vtDeshacer) vtDeshacer(tx('Quitado') + ': ' + n.nombre + (fuera.length > 1 ? ' (+' + (fuera.length - 1) + ')' : ''), restaurar);
+  } catch (e) { copias.forEach(x => { NODOS.set(x.id, x); TODOS.set(x.id, x); }); (movidos || []).forEach(x => { NODOS.set(x.id, x); TODOS.set(x.id, x); }); pintarTodo(); toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
 }
 
 // ══════ Hoja modal ══════
@@ -781,7 +883,6 @@ function abrirFormPlano(id, o) {
     <div class="g2">${inp('cPro', 'Proyecto', c.proyecto, 'Instalación eléctrica · Nave 1')}${inp('cTit', 'Título del plano', c.titulo, 'Diagrama unifilar general')}</div>
     <div class="g3">${inp('cDib', 'Dibujó', c.dibujo, '')}${inp('cRev', 'Revisó', c.reviso, '')}${inp('cEsc', 'Escala', c.escala, 'S/E')}</div>
     <div class="g2">${inp('cIng', 'Ingeniero responsable', c.ingNombre, 'Ing. Nombre Apellido')}${inp('cCod', 'N.º CODIA', c.ingCodia, '')}</div>
-    <div class="g2">${inp('cHoj', 'Hoja', c.hoja, '1 de 1', 20)}<div></div></div>
     <label for="pNotas">${esc(tx('Notas generales'))}</label><textarea id="pNotas" maxlength="3000" style="min-height:140px">${esc(p.notas || '')}</textarea>
     <div class="nota">${esc(tx('El plano tiene validez cuando lo sella y firma el ingeniero responsable.'))}</div>
     <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="pOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
@@ -789,11 +890,12 @@ function abrirFormPlano(id, o) {
   q('#pOk').onclick = async () => {
     const nombre = q('#pNom').value.trim();
     if (!nombre) { toast(tx('Escribe el nombre del plano.'), 'warn'); q('#pNom').focus(); return; }
+    if (id && id === DIAG && ['para_construccion', 'conforme_obra'].includes(q('#pEst').value) && CALC && CALC.errores) { toast(tx('El plano tiene errores en la validación: corrígelos antes de marcarlo como Para construcción o Conforme a obra.'), 'error'); return; }
     const pid = id || db.collection('diagramas').doc().id;
     const nuevo = Object.assign({}, p, {
       nombre, codigo: q('#pCod').value.trim(), estado: q('#pEst').value, tamano: q('#pTam').value, sistema: q('#pSis').value.trim(),
       planta: naves.length > 1 ? q('#pNave').value : (naves[0] || p.planta || ''), notas: q('#pNotas').value,
-      cajetin: { empresa: q('#cEmp').value, direccion: q('#cDir').value, proyecto: q('#cPro').value, titulo: q('#cTit').value, dibujo: q('#cDib').value, reviso: q('#cRev').value, escala: q('#cEsc').value, ingNombre: q('#cIng').value, ingCodia: q('#cCod').value, hoja: q('#cHoj').value },
+      cajetin: { empresa: q('#cEmp').value, direccion: q('#cDir').value, proyecto: q('#cPro').value, titulo: q('#cTit').value, dibujo: q('#cDib').value, reviso: q('#cRev').value, escala: q('#cEsc').value, ingNombre: q('#cIng').value, ingCodia: q('#cCod').value },
     });
     if (!id) nuevo.revisiones = [{ rev: 0, fecha: hoyTxt(), desc: tx('Emisión inicial'), por: yo() }];
     q('#pOk').disabled = true;
@@ -849,38 +951,77 @@ function resumenPlano() {
     [tx('Transformadores'), tx_.join(', ') || '—'], [tx('Respaldo'), gens.join(', ') || '—'],
   ];
 }
+function cajetinHtml(p, c, hojaTxt, tituloHoja) {
+  const v = (x, ph) => esc(x || ph || '');
+  const revs = (p.revisiones || []).slice().sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0)).slice(0, 4);
+  return `<div class="h-caj">
+      <div><div class="h-t">${esc(tx('REVISIONES'))}</div><table class="h-revs"><tr><th>${esc(tx('Rev.'))}</th><th>${esc(tx('Fecha'))}</th><th>${esc(tx('Descripción'))}</th><th>${esc(tx('Por'))}</th></tr>${revs.map(r => `<tr><td>${esc(r.rev)}</td><td>${esc(r.fecha)}</td><td>${esc(corta(r.desc, 46))}</td><td>${esc(corta(r.por, 14))}</td></tr>`).join('')}</table></div>
+      <div><div class="h-logo"><i>VT</i><b style="font-size:9.5pt">${v(c.empresa)}</b></div><div>${v(c.direccion)}</div><div>${v(p.planta)}</div></div>
+      <div><div class="h-lb">${esc(tx('PROYECTO'))}</div><div style="font-weight:600;font-size:9pt">${v(c.proyecto)}</div><div class="h-lb" style="margin-top:4px">${esc(tx('TÍTULO DEL PLANO'))}</div><div style="font-weight:700;font-size:11pt">${esc(tituloHoja)}</div><div style="margin-top:3px;font-weight:600">${esc(tx('Estado'))}: ${esc(tx(ESTADO_TXT[p.estado] || ''))}</div></div>
+      <div class="h-datos">
+        <div><div class="h-lb">${esc(tx('PLANO N.º'))}</div><div class="h-v">${v(p.codigo)}</div></div><div><div class="h-lb">${esc(tx('REV.'))}</div><div class="h-v">${esc(p.rev || 0)}</div></div>
+        <div><div class="h-lb">${esc(tx('HOJA'))}</div><div class="h-v">${esc(hojaTxt)}</div></div><div><div class="h-lb">${esc(tx('FECHA'))}</div><div class="h-v" style="font-size:8.5pt">${esc(hoyTxt())}</div></div>
+        <div><div class="h-lb">${esc(tx('DIBUJÓ'))}</div><div>${v(c.dibujo, '—')}</div></div><div><div class="h-lb">${esc(tx('REVISÓ'))}</div><div>${v(c.reviso, '—')}</div></div>
+      </div>
+      <div class="h-sello"><div class="h-t">${esc(tx('INGENIERO RESPONSABLE'))}</div><div class="s">${esc(tx('Sello y firma'))}</div><div>${v(c.ingNombre, '[ ]')}</div><div>CODIA N.º ${v(c.ingCodia, '[ ]')}</div></div>
+    </div>`;
+}
+const zonasHtml = () => Array.from({ length: 8 }, (_, i) => `<span class="zn" style="top:1px;left:${(i + 0.5) * 12.5}%">${i + 1}</span>`).join('') + ['A', 'B', 'C', 'D'].map((l, i) => `<span class="zn" style="left:2px;top:${(i + 0.5) * 25}%">${l}</span>`).join('');
+function hoja2Html(p, c, tam, tituloHoja) {
+  const v = x => esc(x || '');
+  // Cuadros de carga: un cuadro por tablero / CCM con sus circuitos (lo que cuelga directo de él)
+  calcularPosiciones();
+  const barras = Array.from(NODOS.values()).filter(n => ES_BARRA(n.tipo)).sort((a, b) => ((POS.get(a.id) || {}).d - (POS.get(b.id) || {}).d) || ((POS.get(a.id) || {}).x - (POS.get(b.id) || {}).x));
+  const cuadros = barras.map(b => {
+    const rb = res(b.id) || {}, cs = hijos(b.id);
+    const filas = cs.map((h, i) => {
+      const rh = res(h.id) || {}, abajo = hijos(h.id), destino = abajo.length === 1 ? abajo[0].nombre : abajo.length ? abajo.length + ' ' + tx('circuitos') : '—';
+      return `<tr><td>${i + 1}</td><td>${esc(corta(h.nombre, 18))}</td><td>${esc(corta(destino, 22))}</td><td>${esc(corta(lineas(h).a, 22))}</td><td>${esc(corta(h.calibre || '—', 20))}</td><td class="n">${rh.kva ? fmt1(rh.kva) : '—'}</td><td class="n">${rh.i ? fmt1(rh.i) : '—'}</td></tr>`;
+    }).join('');
+    return `<h5>${esc(b.nombre)} · ${esc(lineas(b).a)}</h5><table class="h-t2"><tr><th>${esc(tx('Cto.'))}</th><th>${esc(tx('Protección'))}</th><th>${esc(tx('Alimenta'))}</th><th>${esc(tx('Capacidad'))}</th><th>${esc(tx('Conductor'))}</th><th class="n">kVA</th><th class="n">A</th></tr>${filas}<tr class="tot"><td></td><td colspan="4">${esc(tx('TOTAL'))} ${rb.uso != null && rb.kva ? '· ' + esc(tx('Uso de la barra')) + ' ' + Math.round(rb.uso) + ' %' : ''}</td><td class="n">${rb.kva ? fmt1(rb.kva) : '—'}</td><td class="n">${rb.i ? fmt1(rb.i) : '—'}</td></tr></table>`;
+  }).join('') || `<div>${esc(tx('Sin tableros en este plano.'))}</div>`;
+  // Estudio: cada punto con capacidad de cortocircuito o caída de tensión
+  const puntos = Array.from(NODOS.values()).filter(n => ['transformador', 'tablero', 'ccm', 'interruptor', 'transferencia'].includes(n.tipo) || (res(n.id) && res(n.id).vd));
+  const filasE = puntos.map(n => {
+    const r = res(n.id) || {}, e = n.e || {}, padre = NODOS.get(n.padreId);
+    const disp = n.tipo === 'interruptor' && padre ? (res(padre.id) || {}).isc : r.isc;
+    const mal = r.problemas && r.problemas.some(q => q.nivel === 'error');
+    const resu = mal ? tx('NO CUMPLE') : r.problemas && r.problemas.length ? tx('Revisar') : tx('Cumple');
+    return `<tr class="${mal ? 'mal' : ''}"><td>${esc(corta(n.nombre, 20))}</td><td class="n">${kA(disp)}</td><td class="n">${e.kaic ? esc(e.kaic) + ' kA' : '—'}</td><td class="n">${r.vd ? fmt1(r.vd) + ' %' : '—'}</td><td class="n">${r.vdTot ? fmt1(r.vdTot) + ' %' : '—'}</td><td class="n">${r.uso != null && r.kva ? Math.round(r.uso) + ' %' : '—'}</td><td>${esc(resu)}</td></tr>`;
+  }).join('');
+  const probs = (CALC ? CALC.problemas : []).slice(0, 14).map(q => `<div>${esc(q.nivel === 'error' ? tx('ERROR') : tx('AVISO'))} · <b>${esc(q.nombre)}</b>: ${esc(textoProb(q))}</div>`).join('') || `<div>${esc(tx('Sin errores ni avisos con los datos cargados.'))}</div>`;
+  return `<div class="uf-hoja ${tam}" style="--col: 46%">${zonasHtml()}
+    <div class="h-cab"><b>${esc(tx('CUADROS DE CARGA Y ESTUDIO ELÉCTRICO'))}</b><span>${v(p.sistema)}</span><span class="h-est">${esc(tx(ESTADO_TXT[p.estado] || '').toUpperCase())}</span></div>
+    <div class="h-cc">${cuadros}</div>
+    <div class="h-col">
+      <div class="h-box"><div class="h-t">${esc(tx('ESTUDIO DE CORTOCIRCUITO Y CAÍDA DE TENSIÓN'))}</div><table class="h-t2"><tr><th>${esc(tx('Punto'))}</th><th class="n">${esc(tx('Icc disponible'))}</th><th class="n">${esc(tx('Capacidad'))}</th><th class="n">${esc(tx('Caída tramo'))}</th><th class="n">${esc(tx('Caída total'))}</th><th class="n">${esc(tx('Uso'))}</th><th>${esc(tx('Resultado'))}</th></tr>${filasE}</table></div>
+      <div class="h-box"><div class="h-t">${esc(tx('VALIDACIÓN'))}</div>${probs}</div>
+      <div class="h-box"><div class="h-t">${esc(tx('MÉTODO'))}</div><div>${esc(tx('Cortocircuito por el método punto a punto, con barra infinita en el primario y aporte de motores (4 × corriente nominal). Corriente de motores según NEC tabla 430.250. Caída de tensión con conductores de cobre (K = 12.9). Cálculo aproximado: debe revisarlo y firmarlo el ingeniero responsable.'))}</div></div>
+    </div>
+    ${cajetinHtml(p, c, '2 / 2', tituloHoja === (c.titulo || p.nombre) ? tx('Cuadros de carga y estudio') : tituloHoja)}
+  </div>`;
+}
 function armarHoja() {
+  recalcular();
   const p = planoActual() || { nombre: tx('Diagrama unifilar'), codigo: '', planta: fbNaveActiva() || '', estado: 'borrador', rev: 0, revisiones: [], cajetin: {}, notas: NOTAS_DEF, tamano: 'tabloide', sistema: '' };
   const c = p.cajetin || {};
   const tam = TAMANOS[p.tamano] ? p.tamano : 'tabloide';
   $('ufPage').textContent = '@page { size: ' + TAMANOS[tam][1] + '; margin: 0; }';
   const s = svgPlano({ vivo: false });
   const v = (x, ph) => esc(x || ph || '');
-  const revs = (p.revisiones || []).slice().sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0)).slice(0, 4);
-  const zonas = n => Array.from({ length: n }, (_, i) => i + 1);
-  const hoja = $('ufHoja');
-  hoja.className = 'uf-hoja ' + tam;
-  hoja.innerHTML = `
-    ${zonas(8).map(i => `<span class="zn" style="top:1px;left:${(i - 0.5) * 12.5}%">${i}</span>`).join('')}
-    ${['A', 'B', 'C', 'D'].map((l, i) => `<span class="zn" style="left:2px;top:${(i + 0.5) * 25}%">${l}</span>`).join('')}
-    <div class="h-cab"><b>${v((c.titulo || p.nombre).toUpperCase())}</b><span>${v(p.sistema)} · ${esc(tx('Símbolos ANSI/IEEE 315'))} · ${v(c.escala, tx('Sin escala'))}</span><span class="h-est">${esc(tx(ESTADO_TXT[p.estado] || '').toUpperCase())}</span></div>
+  const titulo = c.titulo || p.nombre;
+  const totKva = raices().reduce((a, n) => a + ((res(n.id) || {}).kva || 0), 0);
+  const resumen = resumenPlano().concat(totKva ? [[tx('Carga conectada'), fmt1(totKva) + ' kVA']] : []).concat(CALC ? [[tx('Validación'), CALC.errores ? CALC.errores + ' ' + tx(CALC.errores === 1 ? 'error' : 'errores') : tx('Cumple')]] : []);
+  $('ufHojas').innerHTML = `<div class="uf-hoja ${tam}">${zonasHtml()}
+    <div class="h-cab"><b>${v(titulo.toUpperCase())}</b><span>${v(p.sistema)} · ${esc(tx('Símbolos ANSI/IEEE 315'))} · ${v(c.escala, tx('Sin escala'))}</span><span class="h-est">${esc(tx(ESTADO_TXT[p.estado] || '').toUpperCase())}</span></div>
     <div class="h-dib"><svg class="uf-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${s.W} ${s.H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(tx('Diagrama unifilar'))}">${s.html}</svg></div>
     <div class="h-col">
       <div class="h-box"><div class="h-t">${esc(tx('SIMBOLOGÍA (ANSI/IEEE 315)'))}</div><div class="h-ley">${LEY.map(([t, l]) => `<svg class="uf-svg" viewBox="0 0 50 50">${svgLeyenda(t)}</svg><span>${esc(tx(l))}</span>`).join('')}</div></div>
       <div class="h-box"><div class="h-t">${esc(tx('NOTAS GENERALES'))}</div><div class="h-notas">${esc(p.notas || '')}</div></div>
-      <div class="h-box"><div class="h-t">${esc(tx('RESUMEN'))}</div><table class="h-res" style="width:100%;border-collapse:collapse">${resumenPlano().map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('')}</table></div>
+      <div class="h-box"><div class="h-t">${esc(tx('RESUMEN'))}</div><table class="h-res" style="width:100%;border-collapse:collapse">${resumen.map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('')}</table></div>
     </div>
-    <div class="h-caj">
-      <div><div class="h-t">${esc(tx('REVISIONES'))}</div><table class="h-revs"><tr><th>${esc(tx('Rev.'))}</th><th>${esc(tx('Fecha'))}</th><th>${esc(tx('Descripción'))}</th><th>${esc(tx('Por'))}</th></tr>${revs.map(r => `<tr><td>${esc(r.rev)}</td><td>${esc(r.fecha)}</td><td>${esc(corta(r.desc, 46))}</td><td>${esc(corta(r.por, 14))}</td></tr>`).join('')}</table></div>
-      <div><div class="h-logo"><i>VT</i><b style="font-size:9.5pt">${v(c.empresa)}</b></div><div>${v(c.direccion)}</div><div>${v(p.planta)}</div></div>
-      <div><div class="h-lb">${esc(tx('PROYECTO'))}</div><div style="font-weight:600;font-size:9pt">${v(c.proyecto)}</div><div class="h-lb" style="margin-top:4px">${esc(tx('TÍTULO DEL PLANO'))}</div><div style="font-weight:700;font-size:11pt">${v(c.titulo || p.nombre)}</div><div style="margin-top:3px;font-weight:600">${esc(tx('Estado'))}: ${esc(tx(ESTADO_TXT[p.estado] || ''))}</div></div>
-      <div class="h-datos">
-        <div><div class="h-lb">${esc(tx('PLANO N.º'))}</div><div class="h-v">${v(p.codigo)}</div></div><div><div class="h-lb">${esc(tx('REV.'))}</div><div class="h-v">${esc(p.rev || 0)}</div></div>
-        <div><div class="h-lb">${esc(tx('HOJA'))}</div><div class="h-v">${v(c.hoja, '1 / 1')}</div></div><div><div class="h-lb">${esc(tx('FECHA'))}</div><div class="h-v" style="font-size:8.5pt">${esc(hoyTxt())}</div></div>
-        <div><div class="h-lb">${esc(tx('DIBUJÓ'))}</div><div>${v(c.dibujo, '—')}</div></div><div><div class="h-lb">${esc(tx('REVISÓ'))}</div><div>${v(c.reviso, '—')}</div></div>
-      </div>
-      <div class="h-sello"><div class="h-t">${esc(tx('INGENIERO RESPONSABLE'))}</div><div class="s">${esc(tx('Sello y firma'))}</div><div>${v(c.ingNombre, '[ ]')}</div><div>CODIA N.º ${v(c.ingCodia, '[ ]')}</div></div>
-    </div>`;
+    ${cajetinHtml(p, c, '1 / 2', titulo)}
+  </div>` + hoja2Html(p, c, tam, titulo);
 }
 function imprimir() {
   if (!NODOS.size) { toast(tx('El plano está vacío.'), 'warn'); return; }
@@ -899,7 +1040,7 @@ $('ufBtnNuevo').onclick = () => abrirForm(null, SEL && NODOS.get(SEL) && PUEDE_H
 $('ufZmas').onclick = () => { ZOOM = Math.min(2.5, ZOOM * 1.25); dibujar(); };
 $('ufZmenos').onclick = () => { ZOOM = Math.max(0.3, ZOOM / 1.25); dibujar(); };
 $('ufZfit').onclick = ajustar;
-window.addEventListener('beforeprint', () => { if (NODOS.size && !$('ufHoja').innerHTML) armarHoja(); });
+window.addEventListener('beforeprint', () => { if (NODOS.size && !$('ufHojas').innerHTML) armarHoja(); });
 window.addEventListener('idioma-cambiado', () => { if (CARGADO) pintarTodo(); });
 window.fbReady.then(() => {
   PUEDE_EDITAR = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');

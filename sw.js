@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v64'; // (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
+const CACHE = 'mantenimiento-v65'; // (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
 const ASSETS = [
   './',
   'index.html',
@@ -49,7 +49,7 @@ const ASSETS = [
   // (v3 etapa 3b) textos de cada pantalla en inglés y turco (se cargan solo si el idioma no es español)
   'i18n-compartido.js', 'i18n-bitacora.js', 'i18n-checklist.js', 'i18n-hoja-vida.js', 'i18n-catalogo.js', 'i18n-almacen.js',
   'i18n-herramientas.js', 'i18n-analisis.js', 'i18n-incentivos.js', 'i18n-rentabilidad.js', 'i18n-admin.js', 'i18n-reportar.js',
-  'i18n-login.js', 'i18n-guia.js', 'unifilar.html', 'i18n-unifilar.js', // (v63) diagrama unifilar
+  'i18n-login.js', 'i18n-guia.js', 'unifilar.html', 'i18n-unifilar.js', 'unifilar-calc.js', // (v63) diagrama unifilar
   'login.html',
   'tecnicos.json',
   'icon-192.png',
