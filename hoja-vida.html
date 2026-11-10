@@ -83,6 +83,14 @@
     .e360-acts a, .e360-acts button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); color: var(--text); font: 600 14px var(--font-sans); text-decoration: none; cursor: pointer; text-align: left; }
     .e360-acts .vt-ico { width: 20px; height: 20px; flex: 0 0 auto; }
     .e360-acts .main { grid-column: 1 / -1; background: var(--color-brand); border-color: transparent; color: #fff; font-size: 15.5px; min-height: 56px; justify-content: center; }
+    /* (10 nov 2026) documentos del equipo */
+    .doc-list { display: flex; flex-direction: column; gap: 6px; }
+    .doc-row { display: flex; align-items: center; gap: 8px; }
+    .doc-row a { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none; }
+    .doc-row a span { min-width: 0; } .doc-row a b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .doc-row a small { display: block; color: var(--muted); font-size: 12px; }
+    .doc-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .doc-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+    .doc-form input, .doc-form select { min-height: 44px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); font-size: 16px; }
     .e360-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
     .e360-t { display: block; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); color: var(--text); text-decoration: none; min-width: 0; }
     .e360-t > b { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -310,6 +318,11 @@
         <button class="btn btn-secondary btn-sm" id="btnCritEval" style="display:none;margin-top:10px;" onclick="evaluarCritActual()"><span data-icon="target"></span> Evaluar</button>
         <!-- (29 oct 2026) <span data-icon="briefcase"></span> CAPEX de este equipo (Administrador y Encargado) -->
         <a class="btn btn-secondary btn-sm" id="btnCapexEq" style="display:none;margin-top:10px;text-decoration:none;" href="capex.html"><span data-icon="briefcase"></span> Crear CAPEX</a>
+      </div>
+      <!-- (10 nov 2026) Documentos del equipo: enlaces (Google Drive u otro) a manuales, planos, fichas -->
+      <div class="card" id="cardDocs">
+        <h3><span data-icon="book"></span> Documentos</h3>
+        <div id="docsBox"></div>
       </div>
       <div class="card" id="cardPermisos">
         <h3><span data-icon="shield"></span> Permisos de trabajo (LOTO)</h3>
@@ -696,7 +709,7 @@ function mostrarHojaDeVida(equipoOrId) {
 // Antes renderMes iba de tercera y, si fallaba, el historial quedaba en blanco.
 function renderTodo() {
   hvLimite = PAGINA;
-  [renderE360, renderCrit, renderPermisos, renderRcaHv, renderTendHv, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
+  [renderE360, renderCrit, renderDocs, renderPermisos, renderRcaHv, renderTendHv, renderFacts, renderKpis, renderMes, renderTecnicos, renderTipos, renderPiezas, renderPendientes, renderFiltrosHist, renderHistorial]
     .forEach(fn => { try { fn(); } catch (err) { console.error('Hoja de vida — ' + fn.name + ':', err); } });
   try { renderE360(); } catch (err) { console.error('Equipo 360:', err); } // otra vez: tendencias y permisos ya en memoria
 }
@@ -772,6 +785,7 @@ function renderE360() {
         const val = el === undefined || el === null ? esc(E3('e_cargando')) : partes.length > 1 ? esc(E3('e_elecInt', { i: partes[partes.length - 2] })) : esc(E3('e_elecNo'));
         return tile('elec', 'zap', val, partes.length > 1 ? esc(el.ruta) : '', '', 'unifilar.html?equipo=' + id);
       })()
+    + tile('docs', 'book', esc((e.documentos || []).length ? E3N('e_nDocs', (e.documentos || []).length) : E3('e_ninguno')), '', '', '#cardDocs')
     + tile('crit', 'target', esc(crit ? (window.i18n ? i18n.t('crit_' + crit) : crit) : (window.i18n ? i18n.t('crit_N') : '—')), '', '', '#cardCrit')
     + `</div>`;
 }
@@ -795,6 +809,48 @@ function renderCrit() {
   if (b) { b.style.display = (typeof fbCritPuedeEvaluar === 'function' && fbCritPuedeEvaluar()) ? '' : 'none'; b.textContent = fbCritNivel(equipoActual) ? 'Volver a evaluar' : 'Evaluar'; }
   const cx = document.getElementById('btnCapexEq'); // (29 oct 2026) CAPEX
   if (cx) { const puede = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO'); cx.style.display = puede ? 'inline-block' : 'none'; cx.href = 'capex.html#nuevo&equipo=' + encodeURIComponent(equipoActual.id); }
+}
+// ══════ (10 nov 2026) Documentos del equipo ══════
+// Campo nuevo /equipos.documentos = [{ t: título, url: https://…, tipo }]. Los archivos viven en Google
+// Drive (u otro sitio): aquí solo el enlace, así no se gasta almacenamiento ni hace falta plan de pago.
+// 0 lecturas extra (viene con el equipo). Lo editan Administrador, Encargado, Supervisor y Técnico.
+const DOC_TIPOS = ['Manual', 'Plano', 'Ficha técnica', 'Foto de placa', 'Procedimiento', 'Lista de repuestos', 'Otro'];
+const TXH = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+let _docForm = false, _docBorrar = -1;
+const docUrlOk = u => /^https:\/\/[^\s]{4,}$/i.test(String(u || '').trim());
+function renderDocs() {
+  const box = document.getElementById('docsBox'); if (!box || !equipoActual) return;
+  const docs = Array.isArray(equipoActual.documentos) ? equipoActual.documentos : [];
+  const puede = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
+  let h = docs.length ? '<div class="doc-list">' + docs.map((d, i) => `<div class="doc-row"><a href="${docUrlOk(d.url) ? esc(d.url) : '#'}" target="_blank" rel="noopener noreferrer">${e3i('external')}<span><b>${esc(d.t || d.url)}</b><small>${esc(TXH(d.tipo || 'Otro'))}</small></span></a>${puede ? `<button type="button" class="btn btn-secondary btn-sm" onclick="borrarDoc(${i})">${esc(TXH(_docBorrar === i ? '¿Quitar?' : 'Quitar'))}</button>` : ''}</div>`).join('') + '</div>'
+    : `<div class="item-sub">${esc(TXH('Todavía no hay documentos. Guarda el manual, los planos o la foto de la placa en Google Drive y pega aquí el enlace.'))}</div>`;
+  if (puede && _docForm) h += `<div class="doc-form"><label>${esc(TXH('Título'))}<input id="docT" maxlength="120" placeholder="${esc(TXH('Ej: Manual del fabricante'))}"></label>
+    <label>${esc(TXH('Enlace'))}<input id="docU" type="url" inputmode="url" maxlength="500" placeholder="https://drive.google.com/…"></label>
+    <label>${esc(TXH('Tipo'))}<select id="docTipo">${DOC_TIPOS.map(x => `<option value="${esc(x)}">${esc(TXH(x))}</option>`).join('')}</select></label>
+    <div class="item-sub">${esc(TXH('En Drive: Compartir → "Cualquier persona de la empresa con el enlace", para que los técnicos lo puedan abrir.'))}</div>
+    <div style="display:flex;gap:8px;margin-top:8px;"><button type="button" class="btn btn-secondary btn-sm" onclick="_docForm=false;renderDocs()">${esc(TXH('Cancelar'))}</button><button type="button" class="btn btn-sm" id="docOk" onclick="guardarDoc()">${esc(TXH('Guardar'))}</button></div></div>`;
+  else if (puede && docs.length < 30) h += `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="_docForm=true;renderDocs()">${e3i('plus')} ${esc(TXH('Agregar documento'))}</button>`;
+  box.innerHTML = h;
+}
+async function escribirDocs(docs) {
+  await db.collection('equipos').doc(equipoActual.id).update({ documentos: docs });
+  equipoActual.documentos = docs;
+  if (typeof fbRefrescarEquipos === 'function') fbRefrescarEquipos(true).catch(() => {});
+}
+async function guardarDoc() {
+  const t = document.getElementById('docT').value.trim(), u = document.getElementById('docU').value.trim(), tipo = document.getElementById('docTipo').value;
+  if (!t) { showToast(TXH('Ponle un título.'), 'warn'); return; }
+  if (!docUrlOk(u)) { showToast(TXH('El enlace debe empezar con https://'), 'warn'); return; }
+  const docs = (Array.isArray(equipoActual.documentos) ? equipoActual.documentos : []).concat([{ t: t.slice(0, 120), url: u.slice(0, 500), tipo: DOC_TIPOS.includes(tipo) ? tipo : 'Otro' }]);
+  document.getElementById('docOk').disabled = true;
+  try { await escribirDocs(docs); _docForm = false; renderDocs(); renderE360(); showToast(TXH('Documento guardado')); }
+  catch (e) { document.getElementById('docOk').disabled = false; showToast(TXH('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+}
+async function borrarDoc(i) {
+  if (_docBorrar !== i) { _docBorrar = i; renderDocs(); setTimeout(() => { if (_docBorrar === i) { _docBorrar = -1; renderDocs(); } }, 4000); return; }
+  _docBorrar = -1;
+  const docs = (equipoActual.documentos || []).filter((_, k) => k !== i);
+  try { await escribirDocs(docs); renderDocs(); renderE360(); } catch (e) { showToast(TXH('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
 }
 function evaluarCritActual() { if (equipoActual) fbCritAbrirAsistente(equipoActual, { onGuardado: () => renderCrit() }); }
 const _permisosPorEquipo = new Map();

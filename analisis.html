@@ -20,6 +20,7 @@
 <script src="i18n-common.js"></script>
 <script src="i18n-shell.js"></script>
 <script src="filtros.js"></script>
+<script src="weibull.js"></script><!-- (10 nov 2026) patrón de falla (Weibull) -->
 <script src="kpis.js"></script><!-- (v3 etapa 3a) indicadores (MTBF, MTTR, disponibilidad, backlog, cumplimiento, vencidas, reincidencia) -->
 <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C -->
 <script src="seguridad.js"></script><!-- (28 oct 2026) permisos de trabajo / LOTO (reporte) -->
@@ -231,6 +232,34 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   .cod-tabla .num { text-align: right; font-family: var(--font-mono); white-space: nowrap; }
   .cod-tabla tr.vital td:first-child { font-weight: 700; }
   .cod-tabla .barcell { width: 30%; min-width: 80px; }
+  .wb-pat, .wb-conf { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--color-border); white-space: nowrap; }
+  .wb-desgaste { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
+  .wb-azar { background: var(--color-surface-2, var(--color-bg)); color: var(--color-text); }
+  .wb-temprana { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+  .wb-c-alta { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+  .wb-c-media { background: var(--color-info-soft); color: var(--color-info-text); }
+  .wb-c-baja, .wb-c-insuficiente { color: var(--color-muted); }
+  /* (10 nov 2026) reporte de la semana */
+  .rs-ov { position: fixed; inset: 0; z-index: 2000; background: var(--color-overlay, rgba(0,0,0,.45)); overflow: auto; padding: 16px; }
+  .rs-hoja { max-width: 820px; margin: 0 auto; background: #fff; color: #111; border-radius: 12px; padding: 22px 24px; font-family: var(--font-sans); }
+  .rs-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+  .rs-cab { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+  .rs-t { font-size: 20px; font-weight: 700; } .rs-st { font-size: 13px; color: #555; margin-top: 2px; } .rs-logo { font-weight: 700; color: #c8102e; }
+  .rs-ks { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+  @media (max-width: 600px) { .rs-ks { grid-template-columns: repeat(2, minmax(0,1fr)); } .rs-2 { grid-template-columns: 1fr !important; } }
+  .rs-k { border: 1px solid #ddd; border-radius: 8px; padding: 10px; } .rs-k .l { font-size: 12px; color: #555; font-weight: 600; } .rs-k .v { font: 600 22px var(--font-mono); margin-top: 2px; } .rs-k .s { font-size: 11.5px; color: #666; }
+  .rs-bien { color: #15803d; font-size: 15px; } .rs-mal { color: #b91c1c; font-size: 15px; } .rs-eq { color: #666; font-size: 15px; }
+  .rs-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rs-hoja h3 { font-size: 14px; margin: 12px 0 6px; } .rs-hoja ol { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.6; }
+  .rs-acc li { margin-bottom: 4px; } .rs-pie { font-size: 11px; color: #666; margin-top: 14px; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print {
+    body.rs-imprimiendo, html:has(body.rs-imprimiendo) { background: #fff !important; }
+    body.rs-imprimiendo > *:not(#repSem) { display: none !important; }
+    body.rs-imprimiendo .rs-ov { position: static; background: none; padding: 0; overflow: visible; }
+    body.rs-imprimiendo .rs-hoja { max-width: none; border-radius: 0; padding: 0; }
+    body.rs-imprimiendo .rs-noprint { display: none !important; }
+  }
+  .cod-tabla td.wb-mal { color: var(--color-danger-text); font-weight: 700; }
   .cod-tabla .barcell span { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--color-info); }
 </style>
 </head>
@@ -241,6 +270,8 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
     <div class="sub" id="rangeInfo">cargando datos…</div>
     <!-- (5 oct 2026) Carga única (no en vivo) de las OTs anteriores a 13 meses -->
     <button class="secondary small" id="histCompletoBtn" style="display:none;" onclick="cargarHistorialCompletoAn()"><span data-icon="book"></span> Analizar todo el historial</button>
+    <!-- (10 nov 2026) lo de más de 60 días sale de la copia del día; esto lo trae del servidor ya -->
+    <button class="secondary small" id="histActBtn" style="display:none;" onclick="actualizarHistAn()"><span data-icon="refresh"></span> Actualizar historial</button>
   </div>
 
   <!-- Filtros globales: afectan a todas las pestañas -->
@@ -336,6 +367,12 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <div class="cardsub" id="critKpisSub">Mismas fórmulas del Resumen para los equipos A · Crítico, B · Importante, C · Normal y sin evaluar. Aplica todos los filtros menos el de criticidad. Clic en una fila para filtrar.</div>
       <div style="overflow-x:auto;"><table id="critKpisTable"><thead><tr><th>Criticidad</th><th>Equipos</th><th>OTs</th><th>Correctivos</th><th>Paro por fallas</th><th>MTBF prom.</th><th>MTTR</th><th>Disponibilidad</th></tr></thead><tbody id="critKpisBody"></tbody></table></div>
     </div>
+    <!-- (10 nov 2026) Calidad de los datos + reporte de la semana para gerencia -->
+    <div class="grid2 even" style="margin-top:16px;">
+      <div class="card"><h2>Calidad de los datos</h2><div class="cardsub">Una app de mantenimiento es tan buena como los datos que le meten. Período y filtros elegidos.</div><div id="saludDatos"></div></div>
+      <div class="card"><h2>Reporte de la semana</h2><div class="cardsub">Una página para la gerencia: la semana pasada comparada con las 4 anteriores, dónde se perdió más tiempo y las 3 acciones que más ayudan. Se puede imprimir o guardar en PDF.</div>
+        <div class="feed-actions" style="margin-top:10px;"><button type="button" id="repSemBtn"><span data-icon="file"></span> Ver reporte de la semana</button></div></div>
+    </div>
   </section>
 
   <!-- ═════════ EQUIPOS ═════════ -->
@@ -366,6 +403,14 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
       <h2>Oportunidades de mejora continua</h2>
       <div class="cardsub">Piezas que se repiten en varios correctivos del mismo equipo. Ciclo PDCA/Kaizen: Plan → Do → Check → Act.</div>
       <div id="kaizenList"></div>
+    </div>
+    <!-- (10 nov 2026) Patrón de falla (Weibull): qué estrategia sirve en cada equipo -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Patrón de falla (Weibull)</h2>
+      <div class="cardsub">Con los días entre fallas correctivas de cada equipo (todo el historial cargado, nave elegida) se calcula cómo falla y qué tipo de mantenimiento le sirve.</div>
+      <details class="que-sig"><summary>¿Qué significa?</summary><p>β (beta) dice cómo falla el equipo. Menos de 0.9: fallas tempranas, poco después de reparar o instalar; el preventivo por tiempo no ayuda, hay que revisar la calidad de la reparación, el montaje y los repuestos. Entre 0.9 y 1.2: fallas al azar; el preventivo por tiempo tampoco ayuda, sirve inspeccionar por condición y tener el repuesto a mano. Más de 1.2: desgaste; el preventivo por tiempo sí ayuda y el intervalo sugerido es el tiempo en que todavía no ha fallado el 90 % (vida B10). Con menos de 5 intervalos entre fallas el cálculo no es confiable.</p></details>
+      <div class="toolbar"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px;"><input type="checkbox" id="wbSolo" checked> Solo equipos con datos suficientes</label></div>
+      <div id="wbTabla"></div>
     </div>
     <!-- (10 nov 2026) Códigos de falla ISO 14224: Pareto de correctivos por modo, causa, acción o pieza -->
     <div class="card" style="margin-top:16px;">
@@ -803,6 +848,7 @@ function render(){
   $('optTodo').textContent = _anCompleto ? 'Todo el historial' : 'Últimos '+MESES_AN+' meses (cargados)';
   $('optCompleto').hidden = _anCompleto; $('optCompleto').disabled = _anCompleto;
   $('histCompletoBtn').style.display = _anCompleto ? 'none' : '';
+  $('histActBtn').style.display = _histDeCacheAn ? '' : 'none';
 
   if (ubic){ F.area = ubic.get().area; ubic.pintar(); } // (Etapa 3) antes: selector de área con las de las OTs
   fillSelect('fTecnico', [...new Set(rowsAll.flatMap(r=>splitTecnicos(r.tecnicos)))].sort(), 'Todos los técnicos', F.tecnico);
@@ -952,6 +998,8 @@ function render(){
   renderTecnicos(scopeRows);
   renderKaizen(scopeRows);
   renderCodigos(scopeRows);
+  renderWeibull();
+  renderSaludDatos(scopeRows);
   renderConclusiones({scopeRows, correctivos, totalDowntime, pctCorr, areaSorted, weeksSorted, weekCounts});
   renderGestion(); // (14 oct 2026) indicadores de gestión
   renderCritKpis(rowsExcept('crit'), ref); // (28 oct 2026)
@@ -1768,6 +1816,108 @@ function renderTecTable(){
 }
 
 /* ---------- kaizen ---------- */
+// (10 nov 2026) Patrón de falla (Weibull) por equipo — weibull.js. Usa todo lo cargado (como el MTBF y el
+// riesgo de esta pestaña), sin el período ni los filtros. No cambia ningún otro indicador.
+const WB_PATRON = { temprana: 'Fallas tempranas', azar: 'Fallas al azar', desgaste: 'Desgaste' };
+const WB_REC = { preventivo: 'Preventivo por tiempo', condicion: 'Inspección por condición', calidad: 'Revisar calidad de reparación y montaje', datos: 'Faltan datos' };
+const WB_CONF = { alta: 'Alta', media: 'Media', baja: 'Baja', insuficiente: 'Insuficiente' };
+function renderWeibull(){
+  const cont = $('wbTabla'); if (!cont || !window.VTWeibull) return;
+  const g = {};
+  (window._rowsAll || []).filter(isCorr).forEach(r=>{ const k = eqKey(r); (g[k] = g[k] || { clave:k, nombre:canonEquipo(r), equipoId:r.equipoId||'', fechas:[] }).fechas.push(r.fecha); });
+  const freq = {}; (_equiposDocs || []).forEach(e=>{ if (+e.checklistFrecuenciaDias > 0) freq[e.id] = +e.checklistFrecuenciaDias; });
+  const solo = $('wbSolo') ? $('wbSolo').checked : true;
+  const filas = VTWeibull.analizar(Object.values(g).filter(x=>x.fechas.length >= 3)).filter(x=>!solo || x.confianza !== 'insuficiente');
+  window._wbFilas = filas;
+  if (!filas.length){ cont.innerHTML = '<div class="empty">'+(solo ? 'Todavía ningún equipo tiene 5 o más intervalos entre fallas correctivas. Quita la marca para ver los que tienen menos (no confiables).' : 'No hay equipos con 3 o más fallas correctivas.')+'</div>'; return; }
+  const f1 = v => v==null ? '—' : (Math.round(v*10)/10).toString();
+  cont.innerHTML = '<div style="overflow-x:auto;"><table class="cod-tabla wb-tabla"><thead><tr><th>Equipo</th><th class="num">Fallas</th><th>Patrón</th><th class="num" style="text-transform:none">β</th><th class="num">Vida característica (días)</th><th class="num">Intervalo sugerido (días)</th><th class="num">Checklist actual (días)</th><th>Confianza</th><th>Qué hacer</th></tr></thead><tbody>'
+    + filas.slice(0,25).map(x=>{ const a = x.ajuste, act = freq[x.equipoId];
+      const nota = x.intervaloSugerido && act ? (act > x.intervaloSugerido*1.25 ? ' wb-mal' : '') : '';
+      return '<tr><td><b>'+esc(x.nombre)+'</b></td><td class="num">'+x.fallas+'</td><td><span class="wb-pat wb-'+esc(x.patron||'na')+'">'+esc(WB_PATRON[x.patron]||'—')+'</span></td><td class="num">'+(a?f1(a.beta):'—')+'</td><td class="num">'+(a?Math.round(a.eta):'—')+'</td><td class="num'+nota+'">'+(x.intervaloSugerido||'—')+'</td><td class="num">'+(act||'—')+'</td><td><span class="wb-conf wb-c-'+esc(x.confianza)+'">'+esc(WB_CONF[x.confianza])+'</span></td><td>'+esc(WB_REC[x.recomendacion])+'</td></tr>'; }).join('')
+    + '</tbody></table></div><p class="cardsub" style="margin-top:8px;">En rojo: el checklist actual es mucho más largo que el intervalo sugerido; el equipo probablemente falla antes de que le toque.</p>';
+}
+document.addEventListener('change', ev=>{ if (ev.target && ev.target.id === 'wbSolo') renderWeibull(); });
+// (10 nov 2026) Calidad de los datos: qué tan completos y a tiempo se registran los trabajos.
+const TA = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+function calcSaludDatos(rows){
+  const corr = rows.filter(isCorr), conFecha = rows.filter(r=>r.creadoMs && parseFecha(r.fecha));
+  const pct = (l, f) => l.length ? l.filter(f).length / l.length * 100 : null;
+  const items = [
+    { k:'causa', t:'Correctivos con causa', v:pct(corr, r=>!!String(r.causa||'').trim()) },
+    { k:'modo', t:'Correctivos con modo de falla', v:pct(corr, r=>!!String(r.modo||'').trim()) },
+    { k:'paro', t:'Correctivos con tiempo de máquina parada', v:pct(corr, r=>r.minMaquina>0) },
+    { k:'sol', t:'Trabajos con solución escrita', v:pct(rows, r=>String(r.solucion||'').trim().length >= 8) },
+    { k:'tec', t:'Trabajos con técnico', v:pct(rows, r=>splitTecnicos(r.tecnicos).length>0) },
+    { k:'tiempo', t:'Registrados el mismo día o al siguiente', v:pct(conFecha, r=>{ const d = parseFecha(r.fecha); return (r.creadoMs - d.getTime()) / 86400000 <= 2; }) },
+  ].filter(x=>x.v!=null);
+  const score = items.length ? items.reduce((a,x)=>a+x.v,0)/items.length : null;
+  const peor = items.slice().sort((a,b)=>a.v-b.v)[0] || null;
+  return { items, score, peor, n: rows.length };
+}
+function renderSaludDatos(rows){
+  const cont = $('saludDatos'); if (!cont) return;
+  const s = calcSaludDatos(rows);
+  if (s.score == null){ cont.innerHTML = '<div class="empty">No hay trabajos en el alcance actual.</div>'; return; }
+  const nivel = s.score >= 90 ? 'Excelente' : s.score >= 75 ? 'Buena' : s.score >= 60 ? 'Regular' : 'Mala';
+  const col = s.score >= 90 ? 'var(--color-success)' : s.score >= 75 ? 'var(--color-info)' : s.score >= 60 ? 'var(--color-warn)' : 'var(--color-danger)';
+  cont.innerHTML = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 10px;"><span style="font:600 34px var(--font-mono)">'+Math.round(s.score)+'<small style="font-size:18px">/100</small></span><span class="wb-pat" style="border-color:'+col+'">'+esc(nivel)+'</span></div>'
+    + '<table class="cod-tabla"><tbody>' + s.items.map(x=>'<tr><td>'+esc(x.t)+'</td><td class="barcell"><span style="width:'+Math.max(2,x.v)+'%;background:'+(x.v>=90?'var(--color-success)':x.v>=60?'var(--color-info)':'var(--color-danger)')+'"></span></td><td class="num">'+Math.round(x.v)+' %</td></tr>').join('') + '</tbody></table>'
+    + (s.peor && s.peor.v < 90 ? '<p class="cardsub" style="margin-top:8px;">'+esc(TA('Lo que más conviene mejorar: {x}.').replace('{x}', TA(s.peor.t).toLowerCase()))+'</p>' : '');
+}
+// (10 nov 2026) Reporte de la semana (última semana completa, lunes a domingo) para gerencia.
+function semanaPasada(){ const d = today0(); d.setDate(d.getDate() - ((d.getDay()+6)%7) - 7); const a = fbFechaLocal(d); d.setDate(d.getDate()+6); return [a, fbFechaLocal(d)]; }
+function masDiasAn(f, n){ const d = fbParseFecha(f); d.setDate(d.getDate()+n); return fbFechaLocal(d); }
+function datosSemana(rows, a, b){
+  const w = rows.filter(r=>r.fecha>=a && r.fecha<=b), corr = w.filter(isCorr);
+  const paroMin = corr.reduce((s,r)=>s+(r.minMaquina||0),0), corrM = corr.filter(r=>r.minMaquina>0);
+  const pl = calcPlanificado(w);
+  return { w, corr, ots:w.length, nCorr:corr.length, paroH:paroMin/60, mttr: corrM.length ? corrM.reduce((s,r)=>s+r.minMaquina,0)/corrM.length : null, plan: pl.pct, salud: calcSaludDatos(w).score };
+}
+function abrirReporteSemana(){
+  const rows = window._rowsAll || [];
+  const [a, b] = semanaPasada();
+  const S = datosSemana(rows, a, b);
+  const prev = [1,2,3,4].map(k=>datosSemana(rows, masDiasAn(a,-7*k), masDiasAn(b,-7*k)));
+  const prom = k => { const v = prev.map(x=>x[k]).filter(x=>x!=null); return v.length ? v.reduce((s,x)=>s+x,0)/v.length : null; };
+  const f1 = v => v==null ? '—' : (Math.round(v*10)/10).toLocaleString(window.i18n && i18n.locale ? i18n.locale() : 'es-DO');
+  const flecha = (v, p, mejorBajo) => { if (v==null || p==null || Math.abs(v-p) < 0.05*Math.max(1,Math.abs(p))) return '<span class="rs-eq">=</span>'; const sube = v > p, bien = mejorBajo ? !sube : sube; return '<span class="'+(bien?'rs-bien':'rs-mal')+'">'+(sube?'▲':'▼')+'</span>'; };
+  const kpi = (t, v, p, unidad, mejorBajo) => '<div class="rs-k"><div class="l">'+esc(TA(t))+'</div><div class="v">'+f1(v)+(unidad||'')+' '+flecha(v,p,mejorBajo)+'</div><div class="s">'+esc(TA('Promedio 4 semanas'))+': '+f1(p)+(unidad||'')+'</div></div>';
+  const topEq = {}; S.corr.forEach(r=>{ const k = canonEquipo(r); topEq[k] = topEq[k] || { n:0, min:0 }; topEq[k].n++; topEq[k].min += r.minMaquina||0; });
+  const eqs = Object.entries(topEq).sort((x,y)=>y[1].min-x[1].min || y[1].n-x[1].n).slice(0,3);
+  const topModo = {}; S.corr.forEach(r=>{ const k = String(r.modo||r.causa||'').trim(); if (k) topModo[k] = (topModo[k]||0)+1; });
+  const modos = Object.entries(topModo).sort((x,y)=>y[1]-x[1]).slice(0,3);
+  // acciones (reglas simples, de más a menos impacto)
+  const acc = [];
+  if (eqs.length && eqs[0][1].min > 0) acc.push(TA('Análisis de causa raíz a {eq}: {h} h de máquina parada en la semana ({n} fallas).').replace('{eq}', eqs[0][0]).replace('{h}', f1(eqs[0][1].min/60)).replace('{n}', eqs[0][1].n));
+  const wb = (window._wbFilas || []).filter(x=>x.confianza!=='insuficiente');
+  const freq = {}; (_equiposDocs || []).forEach(e=>{ if (+e.checklistFrecuenciaDias > 0) freq[e.id] = +e.checklistFrecuenciaDias; });
+  const corto = wb.find(x=>x.intervaloSugerido && freq[x.equipoId] && freq[x.equipoId] > x.intervaloSugerido*1.25);
+  const temprana = wb.find(x=>x.patron==='temprana');
+  if (corto) acc.push(TA('Acortar el checklist de {eq} a cada {d} días (hoy cada {a}): se desgasta antes de que le toque.').replace('{eq}', corto.nombre).replace('{d}', corto.intervaloSugerido).replace('{a}', freq[corto.equipoId]));
+  else if (temprana) acc.push(TA('Revisar la calidad de las reparaciones de {eq}: vuelve a fallar poco después de repararse.').replace('{eq}', temprana.nombre));
+  const sd = calcSaludDatos(S.w);
+  if (sd.score != null && sd.score < 80 && sd.peor) acc.push(TA('Pedir a los técnicos completar: {x} (hoy {p} %).').replace('{x}', TA(sd.peor.t).toLowerCase()).replace('{p}', Math.round(sd.peor.v)));
+  else if (S.plan != null && S.plan < 80) acc.push(TA('Subir el trabajo planificado: {p} % (meta 80 %). Programar los preventivos en el Programa semanal.').replace('{p}', Math.round(S.plan)));
+  if (!acc.length) acc.push(TA('Semana sin alertas: mantener el plan.'));
+  const nave = (typeof fbNaveActiva === 'function' && fbNaveActiva()) || TA('Todas las naves');
+  const ov = document.createElement('div'); ov.id = 'repSem'; ov.className = 'rs-ov';
+  ov.innerHTML = '<div class="rs-hoja"><div class="rs-bar rs-noprint"><button type="button" class="secondary" id="rsCerrar">'+esc(TA('Cerrar'))+'</button><button type="button" id="rsPrint"><span data-icon="printer"></span> '+esc(TA('Imprimir o guardar PDF'))+'</button></div>'
+    + '<div class="rs-cab"><div><div class="rs-t">'+esc(TA('Reporte de mantenimiento · semana {s}').replace('{s}', fbSemanaISO(a)))+'</div><div class="rs-st">'+esc(a.slice(8,10)+'/'+a.slice(5,7)+' – '+b.slice(8,10)+'/'+b.slice(5,7)+'/'+b.slice(0,4))+' · '+esc(nave)+'</div></div><div class="rs-logo">VoidTech</div></div>'
+    + '<div class="rs-ks">'+kpi('Trabajos registrados', S.ots, prom('ots'))+kpi('Correctivos (fallas)', S.nCorr, prom('nCorr'), '', true)+kpi('Horas de máquina parada', S.paroH, prom('paroH'), ' h', true)+kpi('Reparación promedio (MTTR)', S.mttr, prom('mttr'), ' min', true)+kpi('Trabajo planificado', S.plan, prom('plan'), ' %')+kpi('Calidad de los datos', S.salud, prom('salud'), '/100')+'</div>'
+    + '<div class="rs-2"><div><h3>'+esc(TA('Dónde se perdió más tiempo'))+'</h3>'+(eqs.length ? '<ol>'+eqs.map(([k,v])=>'<li><b>'+esc(k)+'</b> · '+f1(v.min/60)+' h · '+v.n+' '+esc(TA(v.n===1?'falla':'fallas'))+'</li>').join('')+'</ol>' : '<p>'+esc(TA('Sin fallas en la semana.'))+'</p>')+'</div>'
+    + '<div><h3>'+esc(TA('Fallas más repetidas'))+'</h3>'+(modos.length ? '<ol>'+modos.map(([k,v])=>'<li><b>'+esc(TA(k))+'</b> · '+v+'</li>').join('')+'</ol>' : '<p>'+esc(TA('Sin códigos de falla en la semana.'))+'</p>')+'</div></div>'
+    + '<h3>'+esc(TA('Acciones recomendadas'))+'</h3><ol class="rs-acc">'+acc.slice(0,3).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'
+    + '<p class="rs-pie">'+esc(TA('▲▼ comparan con el promedio de las 4 semanas anteriores; verde = mejora. Datos de Mantenimiento 2026.'))+'</p></div>';
+  document.body.appendChild(ov);
+  if (window.VTIcons) VTIcons.hydrate(ov);
+  const cerrar = () => { ov.remove(); document.body.classList.remove('rs-imprimiendo'); document.removeEventListener('keydown', esc1); };
+  const esc1 = ev => { if (ev.key === 'Escape') cerrar(); };
+  document.addEventListener('keydown', esc1);
+  ov.querySelector('#rsCerrar').onclick = cerrar;
+  ov.querySelector('#rsPrint').onclick = () => { document.body.classList.add('rs-imprimiendo'); setTimeout(()=>{ window.print(); document.body.classList.remove('rs-imprimiendo'); }, 50); };
+}
+document.addEventListener('click', ev=>{ if (ev.target.closest && ev.target.closest('#repSemBtn')) abrirReporteSemana(); });
 // (10 nov 2026) Pareto de fallas por código ISO 14224 (modo / causa / acción / pieza / equipo y modo).
 let _codPor = 'modo', _codRows = [];
 function renderCodigos(rows){
@@ -2135,7 +2285,8 @@ function otRecordToRow(doc){
     minMaquina:Number(doc.TOTAL_MIN_MAQUINA)||0, minTecnico:Number(doc.TOTAL_MIN_TECNICO)||0,
     falla:doc.DESCRIPCION_FALLA||'', solucion:doc.DESCRIPCION_SOLUCION||'',
     causa:doc.CAUSA_FALLA||doc.causaFalla||'',
-    modo:doc.MODO_FALLA||'', accion:doc.ACCION_MANT||'', // (10 nov 2026) códigos de falla ISO 14224 (no entran en ningún indicador)
+    modo:doc.MODO_FALLA||'', accion:doc.ACCION_MANT||'',
+    creadoMs:(doc.createdAt && typeof doc.createdAt.seconds==='number') ? doc.createdAt.seconds*1000 : null, // (10 nov 2026) calidad de datos: ¿se registró a tiempo? // (10 nov 2026) códigos de falla ISO 14224 (no entran en ningún indicador)
     tiempoRespuestaMin:(doc.TIEMPO_RESPUESTA_MIN!=null && doc.TIEMPO_RESPUESTA_MIN!=='')?Number(doc.TIEMPO_RESPUESTA_MIN):null
   };
 }
@@ -2204,14 +2355,39 @@ document.addEventListener('DOMContentLoaded',()=>{
 //  2) "Analizar todo el historial" lee UNA vez (get, no en vivo) las OTs
 //     anteriores y las suma a las de 13 meses, que siguen en vivo.
 const MESES_AN = 13;
+// (10 nov 2026, cuota) 3) De esos 13 meses, solo los últimos 60 días van en
+//    vivo. Lo anterior (60 días a 13 meses, ~85 % de las lecturas) casi no
+//    cambia: se lee del servidor UNA vez al día por equipo y el resto del día
+//    sale de la copia del celular (caché de Firestore, 0 lecturas). Botón
+//    "Actualizar historial" para traerlo ya. Los indicadores no cambian: el
+//    panel espera las dos partes antes de calcular.
+const DIAS_VIVO_AN = 60, HIST_TTL_AN = 20 * 3600 * 1000, HIST_LS_AN = 'anHistSync';
+let _docsAnHist = [], _histListoAn = false, _vivoListoAn = false, _histDeCacheAn = false, _desdeVivoAn = '';
+function desdeVivoAn(){ const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - DIAS_VIVO_AN); return fbFechaLocal(d); }
+async function cargarHistAn(forzar){
+  const q = db.collection('ots').where('FECHA', '>=', _desdeAn).where('FECHA', '<', _desdeVivoAn);
+  let ult = 0; try { ult = +localStorage.getItem(HIST_LS_AN) || 0; } catch(e) {}
+  let snap = null;
+  if (!forzar && Date.now() - ult < HIST_TTL_AN){
+    try { const c = await q.get({ source: 'cache' }); if (!c.empty){ snap = c; _histDeCacheAn = true; } } catch(e) {}
+  }
+  if (!snap){
+    try { snap = await q.get({ source: 'server' }); _histDeCacheAn = false; try { localStorage.setItem(HIST_LS_AN, String(Date.now())); } catch(e) {} }
+    catch(err){ console.warn('Historial sin servidor, se usa la copia del celular:', err.message); try { snap = await q.get({ source: 'cache' }); _histDeCacheAn = true; } catch(e) { snap = { docs: [] }; } }
+  }
+  _docsAnHist = snap.docs; _histListoAn = true;
+  if (_vivoListoAn) combinarOtsAn();
+}
+function actualizarHistAn(){ const b = $('histActBtn'); if (b) b.disabled = true; return cargarHistAn(true).finally(()=>{ if (b) b.disabled = false; }); }
 let _anCompleto = false;
 let _docsAnRecientes = [];  // listener: FECHA >= desde
 let _docsAnViejos = [];     // get único: FECHA < desde (solo con historial completo)
 let _desdeAn = '';
 function desdeAn(){ const d = new Date(); d.setHours(0,0,0,0); d.setMonth(d.getMonth() - MESES_AN); return fbFechaLocal(d); }
 function suscribirOtsAn(){
-  _desdeAn = desdeAn();
-  db.collection('ots').where('FECHA', '>=', _desdeAn).onSnapshot(async snap=>{
+  _desdeAn = desdeAn(); _desdeVivoAn = desdeVivoAn();
+  cargarHistAn(false);
+  db.collection('ots').where('FECHA', '>=', _desdeVivoAn).onSnapshot(async snap=>{
     // primera vez con la base vacía: se siembra el histórico (si RAW trae datos).
     // (5 oct 2026) Como ahora la consulta es de 13 meses, antes de sembrar se
     // confirma que la colección entera esté vacía.
@@ -2227,8 +2403,8 @@ function suscribirOtsAn(){
         return; // el siguiente snapshot ya trae los datos
       }
     }
-    _docsAnRecientes = snap.docs;
-    combinarOtsAn();
+    _docsAnRecientes = snap.docs; _vivoListoAn = true;
+    if (_histListoAn) combinarOtsAn();
   }, err=>{
     console.error('Error escuchando OTs:', err);
     $('rangeInfo').textContent = 'Error de conexión a Firebase: '+err.message;
@@ -2270,7 +2446,7 @@ function filasDeDocsAn(docs){
 }
 function combinarOtsAn(){
   const porId = new Map();
-  [..._docsAnViejos, ..._docsAnRecientes].forEach(d=>porId.set(d.id, d));
+  [..._docsAnViejos, ..._docsAnHist, ..._docsAnRecientes].forEach(d=>porId.set(d.id, d));
   const todos = [...porId.values()];
   // (25 oct 2026, Etapa 2) Solo las OTs de la nave elegida arriba. Con "Todas"
   // no se quita ninguna: los KPIs (MTBF, disponibilidad…) quedan iguales.
@@ -2300,7 +2476,7 @@ window.fbReady.then(()=>{
     // (14 oct 2026) docs completos para el cumplimiento preventivo (frecuencias y próximas fechas)
     _equiposDocs = s.docs.map(d=>({id:d.id, ...(d.data()||{})}));
     _critPorId = {}; _equiposDocs.forEach(e=>{ if (['A','B','C'].includes(e.criticidad)) _critPorId[e.id] = e.criticidad; }); // (28 oct 2026)
-    if ((fbNavesFiltro() || puedeComparar()) && (_docsAnRecientes.length || _docsAnViejos.length)) combinarOtsAn(); // (Etapa 3) también para el comparativo // (25 oct 2026) la nave de las OTs viejas sale del catálogo
+    if ((fbNavesFiltro() || puedeComparar()) && _vivoListoAn && _histListoAn && (_docsAnRecientes.length || _docsAnHist.length || _docsAnViejos.length)) combinarOtsAn(); // (Etapa 3) también para el comparativo // (25 oct 2026) la nave de las OTs viejas sale del catálogo
     else if (allRows.length) render(); else renderGestion();
   }).catch(err=>{
     console.warn('No se pudo leer el catálogo de equipos (se agrupa por nombre):', err);

@@ -51,5 +51,12 @@
   ['No bajan el OEE: comida o descanso, sin programa de producción, reuniones y el mantenimiento preventivo programado.', 'These do not lower the OEE: lunch or break, no production scheduled, meetings and scheduled preventive maintenance.', 'OEE’yi düşürmeyenler: yemek veya mola, üretim planı yok, toplantılar ve planlı önleyici bakım.'],
   ['Referencia: 85 % o más es clase mundial; 60 % es lo típico en la industria; menos de 40 % es crítico.', 'Reference: 85 % or more is world class; 60 % is typical in industry; below 40 % is critical.', 'Referans: %85 ve üzeri dünya standardı; %60 sektörde tipik; %40’ın altı kritik.'],
   ['Ej: 120', 'E.g. 120', 'Örn: 120'], ['Ej: 800', 'E.g. 800', 'Örn: 800'], ['Ej: 12', 'E.g. 12', 'Örn: 12'],
+  // (10 nov 2026) Dinero perdido por paros (Administrador)
+  ['Dinero perdido por paros (estimado)', 'Money lost to downtime (estimate)', 'Duruşlardan kaybedilen para (tahmini)'],
+  ['Solo lo ve el Administrador. Horas que bajan el OEE × lo que deja de producir cada máquina por hora.', 'Only the Administrator sees this. Hours that lower the OEE × what each machine stops producing per hour.', 'Yalnızca Yönetici görür. OEE’yi düşüren saatler × her makinenin saatte üretemediği değer.'],
+  ['Valor por hora', 'Value per hour', 'Saatlik değer'], ['Horas perdidas', 'Hours lost', 'Kayıp saat'], ['Pérdida', 'Loss', 'Kayıp'],
+  ['{n} máquinas sin valor por hora: ponlo en "Valor por hora" para ver cuánto se pierde.', '{n} machines without a value per hour: set it in "Value per hour" to see how much is lost.', 'Saatlik değeri olmayan {n} makine: ne kadar kaybedildiğini görmek için "Saatlik değer"e girin.'],
+  ['Valor por hora de máquina parada', 'Value per hour of a stopped machine', 'Duran makinenin saatlik değeri'], ['Lo que deja de producir (margen) en una hora. Solo lo ve el Administrador.', 'What it stops producing (margin) in one hour. Only the Administrator sees this.', 'Bir saatte üretemediği (kâr marjı). Yalnızca Yönetici görür.'],
+  ['Valor general por hora (RD$)', 'General value per hour (RD$)', 'Genel saatlik değer (RD$)'], ['Por máquina (si es distinto del general)', 'Per machine (if different from the general one)', 'Makineye göre (genelden farklıysa)'], ['Revisa los números.', 'Check the numbers.', 'Sayıları kontrol edin.'],
 ]]);
 if (window.i18n) window.i18n._drenar();

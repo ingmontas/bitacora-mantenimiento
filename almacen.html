@@ -225,6 +225,14 @@
     .form-grid{grid-template-columns:1fr;}
     table{font-size:11.5px;}
   }
+/* (10 nov 2026) mínimo y máximo sugeridos */
+.mm-cfg { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 10px; font-size: 13.5px; }
+.mm-cfg label { display: flex; align-items: center; gap: 8px; }
+.mm-cfg input { width: 80px; min-height: 40px; padding: 0 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font-size: 15px; }
+.mm-est { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--color-border); white-space: nowrap; }
+.mm-corto { background: var(--color-danger-soft); color: var(--color-danger-text); border-color: var(--color-danger); }
+.mm-alto { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.mm-ok { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
 </style>
 </head>
 <body>
@@ -334,6 +342,12 @@
     <div class="table-card"><div style="overflow-x:auto;"><table>
       <thead><tr><th data-i18n="shell.a_equipo">Equipo</th><th>Repuesto</th><th>Modelo</th><th>Stock</th><th>Mín.</th><th>Estado</th></tr></thead>
       <tbody id="comprasBody"></tbody></table></div></div>
+    <!-- (10 nov 2026) Mínimo y máximo sugeridos con el consumo real (salidas de los últimos 180 días) -->
+    <div class="section-hdr" style="margin-top:22px;"><h2>Mínimo y máximo sugeridos</h2>
+      <button class="btn sm" id="mmCalc" type="button"><span data-icon="chart"></span> <span>Calcular con el consumo real</span></button></div>
+    <div class="hdr-sub" style="margin-bottom:8px;">Con las salidas de los últimos 180 días: mínimo = lo que se gasta mientras llega el pedido + stock de seguridad (95 %); máximo = mínimo + lo que se gasta en un ciclo de compra. Lee los movimientos una sola vez, al tocar el botón.</div>
+    <div class="mm-cfg"><label>Tiempo de entrega (días) <input id="mmLT" type="number" min="1" max="365" value="15"></label><label>Compra cada (días) <input id="mmCiclo" type="number" min="1" max="365" value="30"></label></div>
+    <div id="mmRes"></div>
   </section>
 </div>
 
@@ -2084,6 +2098,83 @@ function pintarMovimientosRecientes(){
 }
 
 /* ── Compras: la misma lista de faltantes que descarga "Lista de compra" (0 lecturas) ── */
+// (10 nov 2026) Mínimo y máximo sugeridos. Salidas de /movimientos de 180 días (1 consulta por fecha, sin
+// índice compuesto), agrupadas por equipo + repuesto. Consumo diario d, desviación semanal σ, tiempo de
+// entrega LT y ciclo de compra C: mínimo = d·LT + 1.65·σ·√(LT/7); máximo = mínimo + d·C (redondeado arriba).
+// "Ajustar" abre la ficha del repuesto con los valores sugeridos: se guarda con el botón de siempre.
+const MM_DIAS = 180;
+const TXA = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+let _mmMovs = null, _mmFilas = [];
+function mmCalcular(movs, equipos, LT, C){
+  const desde = Date.now() - MM_DIAS*86400000, sem = Math.ceil(MM_DIAS/7);
+  const por = new Map();
+  movs.forEach(m => {
+    if (m.tipo !== 'salida') return;
+    const ms = m.fecha && typeof m.fecha.toMillis === 'function' ? m.fecha.toMillis() : (m.fecha && m.fecha.seconds ? m.fecha.seconds*1000 : null);
+    if (!ms || ms < desde) return;
+    const q = Math.abs(Number(m.cantidad) || 0); if (!q) return;
+    const k = (m.equipoId||'') + '|' + (m.repuestoId || ('n:' + String(m.repuesto||'').trim().toLowerCase()));
+    if (!por.has(k)) por.set(k, new Array(sem).fill(0));
+    const w = Math.min(sem-1, Math.floor((Date.now() - ms) / (7*86400000))); por.get(k)[w] += q;
+  });
+  const filas = [];
+  equipos.forEach(e => (e.repuestos || []).forEach((p, idx) => {
+    const sem1 = por.get(e.id + '|' + (p.id || '')) || por.get(e.id + '|n:' + String(p.r||'').trim().toLowerCase());
+    if (!sem1) return;
+    const tot = sem1.reduce((a,b)=>a+b,0); if (!tot) return;
+    const d = tot / MM_DIAS, mw = tot / sem;
+    const sd = Math.sqrt(sem1.reduce((a,x)=>a+(x-mw)*(x-mw),0) / Math.max(1, sem-1));
+    const min = Math.ceil(d*LT + 1.65*sd*Math.sqrt(LT/7)), max = Math.max(min, Math.ceil(min + d*C));
+    const minAct = p.min==null || p.min==='' ? null : Number(p.min), maxAct = p.max==null || p.max==='' ? null : Number(p.max);
+    const estado = minAct == null || minAct < min ? 'corto' : minAct > 2*min && minAct - min >= 2 ? 'alto' : 'ok';
+    filas.push({ equipoId:e.id, equipo:e.nombre, idx, repId:p.id||'', repuesto:p.r||'', modelo:p.m||'', stock:p.q, tot, mes:d*30, min, max, minAct, maxAct, estado });
+  }));
+  return filas.sort((a,b)=>(a.estado==='corto'?0:a.estado==='alto'?1:2)-(b.estado==='corto'?0:b.estado==='alto'?1:2) || b.tot-a.tot);
+}
+async function mmCargar(){
+  const b = document.getElementById('mmCalc'); b.disabled = true;
+  try {
+    if (!_mmMovs){
+      const d = new Date(Date.now() - MM_DIAS*86400000);
+      const s = await db.collection('movimientos').where('fecha', '>=', firebase.firestore.Timestamp.fromDate(d)).get();
+      _mmMovs = s.docs.map(x => x.data());
+    }
+    mmPintar();
+  } catch(e){ document.getElementById('mmRes').innerHTML = `<div class="empty-state">${fbEsc(TXA('No se pudo leer: {e}').replace('{e}', e.message))}</div>`; }
+  b.disabled = false;
+}
+function mmPintar(){
+  if (!_mmMovs) return;
+  const LT = Math.max(1, Math.min(365, +document.getElementById('mmLT').value || 15)), C = Math.max(1, Math.min(365, +document.getElementById('mmCiclo').value || 30));
+  try { localStorage.setItem('mmCfg', JSON.stringify({ LT, C })); } catch(e){}
+  _mmFilas = mmCalcular(_mmMovs, DB.filter(e => fbEquipoEnNave(e)), LT, C);
+  const EST = { corto: 'Mínimo muy bajo', alto: 'Mínimo muy alto', ok: 'Bien' };
+  const f1 = v => (Math.round(v*10)/10).toString();
+  document.getElementById('mmRes').innerHTML = _mmFilas.length ? `<div class="table-card"><div style="overflow-x:auto;"><table>
+    <thead><tr><th>${fbEsc(TXA('Equipo'))}</th><th>${fbEsc(TXA('Repuesto'))}</th><th>${fbEsc(TXA('Salidas 180 días'))}</th><th>${fbEsc(TXA('Por mes'))}</th><th>Stock</th><th>${fbEsc(TXA('Mín. actual → sugerido'))}</th><th>${fbEsc(TXA('Máx. actual → sugerido'))}</th><th>${fbEsc(TXA('Estado'))}</th><th></th></tr></thead><tbody>`
+    + _mmFilas.map((r,i) => `<tr><td class="part-name">${fbEsc(r.equipo)}</td><td>${fbEsc(r.repuesto)}${r.modelo ? `<div class="part-modelo">${fbEsc(r.modelo)}</div>` : ''}</td><td class="mono">${f1(r.tot)}</td><td class="mono">${f1(r.mes)}</td><td class="mono">${fbEsc(r.stock ?? '—')}</td><td class="mono">${r.minAct ?? '—'} → <b>${r.min}</b></td><td class="mono">${r.maxAct ?? '—'} → <b>${r.max}</b></td><td><span class="mm-est mm-${r.estado}">${fbEsc(TXA(EST[r.estado]))}</span></td><td>${r.estado !== 'ok' ? `<button class="btn sm" type="button" data-mm="${i}">${fbEsc(TXA('Ajustar'))}</button>` : ''}</td></tr>`).join('')
+    + `</tbody></table></div></div><div class="hdr-sub" style="margin-top:6px;">${fbEsc(TXA('“Mínimo muy bajo”: con el consumo real, el repuesto se acabaría antes de que llegue el pedido. “Mínimo muy alto”: dinero parado en el almacén.'))}</div>`
+    : `<div class="empty-state">${fbEsc(TXA('No hay salidas de repuestos en los últimos 180 días.'))}</div>`;
+  if (window.VTIcons) VTIcons.hydrate(document.getElementById('mmRes'));
+}
+function mmAjustar(i){
+  const r = _mmFilas[i]; if (!r) return;
+  irSeccion('repuestos');
+  openEquipo(r.equipoId);
+  const e = getCurrentEquipo(); if (!e) return;
+  let idx = (e.repuestos || []).findIndex(p => r.repId && p.id === r.repId);
+  if (idx < 0) idx = (e.repuestos || []).findIndex(p => String(p.r||'').trim().toLowerCase() === r.repuesto.trim().toLowerCase());
+  if (idx < 0) return;
+  openRepuestoModal(idx);
+  document.getElementById('rp-min').value = r.min; document.getElementById('rp-max').value = r.max;
+  if (typeof showToast === 'function') showToast(TXA('Valores sugeridos puestos: revisa y guarda.'));
+}
+(function(){
+  try { const c = JSON.parse(localStorage.getItem('mmCfg') || 'null'); if (c){ document.getElementById('mmLT').value = c.LT; document.getElementById('mmCiclo').value = c.C; } } catch(e){}
+  document.getElementById('mmCalc').addEventListener('click', mmCargar);
+  ['mmLT','mmCiclo'].forEach(id => document.getElementById(id).addEventListener('change', mmPintar));
+  document.getElementById('mmRes').addEventListener('click', ev => { const b = ev.target.closest('[data-mm]'); if (b) mmAjustar(+b.dataset.mm); });
+})();
 function renderCompras(){
   const rows = filasFaltantes(DB.filter(e => fbEquipoEnNave(e)));
   document.getElementById('comprasSub').textContent = AT('a_faltN', { n: rows.length });

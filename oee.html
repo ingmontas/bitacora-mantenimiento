@@ -230,7 +230,9 @@ const NIVEL_IC = { mundial: 'award', tipico: 'check', bajo: 'alert', critico: 'x
 const UNIDADES = ['piezas', 'metros', 'kg', 'rollos', 'sacos', 'cajas', 'litros'];
 
 let EQUIPOS = [], EQ = new Map(), ABIERTOS = [], PAROS = [], PRODS = [], OTS = [], DESDE = '', CARGANDO = null;
-let ES_MANT = false, ES_SUP = false, SEC = 'ahora', PER = '7', HPER = '7';
+let ES_MANT = false, ES_SUP = false, ES_ADMIN = false, SEC = 'ahora', PER = '7', HPER = '7';
+// (10 nov 2026) Dinero perdido por paros: solo Administrador (/costos_config/paros, que solo él lee)
+let COSTO = { porHora: 0, porEquipo: {} };
 
 const nombreEq = id => (EQ.get(id) || {}).nombre || id;
 const lugarEq = id => { const e = EQ.get(id) || {}; return [e.localidad, e.linea].filter(Boolean).join(' · '); };
@@ -419,7 +421,7 @@ function pintarOee() {
     return `<div class="oe-card"><h2>${esc(tx('Tiempo perdido por causa'))}<small>${esc(tx('Todos los paros del período, con o sin turno registrado.'))}</small></h2>` + res.pareto.map(x => `<div class="oe-bar" title="${esc(tx(C.CAT[x.cat].t))}: ${durTxt(x.min)}"><div class="n">${esc(tx(C.CAT[x.cat].t))}<small>${esc(tx(x.clase === 'fuera' ? 'No baja el OEE' : x.clase === 'plan' ? 'Planificado' : 'No planificado'))}</small></div><div class="b"><span style="width:${Math.max(2, x.min / max * 100)}%"></span></div><div class="m">${durTxt(x.min)} · ${fmtN(x.min / tot * 100)} %</div></div>`).join('') + '</div>';
   })() : '';
   if (!P.turnos) {
-    $('oeVista').innerHTML = `<div class="oe-card"><h2>${esc(tx('Todavía no hay turnos registrados en este período.'))}</h2><p class="oe-note">${esc(tx('El OEE necesita la producción de cada turno: cuánto se produjo, cuánto salió malo y el ritmo ideal de la máquina. Regístralo en la pestaña Turno.'))}</p><div class="oe-acts"><button type="button" class="vt-btn pri" id="oeIrTurno">${ic('clipboard')}${esc(tx('Registrar turno'))}</button></div></div>` + pareto;
+    $('oeVista').innerHTML = `<div class="oe-card"><h2>${esc(tx('Todavía no hay turnos registrados en este período.'))}</h2><p class="oe-note">${esc(tx('El OEE necesita la producción de cada turno: cuánto se produjo, cuánto salió malo y el ritmo ideal de la máquina. Regístralo en la pestaña Turno.'))}</p><div class="oe-acts"><button type="button" class="vt-btn pri" id="oeIrTurno">${ic('clipboard')}${esc(tx('Registrar turno'))}</button></div></div>` + dineroHtml(r) + pareto;
     const b = $('oeIrTurno'); if (b) b.onclick = () => irSec('turno');
     return;
   }
@@ -442,9 +444,45 @@ function pintarOee() {
       <div class="oe-tile"><div class="l">${esc(tx('Disponibilidad'))}</div><div class="v">${pct(P.A)}</div><div class="s">${esc(tx('Paros'))}: ${durTxt(P.perdido)}</div></div>
       <div class="oe-tile"><div class="l">${esc(tx('Rendimiento'))}</div><div class="v">${pct(P.P)}</div><div class="s">${esc(tx('Velocidad contra el ritmo ideal'))}</div></div>
       <div class="oe-tile"><div class="l">${esc(tx('Calidad'))}</div><div class="v">${pct(P.Q)}</div><div class="s">${esc(tx('Malas'))}: ${fmtN(P.malas)}</div></div>
-    </div>` + stack + tabla + pareto + trend +
+    </div>` + dineroHtml(r) + stack + tabla + pareto + trend +
     (res.sinTurnoMin ? `<p class="oe-note">${esc(tx('Hay {t} de paros en días sin turno registrado: salen en "Tiempo perdido por causa" pero no entran en el OEE.').replace('{t}', durTxt(res.sinTurnoMin)))}</p>` : '');
 }
+// ══════ Dinero perdido por paros (Administrador) ══════
+// Minutos que bajan el OEE (fallas de las OTs + paros planificados y no planificados; no cuenta comida,
+// sin programa, reuniones ni preventivo programado) × valor por hora de cada máquina (o el general).
+const tasaDe = id => { const v = +COSTO.porEquipo[id]; return v > 0 ? v : (+COSTO.porHora || 0); };
+const dinero = v => 'RD$ ' + fmtN(v, 0);
+function perdidas(r) {
+  const por = new Map();
+  const suma = (id, min) => por.set(id, (por.get(id) || 0) + min);
+  PAROS.concat(ABIERTOS).filter(enMiNave).forEach(p => { const c = C.CAT[p.categoria]; if (!c || c.clase === 'fuera' || p.estado === 'anulado' || p.fecha < r.desde || p.fecha > r.hasta) return; suma(p.equipoId, C.minParo(p)); });
+  OTS.filter(enMiNave).forEach(d => { const x = C.otComoParo(d); if (x && x.cat === 'falla' && x.fecha >= r.desde && x.fecha <= r.hasta) suma(x.equipoId, x.min); });
+  return [...por.entries()].map(([id, min]) => ({ id, min, tasa: tasaDe(id), valor: min / 60 * tasaDe(id) })).sort((a, b) => b.valor - a.valor || b.min - a.min);
+}
+function dineroHtml(r) {
+  if (!ES_ADMIN) return '';
+  const l = perdidas(r), tot = l.reduce((a, x) => a + x.valor, 0), sinTasa = l.filter(x => !x.tasa).length;
+  return `<div class="oe-card"><h2>${esc(tx('Dinero perdido por paros (estimado)'))}<small>${esc(tx('Solo lo ve el Administrador. Horas que bajan el OEE × lo que deja de producir cada máquina por hora.'))}</small></h2>
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px"><span style="font:600 30px var(--font-mono)">${dinero(tot)}</span><button type="button" class="vt-btn" id="oeTasas">${ic('coins')}${esc(tx('Valor por hora'))}</button></div>
+    ${l.length ? `<div class="oe-scroll" style="margin-top:10px"><table class="oe-tabla"><thead><tr><th>${esc(tx('Equipo'))}</th><th class="n">${esc(tx('Horas perdidas'))}</th><th class="n">${esc(tx('Valor por hora'))}</th><th class="n">${esc(tx('Pérdida'))}</th></tr></thead><tbody>${l.slice(0, 10).map(x => `<tr><td>${esc(nombreEq(x.id))}</td><td class="n">${fmtN(x.min / 60, 1)}</td><td class="n">${x.tasa ? dinero(x.tasa) : '—'}</td><td class="n"><b>${x.tasa ? dinero(x.valor) : '—'}</b></td></tr>`).join('')}</tbody></table></div>` : `<p class="oe-note">${esc(tx('No hay paros en este período.'))}</p>`}
+    ${sinTasa ? `<p class="oe-note">${esc(tx('{n} máquinas sin valor por hora: ponlo en "Valor por hora" para ver cuánto se pierde.').replace('{n}', sinTasa))}</p>` : ''}</div>`;
+}
+function abrirTasas() {
+  const r = rango(PER), ids = [...new Set(perdidas(r).map(x => x.id))];
+  const H = hoja(tx('Valor por hora de máquina parada'), tx('Lo que deja de producir (margen) en una hora. Solo lo ve el Administrador.'), `
+    <label for="tsGen">${esc(tx('Valor general por hora (RD$)'))}</label><input type="number" id="tsGen" min="0" step="1" inputmode="decimal" value="${esc(COSTO.porHora || '')}"/>
+    ${ids.length ? `<div class="oe-grp">${esc(tx('Por máquina (si es distinto del general)'))}</div>` + ids.map(id => `<label for="ts_${esc(id)}">${esc(nombreEq(id))}</label><input type="number" min="0" step="1" inputmode="decimal" data-eq="${esc(id)}" id="ts_${esc(id)}" value="${esc(COSTO.porEquipo[id] || '')}"/>`).join('') : ''}
+    <div class="oe-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="tsOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  H.q('#tsOk').onclick = async () => {
+    const gen = +H.q('#tsGen').value || 0, porEquipo = Object.assign({}, COSTO.porEquipo);
+    if (gen < 0 || gen > 1e9) { toast(tx('Revisa los números.'), 'warn'); return; }
+    H.bg.querySelectorAll('[data-eq]').forEach(i => { const v = +i.value; if (v > 0 && v <= 1e9) porEquipo[i.dataset.eq] = v; else delete porEquipo[i.dataset.eq]; });
+    const d = { porHora: gen, porEquipo, actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() };
+    try { await db.collection('costos_config').doc('paros').set(d); COSTO = { porHora: gen, porEquipo }; H.cerrar(); toast(tx('Guardado'), 'ok'); pintarOee(); }
+    catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+  };
+}
+document.addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('#oeTasas')) abrirTasas(); });
 function comoSeCalcula() {
   hoja(tx('Cómo se calcula el OEE'), '', `<div style="font-size:14px;line-height:1.55">
     <p><b>OEE = ${esc(tx('Disponibilidad'))} × ${esc(tx('Rendimiento'))} × ${esc(tx('Calidad'))}</b></p>
@@ -528,6 +566,8 @@ window.addEventListener('idioma-cambiado', () => { $('tUnidad').innerHTML = UNID
 window.fbReady.then(async () => {
   ES_MANT = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR', 'TECNICO');
   ES_SUP = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO', 'SUPERVISOR');
+  ES_ADMIN = userHasRole('ADMINISTRADOR');
+  if (ES_ADMIN) db.collection('costos_config').doc('paros').get().then(s => { const d = s.exists ? s.data() : {}; COSTO = { porHora: +d.porHora || 0, porEquipo: (d.porEquipo && typeof d.porEquipo === 'object') ? d.porEquipo : {} }; if (SEC === 'oee') pintarOee(); }).catch(() => {});
   $('oeTabOee').hidden = !ES_MANT;
   try { const c = await fbEquiposCatalogo(false); EQUIPOS = (c && c.docs ? c.docs.map(x => Object.assign({ id: x.id }, x.data())) : []).filter(e => e.activo !== false); } catch (e) { EQUIPOS = []; }
   EQUIPOS.forEach(e => EQ.set(e.id, e));
