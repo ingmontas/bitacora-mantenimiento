@@ -24,21 +24,29 @@
 <link rel="stylesheet" href="tema.css"/>
 <style>
 /* ══════════════════════════════════════════════════════════════════════
-   (6 nov 2026) DIAGRAMA UNIFILAR — cómo llega la energía a cada máquina.
-   Datos: /electrico (un documento por elemento: acometida, generador,
-   transformador, transferencia, tablero, interruptor o carga) con padreId.
-   El dibujo se arma solo a partir de ese árbol (nadie dibuja a mano).
-   Lo leen Administrador, Encargado, Supervisor y Técnico (lo necesitan para
-   LOTO); lo editan Administrador y Encargado. Las cargas pueden enlazarse a un
-   equipo del catálogo: Equipo 360 muestra de qué interruptor se alimenta.
-   Lecturas: una consulta a /electrico al abrir (sin oyentes en vivo).
+   DIAGRAMA UNIFILAR — cómo llega la energía a cada máquina.
+   (6 nov 2026) Módulo inicial · (9 nov 2026) Entrega 1 "Unifilar Pro":
+   varios planos por planta (/diagramas), datos eléctricos completos por
+   elemento (campo e), símbolos ANSI/IEEE 315 y plano impreso profesional
+   (marco con zonas, simbología, notas, resumen, revisiones, cajetín y
+   espacio para sello y firma del ingeniero) en 11×17, carta o A3.
+   Datos: /electrico (un documento por elemento, padreId + diagramaId) y
+   /diagramas (datos del plano). Lo leen Administrador, Encargado,
+   Supervisor y Técnico (LOTO); lo editan Administrador y Encargado.
+   Lecturas al abrir: /electrico + /diagramas (sin oyentes en vivo).
    ══════════════════════════════════════════════════════════════════════ */
-#uf [hidden], .uf-form [hidden] { display: none !important; }
+#uf [hidden], .uf-form [hidden], .uf-hoja [hidden] { display: none !important; }
 body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
 #uf { max-width: 1400px; margin: 0 auto; padding: 14px 14px 110px; }
 .uf-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .uf-top h1 { font-size: 20px; margin: 0 auto 0 0; letter-spacing: -.01em; }
-.uf-busca { flex: 1 1 260px; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); }
+.uf-plano { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.uf-plano select { flex: 1 1 260px; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 600 15px var(--font-sans); }
+.uf-plano .meta { flex: 1 1 100%; font: 500 12.5px var(--font-mono); color: var(--color-muted); }
+.uf-est { display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: var(--radius-pill); font: 600 12px var(--font-sans); border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); }
+.uf-est.para_construccion, .uf-est.conforme_obra { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success); }
+.uf-est.en_revision { background: var(--color-warn-soft); color: var(--color-warn-text); border-color: var(--color-warn); }
+.uf-busca { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); margin-bottom: 10px; }
 .uf-busca input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: 15px var(--font-sans); outline: none; min-height: 44px; }
 .uf-busca .vt-ico { width: 18px; height: 18px; color: var(--color-muted); }
 .uf-res { display: none; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); margin: -4px 0 10px; max-height: 260px; overflow: auto; }
@@ -54,12 +62,14 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .uf-zoom button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font: 700 18px var(--font-sans); }
 .uf-zoom .vt-ico { width: 18px; height: 18px; }
 #ufSvg { display: block; margin: 0 8px 12px; }
-#ufSvg text { font-family: var(--font-sans); fill: var(--color-text); }
-#ufSvg .sub { font-family: var(--font-mono); font-size: 10.5px; fill: var(--color-muted); }
-#ufSvg .ln, #ufSvg .sym { stroke: var(--color-text); stroke-width: 2; fill: none; }
-#ufSvg .bus { fill: var(--color-text); }
-#ufSvg .fill { fill: var(--color-surface); }
-#ufSvg .resp { stroke: var(--color-muted); stroke-width: 2; stroke-dasharray: 6 5; fill: none; }
+.uf-svg text { font-family: var(--font-sans); fill: var(--color-text); }
+.uf-svg .sub { font-family: var(--font-mono); font-size: 10.5px; fill: var(--color-muted); }
+.uf-svg .ln, .uf-svg .sym { stroke: var(--color-text); stroke-width: 1.8; fill: none; }
+.uf-svg .fill { fill: var(--color-surface); }
+.uf-svg .bus { fill: var(--color-text); }
+.uf-svg .sy { font: 700 10px var(--font-sans); }
+.uf-svg .resp { stroke: var(--color-muted); stroke-width: 1.8; stroke-dasharray: 6 5; fill: none; }
+.uf-svg .dash { stroke: var(--color-text); stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
 #ufSvg .nd { cursor: pointer; outline: none; }
 #ufSvg .nd .hit { fill: transparent; }
 #ufSvg .nd:hover .hit, #ufSvg .nd:focus-visible .hit { fill: var(--color-surface-2); stroke: var(--color-focus); stroke-width: 1.5; }
@@ -73,7 +83,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .uf-panel .tipo { font-size: 12.5px; color: var(--color-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .uf-datos { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0; font-size: 14px; }
 .uf-datos dt { color: var(--color-muted); }
-.uf-datos dd { margin: 0; overflow-wrap: anywhere; }
+.uf-datos dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 13px; }
 .uf-caja { border-radius: 10px; padding: 10px 12px; margin: 10px 0; font-size: 14px; border: 1px solid var(--color-border); background: var(--color-surface-2); }
 .uf-caja.off { background: var(--color-danger-soft); border-color: var(--color-danger); color: var(--color-danger-text); }
 .uf-caja.ruta { background: var(--color-info-soft); border-color: var(--color-info); color: var(--color-info-text); }
@@ -86,10 +96,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .uf-acts .vt-btn { flex: 1 1 auto; }
 .uf-ley { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 13px; color: var(--color-muted); }
 .uf-ley span { display: inline-flex; align-items: center; gap: 6px; }
-.uf-ley svg { width: 26px; height: 26px; }
-.uf-ley .sym, .uf-ley .ln { stroke: var(--color-text); stroke-width: 2; fill: none; }
-.uf-ley .bus { fill: var(--color-text); }
-.uf-ley text { font-family: var(--font-sans); fill: var(--color-text); }
+.uf-ley svg { width: 28px; height: 28px; }
 .uf-vacio { padding: 36px 18px; text-align: center; color: var(--color-muted); font-size: 15px; }
 .uf-vacio .vt-ico { width: 40px; height: 40px; color: var(--color-muted); }
 .uf-vacio .uf-acts { justify-content: center; }
@@ -98,32 +105,87 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .uf-form input, .uf-form select, .uf-form textarea { width: 100%; min-height: 48px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 15px var(--font-sans); box-sizing: border-box; }
 .uf-form textarea { min-height: 72px; resize: vertical; }
 .uf-form .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.uf-form .g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 10px; }
 .uf-form .nota { font-size: 12.5px; color: var(--color-muted); margin-top: 4px; }
+.uf-form h4 { margin: 16px 0 0; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text); }
+.uf-revs { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+.uf-revs th { text-align: left; font-size: 12px; color: var(--color-muted); border-bottom: 1px solid var(--color-border); padding: 6px 4px; }
+.uf-revs td { border-bottom: 1px solid var(--color-border); padding: 6px 4px; vertical-align: top; }
+
+/* ══════ Plano impreso (solo al imprimir) ══════ */
+.uf-hoja { display: none; }
 @media print {
-  .vt-hdr, .vt-tabbar, .vt-side, .uf-top, .uf-res, .uf-panel, .uf-zoom, .uf-banner, .vt-toast { display: none !important; }
-  body { background: #fff; }
-  #uf { padding: 0; max-width: none; }
-  .uf-main { display: block; }
-  .uf-lienzo { border: 0; max-height: none; overflow: visible; }
-  #ufSvg { width: 100% !important; height: auto !important; margin: 0; }
-  #ufPrintHead { display: block !important; font: 600 14px var(--font-sans); margin: 0 0 8px; }
+  html, body { background: #fff !important; }
+  body > *:not(.uf-hoja) { display: none !important; }
+  .uf-hoja { display: grid !important; }
 }
-#ufPrintHead { display: none; }
+.uf-hoja { box-sizing: border-box; color: #000; background: #fff; font-family: 'IBM Plex Sans', Arial, sans-serif; position: relative;
+  grid-template-columns: minmax(0, 1fr) var(--col); grid-template-rows: auto minmax(0, 1fr) var(--caj); gap: 0;
+  border: 2px solid #000; outline: 1px solid #000; outline-offset: -6px; padding: 10px; }
+.uf-hoja.tabloide { width: 17in; height: 11in; --col: 3.3in; --caj: 1.55in; }
+.uf-hoja.carta { width: 11in; height: 8.5in; --col: 2.6in; --caj: 1.35in; font-size: 92%; }
+.uf-hoja.a3 { width: 420mm; height: 297mm; --col: 3.3in; --caj: 1.55in; }
+.uf-hoja * { box-sizing: border-box; }
+.uf-hoja .h-cab { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; padding: 2px 4px 6px; border-bottom: 1px solid #000; }
+.uf-hoja .h-cab b { font: 700 13pt 'IBM Plex Sans', Arial, sans-serif; letter-spacing: .03em; }
+.uf-hoja .h-cab span { font: 500 8.5pt 'IBM Plex Mono', monospace; }
+.uf-hoja .h-cab .h-est { margin-left: auto; border: 1.5px solid #000; padding: 1px 8px; font: 700 8.5pt 'IBM Plex Sans', sans-serif; letter-spacing: .06em; }
+.uf-hoja .h-dib { min-height: 0; padding: 6px; position: relative; }
+.uf-hoja .h-dib svg { width: 100%; height: 100%; display: block; }
+.uf-hoja .h-col { border-left: 1px solid #000; display: flex; flex-direction: column; min-height: 0; }
+.uf-hoja .h-box { border-bottom: 1px solid #000; padding: 6px 8px; font-size: 7.5pt; line-height: 1.4; overflow: hidden; }
+.uf-hoja .h-box:last-child { border-bottom: 0; flex: 1; }
+.uf-hoja .h-t { font: 700 7.5pt 'IBM Plex Sans', sans-serif; letter-spacing: .08em; margin-bottom: 4px; }
+.uf-hoja .h-ley { display: grid; grid-template-columns: 26px 1fr; gap: 2px 6px; align-items: center; }
+.uf-hoja .h-ley svg { width: 26px; height: 22px; }
+.uf-hoja .h-notas { white-space: pre-line; }
+.uf-hoja .h-res td { padding: 1px 0; font: 500 7.5pt 'IBM Plex Mono', monospace; }
+.uf-hoja .h-res td + td { text-align: right; }
+.uf-hoja .h-caj { grid-column: 1 / -1; border-top: 2px solid #000; display: grid; grid-template-columns: 30% 15% 25% 16% 14%; font-size: 7.5pt; }
+.uf-hoja .h-caj > div { border-right: 1px solid #000; padding: 5px 7px; min-width: 0; overflow: hidden; }
+.uf-hoja .h-caj > div:last-child { border-right: 0; }
+.uf-hoja .h-lb { font-size: 6.5pt; letter-spacing: .08em; color: #333; }
+.uf-hoja .h-revs { width: 100%; border-collapse: collapse; font: 500 7pt 'IBM Plex Mono', monospace; }
+.uf-hoja .h-revs th { text-align: left; border-bottom: 1px solid #000; font: 600 6.5pt 'IBM Plex Sans', sans-serif; padding: 1px 2px; }
+.uf-hoja .h-revs td { border-bottom: 1px solid #bbb; padding: 1.5px 2px; }
+.uf-hoja .h-datos { display: grid; grid-template-columns: 1fr 1fr; padding: 0 !important; }
+.uf-hoja .h-datos > div { border-bottom: 1px solid #000; border-right: 1px solid #000; padding: 3px 6px; }
+.uf-hoja .h-datos > div:nth-child(2n) { border-right: 0; }
+.uf-hoja .h-datos > div:nth-last-child(-n+2) { border-bottom: 0; }
+.uf-hoja .h-v { font: 700 10pt 'IBM Plex Mono', monospace; }
+.uf-hoja .h-sello { display: flex; flex-direction: column; }
+.uf-hoja .h-sello .s { flex: 1; border: 1px dashed #555; margin: 3px 0; display: flex; align-items: center; justify-content: center; color: #555; }
+.uf-hoja .h-logo { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.uf-hoja .h-logo i { width: 22px; height: 22px; border-radius: 5px; background: #D21F26; color: #fff; font: 700 9pt 'IBM Plex Sans', sans-serif; font-style: normal; display: inline-flex; align-items: center; justify-content: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.uf-hoja .zn { position: absolute; font: 500 7pt 'IBM Plex Mono', monospace; color: #333; }
+.uf-hoja .uf-svg text { fill: #000; }
+.uf-hoja .uf-svg .sub { fill: #222; font-size: 9.5px; }
+.uf-hoja .uf-svg .ln, .uf-hoja .uf-svg .sym { stroke: #000; }
+.uf-hoja .uf-svg .bus { fill: #000; }
+.uf-hoja .uf-svg .fill { fill: #fff; }
+.uf-hoja .uf-svg .resp, .uf-hoja .uf-svg .dash { stroke: #000; }
 </style>
+<style id="ufPage">@page { size: 17in 11in; margin: 0; }</style>
 </head>
 <body>
 <main id="uf">
   <div class="uf-top">
     <h1>Diagrama unifilar</h1>
-    <button type="button" class="vt-btn" id="ufBtnPrint"><span data-icon="printer"></span>Imprimir</button>
+    <button type="button" class="vt-btn" id="ufBtnRevs" hidden><span data-icon="history"></span>Revisiones</button>
+    <button type="button" class="vt-btn" id="ufBtnPrint"><span data-icon="printer"></span>Imprimir plano</button>
     <button type="button" class="vt-btn pri" id="ufBtnNuevo" hidden><span data-icon="plus"></span>Agregar elemento</button>
+  </div>
+  <div class="uf-plano" id="ufPlanoBar" hidden>
+    <select id="ufPlanoSel" aria-label="Plano"></select>
+    <button type="button" class="vt-btn" id="ufBtnDatos" hidden><span data-icon="pencil"></span>Datos del plano</button>
+    <button type="button" class="vt-btn" id="ufBtnPlano" hidden><span data-icon="plus"></span>Nuevo plano</button>
+    <div class="meta" id="ufPlanoMeta"></div>
   </div>
   <div class="uf-busca"><span data-icon="search"></span><input id="ufBuscar" type="search" autocomplete="off" placeholder="Buscar equipo, tablero o interruptor" aria-label="Buscar equipo, tablero o interruptor"/></div>
   <div class="uf-res" id="ufRes" role="listbox" aria-label="Resultados"></div>
   <div id="ufBanner"></div>
   <div class="uf-main">
     <div class="uf-lienzo" id="ufLienzo">
-      <div id="ufPrintHead"></div>
       <div class="uf-zoom" id="ufZoom" hidden>
         <button type="button" id="ufZmenos" aria-label="Alejar">−</button>
         <button type="button" id="ufZmas" aria-label="Acercar">+</button>
@@ -134,6 +196,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
     <aside class="uf-panel" id="ufPanel" aria-live="polite"></aside>
   </div>
 </main>
+<div class="uf-hoja tabloide" id="ufHoja" aria-hidden="true"></div>
 
 <script>
 'use strict';
@@ -144,53 +207,111 @@ const ic = (n, c) => (window.VTIcons ? VTIcons.icon(n, { cls: c || '' }) : '');
 const tx = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
 const toast = (m, t) => (window.vtToast ? vtToast(m, t) : alert(m));
 const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const hoyTxt = () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); };
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
-const TIPOS = ['acometida', 'generador', 'transformador', 'transferencia', 'tablero', 'interruptor', 'carga'];
-const TIPO_TXT = { acometida: 'Acometida', generador: 'Planta de emergencia', transformador: 'Transformador', transferencia: 'Transferencia', tablero: 'Tablero', interruptor: 'Interruptor', carga: 'Carga' };
+// ══════ Tipos de elemento y sus datos eléctricos (campo e) ══════
+const TIPOS = ['acometida', 'medidor', 'fusible', 'generador', 'transformador', 'transferencia', 'tablero', 'ccm', 'interruptor', 'vfd', 'capacitor', 'ups', 'spd', 'carga'];
+const TIPO_TXT = { acometida: 'Acometida', medidor: 'Medición', fusible: 'Fusible', generador: 'Planta de emergencia', transformador: 'Transformador', transferencia: 'Transferencia', tablero: 'Tablero', ccm: 'Centro de control de motores', interruptor: 'Interruptor', vfd: 'Variador de frecuencia', capacitor: 'Banco de capacitores', ups: 'UPS', spd: 'Supresor de picos', carga: 'Carga' };
 const CARGA_TXT = { motor: 'Motor', iluminacion: 'Iluminación', tomas: 'Tomacorrientes', otro: 'Otra carga' };
-const CAMPOS = ['tipo', 'nombre', 'padreId', 'respaldoId', 'orden', 'planta', 'capacidad', 'voltaje', 'calibre', 'ubicacion', 'cargaTipo', 'equipoId', 'ruta', 'notas'];
+// [clave, etiqueta, ejemplo]
+const CAMPOS_E = {
+  acometida: [['kv', 'Tensión (kV)', '12.47'], ['fases', 'Fases e hilos', '3F 3H'], ['empresa', 'Distribuidora', 'EDE'], ['tipoAc', 'Aérea / subterránea', 'Aérea']],
+  medidor: [['tc', 'Relación de TC', '50:5'], ['num', 'N.º de medidor', '']],
+  fusible: [['amp', 'Corriente (A)', '40'], ['kv', 'Tensión (kV)', '15']],
+  generador: [['kw', 'Potencia (kW)', '350'], ['kva', 'Potencia (kVA)', '438'], ['v', 'Tensión', '480Y/277 V'], ['comb', 'Combustible', 'Diésel']],
+  transformador: [['kva', 'Potencia (kVA)', '750'], ['vp', 'Tensión primaria', '12.47 kV'], ['vs', 'Tensión secundaria', '480Y/277 V'], ['con', 'Conexión', 'Δ-Yn'], ['z', 'Impedancia Z (%)', '5.75'], ['tipoTx', 'Tipo', 'Pad-mounted']],
+  transferencia: [['amp', 'Corriente (A)', '1200'], ['polos', 'Polos', '4'], ['modo', 'Automática / manual', 'Automática']],
+  tablero: [['amp', 'Barra (A)', '1200'], ['v', 'Tensión', '480Y/277 V'], ['fases', 'Fases e hilos', '3F 4H'], ['kaic', 'Capacidad de cortocircuito (kA)', '65']],
+  ccm: [['amp', 'Barra (A)', '400'], ['v', 'Tensión', '480 V'], ['kaic', 'Capacidad de cortocircuito (kA)', '65']],
+  interruptor: [['polos', 'Polos', '3'], ['amp', 'Disparo (A)', '100'], ['marco', 'Marco (A)', '250'], ['kaic', 'Capacidad (kA)', '65'], ['disparo', 'Tipo de disparo', 'Termomagnético']],
+  vfd: [['hp', 'Potencia (HP)', '25'], ['v', 'Tensión', '480 V']],
+  capacitor: [['kvar', 'Potencia (kVAR)', '150'], ['pasos', 'Pasos', '6'], ['modo', 'Automático / fijo', 'Automático']],
+  ups: [['kva', 'Potencia (kVA)', '30'], ['min', 'Autonomía (min)', '15']],
+  spd: [['ka', 'Capacidad (kA)', '100'], ['tipoSpd', 'Tipo', '2']],
+  carga: [['hp', 'Potencia (HP)', '25'], ['kw', 'Potencia (kW)', ''], ['v', 'Tensión', '480 V'], ['fla', 'Corriente nominal (A)', '34']],
+};
+const COMUNES_E = [['largo', 'Largo del alimentador (m)', '30'], ['tuberia', 'Tubería', '2" EMT']];
+const HIJO_SUG = { acometida: 'medidor', medidor: 'transformador', fusible: 'transformador', generador: 'transferencia', transformador: 'interruptor', transferencia: 'tablero', tablero: 'interruptor', ccm: 'interruptor', interruptor: 'carga', vfd: 'carga', ups: 'carga' };
+const ES_BARRA = t => t === 'tablero' || t === 'ccm';
+const PUEDE_HIJOS = t => !['carga', 'capacitor', 'spd'].includes(t);
+const ESTADOS = ['borrador', 'en_revision', 'para_construccion', 'conforme_obra', 'archivado'];
+const ESTADO_TXT = { borrador: 'Borrador', en_revision: 'En revisión', para_construccion: 'Para construcción', conforme_obra: 'Conforme a obra', archivado: 'Archivado' };
+const TAMANOS = { tabloide: ['11 × 17 (tabloide)', '17in 11in'], carta: ['Carta', '11in 8.5in'], a3: ['A3', '420mm 297mm'] };
+const NOTAS_DEF = '1. Instalación según NFPA 70 (NEC) y la reglamentación eléctrica vigente.\n2. Conductores de cobre THHN/THWN-2, 90 °C; calibres en AWG/kcmil.\n3. Antes de intervenir: bloqueo y etiquetado (LOTO) según NFPA 70E.\n4. Caída de tensión máxima: 3 % alimentadores, 5 % total.\n5. Verificar en sitio antes de construir. El plano es válido con sello y firma del ingeniero responsable.';
+const CAMPOS = ['tipo', 'nombre', 'padreId', 'respaldoId', 'orden', 'planta', 'capacidad', 'voltaje', 'calibre', 'ubicacion', 'cargaTipo', 'equipoId', 'ruta', 'notas', 'diagramaId', 'ref'];
+
+// Dos líneas de datos para el dibujo, a partir de los datos eléctricos (o del texto libre de antes).
+function lineas(n) {
+  const e = n.e || {}, u = (v, s) => (v !== undefined && v !== null && String(v).trim() !== '' ? String(v).trim() + s : '');
+  const j = (...a) => a.filter(Boolean).join(' · ');
+  let a = '', b = '';
+  switch (n.tipo) {
+    case 'acometida': a = j(u(e.kv, ' kV'), e.fases); b = j(e.empresa, e.tipoAc); break;
+    case 'medidor': a = j(e.tc ? 'TC ' + e.tc : ''); b = e.num ? 'N.º ' + e.num : ''; break;
+    case 'fusible': a = j(u(e.amp, ' A'), u(e.kv, ' kV')); break;
+    case 'generador': a = j(u(e.kw, ' kW'), u(e.kva, ' kVA')); b = j(e.v, e.comb); break;
+    case 'transformador': a = j(u(e.kva, ' kVA'), e.vp && e.vs ? e.vp + ' – ' + e.vs : (e.vp || e.vs)); b = j(e.con, u(e.z, '') ? 'Z ' + e.z + ' %' : '', e.tipoTx); break;
+    case 'transferencia': a = j(u(e.amp, ' A'), u(e.polos, 'P')); b = e.modo || ''; break;
+    case 'tablero': case 'ccm': a = j(e.amp ? tx('Barra') + ' ' + e.amp + ' A' : '', e.v, e.fases); b = e.kaic ? e.kaic + ' kAIC' : ''; break;
+    case 'interruptor': a = j(e.polos ? e.polos + 'P ' + (e.amp ? e.amp + ' AT' : '') + (e.marco ? '/' + e.marco + ' AF' : '') : u(e.amp, ' A'), u(e.kaic, ' kA')); b = e.disparo || ''; break;
+    case 'vfd': a = j(u(e.hp, ' HP'), e.v); break;
+    case 'capacitor': a = j(u(e.kvar, ' kVAR'), e.pasos ? e.pasos + ' ' + tx('pasos') : ''); b = e.modo || ''; break;
+    case 'ups': a = j(u(e.kva, ' kVA'), u(e.min, ' min')); break;
+    case 'spd': a = j(e.tipoSpd ? tx('Tipo') + ' ' + e.tipoSpd : '', u(e.ka, ' kA')); break;
+    case 'carga': a = j(u(e.hp, ' HP'), u(e.kw, ' kW'), e.v); b = e.fla ? 'FLA ' + e.fla + ' A' : ''; break;
+  }
+  if (!a) a = [n.capacidad, n.voltaje].filter(Boolean).join(' · ');
+  const cab = [n.calibre, e.largo ? e.largo + ' m' : ''].filter(Boolean).join(' · ');
+  return { a, b, cab };
+}
+function capacidadDe(n) { const l = lineas(n); return String(l.a || '').slice(0, 40); }
+function voltajeDe(n) { const e = n.e || {}; return String(e.vs || e.v || (e.kv ? e.kv + ' kV' : '') || n.voltaje || '').slice(0, 40); }
 
 // ── Estado ──
-let NODOS = new Map();       // id → nodo (datos de /electrico o del ejemplo)
-let EJEMPLO = false;         // true = mostrando el ejemplo (no se guarda)
-let PUEDE_EDITAR = false;    // Administrador o Encargado
-let SEL = null;              // id elegido
-let ZOOM = 1;
-let EQUIPOS = [];            // catálogo (para enlazar cargas)
+let TODOS = new Map();       // todos los elementos de la nave
+let NODOS = new Map();       // los del plano abierto
+let DIAGS = new Map();       // planos de la nave
+let DIAG = null;             // id del plano abierto ('' = elementos sin plano)
+let EJEMPLO = false;
+let PUEDE_EDITAR = false;
+let SEL = null, ZOOM = 1;
+let EQUIPOS = [];
 let CARGADO = false, ERROR = '';
 
-// ══════ Ejemplo (en memoria, no se guarda hasta que el Encargado lo pida) ══════
+// ══════ Ejemplo (en memoria) ══════
 function datosEjemplo() {
-  const n = (id, tipo, nombre, padreId, o) => Object.assign({ id, tipo, nombre, padreId: padreId || '', orden: 0, capacidad: '', voltaje: '', calibre: '', ubicacion: '', cargaTipo: '', equipoId: '', respaldoId: '', notas: '' }, o || {});
+  const n = (id, tipo, nombre, padreId, e, o) => Object.assign({ id, tipo, nombre, padreId: padreId || '', orden: 0, capacidad: '', voltaje: '', calibre: '', ubicacion: '', cargaTipo: '', equipoId: '', respaldoId: '', notas: '', diagramaId: 'ex_plano', ref: '', e: e || {} }, o || {});
   return [
-    n('ex_aco', 'acometida', 'Acometida EDE', '', { voltaje: '12.5 kV', ubicacion: 'Poste de entrada', orden: 1 }),
-    n('ex_gen', 'generador', 'Planta 350 kW', '', { capacidad: '350 kW', voltaje: '480 V', ubicacion: 'Cuarto de planta', orden: 2 }),
-    n('ex_tx1', 'transformador', 'TX-1', 'ex_aco', { capacidad: '750 kVA', voltaje: '12.5 kV / 480 V', ubicacion: 'Subestación' }),
-    n('ex_ats', 'transferencia', 'ATS-1', 'ex_tx1', { capacidad: '1200 A', voltaje: '480 V', respaldoId: 'ex_gen', ubicacion: 'Cuarto eléctrico' }),
-    n('ex_tp', 'tablero', 'TP — Tablero principal', 'ex_ats', { capacidad: '1200 A', voltaje: '480 V', ubicacion: 'Cuarto eléctrico' }),
-    n('ex_i1', 'interruptor', 'INT-1', 'ex_tp', { capacidad: '3P 400 A', calibre: '2 × 3#250 MCM', orden: 1 }),
-    n('ex_i2', 'interruptor', 'INT-2', 'ex_tp', { capacidad: '3P 200 A', calibre: '3#3/0 THHN', orden: 2 }),
-    n('ex_i3', 'interruptor', 'INT-3', 'ex_tp', { capacidad: '3P 100 A', calibre: '3#2 THHN', orden: 3 }),
-    n('ex_tt', 'tablero', 'TD-TEJ — Tejeduría', 'ex_i1', { capacidad: '400 A', voltaje: '480 V', ubicacion: 'Nave tejeduría' }),
-    n('ex_tt1', 'interruptor', 'TEJ-1', 'ex_tt', { capacidad: '3P 60 A', orden: 1 }),
-    n('ex_tt2', 'interruptor', 'TEJ-2', 'ex_tt', { capacidad: '3P 60 A', orden: 2 }),
-    n('ex_tt3', 'interruptor', 'TEJ-3', 'ex_tt', { capacidad: '3P 40 A', orden: 3 }),
-    n('ex_c1', 'carga', 'Telar 5', 'ex_tt1', { cargaTipo: 'motor', capacidad: '25 HP', voltaje: '480 V' }),
-    n('ex_c2', 'carga', 'Telar 6', 'ex_tt2', { cargaTipo: 'motor', capacidad: '25 HP', voltaje: '480 V' }),
-    n('ex_c3', 'carga', 'Urdidora', 'ex_tt3', { cargaTipo: 'motor', capacidad: '15 HP', voltaje: '480 V' }),
-    n('ex_ts', 'tablero', 'TD-SER — Servicios', 'ex_i2', { capacidad: '225 A', voltaje: '480 V', ubicacion: 'Cuarto de compresores' }),
-    n('ex_ts1', 'interruptor', 'SER-1', 'ex_ts', { capacidad: '3P 125 A', orden: 1 }),
-    n('ex_ts2', 'interruptor', 'SER-2', 'ex_ts', { capacidad: '3P 30 A', orden: 2 }),
-    n('ex_c4', 'carga', 'Compresor GA-37', 'ex_ts1', { cargaTipo: 'motor', capacidad: '50 HP', voltaje: '480 V' }),
-    n('ex_c5', 'carga', 'Secador de aire', 'ex_ts2', { cargaTipo: 'otro', capacidad: '5 kW', voltaje: '480 V' }),
-    n('ex_tx2', 'transformador', 'TX-2', 'ex_i3', { capacidad: '75 kVA', voltaje: '480 V / 208-120 V' }),
-    n('ex_tl', 'tablero', 'TL — Alumbrado', 'ex_tx2', { capacidad: '225 A', voltaje: '208/120 V' }),
-    n('ex_tl1', 'interruptor', 'L-1', 'ex_tl', { capacidad: '1P 20 A', orden: 1 }),
-    n('ex_tl2', 'interruptor', 'L-2', 'ex_tl', { capacidad: '1P 20 A', orden: 2 }),
-    n('ex_c6', 'carga', 'Alumbrado nave', 'ex_tl1', { cargaTipo: 'iluminacion', capacidad: '2.4 kW', voltaje: '120 V' }),
-    n('ex_c7', 'carga', 'Tomas oficina', 'ex_tl2', { cargaTipo: 'tomas', capacidad: '1.8 kW', voltaje: '120 V' }),
+    n('ex_aco', 'acometida', 'Acometida EDE', '', { kv: '12.47', fases: '3F 3H', empresa: 'EDE', tipoAc: 'Aérea' }, { orden: 1 }),
+    n('ex_fus', 'fusible', 'Cortacircuito', 'ex_aco', { amp: '40', kv: '15' }),
+    n('ex_med', 'medidor', 'Medición EDE', 'ex_fus', { tc: '50:5' }),
+    n('ex_gen', 'generador', 'GEN-1', '', { kw: '350', kva: '438', v: '480Y/277 V', comb: 'Diésel' }, { orden: 2 }),
+    n('ex_tx1', 'transformador', 'TX-1', 'ex_med', { kva: '750', vp: '12.47 kV', vs: '480Y/277 V', con: 'Δ-Yn', z: '5.75', tipoTx: 'Pad-mounted' }),
+    n('ex_ip', 'interruptor', 'INT-P', 'ex_tx1', { polos: '3', amp: '1200', marco: '1200', kaic: '65', disparo: 'Electrónico LSIG' }, { calibre: '4 × (3#500 kcmil + 1#3/0 T)', e: { polos: '3', amp: '1200', marco: '1200', kaic: '65', disparo: 'Electrónico LSIG', largo: '12' } }),
+    n('ex_ats', 'transferencia', 'ATS-1', 'ex_ip', { amp: '1200', polos: '4', modo: 'Automática' }, { respaldoId: 'ex_gen' }),
+    n('ex_tp', 'tablero', 'TP — Tablero principal', 'ex_ats', { amp: '1200', v: '480Y/277 V', fases: '3F 4H', kaic: '65' }, { ubicacion: 'Cuarto eléctrico' }),
+    n('ex_i1', 'interruptor', 'INT-1', 'ex_tp', { polos: '3', amp: '400', kaic: '65' }, { orden: 1, calibre: '3#500 kcmil + 1#3 T', e: { polos: '3', amp: '400', kaic: '65', largo: '30' } }),
+    n('ex_i2', 'interruptor', 'INT-2', 'ex_tp', { polos: '3', amp: '225', kaic: '65' }, { orden: 2, calibre: '3#4/0 + 1#4 T', e: { polos: '3', amp: '225', kaic: '65', largo: '25' } }),
+    n('ex_i3', 'interruptor', 'INT-3', 'ex_tp', { polos: '3', amp: '100', kaic: '65' }, { orden: 3 }),
+    n('ex_i4', 'interruptor', 'INT-4', 'ex_tp', { polos: '3', amp: '250', kaic: '65' }, { orden: 4 }),
+    n('ex_i5', 'interruptor', 'INT-5', 'ex_tp', { polos: '3', amp: '30' }, { orden: 5 }),
+    n('ex_ccm', 'ccm', 'CCM-1 — Tejeduría', 'ex_i1', { amp: '400', v: '480 V', kaic: '65' }),
+    n('ex_v1', 'vfd', 'VFD-1', 'ex_ccm', { hp: '25' }, { orden: 1 }),
+    n('ex_v2', 'vfd', 'VFD-2', 'ex_ccm', { hp: '25' }, { orden: 2 }),
+    n('ex_c1', 'carga', 'Telar 5', 'ex_v1', { hp: '25', v: '480 V', fla: '34' }, { cargaTipo: 'motor' }),
+    n('ex_c2', 'carga', 'Telar 6', 'ex_v2', { hp: '25', v: '480 V', fla: '34' }, { cargaTipo: 'motor' }),
+    n('ex_ts', 'tablero', 'TD-SER — Servicios', 'ex_i2', { amp: '225', v: '480 V', kaic: '22' }),
+    n('ex_ts1', 'interruptor', 'SER-1', 'ex_ts', { polos: '3', amp: '125', kaic: '22' }, { orden: 1 }),
+    n('ex_c4', 'carga', 'Compresor GA-37', 'ex_ts1', { hp: '50', v: '480 V', fla: '65' }, { cargaTipo: 'motor' }),
+    n('ex_tx2', 'transformador', 'TX-2', 'ex_i3', { kva: '75', vp: '480 V', vs: '208Y/120 V', z: '4.5', tipoTx: 'Seco' }),
+    n('ex_tl', 'tablero', 'TL — Alumbrado y tomas', 'ex_tx2', { amp: '225', v: '208Y/120 V', kaic: '10' }),
+    n('ex_bc', 'capacitor', 'BC-1', 'ex_i4', { kvar: '150', pasos: '6', modo: 'Automático' }),
+    n('ex_spd', 'spd', 'SPD-1', 'ex_i5', { ka: '100', tipoSpd: '2' }),
   ];
 }
+const PLANO_EJEMPLO = () => ({ id: 'ex_plano', nombre: 'Unifilar general (ejemplo)', codigo: 'E-001', planta: '', estado: 'borrador', rev: 0, revisiones: [{ rev: 0, fecha: hoyTxt(), desc: 'Emisión inicial', por: '' }], cajetin: { empresa: 'VoidTech Dominicana', proyecto: 'Instalación eléctrica', titulo: 'Diagrama unifilar general' }, notas: NOTAS_DEF, tamano: 'tabloide', sistema: '480Y/277 V · 3F 4H · 60 Hz' });
 
 // ══════ Árbol ══════
 function hijos(id) {
@@ -204,25 +325,24 @@ function raices() {
   const ord = t => ({ acometida: 0, generador: 1 }[t] ?? 2);
   return l.sort((a, b) => ord(a.tipo) - ord(b.tipo) || (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
 }
-function ancestros(id) {           // de la fuente al nodo (incluido)
+function ancestros(id) {
   const l = []; const vistos = new Set(); let n = NODOS.get(id);
   while (n && !vistos.has(n.id)) { vistos.add(n.id); l.unshift(n); n = NODOS.get(n.padreId); }
   return l;
 }
-function descendientes(id) {       // todo lo que queda debajo (sin el nodo)
+function descendientes(id) {
   const l = []; const pila = hijos(id).slice(); const vistos = new Set([id]);
   while (pila.length) { const n = pila.shift(); if (vistos.has(n.id)) continue; vistos.add(n.id); l.push(n); pila.push(...hijos(n.id)); }
-  // Lo que se alimenta como respaldo de este nodo (planta → transferencia) NO se apaga: tiene otra fuente.
   return l;
 }
 function textoRuta(id) { return ancestros(id).map(n => n.nombre).join(' → '); }
-function interruptorDe(id) {       // el interruptor más cercano aguas arriba (para LOTO)
-  const a = ancestros(id); for (let i = a.length - 2; i >= 0; i--) if (a[i].tipo === 'interruptor') return a[i];
+function interruptorDe(id) {
+  const a = ancestros(id); for (let i = a.length - 2; i >= 0; i--) if (a[i].tipo === 'interruptor' || a[i].tipo === 'fusible') return a[i];
   return null;
 }
 
-// ══════ Dibujo (SVG) ══════
-const SX = 178, SY = 118, M = 24, TOP = 46;
+// ══════ Dibujo (SVG, símbolos ANSI/IEEE 315) ══════
+const SX = 182, SY = 122, M = 24, TOP = 50;
 let POS = new Map();
 function calcularPosiciones() {
   POS = new Map(); let slot = 0, prof = 0;
@@ -241,76 +361,106 @@ function calcularPosiciones() {
 }
 const cx = p => M + p.x * SX + SX / 2;
 const cy = p => TOP + p.d * SY;
+const tierra = (x, y) => `<path class="sym" d="M${x} ${y}V${y + 8}M${x - 9} ${y + 8}H${x + 9}M${x - 6} ${y + 12}H${x + 6}M${x - 3} ${y + 16}H${x + 3}"/>`;
 function simbolo(n, x, y) {
-  const s = [];
+  const st = (a, b) => `<path class="sym" d="M${x} ${y - 24}V${a}M${x} ${b}V${y + 24}"/>`;
   switch (n.tipo) {
-    case 'acometida': s.push(`<path class="sym" d="M${x} ${y - 24}V${y + 2}"/><path class="sym fill" d="M${x - 9} ${y - 4}L${x} ${y + 10}L${x + 9} ${y - 4}Z"/><circle class="sym fill" cx="${x}" cy="${y + 16}" r="7"/>`); break;
-    case 'generador': s.push(`<circle class="sym fill" cx="${x}" cy="${y}" r="17"/><text x="${x}" y="${y + 5}" text-anchor="middle" font-size="15" font-weight="700">G</text>`); break;
-    case 'transformador': s.push(`<circle class="sym" cx="${x}" cy="${y - 8}" r="12"/><circle class="sym" cx="${x}" cy="${y + 8}" r="12"/>`); break;
-    case 'transferencia': s.push(`<rect class="sym fill" x="${x - 18}" y="${y - 13}" width="36" height="26" rx="3"/><text x="${x}" y="${y + 5}" text-anchor="middle" font-size="11" font-weight="700">TS</text>`); break;
-    case 'interruptor': s.push(`<path class="sym" d="M${x} ${y - 22}V${y - 9}M${x} ${y + 9}V${y + 22}"/><path class="sym" d="M${x} ${y + 9}L${x - 10} ${y - 8}"/><circle class="sym fill" cx="${x}" cy="${y - 9}" r="2.5"/><circle class="sym fill" cx="${x}" cy="${y + 9}" r="2.5"/>`); break;
+    case 'acometida': return `<path class="sym" d="M${x} ${y - 24}V${y + 24}"/><path class="sym fill" d="M${x - 9} ${y - 8}L${x} ${y + 6}L${x + 9} ${y - 8}Z"/>`;
+    case 'medidor': return `<path class="sym" d="M${x} ${y - 24}V${y + 24}"/><circle class="sym fill" cx="${x}" cy="${y}" r="6"/><path class="dash" d="M${x + 6} ${y}H${x + 22}"/><circle class="sym fill" cx="${x + 36}" cy="${y}" r="13"/><text class="sy" x="${x + 27}" y="${y + 3}" style="font-size:7.5px">kWh</text>`;
+    case 'fusible': return st(y - 13, y + 13) + `<rect class="sym fill" x="${x - 6}" y="${y - 13}" width="12" height="26"/><path class="sym" d="M${x} ${y - 13}V${y + 13}"/>`;
+    case 'generador': return `<circle class="sym fill" cx="${x}" cy="${y}" r="18"/><text class="sy" x="${x - 5}" y="${y + 1}" style="font-size:13px">G</text><path class="sym" d="M${x - 8} ${y + 8}q4 -5 8 0t8 0"/><path class="sym" d="M${x} ${y + 18}V${y + 24}"/>`;
+    case 'transformador': return st(y - 22, y + 22) + `<circle class="sym" cx="${x}" cy="${y - 9}" r="13"/><circle class="sym" cx="${x}" cy="${y + 9}" r="13"/>`;
+    case 'transferencia': return st(y - 14, y + 14) + `<rect class="sym fill" x="${x - 20}" y="${y - 14}" width="40" height="28" rx="2"/><text class="sy" x="${x - 11}" y="${y + 4}">ATS</text>`;
+    case 'interruptor': return st(y - 12, y + 12) + `<circle class="sym fill" cx="${x}" cy="${y - 11}" r="2.6"/><path class="sym" d="M${x + 2} ${y - 13}Q${x + 17} ${y} ${x + 2} ${y + 13}"/><circle class="sym fill" cx="${x}" cy="${y + 11}" r="2.6"/>`;
+    case 'vfd': return st(y - 12, y + 12) + `<rect class="sym fill" x="${x - 18}" y="${y - 12}" width="36" height="24"/><text class="sy" x="${x - 11}" y="${y + 4}">VFD</text>`;
+    case 'capacitor': return `<path class="sym" d="M${x} ${y - 24}V${y - 5}M${x - 16} ${y - 5}H${x + 16}M${x - 16} ${y + 5}H${x + 16}M${x} ${y + 5}V${y + 10}"/>` + tierra(x, y + 10);
+    case 'ups': return st(y - 13, y + 13) + `<rect class="sym fill" x="${x - 20}" y="${y - 13}" width="40" height="26"/><text class="sy" x="${x - 11}" y="${y + 4}">UPS</text>`;
+    case 'spd': return `<path class="sym" d="M${x} ${y - 24}V${y - 12}"/><rect class="sym fill" x="${x - 18}" y="${y - 12}" width="36" height="22"/><text class="sy" x="${x - 11}" y="${y + 3}">SPD</text>` + tierra(x, y + 10);
     case 'carga':
-      if (n.cargaTipo === 'motor') s.push(`<circle class="sym fill" cx="${x}" cy="${y + 4}" r="15"/><text x="${x}" y="${y + 9}" text-anchor="middle" font-size="14" font-weight="700">M</text>`);
-      else if (n.cargaTipo === 'iluminacion') s.push(`<circle class="sym fill" cx="${x}" cy="${y + 4}" r="13"/><path class="sym" d="M${x - 9} ${y - 5}L${x + 9} ${y + 13}M${x + 9} ${y - 5}L${x - 9} ${y + 13}"/>`);
-      else s.push(`<rect class="sym fill" x="${x - 14}" y="${y - 10}" width="28" height="28" rx="3"/><path class="sym" d="M${x - 8} ${y + 4}h16"/>`);
-      break;
-    default: s.push(`<circle class="sym fill" cx="${x}" cy="${y}" r="8"/>`);
+      if (n.cargaTipo === 'motor') return `<path class="sym" d="M${x} ${y - 24}V${y - 11}"/><circle class="sym fill" cx="${x}" cy="${y + 4}" r="15"/><text class="sy" x="${x - 5}" y="${y + 9}" style="font-size:13px">M</text>`;
+      if (n.cargaTipo === 'iluminacion') return `<path class="sym" d="M${x} ${y - 24}V${y - 9}"/><circle class="sym fill" cx="${x}" cy="${y + 4}" r="13"/><path class="sym" d="M${x - 9} ${y - 5}L${x + 9} ${y + 13}M${x + 9} ${y - 5}L${x - 9} ${y + 13}"/>`;
+      return `<path class="sym" d="M${x} ${y - 24}V${y - 10}"/><rect class="sym fill" x="${x - 14}" y="${y - 10}" width="28" height="28" rx="2"/><path class="sym" d="M${x - 8} ${y + 4}h16"/>`;
+    default: return `<circle class="sym fill" cx="${x}" cy="${y}" r="8"/>`;
   }
-  return s.join('');
 }
 const corta = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
-function dibujar() {
-  const caja = $('ufDibujo');
-  if (!NODOS.size) { $('ufZoom').hidden = true; return; }
-  $('ufZoom').hidden = false;
+// Arma el SVG del plano. o.vivo = con selección y zonas clicables (pantalla); si no, para imprimir.
+function svgPlano(o) {
+  o = o || {};
   const { slots, prof } = calcularPosiciones();
-  const W = M * 2 + slots * SX, H = TOP + prof * SY + 70;
-  const apagados = new Set(SEL ? descendientes(SEL).map(n => n.id) : []);
-  const ruta = new Set(SEL ? ancestros(SEL).map(n => n.id) : []);
+  const W = M * 2 + slots * SX, H = TOP + prof * SY + 78;
+  const apagados = new Set(o.vivo && SEL ? descendientes(SEL).map(n => n.id) : []);
+  const ruta = new Set(o.vivo && SEL ? ancestros(SEL).map(n => n.id) : []);
   const est = id => (apagados.has(id) ? ' off' : ruta.has(id) && id !== SEL ? ' ruta' : '');
-  const lineas = [], nodos = [], buses = [];
+  const lineasS = [], nodos = [], buses = [];
   NODOS.forEach(n => {
     const p = POS.get(n.id); if (!p) return;
     const x = cx(p), y = cy(p);
     const hs = hijos(n.id).filter(h => POS.get(h.id));
-    if (n.tipo === 'tablero' && hs.length) {
+    const L = lineas(n);
+    if (ES_BARRA(n.tipo) && hs.length) {
       const xs = hs.map(h => cx(POS.get(h.id)));
       const x1 = Math.min(...xs, x) - 26, x2 = Math.max(...xs, x) + 26;
-      buses.push(`<rect class="bus${est(n.id) || (n.id === SEL ? ' ruta' : '')}" x="${x1}" y="${y - 4}" width="${x2 - x1}" height="8" rx="2"/>`);
-      hs.forEach(h => { const q = POS.get(h.id); const cls = apagados.has(h.id) ? ' off' : ''; lineas.push(`<path class="ln${cls}" d="M${cx(q)} ${y + 4}V${cy(q) - 24}"/>`); });
+      buses.push(`<rect class="bus${est(n.id) || (o.vivo && n.id === SEL ? ' ruta' : '')}" x="${x1}" y="${y - (n.tipo === 'ccm' ? 5 : 4)}" width="${x2 - x1}" height="${n.tipo === 'ccm' ? 10 : 8}" rx="2"/>`);
+      hs.forEach(h => {
+        const q = POS.get(h.id); lineasS.push(`<path class="ln${apagados.has(h.id) ? ' off' : ruta.has(h.id) ? ' ruta' : ''}" d="M${cx(q)} ${y + 4}V${cy(q) - 24}"/>`);
+        const LH = lineas(h); if (LH.cab && h.tipo !== 'carga') lineasS.push(`<text class="sub" x="${cx(q) + 6}" y="${cy(q) - 34}">${esc(corta(LH.cab, 30))}</text>`);
+      });
     } else {
       hs.forEach(h => {
         const q = POS.get(h.id); const hx = cx(q), hy = cy(q);
         const y0 = y + 24, y1 = hy - 24, ym = Math.round((y0 + y1) / 2);
         const cls = apagados.has(h.id) ? ' off' : ruta.has(h.id) ? ' ruta' : '';
-        lineas.push(`<path class="ln${cls}" d="M${x} ${y0}V${ym}H${hx}V${y1}"/>`);
+        lineasS.push(`<path class="ln${cls}" d="M${x} ${y0}V${ym}H${hx}V${y1}"/>`);
+        // datos del alimentador (calibre · largo) junto al tramo
+        const LH = lineas(h);
+        if (LH.cab && h.tipo !== 'carga') lineasS.push(`<text class="sub" x="${hx + 6}" y="${y1 - 4}">${esc(corta(LH.cab, 30))}</text>`);
       });
     }
-    // respaldo (planta de emergencia → transferencia): línea punteada
     if (n.tipo === 'transferencia' && n.respaldoId && POS.get(n.respaldoId)) {
       const g = POS.get(n.respaldoId), gx = cx(g), gy = cy(g);
-      lineas.push(`<path class="resp" d="M${gx} ${gy + 20}V${y + 26}H${x + 10}V${y + 13}"/>`);
+      lineasS.push(`<path class="resp" d="M${gx} ${gy + 24}V${y + 28}H${x + 12}V${y + 14}"/>`);
     }
-    const nombre = esc(corta(n.nombre, n.tipo === 'tablero' ? 30 : 20)), sub = esc(corta([n.capacidad, n.voltaje].filter(Boolean).join(' · '), 26));
-    const etiqueta = n.tipo === 'tablero'
-      ? `<text x="${x}" y="${y - 12}" text-anchor="middle" font-size="12.5" font-weight="700">${nombre}</text>${sub ? `<text class="sub" x="${x}" y="${y + 20}" text-anchor="middle">${sub}</text>` : ''}`
-      : `<text x="${x + 22}" y="${y - 2}" font-size="12.5" font-weight="700">${nombre}</text>${sub ? `<text class="sub" x="${x + 22}" y="${y + 12}">${sub}</text>` : ''}`;
-    const sym = n.tipo === 'tablero' ? (hs.length ? '' : `<rect class="bus" x="${x - 30}" y="${y - 4}" width="60" height="8" rx="2"/>`) : simbolo(n, x, y);
-    const hit = n.tipo === 'tablero' ? `<rect class="hit" x="${x - 80}" y="${y - 28}" width="160" height="56" rx="8"/>` : `<rect class="hit" x="${x - 26}" y="${y - 28}" width="${SX - 8}" height="56" rx="8"/>`;
+    const nombre = esc(corta(n.nombre, ES_BARRA(n.tipo) ? 32 : 22)), a = esc(corta(L.a, 32)), b = esc(corta(L.b, 32));
+    const dx = n.tipo === 'medidor' ? 56 : n.tipo === 'transferencia' || n.tipo === 'ups' ? 26 : 22;
+    let bx = x + 12, banc = 'start';
+    if (ES_BARRA(n.tipo) && hs.length) { const xs = hs.map(h => cx(POS.get(h.id))); const x1 = Math.min(...xs, x) - 26; if (x - x1 > 150) { bx = x1 + 4; } }
+    const etiqueta = ES_BARRA(n.tipo)
+      ? `<text x="${bx}" y="${y - 22}" text-anchor="${banc}" font-size="12.5" font-weight="700">${nombre}</text>${a ? `<text class="sub" x="${bx}" y="${y - 9}" text-anchor="${banc}">${a}${b ? ' · ' + b : ''}</text>` : ''}`
+      : `<text x="${x + dx}" y="${y - 6}" font-size="12.5" font-weight="700">${nombre}</text>${a ? `<text class="sub" x="${x + dx}" y="${y + 8}">${a}</text>` : ''}${b ? `<text class="sub" x="${x + dx}" y="${y + 20}">${b}</text>` : ''}`;
+    const sym = ES_BARRA(n.tipo) ? (hs.length ? '' : `<rect class="bus" x="${x - 30}" y="${y - 4}" width="60" height="8" rx="2"/>`) : simbolo(n, x, y);
+    const tierraTx = n.tipo === 'transformador' ? `<path class="sym" d="M${x - 13} ${y + 9}H${x - 26}"/>` + tierra(x - 26, y + 9) : '';
+    if (!o.vivo) { nodos.push(`<g>${sym}${tierraTx}${etiqueta}</g>`); return; }
+    const hit = ES_BARRA(n.tipo) ? `<rect class="hit" x="${x - 84}" y="${y - 28}" width="168" height="56" rx="8"/>` : `<rect class="hit" x="${x - 26}" y="${y - 28}" width="${SX - 8}" height="56" rx="8"/>`;
     const tLabel = tx(TIPO_TXT[n.tipo] || n.tipo) + ': ' + n.nombre;
-    nodos.push(`<g class="nd${n.id === SEL ? ' sel' : ''}${est(n.id)}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(tLabel)}"><title>${esc(tLabel + (n.capacidad ? ' · ' + n.capacidad : ''))}</title>${hit}${sym}${etiqueta}</g>`);
+    nodos.push(`<g class="nd${n.id === SEL ? ' sel' : ''}${est(n.id)}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(tLabel)}"><title>${esc(tLabel + (L.a ? ' · ' + L.a : ''))}</title>${hit}${sym}${tierraTx}${etiqueta}</g>`);
   });
-  caja.innerHTML = `<svg id="ufSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * ZOOM)}" height="${Math.round(H * ZOOM)}" role="img" aria-label="${esc(tx('Diagrama unifilar'))}">${lineas.join('')}${buses.join('')}${nodos.join('')}</svg>`;
+  return { W, H, html: lineasS.join('') + buses.join('') + nodos.join('') };
+}
+function dibujar() {
+  const caja = $('ufDibujo');
+  if (!NODOS.size) { $('ufZoom').hidden = true; return; }
+  $('ufZoom').hidden = false;
+  const s = svgPlano({ vivo: true });
+  caja.innerHTML = `<svg id="ufSvg" class="uf-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${s.W} ${s.H}" width="${Math.round(s.W * ZOOM)}" height="${Math.round(s.H * ZOOM)}" role="img" aria-label="${esc(tx('Diagrama unifilar'))}">${s.html}</svg>`;
   caja.querySelectorAll('.nd').forEach(g => {
     g.addEventListener('click', () => elegir(g.dataset.id));
     g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); elegir(g.dataset.id); } });
   });
-  $('ufPrintHead').textContent = tx('Diagrama unifilar') + (fbNaveActiva() ? ' · ' + fbNaveActiva() : '') + ' · ' + (window.i18n ? i18n.fmtDate(new Date()) : new Date().toLocaleDateString());
 }
 function ajustar() {
   const svg = $('ufSvg'); if (!svg) return;
   const vb = svg.viewBox.baseVal; const ancho = $('ufLienzo').clientWidth - 20;
-  ZOOM = Math.max(0.8, Math.min(1.4, ancho / vb.width)); dibujar(); // nunca tan chico que no se lea: si no cabe, se desplaza
+  ZOOM = Math.max(0.8, Math.min(1.4, ancho / vb.width)); dibujar();
+}
+
+// ══════ Simbología (pantalla e impresión) ══════
+const LEY = [['interruptor', 'Interruptor'], ['fusible', 'Fusible'], ['transformador', 'Transformador'], ['generador', 'Planta de emergencia'], ['transferencia', 'Transferencia'], ['tablero', 'Tablero / CCM'], ['vfd', 'Variador de frecuencia'], ['capacitor', 'Banco de capacitores'], ['ups', 'UPS'], ['spd', 'Supresor de picos'], ['medidor', 'Medición'], ['motor', 'Motor'], ['otro', 'Otra carga'], ['tierra', 'Puesta a tierra']];
+function svgLeyenda(t) {
+  if (t === 'tablero') return '<rect class="bus" x="2" y="22" width="46" height="7" rx="2"/>';
+  if (t === 'tierra') return tierra(25, 14);
+  const n = t === 'motor' || t === 'otro' ? { tipo: 'carga', cargaTipo: t } : { tipo: t };
+  return simbolo(n, t === 'medidor' ? 12 : 25, 25);
 }
 
 // ══════ Panel ══════
@@ -326,13 +476,7 @@ function linkEquipo(n) {
 }
 function panel() {
   const box = $('ufPanel');
-  const ley = `<div class="uf-ley" aria-label="${esc(tx('Símbolos'))}">${[
-    ['acometida', 'Acometida'], ['generador', 'Planta de emergencia'], ['transformador', 'Transformador'], ['transferencia', 'Transferencia'],
-    ['tablero', 'Tablero'], ['interruptor', 'Interruptor'], ['motor', 'Motor'], ['otro', 'Otra carga']].map(([t, l]) => {
-    const n = t === 'motor' || t === 'otro' ? { tipo: 'carga', cargaTipo: t } : { tipo: t };
-    const g = t === 'tablero' ? '<rect class="bus" x="1" y="22" width="48" height="6" rx="2"/>' : simbolo(n, 25, 25).replace(/class="sym fill"/g, 'class="sym" style="fill:var(--color-surface)"');
-    return `<span><svg viewBox="0 0 50 50" aria-hidden="true">${g}</svg>${esc(tx(l))}</span>`;
-  }).join('')}</div>`;
+  const ley = `<div class="uf-ley" aria-label="${esc(tx('Símbolos'))}">${LEY.map(([t, l]) => `<span><svg class="uf-svg" viewBox="0 0 50 50" aria-hidden="true">${svgLeyenda(t)}</svg>${esc(tx(l))}</span>`).join('')}</div>`;
   if (!SEL) {
     box.innerHTML = `<div class="tipo">${esc(tx('Cómo usarlo'))}</div><p style="margin:6px 0 0;font-size:14px">${esc(tx('Toca un tablero, interruptor o equipo para ver qué se queda sin energía si se abre y de dónde se alimenta.'))}</p>${ley}`;
     return;
@@ -341,20 +485,23 @@ function panel() {
   const abajo = descendientes(SEL), cargas = abajo.filter(x => x.tipo === 'carga');
   const ruta = ancestros(SEL);
   const intLoto = n.tipo === 'interruptor' ? n : interruptorDe(SEL);
+  const e = n.e || {};
+  const filas = (CAMPOS_E[n.tipo] || []).concat(COMUNES_E).filter(([k]) => e[k] !== undefined && String(e[k]).trim() !== '').map(([k, l]) => `<dt>${esc(tx(l))}</dt><dd>${esc(e[k])}</dd>`).join('');
   const dato = (k, v) => (v ? `<dt>${esc(tx(k))}</dt><dd>${esc(v)}</dd>` : '');
   let h = `<div class="tipo">${esc(tx(TIPO_TXT[n.tipo] || n.tipo))}${n.tipo === 'carga' && n.cargaTipo ? ' · ' + esc(tx(CARGA_TXT[n.cargaTipo] || '')) : ''}</div><h2>${n.tipo === 'carga' ? linkEquipo(n) : esc(n.nombre)}</h2>`;
-  h += `<dl class="uf-datos">${dato('Capacidad', n.capacidad)}${dato('Voltaje', n.voltaje)}${dato('Calibre', n.calibre)}${dato('Ubicación', n.ubicacion)}${dato('Nave', n.planta)}${dato('Notas', n.notas)}</dl>`;
+  h += `<dl class="uf-datos">${filas || (dato('Capacidad', n.capacidad) + dato('Voltaje', n.voltaje))}${dato('Conductor', n.calibre)}${dato('Ubicación', n.ubicacion)}${dato('Notas', n.notas)}</dl>`;
+  if (n.ref && DIAGS.has(n.ref)) h += `<div class="uf-acts"><button type="button" class="vt-btn" data-act="ref">${ic('layers')}${esc(tx('Abrir plano de detalle'))}: ${esc(DIAGS.get(n.ref).codigo || DIAGS.get(n.ref).nombre)}</button></div>`;
   if (n.tipo !== 'carga') {
     h += `<div class="uf-caja off"><b>${ic('zap')}${esc(tx('Si se abre, se quedan sin energía'))}: ${cargas.length}</b>`;
-    h += cargas.length ? `<ul>${cargas.slice(0, 40).map(c => `<li>${linkEquipo(c)}${c.capacidad ? ' · ' + esc(c.capacidad) : ''}</li>`).join('')}</ul>${cargas.length > 40 ? `<div>+${cargas.length - 40}</div>` : ''}` : `<div>${esc(tx('Ningún equipo registrado debajo.'))}</div>`;
+    h += cargas.length ? `<ul>${cargas.slice(0, 40).map(c => `<li>${linkEquipo(c)}${lineas(c).a ? ' · ' + esc(lineas(c).a) : ''}</li>`).join('')}</ul>${cargas.length > 40 ? `<div>+${cargas.length - 40}</div>` : ''}` : `<div>${esc(tx('Ningún equipo registrado debajo.'))}</div>`;
     h += `</div>`;
   }
   h += `<div class="uf-caja ruta"><b>${ic('arrow-up')}${esc(tx('De dónde se alimenta'))}</b><div>${ruta.map(x => esc(x.nombre)).join(' → ')}</div></div>`;
-  if (intLoto) h += `<div class="uf-caja"><b>${ic('lock')}${esc(tx('Para LOTO, bloquea'))}: ${esc(intLoto.nombre)}${intLoto.capacidad ? ' (' + esc(intLoto.capacidad) + ')' : ''}</b><div>${esc(tx('Verifica ausencia de tensión antes de trabajar.'))}</div></div>`;
+  if (intLoto) h += `<div class="uf-caja"><b>${ic('lock')}${esc(tx('Para LOTO, bloquea'))}: ${esc(intLoto.nombre)}${lineas(intLoto).a ? ' (' + esc(lineas(intLoto).a) + ')' : ''}</b><div>${esc(tx('Verifica ausencia de tensión antes de trabajar.'))}</div></div>`;
   const acts = [];
   if (n.equipoId) acts.push(`<a class="vt-btn" href="hoja-vida.html?id=${encodeURIComponent(n.equipoId)}">${ic('cog')}${esc(tx('Ver Equipo 360'))}</a>`);
   if (PUEDE_EDITAR && !EJEMPLO) {
-    if (n.tipo !== 'carga') acts.push(`<button type="button" class="vt-btn pri" data-act="hijo">${ic('plus')}${esc(tx('Agregar debajo'))}</button>`);
+    if (PUEDE_HIJOS(n.tipo)) acts.push(`<button type="button" class="vt-btn pri" data-act="hijo">${ic('plus')}${esc(tx('Agregar debajo'))}</button>`);
     acts.push(`<button type="button" class="vt-btn" data-act="editar">${ic('pencil')}${esc(tx('Editar'))}</button>`);
     if (!hijos(SEL).length) acts.push(`<button type="button" class="vt-btn" data-act="borrar">${ic('trash')}${esc(tx('Quitar'))}</button>`);
   }
@@ -368,36 +515,73 @@ function panel() {
     else if (a === 'hijo') abrirForm(null, SEL);
     else if (a === 'editar') abrirForm(SEL);
     else if (a === 'borrar') borrar(SEL);
+    else if (a === 'ref') abrirPlano(n.ref);
   });
 }
 
-// ══════ Buscar ══════
+// ══════ Buscar (en todos los planos de la nave) ══════
 function buscar() {
   const q = norm($('ufBuscar').value), res = $('ufRes');
   if (!q) { res.classList.remove('on'); res.innerHTML = ''; return; }
-  const l = []; NODOS.forEach(n => { if (norm([n.nombre, n.ubicacion, n.capacidad].join(' ')).includes(q)) l.push(n); });
-  res.innerHTML = l.slice(0, 20).map(n => `<button type="button" role="option" data-id="${esc(n.id)}">${esc(n.nombre)}<small>${esc(tx(TIPO_TXT[n.tipo] || n.tipo))} · ${esc(textoRuta(n.id))}</small></button>`).join('') || `<div class="vt-empty">${esc(tx('Sin resultados'))}</div>`;
+  const fuente = EJEMPLO ? NODOS : TODOS;
+  const l = []; fuente.forEach(n => { if (norm([n.nombre, n.ubicacion, lineas(n).a].join(' ')).includes(q)) l.push(n); });
+  res.innerHTML = l.slice(0, 20).map(n => { const d = DIAGS.get(n.diagramaId || ''); return `<button type="button" role="option" data-id="${esc(n.id)}">${esc(n.nombre)}<small>${esc(tx(TIPO_TXT[n.tipo] || n.tipo))}${d && !EJEMPLO ? ' · ' + esc(d.codigo || d.nombre) : ''}</small></button>`; }).join('') || `<div class="vt-empty">${esc(tx('Sin resultados'))}</div>`;
   res.classList.add('on');
-  res.querySelectorAll('button').forEach(b => b.onclick = () => { res.classList.remove('on'); $('ufBuscar').value = ''; elegir(b.dataset.id); centrar(b.dataset.id); });
+  res.querySelectorAll('button').forEach(b => b.onclick = () => {
+    res.classList.remove('on'); $('ufBuscar').value = '';
+    const n = fuente.get(b.dataset.id); if (!n) return;
+    if (!EJEMPLO && (n.diagramaId || '') !== DIAG) abrirPlano(n.diagramaId || '', n.id); else { elegir(n.id); centrar(n.id); }
+  });
 }
 function centrar(id) {
   const p = POS.get(id), l = $('ufLienzo'); if (!p || !l) return;
   l.scrollTo({ left: Math.max(0, cx(p) * ZOOM - l.clientWidth / 2), top: Math.max(0, cy(p) * ZOOM - l.clientHeight / 2), behavior: 'auto' });
 }
 
-// ══════ Estado vacío / ejemplo ══════
+// ══════ Planos ══════
+function planoActual() { return EJEMPLO ? PLANO_EJEMPLO() : DIAGS.get(DIAG) || null; }
+function huerfanos() { const l = []; TODOS.forEach(n => { if (!n.diagramaId || !DIAGS.has(n.diagramaId)) l.push(n); }); return l; }
+function listaPlanos() { return Array.from(DIAGS.values()).filter(d => d.estado !== 'archivado' || d.id === DIAG).sort((a, b) => String(a.codigo || a.nombre).localeCompare(String(b.codigo || b.nombre), 'es', { numeric: true })); }
+function abrirPlano(id, selId) {
+  DIAG = id; SEL = null;
+  if (!EJEMPLO) lsSet('ufPlano', id);
+  NODOS = new Map(); TODOS.forEach(n => { const d = (n.diagramaId && DIAGS.has(n.diagramaId)) ? n.diagramaId : ''; if (d === id) NODOS.set(n.id, n); });
+  pintarTodo();
+  if (NODOS.size) requestAnimationFrame(() => { ajustar(); if (selId) { elegir(selId); centrar(selId); } });
+}
+function pintarBarraPlano() {
+  const bar = $('ufPlanoBar'), sel = $('ufPlanoSel');
+  const planos = EJEMPLO ? [PLANO_EJEMPLO()] : listaPlanos();
+  const orf = !EJEMPLO && huerfanos().length;
+  bar.hidden = !(planos.length || orf || PUEDE_EDITAR) || ERROR;
+  const op = (v, l, s) => `<option value="${esc(v)}"${s ? ' selected' : ''}>${esc(l)}</option>`;
+  sel.innerHTML = planos.map(d => op(d.id, (d.codigo ? d.codigo + ' · ' : '') + d.nombre, (EJEMPLO ? 'ex_plano' : DIAG) === d.id)).join('') + (orf ? op('', tx('Elementos sin plano') + ' (' + huerfanos().length + ')', DIAG === '') : '') + (!planos.length && !orf ? op('', '—', true) : '');
+  sel.disabled = EJEMPLO;
+  const d = planoActual();
+  $('ufPlanoMeta').innerHTML = d ? `${esc(d.codigo || '')} · Rev. ${esc(d.rev || 0)} · <span class="uf-est ${esc(d.estado)}">${esc(tx(ESTADO_TXT[d.estado] || d.estado))}</span>${d.sistema ? ' · ' + esc(d.sistema) : ''}${d.planta ? ' · ' + esc(d.planta) : ''}` : '';
+  $('ufBtnDatos').hidden = !(PUEDE_EDITAR && !EJEMPLO && d);
+  $('ufBtnPlano').hidden = !(PUEDE_EDITAR && !EJEMPLO);
+  $('ufBtnRevs').hidden = !d;
+}
+
+// ══════ Pintar todo ══════
 function pintarTodo() {
   const ban = $('ufBanner');
-  ban.innerHTML = EJEMPLO
-    ? `<div class="uf-banner">${ic('info')}<b>${esc(tx('Ejemplo con datos de prueba: no se guarda.'))}</b>${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufUsarEj">${ic('check')}${esc(tx('Usar como punto de partida'))}</button>` : ''}<button type="button" class="vt-btn" id="ufSalirEj">${esc(tx('Salir del ejemplo'))}</button></div>`
-    : '';
-  if (EJEMPLO) { $('ufSalirEj').onclick = () => { EJEMPLO = false; cargar(); }; if ($('ufUsarEj')) $('ufUsarEj').onclick = usarEjemplo; }
-  $('ufBtnNuevo').hidden = !(PUEDE_EDITAR && !EJEMPLO);
+  pintarBarraPlano();
+  let bh = '';
+  if (EJEMPLO) bh = `<div class="uf-banner">${ic('info')}<b>${esc(tx('Ejemplo con datos de prueba: no se guarda.'))}</b>${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufUsarEj">${ic('check')}${esc(tx('Usar como punto de partida'))}</button>` : ''}<button type="button" class="vt-btn" id="ufSalirEj">${esc(tx('Salir del ejemplo'))}</button></div>`;
+  else if (DIAG === '' && NODOS.size) bh = `<div class="uf-banner">${ic('info')}<b>${esc(tx('Estos elementos todavía no están en un plano.'))}</b>${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufAsignar">${ic('layers')}${esc(tx('Pasarlos a un plano nuevo'))}</button>` : ''}</div>`;
+  ban.innerHTML = bh;
+  if ($('ufSalirEj')) $('ufSalirEj').onclick = () => { EJEMPLO = false; cargar(); };
+  if ($('ufUsarEj')) $('ufUsarEj').onclick = usarEjemplo;
+  if ($('ufAsignar')) $('ufAsignar').onclick = () => abrirFormPlano(null, { asignarHuerfanos: true });
+  $('ufBtnNuevo').hidden = !(PUEDE_EDITAR && !EJEMPLO && (DIAG || DIAGS.size === 0));
   if (ERROR) { $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('alert')}<p>${esc(ERROR)}</p></div>`; $('ufZoom').hidden = true; panel(); return; }
   if (!NODOS.size) {
     $('ufZoom').hidden = true;
-    $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('zap')}<p><b>${esc(tx('Todavía no hay diagrama de esta nave.'))}</b></p><p>${esc(tx(PUEDE_EDITAR ? 'Empieza por la acometida (la entrada de energía) y ve agregando lo que cuelga de ella.' : 'El Encargado de mantenimiento lo puede cargar.'))}</p><div class="uf-acts">${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufEmpezar">${ic('plus')}${esc(tx('Agregar acometida'))}</button>` : ''}<button type="button" class="vt-btn" id="ufVerEj">${ic('eye')}${esc(tx('Ver ejemplo'))}</button></div></div>`;
-    if ($('ufEmpezar')) $('ufEmpezar').onclick = () => abrirForm(null, '', 'acometida');
+    const hayPlanos = DIAGS.size > 0;
+    $('ufDibujo').innerHTML = `<div class="uf-vacio">${ic('zap')}<p><b>${esc(tx(hayPlanos ? 'Este plano todavía está vacío.' : 'Todavía no hay diagrama de esta nave.'))}</b></p><p>${esc(tx(PUEDE_EDITAR ? 'Empieza por la acometida (la entrada de energía) y ve agregando lo que cuelga de ella.' : 'El Encargado de mantenimiento lo puede cargar.'))}</p><div class="uf-acts">${PUEDE_EDITAR ? `<button type="button" class="vt-btn pri" id="ufEmpezar">${ic('plus')}${esc(tx('Agregar acometida'))}</button>` : ''}<button type="button" class="vt-btn" id="ufVerEj">${ic('eye')}${esc(tx('Ver ejemplo'))}</button></div></div>`;
+    if ($('ufEmpezar')) $('ufEmpezar').onclick = () => (DIAG ? abrirForm(null, '', 'acometida') : abrirFormPlano(null, { luegoAcometida: true }));
     $('ufVerEj').onclick = verEjemplo;
     panel(); return;
   }
@@ -412,28 +596,35 @@ function verEjemplo() {
 async function cargar() {
   ERROR = ''; SEL = null;
   try {
-    const s = await db.collection('electrico').get();
-    NODOS = new Map();
-    s.docs.forEach(d => { const x = Object.assign({ id: d.id }, d.data()); if (fbEnNave(x)) NODOS.set(d.id, x); });
+    const [s, sd] = await Promise.all([db.collection('electrico').get(), db.collection('diagramas').get().catch(e => { if (e && e.code === 'permission-denied') return { docs: [] }; throw e; })]);
+    TODOS = new Map(); DIAGS = new Map();
+    sd.docs.forEach(d => { const x = Object.assign({ id: d.id }, d.data()); if (fbEnNave(x)) DIAGS.set(d.id, x); });
+    s.docs.forEach(d => { const x = Object.assign({ id: d.id }, d.data()); if (fbEnNave(x)) TODOS.set(d.id, x); });
   } catch (e) {
-    NODOS = new Map();
+    TODOS = new Map(); DIAGS = new Map();
     ERROR = e && e.code === 'permission-denied' ? tx('Tu usuario no puede ver el diagrama unifilar todavía. Pide al administrador que publique las reglas nuevas.') : tx('No se pudo cargar el diagrama: {e}').replace('{e}', (e && e.message) || e);
   }
-  CARGADO = true; pintarTodo();
-  if (NODOS.size) requestAnimationFrame(ajustar);
-  const pid = new URLSearchParams(location.search).get('equipo');
-  if (pid) { let hit = null; NODOS.forEach(n => { if (n.equipoId === pid) hit = n; }); if (hit) { elegir(hit.id); centrar(hit.id); } }
+  CARGADO = true;
+  const q = new URLSearchParams(location.search);
+  const pid = q.get('equipo'), pl = q.get('plano');
+  let hit = null; if (pid) TODOS.forEach(n => { if (n.equipoId === pid) hit = n; });
+  const guardado = lsGet('ufPlano');
+  const lista = listaPlanos();
+  let id = hit ? (DIAGS.has(hit.diagramaId) ? hit.diagramaId : '') : pl && DIAGS.has(pl) ? pl : guardado !== null && (DIAGS.has(guardado) || (guardado === '' && huerfanos().length)) ? guardado : lista.length ? lista[0].id : '';
+  abrirPlano(id, hit ? hit.id : null);
 }
 const yo = () => (window.currentUserRole && (window.currentUserRole.nombre || window.currentUserRole.email)) || (window.currentUser && window.currentUser.email) || '';
+function limpiarE(e) { const o = {}; Object.keys(e || {}).slice(0, 30).forEach(k => { const v = String(e[k] == null ? '' : e[k]).trim().slice(0, 60); if (v) o[k] = v; }); return o; }
 function datosParaGuardar(n) {
   const d = {};
+  n.capacidad = capacidadDe(n); n.voltaje = voltajeDe(n);
   CAMPOS.forEach(k => { if (k === 'orden') d.orden = Number(n.orden) || 0; else d[k] = String(n[k] == null ? '' : n[k]); });
+  d.e = limpiarE(n.e);
   d.actualizadoPor = String(yo()).slice(0, 100);
   d.actualizadoPorUid = window.currentUser.uid;
   d.actualizadoEn = firebase.firestore.FieldValue.serverTimestamp();
   return d;
 }
-// Recalcula la "ruta" guardada en cada carga (la usa Equipo 360 sin leer todo el diagrama).
 function rutasCambiadas() {
   const l = []; NODOS.forEach(n => { if (n.tipo === 'carga') { const r = textoRuta(n.id).slice(0, 600); if (r !== (n.ruta || '')) { n.ruta = r; l.push(n); } } });
   return l;
@@ -446,110 +637,269 @@ async function escribir(cambios, borrados) {
   set.forEach(n => b.set(col.doc(n.id), datosParaGuardar(n)));
   await b.commit();
 }
+function datosPlanoParaGuardar(p) {
+  return {
+    nombre: String(p.nombre || '').slice(0, 80), codigo: String(p.codigo || '').slice(0, 30), planta: String(p.planta || '').slice(0, 80),
+    estado: ESTADOS.includes(p.estado) ? p.estado : 'borrador', rev: Math.max(0, Math.min(999, parseInt(p.rev, 10) || 0)),
+    revisiones: (p.revisiones || []).slice(-60).map(r => ({ rev: Number(r.rev) || 0, fecha: String(r.fecha || '').slice(0, 20), desc: String(r.desc || '').slice(0, 200), por: String(r.por || '').slice(0, 100) })),
+    cajetin: limpiarE(p.cajetin), notas: String(p.notas || '').slice(0, 3000), tamano: TAMANOS[p.tamano] ? p.tamano : 'tabloide', sistema: String(p.sistema || '').slice(0, 120),
+    creadoPorUid: p.creadoPorUid || window.currentUser.uid, actualizadoPor: String(yo()).slice(0, 100), actualizadoPorUid: window.currentUser.uid,
+    actualizadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+}
+function siguienteCodigo() {
+  let max = 0; DIAGS.forEach(d => { const m = /^E-(\d+)$/.exec(d.codigo || ''); if (m) max = Math.max(max, +m[1]); });
+  return 'E-' + String(max + 1).padStart(3, '0');
+}
+function naveParaNuevo() { return fbNaveActiva() || (fbNavesDisponibles().length === 1 ? fbNavesDisponibles()[0] : ''); }
 async function usarEjemplo() {
-  const nave = fbNaveActiva() || (fbNavesDisponibles().length === 1 ? fbNavesDisponibles()[0] : '');
+  const nave = naveParaNuevo();
   if (!nave && fbNavesDisponibles().length > 1) { toast(tx('Elige primero la nave arriba, en el encabezado.'), 'warn'); return; }
-  const mapa = new Map(); const col = db.collection('electrico');
-  datosEjemplo().forEach(n => mapa.set(n.id, col.doc().id));
-  const nuevos = datosEjemplo().map(n => Object.assign({}, n, { id: mapa.get(n.id), padreId: n.padreId ? mapa.get(n.padreId) : '', respaldoId: n.respaldoId ? mapa.get(n.respaldoId) : '', planta: nave }));
-  EJEMPLO = false; NODOS = new Map(nuevos.map(n => [n.id, n]));
-  try { await escribir(nuevos); toast(tx('Ejemplo guardado. Cambia los nombres y valores por los reales.'), 'ok'); }
-  catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+  const colD = db.collection('diagramas'), col = db.collection('electrico');
+  const pid = colD.doc().id;
+  const plano = Object.assign(PLANO_EJEMPLO(), { nombre: tx('Unifilar general'), codigo: siguienteCodigo(), planta: nave, revisiones: [{ rev: 0, fecha: hoyTxt(), desc: tx('Emisión inicial'), por: yo() }] });
+  const mapa = new Map(); datosEjemplo().forEach(n => mapa.set(n.id, col.doc().id));
+  const nuevos = datosEjemplo().map(n => Object.assign({}, n, { id: mapa.get(n.id), padreId: n.padreId ? mapa.get(n.padreId) : '', respaldoId: n.respaldoId ? mapa.get(n.respaldoId) : '', planta: nave, diagramaId: pid }));
+  try {
+    await colD.doc(pid).set(datosPlanoParaGuardar(plano));
+    EJEMPLO = false; DIAGS.set(pid, Object.assign({ id: pid }, plano)); TODOS = new Map(nuevos.map(n => [n.id, n])); NODOS = new Map(nuevos.map(n => [n.id, n]));
+    await escribir(nuevos);
+    toast(tx('Ejemplo guardado. Cambia los nombres y valores por los reales.'), 'ok');
+    lsSet('ufPlano', pid);
+  } catch (e) { toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
   cargar();
 }
 async function borrar(id) {
   const n = NODOS.get(id); if (!n || hijos(id).length) return;
   const copia = Object.assign({}, n);
-  NODOS.delete(id); SEL = n.padreId && NODOS.has(n.padreId) ? n.padreId : null; pintarTodo();
+  NODOS.delete(id); TODOS.delete(id); SEL = n.padreId && NODOS.has(n.padreId) ? n.padreId : null; pintarTodo();
   try {
     await escribir([], [id]);
-    if (window.vtDeshacer) vtDeshacer(tx('Quitado') + ': ' + copia.nombre, async () => { NODOS.set(copia.id, copia); try { await escribir([copia]); } catch (e) { toast(e.message, 'error'); } SEL = copia.id; pintarTodo(); });
-  } catch (e) { NODOS.set(id, copia); pintarTodo(); toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+    if (window.vtDeshacer) vtDeshacer(tx('Quitado') + ': ' + copia.nombre, async () => { NODOS.set(copia.id, copia); TODOS.set(copia.id, copia); try { await escribir([copia]); } catch (e) { toast(e.message, 'error'); } SEL = copia.id; pintarTodo(); });
+  } catch (e) { NODOS.set(id, copia); TODOS.set(id, copia); pintarTodo(); toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
 }
 
-// ══════ Formulario ══════
+// ══════ Hoja modal ══════
+function hoja(titulo, sub, cuerpo) {
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh uf-form" role="dialog" aria-modal="true" aria-labelledby="ufHt"><div class="fbsh-head"><div><h3 id="ufHt">${esc(titulo)}</h3>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>${cuerpo}</div>`;
+  document.body.appendChild(bg);
+  const previo = document.activeElement;
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); try { if (previo && previo.focus) previo.focus(); } catch (e) {} };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
+  setTimeout(() => { const f = bg.querySelector('input, select, textarea'); if (f && !bg.contains(document.activeElement)) f.focus(); }, 30);
+  return { bg, q: s => bg.querySelector(s), cerrar };
+}
+const opt = (v, l, s) => `<option value="${esc(v)}"${s ? ' selected' : ''}>${esc(l)}</option>`;
+
+// ══════ Formulario de elemento ══════
 function opcionesPadre(actualId) {
   const prohibidos = new Set(actualId ? [actualId, ...descendientes(actualId).map(n => n.id)] : []);
-  const l = []; NODOS.forEach(n => { if (n.tipo !== 'carga' && !prohibidos.has(n.id)) l.push(n); });
+  const l = []; NODOS.forEach(n => { if (PUEDE_HIJOS(n.tipo) && !prohibidos.has(n.id)) l.push(n); });
   l.sort((a, b) => textoRuta(a.id).localeCompare(textoRuta(b.id), 'es', { numeric: true }));
   return l;
-}
-function tipoHijoSugerido(padre) {
-  if (!padre) return 'acometida';
-  return { acometida: 'transformador', generador: 'transferencia', transformador: 'tablero', transferencia: 'tablero', tablero: 'interruptor', interruptor: 'carga' }[padre.tipo] || 'interruptor';
 }
 async function abrirForm(id, padreId, tipoIni) {
   const n = id ? NODOS.get(id) : null;
   const padre = n ? NODOS.get(n.padreId) : NODOS.get(padreId || '');
-  const d = n ? Object.assign({}, n) : { tipo: tipoIni || tipoHijoSugerido(padre), nombre: '', padreId: padre ? padre.id : '', capacidad: '', voltaje: '', calibre: '', ubicacion: '', cargaTipo: 'motor', equipoId: '', respaldoId: '', notas: '', orden: padre ? hijos(padre.id).length + 1 : 1, planta: padre ? padre.planta : (fbNaveActiva() || '') };
-  if (!EQUIPOS.length) { try { const c = await fbEquiposCatalogo(false); EQUIPOS = (Array.isArray(c) ? c : (c && c.docs ? c.docs.map(x => Object.assign({ id: x.id }, x.data())) : [])).filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e)); } catch (e) { EQUIPOS = []; } }
-  const naves = fbNavesDisponibles();
+  const d = n ? Object.assign({}, n, { e: Object.assign({}, n.e || {}) }) : { tipo: tipoIni || (padre ? HIJO_SUG[padre.tipo] || 'interruptor' : 'acometida'), nombre: '', padreId: padre ? padre.id : '', calibre: '', ubicacion: '', cargaTipo: 'motor', equipoId: '', respaldoId: '', notas: '', ref: '', orden: padre ? hijos(padre.id).length + 1 : 1, planta: padre ? padre.planta : (planoActual() ? planoActual().planta : naveParaNuevo()), diagramaId: DIAG || '', e: {} };
+  if (!EQUIPOS.length) { try { const c = await fbEquiposCatalogo(false); EQUIPOS = (c && c.docs ? c.docs.map(x => Object.assign({ id: x.id }, x.data())) : []).filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e)); } catch (e) { EQUIPOS = []; } }
   const padres = opcionesPadre(id);
   const gens = []; NODOS.forEach(x => { if (x.tipo === 'generador') gens.push(x); });
-  const opt = (v, l, s) => `<option value="${esc(v)}"${s ? ' selected' : ''}>${esc(l)}</option>`;
-  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
-  bg.innerHTML = `<div class="fbsh uf-form" role="dialog" aria-modal="true" aria-labelledby="ufFt">
-    <div class="fbsh-head"><div><h3 id="ufFt">${esc(tx(n ? 'Editar elemento' : 'Agregar elemento'))}</h3>${padre ? `<small>${esc(tx('Debajo de'))}: ${esc(padre.nombre)}</small>` : ''}</div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>
+  // los datos eléctricos de cada tipo, en grupos que se muestran según el tipo elegido
+  const grupos = TIPOS.map(t => `<div data-grupo="${t}" class="g2">${(CAMPOS_E[t] || []).map(([k, l, ej]) => `<div><label for="fe_${t}_${k}">${esc(tx(l))}</label><input id="fe_${t}_${k}" data-e="${k}" maxlength="60" value="${esc(d.tipo === t && d.e[k] != null ? d.e[k] : '')}"${ej ? ` placeholder="${esc(tx('Ej:') + ' ' + ej)}"` : ''}/></div>`).join('')}</div>`).join('');
+  const H = hoja(tx(n ? 'Editar elemento' : 'Agregar elemento'), padre ? tx('Debajo de') + ': ' + padre.nombre : '', `
     <label for="fTipo">${esc(tx('Tipo'))}</label><select id="fTipo">${TIPOS.map(t => opt(t, tx(TIPO_TXT[t]), d.tipo === t)).join('')}</select>
     <label for="fNombre">${esc(tx('Nombre o código'))} *</label><input id="fNombre" maxlength="80" value="${esc(d.nombre)}" placeholder="${esc(tx('Ej: TP-1, INT-3, Telar 5'))}"/>
     <div id="fCargaBox"><label for="fEquipo">${esc(tx('Equipo del catálogo'))}</label><select id="fEquipo">${opt('', tx('— Sin enlazar —'), !d.equipoId)}${EQUIPOS.slice().sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true })).map(e => opt(e.id, e.nombre + (e.localidad ? ' · ' + e.localidad : ''), e.id === d.equipoId)).join('')}</select>
       <div class="nota">${esc(tx('Enlazado, Equipo 360 muestra de qué interruptor se alimenta.'))}</div>
       <label for="fCargaTipo">${esc(tx('Tipo de carga'))}</label><select id="fCargaTipo">${Object.keys(CARGA_TXT).map(k => opt(k, tx(CARGA_TXT[k]), d.cargaTipo === k)).join('')}</select></div>
-    <div class="g2"><div><label for="fCap">${esc(tx('Capacidad'))}</label><input id="fCap" maxlength="40" value="${esc(d.capacidad)}" placeholder="${esc(tx('Ej: 750 kVA · 3P 60 A · 25 HP'))}"/></div>
-      <div><label for="fVolt">${esc(tx('Voltaje'))}</label><input id="fVolt" maxlength="40" value="${esc(d.voltaje)}" placeholder="${esc(tx('Ej: 480 V'))}"/></div></div>
-    <label for="fCal">${esc(tx('Calibre del alimentador'))}</label><input id="fCal" maxlength="60" value="${esc(d.calibre)}" placeholder="${esc(tx('Ej: 3#2 THHN'))}"/>
-    <label for="fUbi">${esc(tx('Ubicación'))}</label><input id="fUbi" maxlength="80" value="${esc(d.ubicacion)}"/>
+    <h4>${esc(tx('Datos eléctricos'))}</h4>${grupos}
+    <h4>${esc(tx('Alimentador'))}</h4>
+    <label for="fCal">${esc(tx('Conductor'))}</label><input id="fCal" maxlength="60" value="${esc(d.calibre)}" placeholder="${esc(tx('Ej: 3#2 + 1#6 T THHN'))}"/>
+    <div class="g2">${COMUNES_E.map(([k, l, ej]) => `<div><label for="fc_${k}">${esc(tx(l))}</label><input id="fc_${k}" data-c="${k}" maxlength="60" value="${esc(d.e[k] || '')}" placeholder="${esc(tx('Ej:') + ' ' + ej)}"/></div>`).join('')}</div>
+    <h4>${esc(tx('Conexión'))}</h4>
     <label for="fPadre">${esc(tx('Se alimenta de'))}</label><select id="fPadre">${opt('', tx('— Ninguno (fuente de energía) —'), !d.padreId)}${padres.map(p => opt(p.id, textoRuta(p.id), p.id === d.padreId)).join('')}</select>
     <div id="fRespBox"><label for="fResp">${esc(tx('Planta de emergencia que la respalda'))}</label><select id="fResp">${opt('', tx('— Ninguna —'), !d.respaldoId)}${gens.map(g => opt(g.id, g.nombre, g.id === d.respaldoId)).join('')}</select></div>
-    <div id="fNaveBox"><label for="fNave">${esc(tx('Nave'))}</label><select id="fNave">${opt('', '—', !d.planta)}${naves.map(v => opt(v, v, v === d.planta)).join('')}</select></div>
-    <div class="g2"><div><label for="fOrden">${esc(tx('Orden (izquierda a derecha)'))}</label><input id="fOrden" type="number" min="0" max="999" value="${esc(d.orden)}"/></div><div></div></div>
+    <div id="fRefBox"><label for="fRef">${esc(tx('Plano de detalle'))}</label><select id="fRef">${opt('', tx('— Ninguno —'), !d.ref)}${listaPlanos().filter(p => p.id !== DIAG).map(p => opt(p.id, (p.codigo ? p.codigo + ' · ' : '') + p.nombre, p.id === d.ref)).join('')}</select></div>
+    <div class="g2"><div><label for="fUbi">${esc(tx('Ubicación'))}</label><input id="fUbi" maxlength="80" value="${esc(d.ubicacion)}"/></div><div><label for="fOrden">${esc(tx('Orden (izquierda a derecha)'))}</label><input id="fOrden" type="number" min="0" max="999" value="${esc(d.orden)}"/></div></div>
     <label for="fNotas">${esc(tx('Notas'))}</label><textarea id="fNotas" maxlength="500">${esc(d.notas)}</textarea>
-    <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="fOk">${ic('check')}${esc(tx('Guardar'))}</button></div>
-  </div>`;
-  document.body.appendChild(bg);
-  const q = s => bg.querySelector(s);
-  const cerrar = () => bg.remove();
-  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
-  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
-  bg.addEventListener('keydown', ev => { if (ev.key === 'Escape') cerrar(); });
+    <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="fOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  const q = H.q;
   const vista = () => {
-    const t = q('#fTipo').value, root = !q('#fPadre').value;
+    const t = q('#fTipo').value;
     q('#fCargaBox').hidden = t !== 'carga';
     q('#fRespBox').hidden = t !== 'transferencia';
-    q('#fNaveBox').hidden = !(root && naves.length > 1);
+    q('#fRefBox').hidden = !['tablero', 'ccm', 'interruptor'].includes(t);
+    H.bg.querySelectorAll('[data-grupo]').forEach(g => { g.hidden = g.dataset.grupo !== t; });
   };
-  q('#fTipo').onchange = vista; q('#fPadre').onchange = vista; vista();
+  q('#fTipo').onchange = vista; vista();
   q('#fEquipo').onchange = () => { const e = EQUIPOS.find(x => x.id === q('#fEquipo').value); if (e && !q('#fNombre').value.trim()) q('#fNombre').value = e.nombre; };
   setTimeout(() => q('#fNombre').focus(), 50);
   q('#fOk').onclick = async () => {
     const nombre = q('#fNombre').value.trim();
     if (!nombre) { toast(tx('Escribe el nombre o código.'), 'warn'); q('#fNombre').focus(); return; }
     const tipo = q('#fTipo').value, padreN = NODOS.get(q('#fPadre').value);
+    const e = {};
+    H.bg.querySelectorAll(`[data-grupo="${tipo}"] [data-e]`).forEach(i => { if (i.value.trim()) e[i.dataset.e] = i.value.trim(); });
+    H.bg.querySelectorAll('[data-c]').forEach(i => { if (i.value.trim()) e[i.dataset.c] = i.value.trim(); });
+    const plano = planoActual();
     const nuevo = Object.assign({}, d, {
-      id: n ? n.id : db.collection('electrico').doc().id, tipo, nombre,
-      padreId: padreN ? padreN.id : '', capacidad: q('#fCap').value.trim(), voltaje: q('#fVolt').value.trim(), calibre: q('#fCal').value.trim(),
-      ubicacion: q('#fUbi').value.trim(), notas: q('#fNotas').value.trim(), orden: Number(q('#fOrden').value) || 0,
+      id: n ? n.id : db.collection('electrico').doc().id, tipo, nombre, e,
+      padreId: padreN ? padreN.id : '', calibre: q('#fCal').value.trim(), ubicacion: q('#fUbi').value.trim(), notas: q('#fNotas').value.trim(), orden: Number(q('#fOrden').value) || 0,
       cargaTipo: tipo === 'carga' ? q('#fCargaTipo').value : '', equipoId: tipo === 'carga' ? q('#fEquipo').value : '',
-      respaldoId: tipo === 'transferencia' ? q('#fResp').value : '',
-      planta: padreN ? (padreN.planta || '') : (naves.length > 1 ? q('#fNave').value : (naves[0] || d.planta || '')),
+      respaldoId: tipo === 'transferencia' ? q('#fResp').value : '', ref: ['tablero', 'ccm', 'interruptor'].includes(tipo) ? q('#fRef').value : '',
+      planta: padreN ? (padreN.planta || '') : (plano ? plano.planta || '' : d.planta || ''), diagramaId: n ? (n.diagramaId || DIAG || '') : (DIAG || ''),
     });
     const antes = n ? Object.assign({}, n) : null;
-    NODOS.set(nuevo.id, nuevo);
-    // la nave de lo que cuelga sigue a la de su padre
+    NODOS.set(nuevo.id, nuevo); TODOS.set(nuevo.id, nuevo);
     const arrastre = descendientes(nuevo.id).filter(x => x.planta !== nuevo.planta).map(x => { x.planta = nuevo.planta; return x; });
     q('#fOk').disabled = true;
-    try { await escribir([nuevo, ...arrastre]); cerrar(); SEL = nuevo.id; pintarTodo(); centrar(nuevo.id); toast(tx('Guardado'), 'ok'); }
-    catch (e) { if (antes) NODOS.set(antes.id, antes); else NODOS.delete(nuevo.id); q('#fOk').disabled = false; toast(tx('No se pudo guardar: {e}').replace('{e}', e.message), 'error'); }
+    try { await escribir([nuevo, ...arrastre]); H.cerrar(); SEL = nuevo.id; pintarTodo(); centrar(nuevo.id); toast(tx('Guardado'), 'ok'); }
+    catch (err) { if (antes) { NODOS.set(antes.id, antes); TODOS.set(antes.id, antes); } else { NODOS.delete(nuevo.id); TODOS.delete(nuevo.id); } q('#fOk').disabled = false; toast(tx('No se pudo guardar: {e}').replace('{e}', err.message), 'error'); }
   };
+}
+
+// ══════ Formulario del plano (datos del cajetín) ══════
+function abrirFormPlano(id, o) {
+  o = o || {};
+  const p = id ? Object.assign({}, DIAGS.get(id)) : { nombre: '', codigo: siguienteCodigo(), planta: naveParaNuevo(), estado: 'borrador', rev: 0, revisiones: [], cajetin: { empresa: (listaPlanos()[0] && listaPlanos()[0].cajetin && listaPlanos()[0].cajetin.empresa) || 'VoidTech Dominicana' }, notas: NOTAS_DEF, tamano: 'tabloide', sistema: '480Y/277 V · 3F 4H · 60 Hz' };
+  const c = Object.assign({}, p.cajetin || {});
+  const naves = fbNavesDisponibles();
+  const inp = (idc, l, v, ej, max) => `<div><label for="${idc}">${esc(tx(l))}</label><input id="${idc}" maxlength="${max || 60}" value="${esc(v || '')}"${ej ? ` placeholder="${esc(tx('Ej:') + ' ' + ej)}"` : ''}/></div>`;
+  const H = hoja(tx(id ? 'Datos del plano' : 'Nuevo plano'), '', `
+    <div class="g2">${inp('pNom', 'Nombre del plano', p.nombre, 'Unifilar general', 80)}${inp('pCod', 'Plano N.º', p.codigo, 'E-001', 30)}</div>
+    <div class="g2"><div><label for="pEst">${esc(tx('Estado'))}</label><select id="pEst">${ESTADOS.map(s => opt(s, tx(ESTADO_TXT[s]), p.estado === s)).join('')}</select></div>
+      <div><label for="pTam">${esc(tx('Tamaño de hoja'))}</label><select id="pTam">${Object.keys(TAMANOS).map(k => opt(k, tx(TAMANOS[k][0]), p.tamano === k)).join('')}</select></div></div>
+    <div ${naves.length > 1 ? '' : 'hidden'}><label for="pNave">${esc(tx('Nave'))}</label><select id="pNave">${opt('', '—', !p.planta)}${naves.map(v => opt(v, v, v === p.planta)).join('')}</select></div>
+    ${inp('pSis', 'Sistema', p.sistema, '480Y/277 V · 3F 4H · 60 Hz', 120)}
+    <h4>${esc(tx('Cajetín'))}</h4>
+    <div class="g2">${inp('cEmp', 'Empresa', c.empresa, 'VoidTech Dominicana')}${inp('cDir', 'Dirección', c.direccion, '')}</div>
+    <div class="g2">${inp('cPro', 'Proyecto', c.proyecto, 'Instalación eléctrica · Nave 1')}${inp('cTit', 'Título del plano', c.titulo, 'Diagrama unifilar general')}</div>
+    <div class="g3">${inp('cDib', 'Dibujó', c.dibujo, '')}${inp('cRev', 'Revisó', c.reviso, '')}${inp('cEsc', 'Escala', c.escala, 'S/E')}</div>
+    <div class="g2">${inp('cIng', 'Ingeniero responsable', c.ingNombre, 'Ing. Nombre Apellido')}${inp('cCod', 'N.º CODIA', c.ingCodia, '')}</div>
+    <div class="g2">${inp('cHoj', 'Hoja', c.hoja, '1 de 1', 20)}<div></div></div>
+    <label for="pNotas">${esc(tx('Notas generales'))}</label><textarea id="pNotas" maxlength="3000" style="min-height:140px">${esc(p.notas || '')}</textarea>
+    <div class="nota">${esc(tx('El plano tiene validez cuando lo sella y firma el ingeniero responsable.'))}</div>
+    <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="pOk">${ic('check')}${esc(tx('Guardar'))}</button></div>`);
+  const q = H.q;
+  q('#pOk').onclick = async () => {
+    const nombre = q('#pNom').value.trim();
+    if (!nombre) { toast(tx('Escribe el nombre del plano.'), 'warn'); q('#pNom').focus(); return; }
+    const pid = id || db.collection('diagramas').doc().id;
+    const nuevo = Object.assign({}, p, {
+      nombre, codigo: q('#pCod').value.trim(), estado: q('#pEst').value, tamano: q('#pTam').value, sistema: q('#pSis').value.trim(),
+      planta: naves.length > 1 ? q('#pNave').value : (naves[0] || p.planta || ''), notas: q('#pNotas').value,
+      cajetin: { empresa: q('#cEmp').value, direccion: q('#cDir').value, proyecto: q('#cPro').value, titulo: q('#cTit').value, dibujo: q('#cDib').value, reviso: q('#cRev').value, escala: q('#cEsc').value, ingNombre: q('#cIng').value, ingCodia: q('#cCod').value, hoja: q('#cHoj').value },
+    });
+    if (!id) nuevo.revisiones = [{ rev: 0, fecha: hoyTxt(), desc: tx('Emisión inicial'), por: yo() }];
+    q('#pOk').disabled = true;
+    try {
+      await db.collection('diagramas').doc(pid).set(datosPlanoParaGuardar(nuevo));
+      DIAGS.set(pid, Object.assign({ id: pid }, nuevo, { creadoPorUid: nuevo.creadoPorUid || window.currentUser.uid }));
+      if (o.asignarHuerfanos) {
+        const hs = huerfanos(); hs.forEach(x => { x.diagramaId = pid; });
+        const b = db.batch(); hs.forEach(x => b.set(db.collection('electrico').doc(x.id), datosParaGuardar(x))); if (hs.length) await b.commit();
+      }
+      H.cerrar(); toast(tx('Guardado'), 'ok');
+      abrirPlano(pid);
+      if (o.luegoAcometida) abrirForm(null, '', 'acometida');
+    } catch (err) { q('#pOk').disabled = false; toast(tx('No se pudo guardar: {e}').replace('{e}', err.message), 'error'); }
+  };
+}
+
+// ══════ Revisiones ══════
+function abrirRevisiones() {
+  const p = planoActual(); if (!p) return;
+  const revs = (p.revisiones || []).slice().sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0));
+  const puede = PUEDE_EDITAR && !EJEMPLO;
+  const H = hoja(tx('Revisiones'), (p.codigo ? p.codigo + ' · ' : '') + p.nombre, `
+    <table class="uf-revs"><tr><th>${esc(tx('Rev.'))}</th><th>${esc(tx('Fecha'))}</th><th>${esc(tx('Descripción'))}</th><th>${esc(tx('Por'))}</th></tr>
+    ${revs.map(r => `<tr><td>${esc(r.rev)}</td><td>${esc(r.fecha)}</td><td>${esc(r.desc)}</td><td>${esc(r.por)}</td></tr>`).join('') || `<tr><td colspan="4">—</td></tr>`}</table>
+    ${puede ? `<h4>${esc(tx('Nueva revisión'))} (Rev. ${(Number(p.rev) || 0) + 1})</h4><label for="rDesc">${esc(tx('Qué cambió'))}</label><input id="rDesc" maxlength="200" placeholder="${esc(tx('Ej: Se agrega banco de capacitores BC-1'))}"/>
+    <div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cerrar'))}</button><button type="button" class="vt-btn pri" id="rOk">${ic('check')}${esc(tx('Guardar revisión'))}</button></div>` : `<div class="uf-acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cerrar'))}</button></div>`}`);
+  if (!puede) return;
+  H.q('#rOk').onclick = async () => {
+    const desc = H.q('#rDesc').value.trim();
+    if (!desc) { toast(tx('Escribe qué cambió.'), 'warn'); return; }
+    const nuevo = Object.assign({}, p, { rev: (Number(p.rev) || 0) + 1 });
+    nuevo.revisiones = (p.revisiones || []).concat([{ rev: nuevo.rev, fecha: hoyTxt(), desc, por: yo() }]);
+    H.q('#rOk').disabled = true;
+    try { await db.collection('diagramas').doc(p.id).set(datosPlanoParaGuardar(nuevo)); DIAGS.set(p.id, nuevo); H.cerrar(); pintarBarraPlano(); toast(tx('Guardado'), 'ok'); }
+    catch (err) { H.q('#rOk').disabled = false; toast(tx('No se pudo guardar: {e}').replace('{e}', err.message), 'error'); }
+  };
+}
+
+// ══════ Plano impreso ══════
+function resumenPlano() {
+  let hp = 0, kw = 0, motores = 0, otras = 0; const tx_ = [], gens = [];
+  NODOS.forEach(n => {
+    const e = n.e || {}, num = v => parseFloat(String(v || '').replace(',', '.')) || 0;
+    if (n.tipo === 'carga') { if (num(e.hp)) { hp += num(e.hp); motores++; } else { kw += num(e.kw); otras++; } }
+    if (n.tipo === 'transformador' && num(e.kva)) tx_.push(n.nombre + ' ' + num(e.kva) + ' kVA');
+    if (n.tipo === 'generador' && (num(e.kw) || num(e.kva))) gens.push(n.nombre + ' ' + (num(e.kw) ? num(e.kw) + ' kW' : num(e.kva) + ' kVA'));
+  });
+  const cuenta = t => Array.from(NODOS.values()).filter(n => (Array.isArray(t) ? t.includes(n.tipo) : n.tipo === t)).length;
+  return [
+    [tx('Tableros y CCM'), cuenta(['tablero', 'ccm'])], [tx('Interruptores'), cuenta('interruptor')],
+    [tx('Motores'), motores + (hp ? ' · ' + Math.round(hp * 10) / 10 + ' HP' : '')], [tx('Otras cargas'), otras + (kw ? ' · ' + Math.round(kw * 10) / 10 + ' kW' : '')],
+    [tx('Transformadores'), tx_.join(', ') || '—'], [tx('Respaldo'), gens.join(', ') || '—'],
+  ];
+}
+function armarHoja() {
+  const p = planoActual() || { nombre: tx('Diagrama unifilar'), codigo: '', planta: fbNaveActiva() || '', estado: 'borrador', rev: 0, revisiones: [], cajetin: {}, notas: NOTAS_DEF, tamano: 'tabloide', sistema: '' };
+  const c = p.cajetin || {};
+  const tam = TAMANOS[p.tamano] ? p.tamano : 'tabloide';
+  $('ufPage').textContent = '@page { size: ' + TAMANOS[tam][1] + '; margin: 0; }';
+  const s = svgPlano({ vivo: false });
+  const v = (x, ph) => esc(x || ph || '');
+  const revs = (p.revisiones || []).slice().sort((a, b) => (Number(b.rev) || 0) - (Number(a.rev) || 0)).slice(0, 4);
+  const zonas = n => Array.from({ length: n }, (_, i) => i + 1);
+  const hoja = $('ufHoja');
+  hoja.className = 'uf-hoja ' + tam;
+  hoja.innerHTML = `
+    ${zonas(8).map(i => `<span class="zn" style="top:1px;left:${(i - 0.5) * 12.5}%">${i}</span>`).join('')}
+    ${['A', 'B', 'C', 'D'].map((l, i) => `<span class="zn" style="left:2px;top:${(i + 0.5) * 25}%">${l}</span>`).join('')}
+    <div class="h-cab"><b>${v((c.titulo || p.nombre).toUpperCase())}</b><span>${v(p.sistema)} · ${esc(tx('Símbolos ANSI/IEEE 315'))} · ${v(c.escala, tx('Sin escala'))}</span><span class="h-est">${esc(tx(ESTADO_TXT[p.estado] || '').toUpperCase())}</span></div>
+    <div class="h-dib"><svg class="uf-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${s.W} ${s.H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(tx('Diagrama unifilar'))}">${s.html}</svg></div>
+    <div class="h-col">
+      <div class="h-box"><div class="h-t">${esc(tx('SIMBOLOGÍA (ANSI/IEEE 315)'))}</div><div class="h-ley">${LEY.map(([t, l]) => `<svg class="uf-svg" viewBox="0 0 50 50">${svgLeyenda(t)}</svg><span>${esc(tx(l))}</span>`).join('')}</div></div>
+      <div class="h-box"><div class="h-t">${esc(tx('NOTAS GENERALES'))}</div><div class="h-notas">${esc(p.notas || '')}</div></div>
+      <div class="h-box"><div class="h-t">${esc(tx('RESUMEN'))}</div><table class="h-res" style="width:100%;border-collapse:collapse">${resumenPlano().map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('')}</table></div>
+    </div>
+    <div class="h-caj">
+      <div><div class="h-t">${esc(tx('REVISIONES'))}</div><table class="h-revs"><tr><th>${esc(tx('Rev.'))}</th><th>${esc(tx('Fecha'))}</th><th>${esc(tx('Descripción'))}</th><th>${esc(tx('Por'))}</th></tr>${revs.map(r => `<tr><td>${esc(r.rev)}</td><td>${esc(r.fecha)}</td><td>${esc(corta(r.desc, 46))}</td><td>${esc(corta(r.por, 14))}</td></tr>`).join('')}</table></div>
+      <div><div class="h-logo"><i>VT</i><b style="font-size:9.5pt">${v(c.empresa)}</b></div><div>${v(c.direccion)}</div><div>${v(p.planta)}</div></div>
+      <div><div class="h-lb">${esc(tx('PROYECTO'))}</div><div style="font-weight:600;font-size:9pt">${v(c.proyecto)}</div><div class="h-lb" style="margin-top:4px">${esc(tx('TÍTULO DEL PLANO'))}</div><div style="font-weight:700;font-size:11pt">${v(c.titulo || p.nombre)}</div><div style="margin-top:3px;font-weight:600">${esc(tx('Estado'))}: ${esc(tx(ESTADO_TXT[p.estado] || ''))}</div></div>
+      <div class="h-datos">
+        <div><div class="h-lb">${esc(tx('PLANO N.º'))}</div><div class="h-v">${v(p.codigo)}</div></div><div><div class="h-lb">${esc(tx('REV.'))}</div><div class="h-v">${esc(p.rev || 0)}</div></div>
+        <div><div class="h-lb">${esc(tx('HOJA'))}</div><div class="h-v">${v(c.hoja, '1 / 1')}</div></div><div><div class="h-lb">${esc(tx('FECHA'))}</div><div class="h-v" style="font-size:8.5pt">${esc(hoyTxt())}</div></div>
+        <div><div class="h-lb">${esc(tx('DIBUJÓ'))}</div><div>${v(c.dibujo, '—')}</div></div><div><div class="h-lb">${esc(tx('REVISÓ'))}</div><div>${v(c.reviso, '—')}</div></div>
+      </div>
+      <div class="h-sello"><div class="h-t">${esc(tx('INGENIERO RESPONSABLE'))}</div><div class="s">${esc(tx('Sello y firma'))}</div><div>${v(c.ingNombre, '[ ]')}</div><div>CODIA N.º ${v(c.ingCodia, '[ ]')}</div></div>
+    </div>`;
+}
+function imprimir() {
+  if (!NODOS.size) { toast(tx('El plano está vacío.'), 'warn'); return; }
+  armarHoja();
+  setTimeout(() => window.print(), 50);
 }
 
 // ══════ Arranque ══════
 $('ufBuscar').addEventListener('input', buscar);
-$('ufBtnPrint').onclick = () => { const z = ZOOM; window.print(); ZOOM = z; };
-$('ufBtnNuevo').onclick = () => abrirForm(null, SEL && NODOS.get(SEL) && NODOS.get(SEL).tipo !== 'carga' ? SEL : '');
+$('ufBtnPrint').onclick = imprimir;
+$('ufBtnRevs').onclick = abrirRevisiones;
+$('ufBtnDatos').onclick = () => { if (DIAG) abrirFormPlano(DIAG); };
+$('ufBtnPlano').onclick = () => abrirFormPlano(null);
+$('ufPlanoSel').onchange = () => abrirPlano($('ufPlanoSel').value);
+$('ufBtnNuevo').onclick = () => abrirForm(null, SEL && NODOS.get(SEL) && PUEDE_HIJOS(NODOS.get(SEL).tipo) ? SEL : '');
 $('ufZmas').onclick = () => { ZOOM = Math.min(2.5, ZOOM * 1.25); dibujar(); };
 $('ufZmenos').onclick = () => { ZOOM = Math.max(0.3, ZOOM / 1.25); dibujar(); };
 $('ufZfit').onclick = ajustar;
+window.addEventListener('beforeprint', () => { if (NODOS.size && !$('ufHoja').innerHTML) armarHoja(); });
 window.addEventListener('idioma-cambiado', () => { if (CARGADO) pintarTodo(); });
 window.fbReady.then(() => {
   PUEDE_EDITAR = userHasRole('ADMINISTRADOR', 'ENCARGADO_MANTENIMIENTO');
