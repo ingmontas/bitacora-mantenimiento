@@ -128,6 +128,12 @@
     const tot = { minTurno: 0, fuera: 0, plan: 0, noplan: 0, total: 0, malas: 0, idealMin: 0, sinRitmo: 0, turnos: 0 };
     equipos.forEach(x => { if (x.turnos) Object.keys(tot).forEach(k => { tot[k] += x[k]; }); });
     const planta = Object.assign(tot, ind(tot));
+    // (v71) TEEP y paros como % del tiempo planificado (campos nuevos; los de arriba no cambian).
+    // Tiempo calendario = 24 h por cada máquina y día con turno registrado.
+    planta.calendario = conTurno.size * 1440;
+    planta.teep = planta.oee != null && planta.calendario > 0 ? Math.min(planta.oee, planta.oee * planta.planificado / planta.calendario) : null;
+    planta.pNoPlan = planta.planificado > 0 ? Math.min(planta.planificado, planta.noplan) / planta.planificado : null;
+    planta.pPlan = planta.planificado > 0 ? Math.min(planta.planificado, planta.plan) / planta.planificado : null;
     // tendencia por día (planta)
     const D = new Map();
     prods.forEach(p => {

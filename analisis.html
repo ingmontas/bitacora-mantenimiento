@@ -20,7 +20,7 @@
 <script src="i18n-common.js"></script>
 <script src="i18n-shell.js"></script>
 <script src="filtros.js"></script>
-<script src="weibull.js"></script><script src="spc.js"></script><!-- (10 nov 2026) control estadístico de lecturas --><!-- (10 nov 2026) patrón de falla (Weibull) -->
+<script src="weibull.js"></script><script src="spc.js"></script><script src="kpi-tablero.js"></script><!-- (v71) KPI nuevos del tablero --><!-- (10 nov 2026) control estadístico de lecturas --><!-- (10 nov 2026) patrón de falla (Weibull) -->
 <script src="kpis.js"></script><!-- (v3 etapa 3a) indicadores (MTBF, MTTR, disponibilidad, backlog, cumplimiento, vencidas, reincidencia) -->
 <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C -->
 <script src="seguridad.js"></script><!-- (28 oct 2026) permisos de trabajo / LOTO (reporte) -->
@@ -231,6 +231,15 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
   .cod-tabla td { padding: 7px 8px; border-bottom: 1px solid var(--color-border); }
   .cod-tabla .num { text-align: right; font-family: var(--font-mono); white-space: nowrap; }
   .cod-tabla tr.vital td:first-child { font-weight: 700; }
+  /* (v71) Tablero de KPI */
+  .tk-tabla tr.tk-g td { background: var(--color-surface-2); font: 700 12px var(--font-sans); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); padding-top: 9px; }
+  .tk-tabla tr.tk-f { cursor: pointer; }
+  .tk-tabla tr.tk-f:hover td, .tk-tabla tr.tk-f:focus-visible td { background: var(--color-surface-2); }
+  .tk-tabla td.tk-v { font: 600 14.5px var(--font-mono); white-space: nowrap; text-align: right; }
+  .tk-tabla td.tk-m { color: var(--color-muted); font-size: 12.5px; white-space: nowrap; }
+  .tk-tabla td.tk-e { white-space: nowrap; font-size: 12.5px; }
+  .tk-tabla small { display: block; color: var(--color-muted); font-size: 11.5px; }
+  @media (max-width: 520px) { .tk-tabla td.tk-m, .tk-tabla th.tk-m { display: none; } }
   .cod-tabla .barcell { width: 30%; min-width: 80px; }
   .wb-pat, .wb-conf { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--color-border); white-space: nowrap; }
   .wb-desgaste { background: var(--color-info-soft); color: var(--color-info-text); border-color: var(--color-info); }
@@ -310,6 +319,13 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;font-
 
   <!-- ═════════ RESUMEN ═════════ -->
   <section class="tabpanel active" id="tab-resumen">
+    <!-- (v71) Tablero de KPI: todos los indicadores en un lugar, con meta y semáforo. Cero lecturas nuevas. -->
+    <div class="card mb" id="tabKpiCard">
+      <h2>Tablero de KPI</h2>
+      <div class="cardsub">Todos los indicadores en un solo lugar, con su meta. Toca uno para ver el detalle. Período y filtros elegidos.</div>
+      <div id="tabKpi"><div class="empty">Cargando…</div></div>
+      <div class="feed-actions"><button type="button" class="secondary" onclick="exportTableroExcel()"><span data-icon="download"></span> Exportar tablero a Excel</button><span class="feed-status" id="tabKpiStatus"></span></div>
+    </div>
     <div class="kpis" id="kpiRow"></div>
     <!-- (14 oct 2026) Indicadores de gestión (inspirados en SAP PM). Clic en un
          indicador para ir a su detalle. Ver renderGestion() para las definiciones. -->
@@ -1128,7 +1144,7 @@ function cargarMundial(){
   if (_mund.cargando || (_mund.tecs && _mund.cfg)) return;
   _mund.cargando = true;
   Promise.all([ (typeof fbTecnicos==='function' ? fbTecnicos() : Promise.resolve([])).catch(()=>[]), fbKpiConfig().catch(()=>FB_KPI_CFG_DEF) ])
-    .then(([t,c])=>{ _mund.tecs = t||[]; _mund.cfg = c; }).finally(()=>{ _mund.cargando = false; renderMundial(); });
+    .then(([t,c])=>{ _mund.tecs = t||[]; _mund.cfg = c; }).finally(()=>{ _mund.cargando = false; renderMundial(); if (typeof renderTablero==='function') renderTablero(); });
 }
 const enCritF = id => !F.crit || ((id && (_critPorId[id] || (typeof fbCriticidadDeEquipo==='function' ? fbCriticidadDeEquipo(id) : ''))) || 'N')===F.crit;
 function otsAbiertasAlcance(){
@@ -1527,6 +1543,7 @@ function renderGestion(){
     <div class="kpi clickable ${rCls}" data-gscroll="gdReinc" title="Correctivos del alcance filtrado cuyo mismo equipo tuvo otro correctivo con la misma causa de falla entre 1 y ${DIAS_REINC_AN} días antes ÷ total de correctivos del alcance. Los correctivos sin causa registrada cuentan en el total pero no pueden ser reincidentes."><div class="lbl">Reincidencia de fallas</div><div class="val">${pctTxt(pReinc)}</div><div class="foot">${corrScope.length?`${nReinc} de ${corrScope.length} correctivos${sinCausa?` · ${sinCausa} sin causa`:''}`:'sin correctivos en el alcance'}</div></div>`;
   renderComparativo();
   if (typeof renderMundial==='function'){ renderMundial(); renderTendAn(); } // (28 oct 2026) llegan OTs abiertas / checklists
+  renderTablero(); // (v71)
 }
 
 /* ══════ COMPARATIVO ENTRE NAVES Y POR ÁREA (25 oct 2026, Etapa 3) ══════
@@ -1885,6 +1902,93 @@ function renderSaludDatos(rows){
   cont.innerHTML = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 10px;"><span style="font:600 34px var(--font-mono)">'+Math.round(s.score)+'<small style="font-size:18px">/100</small></span><span class="wb-pat" style="border-color:'+col+'">'+esc(nivel)+'</span></div>'
     + '<table class="cod-tabla"><tbody>' + s.items.map(x=>'<tr><td>'+esc(x.t)+'</td><td class="barcell"><span style="width:'+Math.max(2,x.v)+'%;background:'+(x.v>=90?'var(--color-success)':x.v>=60?'var(--color-info)':'var(--color-danger)')+'"></span></td><td class="num">'+Math.round(x.v)+' %</td></tr>').join('') + '</tbody></table>'
     + (s.peor && s.peor.v < 90 ? '<p class="cardsub" style="margin-top:8px;">'+esc(TA('Lo que más conviene mejorar: {x}.').replace('{x}', TA(s.peor.t).toLowerCase()))+'</p>' : '');
+}
+// ══════ (v71) TABLERO DE KPI ══════
+// Junta todos los indicadores con las MISMAS funciones de siempre (calcKpis, calcPlanificado, calcBacklog,
+// calcCumplimiento, calcVencidas, calcReincidencia) + los nuevos de kpi-tablero.js. Cero lecturas nuevas:
+// técnicos y ajustes salen de cargarMundial (copia de 6 h, la misma de Clase mundial).
+const TK_EST = {verde:'En meta', amarillo:'Cerca de la meta', rojo:'Fuera de meta'};
+function diasPeriodoAn(){
+  if (F.periodo!=='todo') return +F.periodo;
+  const rows = window._rowsAll||[]; if (!rows.length) return 0;
+  const min = rows.reduce((m,r)=>{ const d = parseFecha(r.fecha); return d && d < m ? d : m; }, today0());
+  return Math.max(1, daysBetween(min, today0()) + 1);
+}
+function datosTablero(){
+  const ref = today0(), T = window.VTTablero;
+  const scope = window._scopeRows||[], all = window._rowsAll||[];
+  const K = calcKpis(scope, ref), P = calcPlanificado(scope);
+  // Sin lecturas al abrir: si Clase mundial aún no leyó técnicos y ajustes, se usa la copia del celular
+  // (la deja cualquier pantalla que los leyó); si no hay copia, esas filas esperan a Clase mundial.
+  const copiaTec = (!_mund.tecs && typeof _fbTecLeerCopia==='function') ? _fbTecLeerCopia() : null;
+  const listaTec = _mund.tecs || (copiaTec && copiaTec.lista) || null;
+  const listoMund = !!listaTec;
+  const cfg = _mund.cfg || fbKpiConfigSync();
+  const tecs = (listaTec||[]).filter(t=>fbTecnicoEnNave(t));
+  const abiertas = (_otsAbiertasAn && !_otsAbiertasErr) ? otsAbiertasAlcance() : null;
+  const B = (listoMund && abiertas) ? calcBacklog(abiertas, all, tecs.length, cfg.horasSemanaTecnico, ref) : null;
+  const cp = _equiposDocs ? calcCumplimiento(_equiposDocs.filter(e=>fbEquipoEnNave(e)), _ckAn.docs.filter(c=>fbEnNave(c)), enUbicEquipo) : null;
+  const venc = abiertas ? calcVencidas(_otsAbiertasAn.filter(o=>fbEnNave(o)), enUbicOtAbierta).length : null;
+  const re = calcReincidencia(all, scope);
+  const preds = predsAlcance();
+  const hechasUbic = all.filter(r=>['area','tecnico','crit'].every(k=>!preds[k] || preds[k](r)));
+  const CP = abiertas ? T.cumplimientoPlan(hechasUbic, abiertas, ref, 28) : null;
+  const RA = T.respuestaAvisos(scope);
+  const DA = T.diasAvisoATrabajo(scope);
+  const HO = listoMund ? T.horasEnOT(scope, tecs.length, cfg.horasSemanaTecnico, diasPeriodoAn(), F.tecnico || '', (r,t)=>splitTecnicos(r.tecnicos).includes(t)) : null;
+  return {K, P, B, cp, venc, re, CP, RA, DA, HO, cfg, scope};
+}
+function filasTablero(D){
+  const T = window.VTTablero, sem = T.semaforo;
+  const f1 = v => v==null ? '—' : (Math.round(v*10)/10).toLocaleString('es-DO');
+  const pc = v => v==null ? '—' : pctTxt(v);
+  const esAdm = typeof userHasRole==='function' && userHasRole('ADMINISTRADOR');
+  const {K, P, B, cp, venc, re, CP, RA, DA, HO, scope} = D;
+  const L = [];
+  L.push({g:'Confiabilidad'});
+  L.push({k:'disp', t:'Disponibilidad', v:pc(K.disp), m:'≥ 95 %', s:sem(K.disp,95,85), d:'MTBF ÷ (MTBF + MTTR)', ir:['gscroll','kpiRow']});
+  L.push({k:'mtbf', t:'MTBF (días entre fallas)', v:K.mtbfAvg==null?'—':f1(K.mtbfAvg)+' d', m:'que suba', s:'', d:K.mtbfs.length+' equipo(s) con 3 fallas o más', ir:['goto','equipos']});
+  L.push({k:'mttr', t:'MTTR (paro por falla)', v:K.mttrAvg==null?'—':fmtHM(K.mttrAvg), m:'que baje', s:'', d:K.corrM.length+' correctivo(s) con paro', ir:['gscroll','kpiRow']});
+  L.push({g:'Planificación'});
+  L.push({k:'plan', t:'Trabajo planificado', v:pc(P.pct), m:'≥ 80 %', s:P.sem||'', d:P.plan+' planificadas · '+P.reac+' reactivas', ir:['gscroll','mundKpis']});
+  L.push({k:'backlog', t:'Semanas de backlog', v:B?(B.semanas==null?'—':f1(B.semanas)):'…', m:'2 a 4', s:B?(B.sem||''):'', d:B?B.n+' OT abiertas · '+Math.round(B.horas)+' h':'se calcula al bajar a Clase mundial', ir:['gscroll','mundKpis']});
+  L.push({k:'prev', t:'Preventivo al día', v:cp?pc(cp.pAlDia):'…', m:'≥ 90 %', s:cp?sem(cp.pAlDia,90,75):'', d:cp?(cp.nFrec ? (cp.nFrec-cp.vencPrev.length)+' de '+cp.nFrec+' equipos al día' : 'ningún equipo tiene frecuencia'):'cargando…', ir:['gscroll','gdPrev']});
+  L.push({k:'venc', t:'OT vencidas', v:venc==null?'…':String(venc), m:'0', s:venc==null?'':venc===0?'verde':venc<=5?'amarillo':'rojo', d:'abiertas con la fecha pasada', ir:['gscroll','gdVenc']});
+  L.push({k:'aTiempo', t:'OT planificadas hechas a tiempo', v:CP?pc(CP.pct):'…', m:'≥ 90 %', s:CP?sem(CP.pct,90,75):'', d:CP?(CP.total ? CP.aTiempo+' a tiempo · '+CP.tarde+' tarde · '+CP.pendientes+' sin hacer (4 semanas)' : 'sin OT planificadas en 4 semanas'):'cargando…', ir:['href','programa.html']});
+  L.push({g:'Calidad del trabajo y respuesta'});
+  L.push({k:'corr', t:'% correctivo', v:scope.length?pc(K.pctCorr):'—', m:'que baje', s:scope.length?sem(K.pctCorr,35,60,true):'', d:K.correctivos.length+' de '+scope.length+' OT', ir:['gscroll','kpiRow']});
+  L.push({k:'reinc', t:'Reincidencia de fallas', v:pc(re.pReinc), m:'0 %', s:sem(re.pReinc,10,25,true), d:re.nReinc+' de '+re.corrScope.length+' correctivos', ir:['gscroll','gdReinc']});
+  L.push({k:'resp', t:'Respuesta a avisos dentro de la meta', v:pc(RA.pct), m:'≥ 90 %', s:sem(RA.pct,90,75), d:RA.n ? 'promedio '+fmtHM(RA.prom)+' · '+RA.n+' aviso(s) · meta 15 min parada, 30 min falla' : 'sin avisos con hora de parada y de llegada', ir:null});
+  L.push({k:'diasAv', t:'Días de aviso a trabajo hecho', v:DA.n?f1(DA.prom)+' d':'—', m:'que baje', s:'', d:DA.n ? Math.round(DA.mismoDia)+' % el mismo día · '+DA.n+' aviso(s)' : 'sin avisos en el alcance', ir:null});
+  L.push({g:'Personas'});
+  L.push({k:'horas', t:'Horas en OT ÷ horas disponibles', v:HO?pc(HO.pct):'…', m:'que suba', s:'', d:HO?(HO.disponibles ? Math.round(HO.horas)+' h de '+Math.round(HO.disponibles)+' h · '+HO.personas+' técnico(s) · aproxima el tiempo de llave' : 'faltan técnicos en la lista'):'se calcula al bajar a Clase mundial', ir:['goto','personas']});
+  L.push({g:'En otras pantallas'});
+  L.push({k:'oee', t:'OEE, TEEP y paro no planificado', v:'Ver', m:'OEE ≥ 85 %', s:'', d:'Paros y OEE', ir:['href','oee.html']});
+  if (esAdm) L.push({k:'rav', t:'Costo / valor de reposición (RAV)', v:'Ver', m:'< 2–3 %', s:'', d:'Rentabilidad', ir:['href','rentabilidad.html#anio']});
+  L.push({k:'loto', t:'Trabajos en equipos A sin LOTO', v:'Ver', m:'0', s:'', d:'Confiabilidad → Seguridad', ir:['goto','confiabilidad']});
+  return L;
+}
+function renderTablero(){
+  const box = $('tabKpi'); if (!box || !window.VTTablero) return;
+  const D = datosTablero(), L = filasTablero(D);
+  window._tablero = L;
+  const attr = ir => !ir ? '' : ir[0]==='href' ? ` data-href="${esc(ir[1])}" tabindex="0"` : ` data-${ir[0]}="${esc(ir[1])}" tabindex="0"`;
+  box.innerHTML = '<div style="overflow-x:auto;"><table class="cod-tabla tk-tabla"><thead><tr><th>Indicador</th><th class="num">Valor</th><th class="tk-m">Meta</th><th>Estado</th></tr></thead><tbody>'
+    + L.map(x=>x.g ? `<tr class="tk-g"><td colspan="4">${esc(x.g)}</td></tr>`
+      : `<tr class="${x.ir?'tk-f':''}" data-tk="${esc(x.k)}"${attr(x.ir)}><td><b>${esc(x.t)}</b><small>${esc(x.d)}</small></td><td class="tk-v">${esc(x.v)}</td><td class="tk-m">${esc(x.m)}</td><td class="tk-e">${x.s ? semIco(x.s)+esc(TK_EST[x.s]) : '<span style="color:var(--color-muted)">—</span>'}</td></tr>`).join('')
+    + '</tbody></table></div>';
+  if (window.VTIcons) VTIcons.hydrate(box);
+}
+document.addEventListener('click', ev=>{ const h = ev.target.closest && ev.target.closest('#tabKpi [data-href]'); if (h) location.href = h.dataset.href; });
+document.addEventListener('keydown', ev=>{ if (ev.key!=='Enter') return; const r = ev.target.closest && ev.target.closest('#tabKpi tr[tabindex]'); if (r) r.click(); });
+function exportTableroExcel(){
+  const L = window._tablero || []; let g = '';
+  const filas = [];
+  L.forEach(x=>{ if (x.g){ g = x.g; return; } filas.push([g, x.t, x.v, x.m, x.s ? TK_EST[x.s] : '', x.d]); });
+  const ubTxt = (ubic && ubic.texto()) || fbNaveTexto();
+  const titulo = 'Tablero de KPI · ' + ubTxt + ' · ' + (F.periodo==='todo'?'últimos '+MESES_AN+' meses':'últimos '+F.periodo+' días') + ' · generado ' + fbHoy();
+  fbExportar({ nombre: fbNombreArchivo('tablero-kpi', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas:[{ nombre:'Tablero KPI', titulo,
+    columnas:[{t:'Grupo',w:24},{t:'Indicador',w:36},{t:'Valor',w:14},{t:'Meta',w:16},{t:'Estado',w:18},{t:'Detalle',w:60}], filas }], aviso: m=>{ $('tabKpiStatus').textContent = m; } });
 }
 // (10 nov 2026) Reporte de la semana (última semana completa, lunes a domingo) para gerencia.
 function semanaPasada(){ const d = today0(); d.setDate(d.getDate() - ((d.getDay()+6)%7) - 7); const a = fbFechaLocal(d); d.setDate(d.getDate()+6); return [a, fbFechaLocal(d)]; }
@@ -2308,7 +2412,9 @@ function otRecordToRow(doc){
     causa:doc.CAUSA_FALLA||doc.causaFalla||'',
     modo:doc.MODO_FALLA||'', accion:doc.ACCION_MANT||'',
     creadoMs:(doc.createdAt && typeof doc.createdAt.seconds==='number') ? doc.createdAt.seconds*1000 : null, // (10 nov 2026) calidad de datos: ¿se registró a tiempo? // (10 nov 2026) códigos de falla ISO 14224 (no entran en ningún indicador)
-    tiempoRespuestaMin:(doc.TIEMPO_RESPUESTA_MIN!=null && doc.TIEMPO_RESPUESTA_MIN!=='')?Number(doc.TIEMPO_RESPUESTA_MIN):null
+    tiempoRespuestaMin:(doc.TIEMPO_RESPUESTA_MIN!=null && doc.TIEMPO_RESPUESTA_MIN!=='')?Number(doc.TIEMPO_RESPUESTA_MIN):null,
+    // (v71) para el Tablero de KPI (respuesta a avisos); no entran en ningún indicador anterior
+    hInicio:doc.H_INICIO||'', hTecnico:doc.H_TECNICO||'', maquinaParada:doc.maquinaParada===true
   };
 }
 

@@ -58,6 +58,8 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); font-fa
 .oe-paro .vt-btn { flex: 0 0 auto; }
 .oe-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 @media (min-width: 760px) { .oe-tiles { grid-template-columns: 1.4fr 1fr 1fr 1fr; } }
+.oe-tiles.oe-tiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } /* (v71) TEEP y paros */
+@media (max-width: 420px) { .oe-tiles.oe-tiles3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .oe-tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 12px 14px; }
 .oe-tile .l { font-size: 12.5px; color: var(--color-muted); font-weight: 600; }
 .oe-tile .v { font: 600 30px var(--font-mono); letter-spacing: -.02em; margin-top: 2px; }
@@ -444,6 +446,11 @@ function pintarOee() {
       <div class="oe-tile"><div class="l">${esc(tx('Disponibilidad'))}</div><div class="v">${pct(P.A)}</div><div class="s">${esc(tx('Paros'))}: ${durTxt(P.perdido)}</div></div>
       <div class="oe-tile"><div class="l">${esc(tx('Rendimiento'))}</div><div class="v">${pct(P.P)}</div><div class="s">${esc(tx('Velocidad contra el ritmo ideal'))}</div></div>
       <div class="oe-tile"><div class="l">${esc(tx('Calidad'))}</div><div class="v">${pct(P.Q)}</div><div class="s">${esc(tx('Malas'))}: ${fmtN(P.malas)}</div></div>
+    </div>
+    <div class="oe-tiles oe-tiles3">
+      <div class="oe-tile" title="${esc(tx('TEEP = OEE × tiempo planificado ÷ 24 horas de cada máquina y día con turno.'))}"><div class="l">TEEP</div><div class="v">${pct(P.teep)}</div><div class="s">${esc(tx('OEE contra las 24 horas del día'))}</div></div>
+      <div class="oe-tile"><div class="l">${esc(tx('Paro no planificado'))}</div><div class="v">${pct(P.pNoPlan)}</div><div class="s">${esc(tx('del tiempo planificado'))}: ${durTxt(P.noplan)}</div></div>
+      <div class="oe-tile"><div class="l">${esc(tx('Paro planificado'))}</div><div class="v">${pct(P.pPlan)}</div><div class="s">${esc(tx('cambios y limpieza'))}: ${durTxt(P.plan)}</div></div>
     </div>` + dineroHtml(r) + stack + tabla + pareto + trend +
     (res.sinTurnoMin ? `<p class="oe-note">${esc(tx('Hay {t} de paros en días sin turno registrado: salen en "Tiempo perdido por causa" pero no entran en el OEE.').replace('{t}', durTxt(res.sinTurnoMin)))}</p>` : '');
 }
