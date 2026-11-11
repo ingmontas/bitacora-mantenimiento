@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v71'; // (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
+const CACHE = 'mantenimiento-v72'; // (v72: Excel del tablero de KPI con formato) (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
 const ASSETS = [
   './',
   'index.html',

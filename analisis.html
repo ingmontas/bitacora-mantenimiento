@@ -1946,22 +1946,22 @@ function filasTablero(D){
   const {K, P, B, cp, venc, re, CP, RA, DA, HO, scope} = D;
   const L = [];
   L.push({g:'Confiabilidad'});
-  L.push({k:'disp', t:'Disponibilidad', v:pc(K.disp), m:'≥ 95 %', s:sem(K.disp,95,85), d:'MTBF ÷ (MTBF + MTTR)', ir:['gscroll','kpiRow']});
-  L.push({k:'mtbf', t:'MTBF (días entre fallas)', v:K.mtbfAvg==null?'—':f1(K.mtbfAvg)+' d', m:'que suba', s:'', d:K.mtbfs.length+' equipo(s) con 3 fallas o más', ir:['goto','equipos']});
-  L.push({k:'mttr', t:'MTTR (paro por falla)', v:K.mttrAvg==null?'—':fmtHM(K.mttrAvg), m:'que baje', s:'', d:K.corrM.length+' correctivo(s) con paro', ir:['gscroll','kpiRow']});
+  L.push({k:'disp', t:'Disponibilidad', v:pc(K.disp), n:K.disp, nf:'pct', m:'≥ 95 %', s:sem(K.disp,95,85), d:'MTBF ÷ (MTBF + MTTR)', ir:['gscroll','kpiRow']});
+  L.push({k:'mtbf', t:'MTBF (días entre fallas)', v:K.mtbfAvg==null?'—':f1(K.mtbfAvg)+' d', n:K.mtbfAvg, nf:'d', m:'que suba', s:'', d:K.mtbfs.length+' equipo(s) con 3 fallas o más', ir:['goto','equipos']});
+  L.push({k:'mttr', t:'MTTR (paro por falla)', v:K.mttrAvg==null?'—':fmtHM(K.mttrAvg), n:K.mttrAvg, nf:'hm', m:'que baje', s:'', d:K.corrM.length+' correctivo(s) con paro', ir:['gscroll','kpiRow']});
   L.push({g:'Planificación'});
-  L.push({k:'plan', t:'Trabajo planificado', v:pc(P.pct), m:'≥ 80 %', s:P.sem||'', d:P.plan+' planificadas · '+P.reac+' reactivas', ir:['gscroll','mundKpis']});
-  L.push({k:'backlog', t:'Semanas de backlog', v:B?(B.semanas==null?'—':f1(B.semanas)):'…', m:'2 a 4', s:B?(B.sem||''):'', d:B?B.n+' OT abiertas · '+Math.round(B.horas)+' h':'se calcula al bajar a Clase mundial', ir:['gscroll','mundKpis']});
-  L.push({k:'prev', t:'Preventivo al día', v:cp?pc(cp.pAlDia):'…', m:'≥ 90 %', s:cp?sem(cp.pAlDia,90,75):'', d:cp?(cp.nFrec ? (cp.nFrec-cp.vencPrev.length)+' de '+cp.nFrec+' equipos al día' : 'ningún equipo tiene frecuencia'):'cargando…', ir:['gscroll','gdPrev']});
-  L.push({k:'venc', t:'OT vencidas', v:venc==null?'…':String(venc), m:'0', s:venc==null?'':venc===0?'verde':venc<=5?'amarillo':'rojo', d:'abiertas con la fecha pasada', ir:['gscroll','gdVenc']});
-  L.push({k:'aTiempo', t:'OT planificadas hechas a tiempo', v:CP?pc(CP.pct):'…', m:'≥ 90 %', s:CP?sem(CP.pct,90,75):'', d:CP?(CP.total ? CP.aTiempo+' a tiempo · '+CP.tarde+' tarde · '+CP.pendientes+' sin hacer (4 semanas)' : 'sin OT planificadas en 4 semanas'):'cargando…', ir:['href','programa.html']});
+  L.push({k:'plan', t:'Trabajo planificado', v:pc(P.pct), n:P.pct, nf:'pct', m:'≥ 80 %', s:P.sem||'', d:P.plan+' planificadas · '+P.reac+' reactivas', ir:['gscroll','mundKpis']});
+  L.push({k:'backlog', t:'Semanas de backlog', v:B?(B.semanas==null?'—':f1(B.semanas)):'…', n:B?B.semanas:null, nf:'0.0', m:'2 a 4', s:B?(B.sem||''):'', d:B?B.n+' OT abiertas · '+Math.round(B.horas)+' h':'se calcula al bajar a Clase mundial', ir:['gscroll','mundKpis']});
+  L.push({k:'prev', t:'Preventivo al día', v:cp?pc(cp.pAlDia):'…', n:cp?cp.pAlDia:null, nf:'pct', m:'≥ 90 %', s:cp?sem(cp.pAlDia,90,75):'', d:cp?(cp.nFrec ? (cp.nFrec-cp.vencPrev.length)+' de '+cp.nFrec+' equipos al día' : 'ningún equipo tiene frecuencia'):'cargando…', ir:['gscroll','gdPrev']});
+  L.push({k:'venc', t:'OT vencidas', v:venc==null?'…':String(venc), n:venc, nf:'0', m:'0', s:venc==null?'':venc===0?'verde':venc<=5?'amarillo':'rojo', d:'abiertas con la fecha pasada', ir:['gscroll','gdVenc']});
+  L.push({k:'aTiempo', t:'OT planificadas hechas a tiempo', v:CP?pc(CP.pct):'…', n:CP?CP.pct:null, nf:'pct', m:'≥ 90 %', s:CP?sem(CP.pct,90,75):'', d:CP?(CP.total ? CP.aTiempo+' a tiempo · '+CP.tarde+' tarde · '+CP.pendientes+' sin hacer (4 semanas)' : 'sin OT planificadas en 4 semanas'):'cargando…', ir:['href','programa.html']});
   L.push({g:'Calidad del trabajo y respuesta'});
-  L.push({k:'corr', t:'% correctivo', v:scope.length?pc(K.pctCorr):'—', m:'que baje', s:scope.length?sem(K.pctCorr,35,60,true):'', d:K.correctivos.length+' de '+scope.length+' OT', ir:['gscroll','kpiRow']});
-  L.push({k:'reinc', t:'Reincidencia de fallas', v:pc(re.pReinc), m:'0 %', s:sem(re.pReinc,10,25,true), d:re.nReinc+' de '+re.corrScope.length+' correctivos', ir:['gscroll','gdReinc']});
-  L.push({k:'resp', t:'Respuesta a avisos dentro de la meta', v:pc(RA.pct), m:'≥ 90 %', s:sem(RA.pct,90,75), d:RA.n ? 'promedio '+fmtHM(RA.prom)+' · '+RA.n+' aviso(s) · meta 15 min parada, 30 min falla' : 'sin avisos con hora de parada y de llegada', ir:null});
-  L.push({k:'diasAv', t:'Días de aviso a trabajo hecho', v:DA.n?f1(DA.prom)+' d':'—', m:'que baje', s:'', d:DA.n ? Math.round(DA.mismoDia)+' % el mismo día · '+DA.n+' aviso(s)' : 'sin avisos en el alcance', ir:null});
+  L.push({k:'corr', t:'% correctivo', v:scope.length?pc(K.pctCorr):'—', n:scope.length?K.pctCorr:null, nf:'pct', m:'que baje', s:scope.length?sem(K.pctCorr,35,60,true):'', d:K.correctivos.length+' de '+scope.length+' OT', ir:['gscroll','kpiRow']});
+  L.push({k:'reinc', t:'Reincidencia de fallas', v:pc(re.pReinc), n:re.pReinc, nf:'pct', m:'0 %', s:sem(re.pReinc,10,25,true), d:re.nReinc+' de '+re.corrScope.length+' correctivos', ir:['gscroll','gdReinc']});
+  L.push({k:'resp', t:'Respuesta a avisos dentro de la meta', v:pc(RA.pct), n:RA.pct, nf:'pct', m:'≥ 90 %', s:sem(RA.pct,90,75), d:RA.n ? 'promedio '+fmtHM(RA.prom)+' · '+RA.n+' aviso(s) · meta 15 min parada, 30 min falla' : 'sin avisos con hora de parada y de llegada', ir:null});
+  L.push({k:'diasAv', t:'Días de aviso a trabajo hecho', v:DA.n?f1(DA.prom)+' d':'—', n:DA.n?DA.prom:null, nf:'d', m:'que baje', s:'', d:DA.n ? Math.round(DA.mismoDia)+' % el mismo día · '+DA.n+' aviso(s)' : 'sin avisos en el alcance', ir:null});
   L.push({g:'Personas'});
-  L.push({k:'horas', t:'Horas en OT ÷ horas disponibles', v:HO?pc(HO.pct):'…', m:'que suba', s:'', d:HO?(HO.disponibles ? Math.round(HO.horas)+' h de '+Math.round(HO.disponibles)+' h · '+HO.personas+' técnico(s) · aproxima el tiempo de llave' : 'faltan técnicos en la lista'):'se calcula al bajar a Clase mundial', ir:['goto','personas']});
+  L.push({k:'horas', t:'Horas en OT ÷ horas disponibles', v:HO?pc(HO.pct):'…', n:HO?HO.pct:null, nf:'pct', m:'que suba', s:'', d:HO?(HO.disponibles ? Math.round(HO.horas)+' h de '+Math.round(HO.disponibles)+' h · '+HO.personas+' técnico(s) · aproxima el tiempo de llave' : 'faltan técnicos en la lista'):'se calcula al bajar a Clase mundial', ir:['goto','personas']});
   L.push({g:'En otras pantallas'});
   L.push({k:'oee', t:'OEE, TEEP y paro no planificado', v:'Ver', m:'OEE ≥ 85 %', s:'', d:'Paros y OEE', ir:['href','oee.html']});
   if (esAdm) L.push({k:'rav', t:'Costo / valor de reposición (RAV)', v:'Ver', m:'< 2–3 %', s:'', d:'Rentabilidad', ir:['href','rentabilidad.html#anio']});
@@ -1986,10 +1986,34 @@ function exportTableroExcel(){
   const filas = [];
   L.forEach(x=>{ if (x.g){ g = x.g; return; } filas.push([g, x.t, x.v, x.m, x.s ? TK_EST[x.s] : '', x.d]); });
   const ubTxt = (ubic && ubic.texto()) || fbNaveTexto();
-  const titulo = 'Tablero de KPI · ' + ubTxt + ' · ' + (F.periodo==='todo'?'últimos '+MESES_AN+' meses':'últimos '+F.periodo+' días') + ' · generado ' + fbHoy();
-  fbExportar({ nombre: fbNombreArchivo('tablero-kpi', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), hojas:[{ nombre:'Tablero KPI', titulo,
+  const per = F.periodo==='todo'?'últimos '+MESES_AN+' meses':'últimos '+F.periodo+' días';
+  const titulo = 'Tablero de KPI · ' + ubTxt + ' · ' + per + ' · generado ' + fbHoy();
+  // (v72) Excel con formato: semáforo con color, números de verdad (% y horas), resumen arriba,
+  // enlaces "Ver" y una hoja con cómo se calcula cada indicador. Si falla, el CSV de siempre (hojas).
+  const construir = () => {
+    const base = location.href.replace(/[^\/]*([?#].*)?$/, '');
+    const sub = TA(ubTxt) + ' · ' + TA(per) + ' · ' + TA('generado') + ' ' + fbHoy();
+    return VTTablero.libroExcel(ExcelJS, L, { titulo: TA('Tablero de KPI') + ' · ' + TA('Mantenimiento'), sub, tx: TA, base, def: TK_DEF }).xlsx.writeBuffer();
+  };
+  fbExportar({ nombre: fbNombreArchivo('tablero-kpi', ubic ? ubic.partes() : [], fbHoy().slice(0,7)), construir, hojas:[{ nombre:'Tablero KPI', titulo,
     columnas:[{t:'Grupo',w:24},{t:'Indicador',w:36},{t:'Valor',w:14},{t:'Meta',w:16},{t:'Estado',w:18},{t:'Detalle',w:60}], filas }], aviso: m=>{ $('tabKpiStatus').textContent = m; } });
 }
+// (v72) Cómo se calcula cada indicador (hoja 2 del Excel y nota en la celda de detalle)
+const TK_DEF = {
+  disp: 'MTBF ÷ (MTBF + MTTR), con los minutos de máquina parada de los correctivos.',
+  mtbf: 'Promedio de días entre fallas de los equipos con 3 días de correctivo o más.',
+  mttr: 'Promedio de minutos de máquina parada de los correctivos con paro.',
+  plan: 'OT planificadas (preventivo, predictivo, programado) ÷ todas las OT del período.',
+  backlog: 'Horas de las OT abiertas ÷ (técnicos × horas por semana de cada técnico).',
+  prev: 'Equipos con frecuencia de checklist que no están vencidos ÷ equipos con frecuencia.',
+  venc: 'OT abiertas con la fecha planificada pasada, o pendientes sin planificar hace más de 7 días.',
+  aTiempo: 'OT planificadas de las últimas 4 semanas hechas a más tardar el día planificado ÷ todas las planificadas.',
+  corr: 'Correctivos ÷ todas las OT del período.',
+  reinc: 'Correctivos del mismo equipo y la misma causa a 90 días o menos ÷ correctivos.',
+  resp: 'Avisos donde el técnico llegó a tiempo (15 min con máquina parada, 30 min sin parada) ÷ avisos con las dos horas.',
+  diasAv: 'Días entre que se creó el aviso y el día en que se hizo el trabajo.',
+  horas: 'Horas de técnico registradas en OT ÷ horas disponibles del período (técnicos × horas por semana).',
+};
 // (10 nov 2026) Reporte de la semana (última semana completa, lunes a domingo) para gerencia.
 function semanaPasada(){ const d = today0(); d.setDate(d.getDate() - ((d.getDay()+6)%7) - 7); const a = fbFechaLocal(d); d.setDate(d.getDate()+6); return [a, fbFechaLocal(d)]; }
 function masDiasAn(f, n){ const d = fbParseFecha(f); d.setDate(d.getDate()+n); return fbFechaLocal(d); }
