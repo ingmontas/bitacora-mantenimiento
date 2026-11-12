@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B2545"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B131C"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Repuestos por máquina — Mantenimiento 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="i18n-common.js"></script>
+<script src="i18n-shell.js"></script>
+<script src="i18n-repuestos.js"></script>
+<script src="filtros.js"></script>
+<script src="repuestos-calc.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tema.css"/>
+<style>
+/* ═════════════════════════════════════════════════════════════════
+   REPUESTOS POR MÁQUINA — (11 nov 2026, v73)
+   Todos los repuestos de la lista de cada máquina (la misma de Almacén),
+   con filtros, tarjetas, gráficos que filtran al tocarlos, tabla dinámica
+   y detalle. Al tocar un repuesto se abre su ficha: código, descripción,
+   stock, la máquina con todos sus datos y en qué otras máquinas se usa.
+   Solo lee (/equipos, con la copia del celular: casi sin lecturas). Sin precios.
+   ═════════════════════════════════════════════════════════════════ */
+#rp [hidden] { display: none !important; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+#rp { max-width: 1400px; margin: 0 auto; padding: 14px 14px 110px; display: grid; gap: 12px; }
+#rp > *, .rp-g3 > * { min-width: 0; }
+.rp-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.rp-top h1 { font-size: 20px; margin: 0; }
+.rp-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.rp-nav a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font: 600 13px var(--font-sans); text-decoration: none; }
+.rp-nav a:hover { border-color: var(--color-border-strong); }
+#kpis, #secGraf, #secPiv, #secDet { scroll-margin-top: 70px; }
+.rp-form label { display: block; font-size: 12.5px; font-weight: 600; color: var(--color-muted); margin: 10px 0 4px; }
+.rp-form input, .rp-form select, .rp-form textarea { width: 100%; box-sizing: border-box; min-height: 46px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 15px var(--font-sans); }
+.rp-form textarea { min-height: 64px; resize: vertical; }
+.rp-form .g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+.rp-form .g4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; }
+.rp-form .nota { font-size: 12.5px; color: var(--color-muted); margin: 8px 0 0; }
+.rp-form .err { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: var(--color-danger-soft); color: var(--color-danger-text); font-size: 13.5px; }
+.rp-form .acts { display: flex; gap: 8px; margin-top: 14px; } .rp-form .acts .vt-btn { flex: 1 1 auto; }
+@media (max-width: 520px) { .rp-form .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rp-top p { margin: 2px 0 0; color: var(--color-muted); font-size: 13.5px; }
+.rp-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 14px; min-width: 0; }
+.rp-card h2 { font-size: 15px; margin: 0; }
+.rp-ph { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 10px; }
+.rp-hint { font-size: 12.5px; color: var(--color-muted); }
+.rp-fil { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+.rp-fil .busca { grid-column: span 2; }
+.rp-f label { display: block; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--color-muted); margin-bottom: 4px; }
+.rp-f select, .rp-f input, .rp-pc select { width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-input-bg, var(--color-surface)); color: var(--color-text); font: 15px var(--font-sans); }
+.rp-fb { display: flex; gap: 8px; } .rp-fb .vt-btn { flex: 1 1 auto; } #fMas { display: none; }
+.rp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rp-chips:empty { display: none; }
+.rp-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 6px 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-primary-soft); color: var(--color-text); font: 500 13px var(--font-sans); cursor: pointer; }
+.rp-chip b { font-weight: 700; }
+.rp-chip i { font-style: normal; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--color-surface); }
+.rp-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.rp-k { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 12px; min-width: 0; text-align: left; font: inherit; color: inherit; }
+button.rp-k { cursor: pointer; } button.rp-k:hover { border-color: var(--color-border-strong); }
+button.rp-k[aria-pressed="true"] { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.rp-k .l { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--color-muted); }
+.rp-k .v { font: 700 28px var(--font-mono); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.rp-k .s { font-size: 12px; color: var(--color-muted); }
+.rp-k.sin .v { color: var(--color-danger-text); } .rp-k.bajo .v { color: var(--color-warn-text); } .rp-k.ok .v { color: var(--color-success-text); }
+.rp-meter { height: 6px; border-radius: 3px; background: var(--color-primary-soft); overflow: hidden; margin-top: 6px; }
+.rp-meter i { display: block; height: 100%; background: var(--color-success); }
+.rp-g3 { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .8fr); gap: 12px; }
+.rp-bars { display: grid; gap: 2px; }
+.rp-b { display: grid; grid-template-columns: minmax(80px, 42%) 1fr; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 30px; }
+.rp-b:hover { background: var(--color-primary-soft); }
+.rp-b.sel { background: var(--color-info-soft); }
+.rp-b.dim .fill { opacity: .35; }
+.rp-b .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-b .tr { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rp-b .fill { height: 14px; border-radius: 0 4px 4px 0; background: var(--color-info); min-width: 2px; }
+.rp-b .n { font: 600 12.5px var(--font-mono); font-variant-numeric: tabular-nums; }
+.rp-mas { font-size: 12.5px; color: var(--color-muted); padding: 4px 6px; }
+.e-sin { --c: var(--color-danger); --t: var(--color-danger-text); --s: var(--color-danger-soft); }
+.e-bajo { --c: var(--color-warn); --t: var(--color-warn-text); --s: var(--color-warn-soft); }
+.e-ok { --c: var(--color-success); --t: var(--color-success-text); --s: var(--color-success-soft); }
+.e-nodata { --c: var(--color-muted); --t: var(--color-muted); --s: var(--color-primary-soft); }
+.rp-b[class*="e-"] .fill { background: var(--c); }
+.rp-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font: 600 12px var(--font-sans); white-space: nowrap; background: var(--s); color: var(--t); }
+.rp-pc { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.rp-pc .rp-f { flex: 0 1 190px; }
+.rp-scroll { overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius); margin-top: 10px; }
+.rp-t { border-collapse: collapse; width: 100%; font-size: 13px; }
+.rp-t th, .rp-t td { padding: 7px 10px; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top; }
+.rp-t thead th { position: sticky; top: 0; z-index: 1; background: var(--color-surface-2, var(--color-primary-soft)); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.rp-t td.n, .rp-t th.n { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rp-piv td.c { cursor: pointer; } .rp-piv td.c:hover { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.rp-piv td.c.z { color: var(--color-muted); cursor: default; } .rp-piv td.c.z:hover { outline: 0; }
+.rp-piv tr.tot td, .rp-piv td.tot { font-weight: 700; background: var(--color-primary-soft); }
+.rp-piv th.rh, .rp-piv td.rh { min-width: 170px; max-width: 280px; position: sticky; left: 0; background: var(--color-surface); z-index: 1; }
+.rp-piv thead th.rh { z-index: 2; background: var(--color-surface-2, var(--color-primary-soft)); }
+.rp-det tbody tr { cursor: pointer; } .rp-det tbody tr:hover td { background: var(--color-primary-soft); }
+.rp-det td.rep { min-width: 220px; max-width: 420px; } .rp-det td.rep small { display: block; color: var(--color-muted); font-size: 12px; }
+.rp-det th[data-s] { cursor: pointer; user-select: none; } .rp-det th[data-s]:hover { color: var(--color-primary-text); }
+.rp-mono { font-family: var(--font-mono); font-size: 12.5px; }
+.rp-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+.rp-foot > span:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+.rp-ok { font-size: 12.5px; color: var(--color-success-text); }
+.rp-empty { padding: 26px 12px; text-align: center; color: var(--color-muted); }
+/* ficha del repuesto */
+.rp-sh h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-muted); margin: 16px 0 6px; }
+.rp-dl { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 4px 10px; font-size: 14px; margin: 0; }
+.rp-dl dt { color: var(--color-muted); } .rp-dl dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.rp-stock { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.rp-stock div { border: 1px solid var(--color-border); border-radius: 10px; padding: 8px; text-align: center; }
+.rp-stock b { display: block; font: 700 20px var(--font-mono); }
+.rp-stock small { font-size: 11.5px; color: var(--color-muted); }
+.rp-aviso { margin-top: 8px; padding: 9px 11px; border-radius: 10px; font-size: 13.5px; background: var(--s); color: var(--t); }
+.rp-otros { display: grid; gap: 4px; }
+.rp-otros button { display: flex; justify-content: space-between; gap: 8px; align-items: center; width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.rp-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.rp-links .vt-btn { flex: 1 1 auto; text-decoration: none; }
+.rp-foto { width: 100%; max-height: 200px; object-fit: contain; border-radius: 10px; border: 1px solid var(--color-border); margin-top: 8px; background: #fff; }
+@media (max-width: 1100px) { .rp-g3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .rp-g3 > :first-child { grid-column: span 2; } .rp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { #fMas { display: inline-flex; } .rp-fil:not(.abierto) .rp-mf { display: none; } .rp-g3 { grid-template-columns: minmax(0, 1fr); } .rp-g3 > :first-child { grid-column: auto; } .rp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rp-fil .busca { grid-column: auto; } .rp-k .v { font-size: 24px; } .rp-stock { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<main id="rp">
+  <div class="rp-top"><div><h1>Repuestos por máquina</h1><p id="rpSub">La lista de repuestos de cada máquina, la misma de Almacén. Toca un repuesto para ver todo.</p></div><button type="button" class="vt-btn pri" id="rpAdd" hidden><span data-icon="plus"></span>Agregar repuesto</button></div>
+  <nav class="rp-nav" aria-label="Secciones"><a href="#kpis">Resumen</a><a href="#secGraf">Gráficos</a><a href="#secPiv">Tabla dinámica</a><a href="#secDet">Detalle</a></nav>
+
+  <section class="rp-card" aria-label="Filtros">
+    <div class="rp-fil">
+      <div class="rp-f"><label for="fEq">Máquina</label><select id="fEq"></select></div>
+      <div class="rp-f rp-mf"><label for="fFam">Tipo o modelo</label><select id="fFam"></select></div>
+      <div class="rp-f rp-mf"><label for="fU">Parte de la máquina</label><select id="fU"></select></div>
+      <div class="rp-f rp-mf"><label for="fEst">Estado del stock</label><select id="fEst"></select></div>
+      <div class="rp-f rp-mf"><label for="fT">Marca</label><select id="fT"></select></div>
+      <div class="rp-f busca"><label for="fQ">Buscar repuesto o código</label><input type="search" id="fQ" placeholder="Ej: rodamiento, 6205, leva" autocomplete="off"/></div>
+      <div class="rp-f rp-fb"><button type="button" class="vt-btn" id="fMas" aria-expanded="false">Más filtros</button><button type="button" class="vt-btn" id="fLimpiar">Limpiar filtros</button></div>
+    </div>
+    <div class="rp-chips" id="chips"></div>
+  </section>
+
+  <section class="rp-kpis" id="kpis" aria-label="Resumen"></section>
+
+  <div id="rpCuerpo">
+    <div class="rp-g3" id="secGraf">
+      <section class="rp-card"><div class="rp-ph"><h2>Repuestos por máquina</h2><span class="rp-hint">Toca una barra para filtrar</span></div><div class="rp-bars" id="chEq"></div></section>
+      <section class="rp-card"><div class="rp-ph"><h2>Por parte de la máquina</h2><span class="rp-hint">Toca para filtrar</span></div><div class="rp-bars" id="chU"></div></section>
+      <section class="rp-card"><div class="rp-ph"><h2>Estado del stock</h2><span class="rp-hint">Toca para filtrar</span></div><div class="rp-bars" id="chEst"></div></section>
+    </div>
+
+    <section class="rp-card" style="margin-top:12px" aria-label="Tabla dinámica" id="secPiv">
+      <div class="rp-ph"><h2>Tabla dinámica</h2><span class="rp-hint">Cambia filas, columnas y valor. Toca un número para ver esos repuestos abajo.</span></div>
+      <div class="rp-pc">
+        <div class="rp-f"><label for="pR">Filas</label><select id="pR"></select></div>
+        <div class="rp-f"><label for="pC">Columnas</label><select id="pC"></select></div>
+        <div class="rp-f"><label for="pV">Valor</label><select id="pV"><option value="n">Número de repuestos</option><option value="c">Códigos distintos</option><option value="q">Cantidad en almacén</option><option value="cm">Cantidad instalada</option></select></div>
+        <button type="button" class="vt-btn" id="pSwap">⇄ Intercambiar</button>
+        <button type="button" class="vt-btn" id="pCopy">Copiar para Excel</button>
+        <span class="rp-ok" id="pOk" hidden>Copiada. Pégala en Excel con Ctrl+V.</span>
+      </div>
+      <div class="rp-scroll" style="max-height:540px"><table class="rp-t rp-piv" id="piv"></table></div>
+    </section>
+
+    <section class="rp-card" style="margin-top:12px" aria-label="Detalle" id="secDet">
+      <div class="rp-ph"><h2>Detalle</h2><span class="rp-hint">Toca un encabezado para ordenar y una fila para ver la ficha del repuesto</span></div>
+      <div class="rp-scroll" style="max-height:640px"><table class="rp-t rp-det" id="det"></table></div>
+      <div class="rp-foot"><span class="rp-hint" id="detN"></span><span><button type="button" class="vt-btn" id="dMas">Mostrar 50 más</button><button type="button" class="vt-btn" id="dCopy">Copiar para Excel</button><button type="button" class="vt-btn" id="dXls"><span data-icon="download"></span> Excel</button></span></div>
+      <span class="rp-ok" id="dOk" hidden>Copiado. Pégalo en Excel con Ctrl+V.</span>
+    </section>
+  </div>
+  <div class="rp-card rp-empty" id="rpVacio" hidden>No hay repuestos con estos filtros.</div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => (typeof fbEsc === 'function' ? fbEsc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const tx = s => (window.i18n && i18n.tx ? i18n.tx(s) : s);
+const C = window.VTRepuestos;
+const EST_TXT = { sin: 'Sin stock', bajo: 'Bajo mínimo', ok: 'Con stock', nodata: 'Sin contar' };
+const DIM_TXT = { eq: 'Máquina', fam: 'Tipo o modelo', u: 'Parte de la máquina', est: 'Estado del stock', t: 'Marca', nave: 'Nave', area: 'Área' };
+const VAL_TXT = { n: 'Número de repuestos', c: 'Códigos distintos', q: 'Cantidad en almacén', cm: 'Cantidad instalada' };
+const loc = () => (window.i18n && i18n.locale ? i18n.locale() : 'es-DO');
+const nf = v => v === null || v === undefined ? '—' : Number(v).toLocaleString(loc(), { maximumFractionDigits: 2 });
+const etq = (dim, v) => dim === 'est' ? tx(EST_TXT[v] || v) : /^\(sin /.test(v) ? tx(v) : v;
+
+let EQ = [], ALL = [], VISTA = [], LIM = 50, ORD = { col: 'eq', asc: true }, ES_ADM = false;
+const F = { eq: '', fam: '', u: '', est: '', t: '', q: '', sel: [] };
+const P = { r: 'eq', c: 'est', v: 'n' };
+
+function cargarEquipos(snap) {
+  EQ = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+  recalcularBase();
+}
+function recalcularBase() {
+  const eqs = EQ.filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e));
+  ALL = C.aplanar(eqs, e => (typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(e) : e.planta) || e.planta || '');
+  const qEq = new URLSearchParams(location.search).get('equipo');
+  if (qEq && !F._qr) { const e = eqs.find(x => x.id === qEq); if (e) F.eq = String(e.nombre || '').trim(); F._qr = true; }
+  pintar();
+}
+
+// ── filtros ──
+function opciones(sel, dim, todosTxt) {
+  const base = C.filtrar(ALL, F, dim);
+  const c = C.contar(base, dim).filter(x => x[1] > 0 || x[0] === F[dim]);
+  if (F[dim] && !c.some(x => x[0] === F[dim])) c.unshift([F[dim], 0]);
+  if (dim === 'eq' || dim === 'fam' || dim === 'u' || dim === 't') c.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'es', { numeric: true }));
+  sel.innerHTML = `<option value="">${esc(tx(todosTxt))} (${base.length})</option>` + c.map(([v, n]) => `<option value="${esc(v)}">${esc(etq(dim, v))} (${n})</option>`).join('');
+  sel.value = F[dim] || '';
+}
+function pintarFiltros() {
+  opciones($('fEq'), 'eq', 'Todas las máquinas'); opciones($('fFam'), 'fam', 'Todos'); opciones($('fU'), 'u', 'Todas');
+  opciones($('fEst'), 'est', 'Todos'); opciones($('fT'), 't', 'Todas');
+  if ($('fQ').value !== F.q) $('fQ').value = F.q;
+  const nMas = ['fam', 'u', 'est', 't'].filter(d => F[d]).length, ab = document.querySelector('.rp-fil').classList.contains('abierto');
+  $('fMas').textContent = tx(ab ? 'Menos filtros' : 'Más filtros') + (nMas && !ab ? ' (' + nMas + ')' : '');
+  const ch = [];
+  ['eq', 'fam', 'u', 'est', 't'].forEach(d => { if (F[d]) ch.push([d, `${esc(tx(DIM_TXT[d]))}: <b>${esc(etq(d, F[d]))}</b>`]); });
+  if (F.q) ch.push(['q', `${esc(tx('Buscar'))}: <b>${esc(F.q)}</b>`]);
+  if (F.sel.length) ch.push(['sel', `${esc(tx('Tabla dinámica'))}: <b>${F.sel.map(s => esc(etq(s.dim, s.v))).join(' · ')}</b>`]);
+  $('chips').innerHTML = ch.map(([d, h]) => `<button type="button" class="rp-chip" data-q="${d}" aria-label="${esc(tx('Quitar filtro'))}">${h}<i aria-hidden="true">×</i></button>`).join('');
+}
+function quitar(d) { if (d === 'sel') F.sel = []; else F[d] = ''; LIM = 50; pintar(); }
+function alternar(d, v) { F[d] = F[d] === v ? '' : v; LIM = 50; pintar(); }
+
+// ── tarjetas ──
+function pintarKpis(V) {
+  const n = V.length, maq = new Set(V.map(x => x.eqId)).size, cod = C.valorDe(V, 'c');
+  const c = s => V.filter(x => x.est === s).length;
+  const contados = n - c('nodata'), pOk = contados ? c('ok') / contados * 100 : 0;
+  const k = (cls, l, v, s, est) => `<${est ? 'button type="button" data-est="' + est + '" aria-pressed="' + (F.est === est) + '"' : 'div'} class="rp-k ${cls}"><div class="l">${esc(tx(l))}</div><div class="v">${nf(v)}</div><div class="s">${s}</div></${est ? 'button' : 'div'}>`;
+  $('kpis').innerHTML = k('', 'Repuestos', n, esc(tx('en {n} máquinas').replace('{n}', maq)))
+    + k('', 'Códigos distintos', cod, esc(tx('el mismo repuesto en varias máquinas cuenta una vez')))
+    + k('sin', 'Sin stock', c('sin'), esc(tx('cantidad en almacén = 0')), 'sin')
+    + k('bajo', 'Bajo mínimo', c('bajo'), esc(tx('hay, pero menos del mínimo')), 'bajo')
+    + k('', 'Sin contar', c('nodata'), esc(tx('nadie ha puesto la cantidad')), 'nodata')
+    + `<div class="rp-k ok"><div class="l">${esc(tx('Con stock'))}</div><div class="v">${contados ? Math.round(pOk) + ' %' : '—'}</div><div class="s">${esc(tx('de los repuestos contados'))}</div><div class="rp-meter"><i style="width:${pOk.toFixed(1)}%"></i></div></div>`;
+}
+
+// ── gráficos ──
+function barras(box, dim, top) {
+  const base = C.filtrar(ALL, F, dim), c = C.contar(base, dim).filter(x => dim === 'est' || x[1] > 0);
+  const vis = top ? c.slice(0, top) : c, max = Math.max(1, ...vis.map(x => x[1]));
+  if (!vis.length) { box.innerHTML = `<div class="rp-empty">${esc(tx('Sin datos'))}</div>`; return; }
+  box.innerHTML = vis.map(([v, n]) => `<button type="button" class="rp-b${dim === 'est' ? ' e-' + v : ''}${F[dim] === v ? ' sel' : ''}${F[dim] && F[dim] !== v ? ' dim' : ''}" data-d="${dim}" data-v="${esc(v)}" title="${esc(etq(dim, v))}: ${n}">
+    <span class="nm">${esc(etq(dim, v))}</span><span class="tr"><span class="fill" style="width:${(n / max * 82).toFixed(1)}%"></span><span class="n">${nf(n)}</span></span></button>`).join('')
+    + (top && c.length > top ? `<div class="rp-mas">${esc(tx('+{n} más en la lista de arriba').replace('{n}', c.length - top))}</div>` : '');
+}
+
+// ── tabla dinámica ──
+function pintarPivot(V) {
+  const dims = Object.keys(DIM_TXT);
+  $('pR').innerHTML = dims.map(d => `<option value="${d}">${esc(tx(DIM_TXT[d]))}</option>`).join(''); $('pR').value = P.r;
+  $('pC').innerHTML = `<option value="">${esc(tx('(ninguna)'))}</option>` + dims.filter(d => d !== P.r).map(d => `<option value="${d}">${esc(tx(DIM_TXT[d]))}</option>`).join(''); $('pC').value = P.c || '';
+  $('pV').value = P.v;
+  const T = C.pivot(V, P.r, P.c || null, P.v);
+  window._piv = T;
+  const tone = v => { if (!v || !T.max) return ''; const a = Math.min(.55, .06 + v / T.max * .5); return ` style="background:color-mix(in srgb, var(--color-info) ${Math.round(a * 100)}%, transparent)"`; };
+  const cab = P.c ? T.cols.map(c => `<th class="n">${esc(etq(P.c, c))}</th>`).join('') + `<th class="n">${esc(tx('Total'))}</th>` : `<th class="n">${esc(tx(VAL_TXT[P.v]))}</th>`;
+  const MAXF = 200;
+  $('piv').innerHTML = `<thead><tr><th class="rh">${esc(tx(DIM_TXT[P.r]))}</th>${cab}</tr></thead><tbody>`
+    + T.filas.slice(0, MAXF).map((f, i) => `<tr><td class="rh">${esc(etq(P.r, f.r))}</td>${P.c ? f.celdas.map((v, j) => `<td class="n c${v ? '' : ' z'}" data-i="${i}" data-j="${j}"${tone(v)}>${v ? nf(v) : '·'}</td>`).join('') + `<td class="n c tot" data-i="${i}" data-j="-1">${nf(f.total)}</td>` : `<td class="n c" data-i="${i}" data-j="-1"${tone(f.total)}>${nf(f.total)}</td>`}</tr>`).join('')
+    + `<tr class="tot"><td class="rh">${esc(tx('Total'))}${T.filas.length > MAXF ? ' · ' + esc(tx('se muestran {a} de {b} filas').replace('{a}', MAXF).replace('{b}', T.filas.length)) : ''}</td>${P.c ? T.totCol.map((v, j) => `<td class="n c" data-i="-1" data-j="${j}">${nf(v)}</td>`).join('') : ''}<td class="n c" data-i="-1" data-j="-1">${nf(T.total)}</td></tr></tbody>`;
+}
+function clicPivot(td) {
+  const T = window._piv, i = +td.dataset.i, j = +td.dataset.j;
+  if (td.classList.contains('z')) return;
+  const sel = [];
+  if (i >= 0) sel.push({ dim: P.r, v: T.filas[i].r });
+  if (j >= 0 && P.c && T.cols[j] !== '(otros)') sel.push({ dim: P.c, v: T.cols[j] });
+  F.sel = sel; LIM = 50; pintar();
+  $('det').closest('section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function tablaTexto(tbl) { return [...tbl.querySelectorAll('tr')].map(tr => [...tr.cells].map(c => c.innerText.replace(/\s+/g, ' ').trim()).join('\t')).join('\n'); }
+async function copiar(texto, okId) { try { await navigator.clipboard.writeText(texto); } catch (e) { const t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e2) {} t.remove(); } const o = $(okId); o.hidden = false; setTimeout(() => { o.hidden = true; }, 2500); }
+
+// ── detalle ──
+const COLS = [['eq', 'Máquina'], ['r', 'Repuesto'], ['m', 'Código'], ['t', 'Marca'], ['u', 'Parte de la máquina'], ['q', 'En almacén', 'n'], ['min', 'Mín / Máx', 'n'], ['cm', 'Por máquina', 'n'], ['est', 'Estado']];
+function pintarDetalle(V) {
+  const L = C.ordenar(V, ORD.col, ORD.asc); window._det = L;
+  const fl = c => ORD.col === c ? (ORD.asc ? ' ▲' : ' ▼') : '';
+  $('det').innerHTML = `<thead><tr>${COLS.map(([c, t, n]) => `<th data-s="${c}" class="${n || ''}" aria-sort="${ORD.col === c ? (ORD.asc ? 'ascending' : 'descending') : 'none'}">${esc(tx(t))}${fl(c)}</th>`).join('')}</tr></thead><tbody>`
+    + L.slice(0, LIM).map((x, i) => `<tr data-i="${i}" tabindex="0"><td>${esc(x.eq)}</td><td class="rep"><b>${esc(x.r)}</b>${x.d && x.d !== x.r ? `<small>${esc(x.d)}</small>` : ''}</td><td class="rp-mono">${esc(x.m || '—')}</td><td>${esc(x.t || '—')}</td><td>${esc(x.u || '—')}</td>
+      <td class="n">${nf(x.q)}</td><td class="n">${nf(x.min)} / ${nf(x.max)}</td><td class="n">${nf(x.cm)}</td><td><span class="rp-pill e-${x.est}">${esc(tx(EST_TXT[x.est]))}</span></td></tr>`).join('') + '</tbody>';
+  $('detN').textContent = tx('Mostrando {a} de {b} repuestos').replace('{a}', nf(Math.min(LIM, L.length))).replace('{b}', nf(L.length));
+  $('dMas').hidden = L.length <= LIM;
+}
+function filasExport(L) { return L.map(x => [x.eq, x.r, x.d, x.m, x.t, x.u, x.q, x.min, x.max, x.cm, tx(EST_TXT[x.est]), x.fam, x.nave, x.area, x.linea]); }
+const COLS_X = [['Máquina', 28], ['Repuesto', 36], ['Descripción', 36], ['Código', 18], ['Marca', 14], ['Parte de la máquina', 22], ['En almacén', 11], ['Mínimo', 9], ['Máximo', 9], ['Por máquina', 11], ['Estado', 14], ['Tipo o modelo', 22], ['Nave', 14], ['Área', 16], ['Línea', 18]];
+function exportar() {
+  const L = window._det || [];
+  const ub = typeof fbNaveTexto === 'function' ? fbNaveTexto() : '';
+  fbExportar({ nombre: fbNombreArchivo('repuestos-por-maquina', [F.eq || F.fam || ub].filter(Boolean), (typeof fbHoy === 'function' ? fbHoy() : '').slice(0, 7)),
+    hojas: [{ nombre: 'Repuestos', titulo: 'Repuestos por máquina · ' + (F.eq || F.fam || ub || 'Todas') + ' · ' + L.length + ' repuestos', columnas: COLS_X.map(([t, w]) => ({ t, w })), filas: filasExport(L) }],
+    aviso: m => { $('detN').textContent = m; } });
+}
+
+// ── ficha del repuesto ──
+function ficha(x) {
+  const e = EQ.find(q => q.id === x.eqId) || {};
+  const otros = C.tambien(ALL, x);
+  const sug = C.compraSugerida(x);
+  const fila = (l, v) => v === undefined || v === null || v === '' ? '' : `<dt>${esc(tx(l))}</dt><dd>${esc(v)}</dd>`;
+  const foto = /^https:\/\//i.test(x.img) ? `<img class="rp-foto" src="${esc(x.img)}" alt="${esc(x.r)}" loading="lazy">` : '';
+  const aviso = x.est === 'sin' ? tx('Sin stock en almacén.') : x.est === 'bajo' ? tx('Hay menos del mínimo.') : x.est === 'nodata' ? tx('Nadie ha puesto la cantidad en almacén.') : '';
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh rp-sh" role="dialog" aria-modal="true" aria-labelledby="rpFt" style="max-width:620px"><div class="fbsh-head"><div><h3 id="rpFt">${esc(x.r)}</h3><small>${esc(x.m ? tx('Código') + ' ' + x.m : tx('Sin código'))}${x.t ? ' · ' + esc(x.t) : ''}</small></div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>
+    ${foto}
+    <h4>${esc(tx('Repuesto'))}</h4><dl class="rp-dl">${fila('Código', x.m)}${fila('Marca', x.t)}${fila('Descripción', x.d)}${fila('Parte de la máquina', x.u)}</dl>
+    <h4>${esc(tx('Stock'))}</h4><div class="rp-stock"><div><b>${nf(x.q)}</b><small>${esc(tx('En almacén'))}</small></div><div><b>${nf(x.min)}</b><small>${esc(tx('Mínimo'))}</small></div><div><b>${nf(x.max)}</b><small>${esc(tx('Máximo'))}</small></div><div><b>${nf(x.cm)}</b><small>${esc(tx('Por máquina'))}</small></div></div>
+    ${aviso ? `<div class="rp-aviso e-${x.est}">${esc(aviso)}${sug ? ' ' + esc(tx('Para llegar al máximo faltan {n}.').replace('{n}', nf(sug))) : ''}</div>` : ''}
+    <h4>${esc(tx('Máquina'))}</h4><dl class="rp-dl">${fila('Nombre', e.nombre)}${fila('Tipo de máquina', e.tipoMaquina)}${fila('Marca', e.marca)}${fila('Modelo', e.modelo)}${fila('Serie', e.serie)}${fila('Nave', x.nave)}${fila('Área', e.localidad)}${fila('Línea', e.linea)}${fila('Potencia', e.potencia)}${fila('Tensión', e.tension)}${fila('Fabricación', e.fabricacion)}${fila('Repuestos en su lista', (e.repuestos || []).length)}</dl>
+    <h4>${esc(tx('También se usa en'))}</h4>${otros.length ? `<div class="rp-otros">${otros.slice(0, 30).map(o => `<button type="button" data-k="${esc(o.k)}"><span><b>${esc(o.eq)}</b>${o.u ? ' · ' + esc(o.u) : ''}</span><span class="rp-pill e-${o.est}">${nf(o.q)} · ${esc(tx(EST_TXT[o.est]))}</span></button>`).join('')}${otros.length > 30 ? `<div class="rp-hint">${esc(tx('y {n} más').replace('{n}', otros.length - 30))}</div>` : ''}</div>` : `<div class="rp-hint">${esc(tx('Solo en esta máquina.'))}</div>`}
+    <div class="rp-links">${ES_ADM ? `<button type="button" class="vt-btn" data-edit><span data-icon="pencil"></span>${esc(tx('Editar'))}</button>` : ''}<button type="button" class="vt-btn" data-solo>${esc(tx('Ver solo esta máquina'))}</button><a class="vt-btn" href="hoja-vida.html?id=${encodeURIComponent(x.eqId)}">${esc(tx('Ficha de la máquina'))}</a><a class="vt-btn pri" href="almacen.html?equipo=${encodeURIComponent(x.eqId)}">${esc(tx('Abrir en Almacén'))}</a></div></div>`;
+  document.body.appendChild(bg);
+  if (window.VTIcons) VTIcons.hydrate(bg);
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  bg.addEventListener('click', ev => { if (ev.target === bg) cerrar(); });
+  const be = bg.querySelector('[data-edit]'); if (be) be.onclick = () => { cerrar(); formRepuesto('editar', x); };
+  bg.querySelector('[data-solo]').onclick = () => { cerrar(); F.eq = x.eq; F.sel = []; LIM = 50; pintar(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  bg.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const o = ALL.find(z => z.k === b.dataset.k); if (o) { cerrar(); ficha(o); } });
+  const x0 = bg.querySelector('.fbsh-x'); if (x0) x0.focus();
+}
+
+// ── editar / agregar (solo Administrador) ──
+// Mismo método que Almacén: transacción sobre /equipos/{id} con la lista FRESCA, el repuesto se
+// busca por su id, solo se escribe `repuestos` (+ updatedAt) y, si cambió la cantidad, su
+// movimiento de ajuste en /movimientos. Nunca se toca el costo ni la foto.
+const CAMPO_TXT = { q: 'En almacén', cm: 'Por máquina', min: 'Mínimo', max: 'Máximo' };
+function formRepuesto(modo, x) {
+  if (!ES_ADM) return;
+  const eqs = EQ.filter(e => typeof fbEquipoEnNave !== 'function' || fbEquipoEnNave(e)).sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { numeric: true }));
+  const eqSel = x ? x.eqId : ((eqs.find(e => String(e.nombre || '').trim() === F.eq) || {}).id || '');
+  const v = k => x && x[k] !== null && x[k] !== undefined ? String(x[k]) : '';
+  const qAlAbrir = v('q');
+  const partes = id => [...new Set(ALL.filter(z => !id || z.eqId === id).map(z => z.u).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const marcas = [...new Set(ALL.map(z => z.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const bg = document.createElement('div'); bg.className = 'fbsh-bg';
+  bg.innerHTML = `<div class="fbsh rp-form" role="dialog" aria-modal="true" aria-labelledby="rpFormT" style="max-width:620px"><div class="fbsh-head"><div><h3 id="rpFormT">${esc(tx(modo === 'editar' ? 'Editar repuesto' : 'Agregar repuesto'))}</h3><small>${esc(modo === 'editar' ? x.eq : tx('Se agrega a la lista de la máquina que elijas.'))}</small></div><button type="button" class="fbsh-x" data-x aria-label="${esc(tx('Cerrar'))}">✕</button></div>
+    ${modo === 'agregar' ? `<label for="rfEq">${esc(tx('Máquina'))} *</label><select id="rfEq"><option value="">${esc(tx('Elige la máquina'))}</option>${eqs.map(e => `<option value="${esc(e.id)}"${e.id === eqSel ? ' selected' : ''}>${esc(e.nombre || e.id)}</option>`).join('')}</select>` : ''}
+    <label for="rfR">${esc(tx('Repuesto'))} *</label><input id="rfR" maxlength="200" value="${esc(v('r'))}" placeholder="${esc(tx('Ej: Rodamiento 6205-2RS'))}"/>
+    <div class="g2"><div><label for="rfM">${esc(tx('Código'))}</label><input id="rfM" maxlength="80" value="${esc(v('m'))}" placeholder="${esc(tx('Ej: 6205-2RS'))}"/></div>
+      <div><label for="rfT">${esc(tx('Marca'))}</label><input id="rfT" maxlength="80" value="${esc(v('t'))}" list="rfTl"/><datalist id="rfTl">${marcas.map(m => `<option value="${esc(m)}">`).join('')}</datalist></div></div>
+    <label for="rfU">${esc(tx('Parte de la máquina'))}</label><input id="rfU" maxlength="120" value="${esc(v('u'))}" list="rfUl" placeholder="${esc(tx('Ej: Cabezal, Lanzaderas, Transmisión'))}"/><datalist id="rfUl"></datalist>
+    <label for="rfD">${esc(tx('Descripción'))}</label><textarea id="rfD" maxlength="300">${esc(v('d'))}</textarea>
+    <div class="g4"><div><label for="rfQ">${esc(tx('En almacén'))}</label><input id="rfQ" inputmode="decimal" value="${esc(qAlAbrir)}" placeholder="—"/></div>
+      <div><label for="rfCm">${esc(tx('Por máquina'))}</label><input id="rfCm" inputmode="decimal" value="${esc(v('cm'))}"/></div>
+      <div><label for="rfMin">${esc(tx('Mínimo'))}</label><input id="rfMin" inputmode="decimal" value="${esc(v('min'))}"/></div>
+      <div><label for="rfMax">${esc(tx('Máximo'))}</label><input id="rfMax" inputmode="decimal" value="${esc(v('max'))}"/></div></div>
+    <p class="nota">${esc(tx('Si cambias la cantidad en almacén, queda anotada como ajuste en Movimientos de Almacén. El precio y la foto se cambian en Almacén.'))}</p>
+    <div class="err" id="rfErr" hidden></div>
+    <div class="acts"><button type="button" class="vt-btn" data-x>${esc(tx('Cancelar'))}</button><button type="button" class="vt-btn pri" id="rfOk"><span data-icon="save"></span>${esc(tx('Guardar'))}</button></div></div>`;
+  document.body.appendChild(bg);
+  if (window.VTIcons) VTIcons.hydrate(bg);
+  const q = sel => bg.querySelector(sel);
+  const pintarPartes = () => { const id = modo === 'agregar' ? q('#rfEq').value : x.eqId; q('#rfUl').innerHTML = partes(id).map(u => `<option value="${esc(u)}">`).join(''); };
+  pintarPartes(); if (q('#rfEq')) q('#rfEq').onchange = pintarPartes;
+  const onKey = ev => { if (ev.key === 'Escape') cerrar(); };
+  const cerrar = () => { document.removeEventListener('keydown', onKey); bg.remove(); };
+  document.addEventListener('keydown', onKey);
+  bg.querySelectorAll('[data-x]').forEach(b => b.onclick = cerrar);
+  const mal = m => { q('#rfErr').textContent = m; q('#rfErr').hidden = false; };
+  q('#rfOk').onclick = async () => {
+    q('#rfErr').hidden = true;
+    const eqId = modo === 'agregar' ? q('#rfEq').value : x.eqId;
+    if (!eqId) { mal(tx('Elige la máquina.')); return; }
+    const form = { r: q('#rfR').value, m: q('#rfM').value, t: q('#rfT').value, u: q('#rfU').value, d: q('#rfD').value, q: q('#rfQ').value, cm: q('#rfCm').value, min: q('#rfMin').value, max: q('#rfMax').value };
+    const { obj, err } = C.leerForm(form);
+    if (err.length) { const [m, c] = err[0].split('|'); mal(tx(m).replace('{c}', c ? tx(CAMPO_TXT[c]) : '')); return; }
+    if (modo === 'editar') obj.qTocada = String(form.q).trim() !== qAlAbrir.trim();
+    if (!navigator.onLine) { mal(tx('Para guardar se necesita conexión. No se guardó nada.')); return; }
+    const b = q('#rfOk'); b.disabled = true;
+    try {
+      const r = await guardarRepuesto(modo, eqId, modo === 'editar' ? { id: x.id, clave: x.clave } : null, obj);
+      cerrar();
+      if (window.vtToast) vtToast(tx(r.msg), 'ok');
+      if (typeof fbRefrescarEquipos === 'function') fbRefrescarEquipos(true).catch(() => {});
+    } catch (e) {
+      b.disabled = false;
+      mal(e.userMsg || (e.code === 'permission-denied' ? tx('Tu usuario no tiene permiso para cambiar los repuestos.') : tx('No se pudo guardar: {e}').replace('{e}', e.message)));
+    }
+  };
+  setTimeout(() => (q('#rfEq') && !q('#rfEq').value ? q('#rfEq') : q('#rfR')).focus(), 30);
+}
+function errUsuario(m) { const e = new Error(m); e.userMsg = m; return e; }
+async function guardarRepuesto(modo, eqId, ref, obj) {
+  const refDoc = db.collection('equipos').doc(eqId);
+  const quien = (window.currentUserRole && window.currentUserRole.nombre) || (window.currentUser && window.currentUser.email) || '—';
+  const uid = (window.currentUser && window.currentUser.uid) || null;
+  return db.runTransaction(async t => {
+    const snap = await t.get(refDoc);
+    if (!snap.exists) throw errUsuario(tx('Esta máquina ya no existe.'));
+    const data = snap.data() || {};
+    const lista = (Array.isArray(data.repuestos) ? data.repuestos : []).map(p => Object.assign({}, p));
+    const r = C.aplicarCambio(lista, modo, ref, obj);
+    if (!r.ok) throw errUsuario(tx(r.msg).replace('{r}', r.r || ''));
+    const repuestos = JSON.parse(JSON.stringify(lista));
+    if (new Blob([JSON.stringify(Object.assign({}, data, { repuestos }))]).size > 1000000) throw errUsuario(tx('La lista de esta máquina pasaría de 1 MB (límite de Firebase).'));
+    t.update(refDoc, { repuestos, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    if (r.cambioQ) {
+      const a = r.antesQ, b = Number(r.p.q);
+      const motivo = modo === 'agregar' ? 'alta de repuesto (Repuestos por máquina)' : 'conteo editado a mano (Repuestos por máquina)';
+      const planta = typeof fbPlantaDeEquipo === 'function' ? fbPlantaDeEquipo(Object.assign({ id: eqId }, data)) : '';
+      t.set(db.collection('movimientos').doc(), Object.assign({ equipoId: eqId, equipo: data.nombre || '', repuestoId: r.p.id, repuesto: r.p.r }, planta ? { planta } : {}, {
+        quien, quienUid: uid, fecha: firebase.firestore.FieldValue.serverTimestamp(), tecnico: quien, tipo: 'ajuste',
+        cantidad: Math.round((b - (a || 0)) * 10000) / 10000, anterior: a, quedaEn: b, motivo, nota: motivo, otFolio: null, costoUnitario: null, costoTotal: null }));
+    }
+    return r;
+  });
+}
+
+// ── todo junto ──
+function pintar() {
+  if (!ALL.length) {
+    $('kpis').innerHTML = ''; $('rpCuerpo').hidden = true; $('rpVacio').hidden = false;
+    $('rpVacio').textContent = tx(EQ.length ? 'Ninguna máquina tiene repuestos en su lista. Se cargan en Almacén.' : 'Cargando…');
+    pintarFiltros(); return;
+  }
+  VISTA = C.filtrar(ALL, F);
+  pintarFiltros(); pintarKpis(VISTA);
+  const hay = VISTA.length > 0;
+  $('rpCuerpo').hidden = !hay; $('rpVacio').hidden = hay;
+  if (!hay) { $('rpVacio').textContent = tx('No hay repuestos con estos filtros.'); return; }
+  barras($('chEq'), 'eq', 15); barras($('chU'), 'u', 12); barras($('chEst'), 'est');
+  pintarPivot(VISTA); pintarDetalle(VISTA);
+}
+
+// ── eventos ──
+[['fEq', 'eq'], ['fFam', 'fam'], ['fU', 'u'], ['fEst', 'est'], ['fT', 't']].forEach(([id, d]) => $(id).addEventListener('change', ev => { F[d] = ev.target.value; LIM = 50; pintar(); }));
+let _qT = 0; $('fQ').addEventListener('input', ev => { clearTimeout(_qT); _qT = setTimeout(() => { F.q = ev.target.value.trim(); LIM = 50; pintar(); }, 200); });
+$('fMas').onclick = () => { const f = document.querySelector('.rp-fil'); const ab = f.classList.toggle('abierto'); $('fMas').setAttribute('aria-expanded', String(ab)); pintarFiltros(); };
+$('fLimpiar').onclick = () => { Object.assign(F, { eq: '', fam: '', u: '', est: '', t: '', q: '', sel: [] }); LIM = 50; pintar(); };
+$('chips').addEventListener('click', ev => { const b = ev.target.closest('[data-q]'); if (b) quitar(b.dataset.q); });
+$('kpis').addEventListener('click', ev => { const b = ev.target.closest('[data-est]'); if (b) alternar('est', b.dataset.est); });
+document.querySelector('.rp-g3').addEventListener('click', ev => { const b = ev.target.closest('.rp-b'); if (b) alternar(b.dataset.d, b.dataset.v); });
+$('pR').onchange = ev => { P.r = ev.target.value; if (P.c === P.r) P.c = ''; pintarPivot(VISTA); };
+$('pC').onchange = ev => { P.c = ev.target.value; pintarPivot(VISTA); };
+$('pV').onchange = ev => { P.v = ev.target.value; pintarPivot(VISTA); };
+$('pSwap').onclick = () => { if (!P.c) return; [P.r, P.c] = [P.c, P.r]; pintarPivot(VISTA); };
+$('pCopy').onclick = () => copiar(tablaTexto($('piv')), 'pOk');
+$('piv').addEventListener('click', ev => { const td = ev.target.closest('td.c'); if (td) clicPivot(td); });
+$('det').addEventListener('click', ev => {
+  const th = ev.target.closest('th[data-s]');
+  if (th) { const c = th.dataset.s; ORD = { col: c, asc: ORD.col === c ? !ORD.asc : !['q', 'cm', 'min'].includes(c) }; pintarDetalle(VISTA); return; }
+  const tr = ev.target.closest('tr[data-i]'); if (tr) ficha(window._det[+tr.dataset.i]);
+});
+$('det').addEventListener('keydown', ev => { if (ev.key === 'Enter') { const tr = ev.target.closest('tr[data-i]'); if (tr) ficha(window._det[+tr.dataset.i]); } });
+$('dMas').onclick = () => { LIM += 50; pintarDetalle(VISTA); };
+$('dCopy').onclick = () => copiar([COLS_X.map(c => tx(c[0])).join('\t')].concat(filasExport(window._det || []).map(f => f.map(v => v == null ? '' : String(v).replace(/\s+/g, ' ')).join('\t'))).join('\n'), 'dOk');
+$('dXls').onclick = exportar;
+$('rpAdd').onclick = () => formRepuesto('agregar', null);
+window.addEventListener('idioma-cambiado', pintar);
+pintar();
+window.fbReady.then(() => {
+  ES_ADM = typeof userHasRole === 'function' && userHasRole('ADMINISTRADOR');
+  $('rpAdd').hidden = !ES_ADM;
+  if (typeof fbOnNaveCambio === 'function') fbOnNaveCambio(recalcularBase);
+  fbEscucharEquipos(cargarEquipos, err => { $('rpVacio').hidden = false; $('rpCuerpo').hidden = true; $('rpVacio').textContent = tx('No se pudieron leer los equipos: {e}').replace('{e}', err.message); });
+}).catch(() => {});
+</script>
+</body>
+</html>

@@ -136,11 +136,12 @@ const FB_ACCESO_PAGINA = {
   'unifilar.html': FB_MANT, // (6 nov 2026) diagrama unifilar: lo ven los de mantenimiento (LOTO)
   'programa.html': FB_MANT, // (10 nov 2026) programa semanal
   'amef.html': FB_MANT, 'habilidades.html': FB_MANT, // (10 nov 2026) AMEF y matriz de habilidades
+  'repuestos.html': FB_MANT.concat(['ALMACEN']), // (11 nov 2026, v73) repuestos por máquina: como Almacén
   'oee.html': FB_MANT.concat(['OPERADOR']), // (10 nov 2026) paros y OEE: el operador anota paros y producción
 };
 // Texto de la tarjeta "Sin acceso" de cada pantalla (i18n-shell.js).
 const FB_ACCESO_CLAVE = {
-  'inventario.html': 'shell.lock_inv', 'almacen.html': 'shell.lock_almMod', 'incentivos.html': 'shell.lock_inc',
+  'inventario.html': 'shell.lock_inv', 'almacen.html': 'shell.lock_almMod', 'repuestos.html': 'shell.lock_almMod', 'incentivos.html': 'shell.lock_inc',
   'rentabilidad.html': 'shell.lock_rent', 'admin.html': 'shell.lock_adm', 'capex.html': 'shell.lock_capex', 'herramientas.html': 'shell.lock_herr',
 };
 // Secciones de una pantalla con su propio candado (mismos roles que la pantalla vieja):

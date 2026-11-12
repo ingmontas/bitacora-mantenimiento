@@ -48,6 +48,7 @@
     // (v3 etapa 3a) Inventario + Almacén = UN módulo "Almacén" (Repuestos · Solicitudes · Movimientos · Compras).
     // inventario.html sigue abriendo (lleva a almacen.html#repuestos); "inventario" se sigue encontrando en el buscador.
     { id: 'almacen', href: 'almacen.html', ic: 'package', k: 'p_almacen', d: 'd_almacen', g: 'g_almacen', roles: MANT.concat([ALM]), alias: ['inventario', 'repuestos', 'solicitudes', 'compras'] },
+    { id: 'repuestos', href: 'repuestos.html', ic: 'tag', k: 'p_repuestos', d: 'd_repuestos', g: 'g_almacen', roles: MANT.concat([ALM]), alias: ['repuestos por maquina', 'piezas', 'codigo', 'spare parts', 'tabla dinamica'] }, // (v73)
     { id: 'herramientas', href: 'herramientas.html', ic: 'hammer', k: 'p_herramientas', d: 'd_herramientas', g: 'g_almacen', roles: [ADM, ENC, SUP, TEC, ALM, RH] },
     { id: 'analisis', href: 'analisis.html', ic: 'chart', k: 'p_analisis', d: 'd_analisis', g: 'g_gestion', roles: MANT },
     { id: 'incentivos', href: 'incentivos.html', ic: 'coins', k: 'p_incentivos', d: 'd_incentivos', g: 'g_gestion', roles: [ADM] },

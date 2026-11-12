@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v72'; // (v72: Excel del tablero de KPI con formato) (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
+const CACHE = 'mantenimiento-v73'; // (v73: repuestos por máquina) (v72: Excel del tablero de KPI con formato) (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
 const ASSETS = [
   './',
   'index.html',
@@ -56,6 +56,7 @@ const ASSETS = [
   'spc.js', // (v70) control estadístico de lecturas
   'kpi-tablero.js', // (v71) KPI nuevos del tablero
   'amef.html', 'i18n-amef.js', 'habilidades.html', 'i18n-habilidades.js', // (v70) AMEF y matriz de habilidades
+  'repuestos.html', 'i18n-repuestos.js', 'repuestos-calc.js', // (v73) repuestos por máquina
   'login.html',
   'tecnicos.json',
   'icon-192.png',
