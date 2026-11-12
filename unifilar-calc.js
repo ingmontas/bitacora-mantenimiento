@@ -67,7 +67,7 @@
       let v = vPadre;
       if (n.tipo === 'acometida') v = voltios((e.kv ? e.kv + ' kV' : '')) || vPadre;
       if (n.tipo === 'transformador') v = voltios(e.vs) || vPadre;
-      if ((n.tipo === 'tablero' || n.tipo === 'ccm' || n.tipo === 'generador') && voltios(e.v)) v = voltios(e.v);
+      if (['tablero', 'ccm', 'generador', 'inversor'].includes(n.tipo) && voltios(e.v)) v = voltios(e.v); // (v73) inversor
       if (n.tipo === 'carga' && voltios(e.v)) r.vCarga = voltios(e.v);
       r.v = v;
       kids(n.id).forEach(h => ponerV(h, v));
@@ -128,13 +128,14 @@
     lista.forEach(n => {
       const e = n.e || {}, r = R.get(n.id);
       const padre = N.get(n.padreId), iscLinea = padre ? R.get(padre.id).isc : r.isc;
-      if (['interruptor', 'tablero', 'ccm', 'transferencia'].includes(n.tipo) && num(e.kaic)) {
-        const disp = (n.tipo === 'interruptor' ? iscLinea : r.isc) / 1000;
+      if (['interruptor', 'tablero', 'ccm', 'transferencia', 'interruptor_mt', 'reconectador'].includes(n.tipo) && num(e.kaic)) {
+        const disp = (['interruptor', 'interruptor_mt', 'reconectador'].includes(n.tipo) ? iscLinea : r.isc) / 1000;
         if (disp > num(e.kaic)) prob(n, 'error', 'kaic', { ka: disp.toFixed(1), cap: num(e.kaic) });
       }
       let cap = 0;
       if (n.tipo === 'transformador') { cap = num(e.kva); if (cap) r.uso = r.kva / cap * 100; }
-      else if (['interruptor', 'tablero', 'ccm', 'transferencia', 'fusible'].includes(n.tipo) && num(e.amp)) { r.uso = r.i / num(e.amp) * 100; }
+      else if (['interruptor', 'tablero', 'ccm', 'transferencia', 'fusible', 'seccionador', 'interruptor_mt', 'reconectador', 'diferencial', 'contactor', 'arrancador_suave', 'reactor'].includes(n.tipo) && num(e.amp)) { r.uso = r.i / num(e.amp) * 100; }
+      else if (n.tipo === 'inversor' && num(e.kw)) r.uso = r.kva / (num(e.kw) / 0.9) * 100; // (v73)
       else if (n.tipo === 'ups' && num(e.kva)) r.uso = r.kva / num(e.kva) * 100;
       if (r.uso !== null && r.kva > 0) {
         if (r.uso > 100) prob(n, 'error', 'sobrecarga', { uso: Math.round(r.uso) });
