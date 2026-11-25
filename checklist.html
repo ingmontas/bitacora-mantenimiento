@@ -17,6 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="vt-respaldo.js"></script> <!-- (v77) listas de respaldo de VoidTech -->
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
   <script src="criticidad.js"></script><!-- (28 oct 2026) criticidad A/B/C por equipo -->
@@ -598,12 +599,8 @@ function addDaysStr(baseStr, dias) {
 
 // ══════ TÉCNICOS (mismo patrón que bitacora.html) ══════
 // (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
-const TECNICOS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
-  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
-  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
-  { "nombre": "LEBRON", "corto": "LEBRON" },
-  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" },
-];
+// (v77) La lista está en vt-respaldo.js; fbRespaldo() (firebase-init.js) la da solo a la empresa de siempre.
+const TECNICOS_FALLBACK = fbRespaldo('tecnicos');
 let TECNICOS_LISTA = TECNICOS_FALLBACK;
 
 // (25 oct 2026) fbTecnicos(): lista del Administrador (/config/tecnicos) o tecnicos.json.

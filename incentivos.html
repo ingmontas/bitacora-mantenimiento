@@ -259,11 +259,11 @@ function normCfg(d) {
 
 // ══════ TÉCNICOS Y EMPAREJAMIENTO DE NOMBRES ══════
 // Las OTs guardan el nombre de distintas formas: Bitácora pone los nombres
-// completos de tecnicos.json separados por coma ("FELIX M. GIL #777, LEBRON"),
+// completos de tecnicos.json separados por coma ("JUAN PÉREZ #101, GÓMEZ"),
 // Checklist pone el nombre completo en asignadoA/tecnicos, y
 // trabajoRealizadoPor / cerradoPor llevan el nombre del USUARIO (puede ser
-// "Felix Gil"). Un texto es de un técnico si (sin acentos, mayúsculas ni
-// espacios) contiene su nombre o su nombre corto, o trae el mismo "#777";
+// "Juan Pérez"). Un texto es de un técnico si (sin acentos, mayúsculas ni
+// espacios) contiene su nombre o su nombre corto, o trae el mismo "#101";
 // si una parte del texto no coincide con nadie, se prueba con el primer
 // nombre cuando solo un técnico lo tiene (igual que la Bitácora).
 let TECS = [];

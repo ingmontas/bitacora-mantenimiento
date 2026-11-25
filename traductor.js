@@ -174,7 +174,7 @@
     /\bhttps?:\/\/\S+/gu,                                                              // enlaces
     /(?<![\p{L}\p{N}])\+?\d[\d ().-]{6,}\d(?![\p{L}\p{N}])/gu,                         // teléfonos
     /(?<![\p{L}\p{N}])(?:OT-P?[A-Z0-9]{3,}|QR-[A-Z0-9]{4,12}|CAPEX-\d{4}-[A-Z0-9]{1,12})(?![\p{L}\p{N}])/gu, // folios
-    /#\d+/gu,                                                                          // número de empleado (#777)
+    /#\d+/gu,                                                                          // número de empleado (#101)
     /(?<![\p{L}\p{N}])(?=[\p{L}\p{N}\-_/.]*\p{L})(?=[\p{L}\p{N}\-_/.]*\d)[\p{L}\p{N}][\p{L}\p{N}\-_/.]*[\p{L}\p{N}](?![\p{L}\p{N}])/gu, // códigos con letras y números (6205-2RS, GA37, M-102)
   ];
   function proteger(texto, extras) {

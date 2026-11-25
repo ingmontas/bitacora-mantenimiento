@@ -628,6 +628,13 @@ async function fbTecnicosJson() {
   const d = await r.json();
   return Array.isArray(d) ? d : [];
 }
+// (v77) Listas de respaldo de vt-respaldo.js ('tecnicos' o 'areas'): solo la
+// empresa de siempre. Otra empresa recibe [] aunque el archivo traiga datos.
+function fbRespaldo(clave) {
+  if (window.VT_EMPRESA && !VT_EMPRESA.legado) return [];
+  if (!window.VT_RESPALDO) { console.warn('Falta vt-respaldo.js: sin listas de respaldo'); return []; }
+  return (VT_RESPALDO[clave] || []).slice();
+}
 async function _fbTecDesdeJson() {
   return _fbTecActivos(await fbTecnicosJson());
 }

@@ -5,7 +5,7 @@
 // app para siempre y los cambios nuevos nunca se ven — eso fue lo que pasó
 // aquí: quedó en "v1" desde el principio, así que ningún cambio posterior se
 // notaba hasta borrar la caché a mano.
-const CACHE = 'mantenimiento-v76'; // (v76: escudo con las iniciales de cada empresa, no "VT") (v74: varias empresas, cada una con su Firebase) (v73: repuestos por máquina) (v72: Excel del tablero de KPI con formato) (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
+const CACHE = 'mantenimiento-v77'; // (v77: nombres y áreas de respaldo en vt-respaldo.js; enlace de uso por empresa) (v76: escudo con las iniciales de cada empresa, no "VT") (v74: varias empresas, cada una con su Firebase) (v73: repuestos por máquina) (v72: Excel del tablero de KPI con formato) (v71: tablero de KPI, TEEP y paros planificados) (v70: control estadístico, AMEF, matriz de habilidades, aviso de respaldo) (v69: dinero perdido por paros, mínimo y máximo de repuestos, documentos del equipo) (v68: Análisis: escudo de lecturas, Weibull, calidad de datos, reporte semanal) (v67: códigos de falla ISO 14224, programa semanal) (v66: paros y OEE) (v65: Unifilar Pro, entrega 2: cálculos) (v64: Unifilar Pro, entrega 1) (v63: diagrama unifilar) // (v62: diccionarios en la raíz, i18n-*.js, para subir sin carpetas) (nov 2026, v3 etapa 3b) toda la app en español, English y Türkçe; iconos; estado de sincronización; tema Sol
 const ASSETS = [
   './',
   'index.html',
@@ -39,6 +39,7 @@ const ASSETS = [
   'capex-calc.js', // (29 oct 2026) cálculos de CAPEX (totales, finanzas, cronograma, gasto)
   'manifest.json',
   'firebase-config.js',
+  'vt-respaldo.js', // (v77) listas de respaldo de VoidTech (vacío para otra empresa)
   'firebase-init.js',
   'filtros.js', // (25 oct 2026, Etapa 3) barra de filtros y exportar a Excel
   'tema.css', // (26 oct 2026, Etapa 4) colores comunes, claro y oscuro

@@ -17,6 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="vt-respaldo.js"></script> <!-- (v77) listas de respaldo de VoidTech -->
   <script src="firebase-init.js"></script>
   <script src="filtros.js"></script>
   <!-- (28 oct 2026) Criticidad A/B/C y Seguridad (LOTO / permiso de trabajo) -->
@@ -1093,15 +1094,11 @@ function prefillEquipoDesdeQR() {
 }
 
 // ══════ LISTA DE TÉCNICOS (Administración → /config/tecnicos; respaldo tecnicos.json) ══════
-// (7 oct 2026) Respaldo igual a tecnicos.json: ANTONIO SANTANA #805 ya no
-// trabaja aquí (sus OTs viejas conservan su nombre, pero no se ofrece).
+// (7 oct 2026) Respaldo igual a tecnicos.json: los técnicos que ya no
+// trabajan aquí no se ofrecen (sus OTs viejas conservan su nombre).
 // (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
-const TECNICOS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
-  { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
-  { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
-  { "nombre": "LEBRON", "corto": "LEBRON" },
-  { "nombre": "LUIS CARLOS", "corto": "LUIS CARLOS" }
-];
+// (v77) La lista está en vt-respaldo.js; fbRespaldo() (firebase-init.js) la da solo a la empresa de siempre.
+const TECNICOS_FALLBACK = fbRespaldo('tecnicos');
 
 // (25 oct 2026) La lista sale de fbTecnicos() (firebase-init.js): la que el
 // Administrador mantiene en <span data-icon="settings"></span> Administración → /config/tecnicos, o
@@ -1270,13 +1267,8 @@ function refrescarAreaYLinea() {
 // Cada área ahora también guarda a qué planta pertenece (plantaNombre) — FASE
 // 2b — para poder filtrar el <select> de Área según la planta elegida.
 // (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
-const AREAS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
-  'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
-  'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
-  'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
-  'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
-  'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
-].map(nombre => ({ nombre, plantaNombre: '' })); // sin planta: aparece igual bajo cualquiera (respaldo)
+// (v77) La lista está en vt-respaldo.js; fbRespaldo() (firebase-init.js) la da solo a la empresa de siempre.
+const AREAS_FALLBACK = fbRespaldo('areas').map(nombre => ({ nombre, plantaNombre: '' })); // sin planta: aparece igual bajo cualquiera (respaldo)
 let currentAreas = AREAS_FALLBACK.slice();
 
 // Áreas de la planta elegida (una sin plantaNombre asignado se muestra bajo
@@ -2128,7 +2120,7 @@ function setSelectedTecs(lista) {
   renderTecUI();
   onTecsCambiaron();
 }
-// Mismo técnico aunque cambie la forma de escribirlo ("FELIX M. GIL #777" / "Felix #777").
+// Mismo técnico aunque cambie la forma de escribirlo ("JUAN PÉREZ #101" / "Juan #101").
 function mismoTecnico(a, b) {
   const na = msNorm(a), nb = msNorm(b);
   if (!na || !nb) return false;
@@ -3021,7 +3013,7 @@ function msListaTecnicos() {
 }
 // Relaciona el usuario que inició sesión con su nombre de técnico en las OTs:
 // 1) campo "tecnico" en su documento /usuarios (el más exacto), 2) mismo
-// nombre, 3) mismo código (#777), 4) mismo primer nombre si es único.
+// nombre, 3) mismo código (#101), 4) mismo primer nombre si es único.
 function msTecnicoDelUsuario(lista) {
   const u = window.currentUserRole || {};
   if (u.tecnico) return u.tecnico;

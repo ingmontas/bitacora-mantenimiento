@@ -176,7 +176,8 @@ const PAGINA = 500;
 const TIPICO = { ots: 2000, equipos: 4000, equipos_publico: 9000, checklists: 2500, herramientas_arqueos: 2000, fotos_repuestos: 120000, incentivos_semanas: 6000, incentivos_config: 3000, costos_config: 3000 };
 const tipico = c => TIPICO[c] || 700;
 const GIB = 1073741824;
-const URL_USO = 'https://console.firebase.google.com/project/mantenimiento-planta-174c2/firestore/usage';
+// (v77) El proyecto de la empresa en uso (firebase-config.js), no uno fijo.
+const URL_USO = 'https://console.firebase.google.com/project/' + encodeURIComponent(firebaseConfig.projectId) + '/firestore/usage';
 
 // ¿Este SDK trae count() (cuenta sin leer cada documento)? La versión compat
 // 9.23 puede no traerlo: entonces se usan los números del último respaldo.
@@ -608,14 +609,14 @@ function limpiarEntrada(t) {
 }
 
 // ══════ MISMA PERSONA CON DOS NOMBRES (26 oct 2026) ══════
-// En producción quedaron repetidos: "LUIS CARLOS" (de tecnicos.json, sin cuenta)
-// y "LUIS CARLOS SORIANO POZO" (la cuenta), "LEBRON" y "VICENTE LEBRON",
-// "JUAN L. JIMÉNEZ #628" y "JUAN LEONARDO JIMENEZ". Una persona (cuenta) y una
+// En producción quedaron repetidos, por ejemplo: "JUAN" (de tecnicos.json, sin cuenta)
+// y "JUAN CARLOS PÉREZ RUIZ" (la cuenta), "PÉREZ" y "JUAN PÉREZ",
+// "JUAN P. GÓMEZ #101" y "JUAN PABLO GOMEZ". Una persona (cuenta) y una
 // entrada de la lista son la misma si:
 //   · el nombre de técnico es igual (sin mayúsculas, acentos, espacios ni puntos), o
 //   · su nombre corto (o su nombre) es igual al nombre o al corto de la entrada, o
 //   · tienen el mismo "#número", o
-//   · la primera palabra Y la última palabra con letras son iguales (JUAN … JIMENEZ).
+//   · la primera palabra Y la última palabra con letras son iguales (JUAN … GOMEZ).
 // Siempre se conserva el nombre ANTERIOR de la lista: los salarios de Incentivos
 // y las OTs viejas están guardados con ese nombre.
 const kNom = s => K(s).replace(/[^a-z0-9#]/g, '');

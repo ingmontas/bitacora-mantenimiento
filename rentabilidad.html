@@ -253,8 +253,8 @@ function datosEquipo(g) {
 
 // ══════ TÉCNICOS Y SALARIOS (/incentivos_config/general) ══════
 // Mismo emparejamiento de nombres que Incentivos (tecnicos.json): el texto de
-// TECNICOS ("FELIX M. GIL #777, LEBRON") se parte por comas y cada parte se
-// compara sin acentos/espacios con el nombre, el nombre corto o el "#777";
+// TECNICOS ("JUAN PÉREZ #101, GÓMEZ") se parte por comas y cada parte se
+// compara sin acentos/espacios con el nombre, el nombre corto o el "#101";
 // si no coincide, por el primer nombre cuando solo un técnico lo tiene.
 let TECS = [], SALARIOS = {};
 const tecKey = nombre => K(nombre).replace(/[^a-z0-9]/g, '_');

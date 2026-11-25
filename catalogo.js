@@ -260,13 +260,8 @@ function asegurarIdsRepuestos(lista){
    esTecnicoOMas()). Aquí solo se lee — agregar un área nueva se hace desde
    Bitácora, no desde Inventario, para no duplicar ese flujo. */
 // (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
-const AREAS_INVENTARIO_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
-  'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
-  'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
-  'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',
-  'Compactadoras','Techo','Extractores','Montacarga','Jardín','Extintores',
-  'Taller','Área de Baterías','Iluminación','Paneles Eléctricos'
-];
+// (v77) La lista está en vt-respaldo.js; fbRespaldo() (firebase-init.js) la da solo a la empresa de siempre.
+const AREAS_INVENTARIO_FALLBACK = fbRespaldo('areas');
 let currentAreasInventario = AREAS_INVENTARIO_FALLBACK.slice();
 
 function renderEquipoLocalidadOptions(valorActual){
