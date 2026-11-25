@@ -15,6 +15,8 @@
   'use strict';
   if (window.VTShell) return;
   const VERSION = 'v3.0';
+  // (v74) Otra empresa: su nombre en el título de la pestaña en vez de VoidTech (firebase-config.js).
+  if (window.VT_EMPRESA) document.title = VT_EMPRESA.titulo(document.title);
   const PAGINA = location.pathname.split('/').pop() || 'index.html';
   const ADM = 'ADMINISTRADOR', ENC = 'ENCARGADO_MANTENIMIENTO', SUP = 'SUPERVISOR', TEC = 'TECNICO', ALM = 'ALMACEN', RH = 'RRHH', OP = 'OPERADOR';
   const MANT = [ADM, ENC, SUP, TEC];
@@ -228,7 +230,7 @@
     const fab = barra().find(x => x[0] === 'fab');
     side.setAttribute('aria-label', T('menu'));
     document.documentElement.classList.toggle('vt-rail', rail());
-    side.innerHTML = `<button type="button" class="vt-ib vt-railbtn" data-vt="rail" aria-pressed="${rail()}" aria-label="${esc(T(rail() ? 'expandirMenu' : 'contraerMenu'))}" title="${esc(T(rail() ? 'expandirMenu' : 'contraerMenu'))}">${ic(rail() ? 'chevron-right' : 'chevron-left')}</button><a class="vt-wm" href="${rol() === OP ? 'reportar.html' : 'index.html'}">${window.VTIcons ? VTIcons.mono({ size: 34 }) : ''}<span><b>Void<em>Tech</em></b><small>${esc(C('appNombre'))}</small></span></a>`
+    side.innerHTML = `<button type="button" class="vt-ib vt-railbtn" data-vt="rail" aria-pressed="${rail()}" aria-label="${esc(T(rail() ? 'expandirMenu' : 'contraerMenu'))}" title="${esc(T(rail() ? 'expandirMenu' : 'contraerMenu'))}">${ic(rail() ? 'chevron-right' : 'chevron-left')}</button><a class="vt-wm" href="${rol() === OP ? 'reportar.html' : 'index.html'}">${window.VTIcons ? VTIcons.mono({ size: 34 }) : ''}<span>${window.VT_EMPRESA ? VT_EMPRESA.marcaHtml : '<b>Void<em>Tech</em></b>'}<small>${esc(C('appNombre'))}</small></span></a>`
       + (fab ? `<button type="button" class="vt-btn cta vt-new" data-vt="${fab[3]}">${ic(fab[1])}${esc(T(fab[3] === 'scan' ? 'act_escanear' : 'tab_nuevo'))}</button>` : '')
       + htmlGrupos(location.hash === '#todo' ? 'todo' : idPagina(), 's')
       + `<div style="margin-top:auto"></div><button type="button" class="vt-item" data-vt="mas">${ic('user')}<span>${esc(u.nombre || '')}</span>${ic('settings', { cls: 'sm' })}</button>`;
@@ -270,7 +272,7 @@
       + `<label class="vt-set-tema"><span><span data-vt-tema-ic>${ic(iconoTema(), { cls: 'md' })}</span> ${esc(T('tema'))}</span>${temaSeg()}</label>`
       + (nv ? `<label><span>${ic('factory', { cls: 'md' })} ${esc(T('nave'))}</span>${nv}</label>` : '') + '</div>'
       + htmlGrupos(location.hash === '#todo' ? 'todo' : idPagina())
-      + `<button type="button" class="vt-out" data-vt="salir">${ic('logout')}${esc(T('salir'))}</button><div class="vt-ver">${esc(T('version', { v: VERSION }))}</div>`,
+      + `<button type="button" class="vt-out" data-vt="salir">${ic('logout')}${esc(T('salir'))}</button><div class="vt-ver">${esc(T('version', { v: VERSION }))}${window.VT_EMPRESA && VT_EMPRESA.mostrarEmpresa ? ' · ' + esc(T('m_empresa', { n: VT_EMPRESA.nombre })) : ''}</div>`,
       { titulo: T('mas') });
   }
   function accionesNuevo() {

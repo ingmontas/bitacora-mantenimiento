@@ -259,7 +259,8 @@ function asegurarIdsRepuestos(lista){
    Misma colección /areas que usa Bitácora (firestore.rules: lectura
    esTecnicoOMas()). Aquí solo se lee — agregar un área nueva se hace desde
    Bitácora, no desde Inventario, para no duplicar ese flujo. */
-const AREAS_INVENTARIO_FALLBACK = [
+// (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
+const AREAS_INVENTARIO_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
   'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
   'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
   'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',

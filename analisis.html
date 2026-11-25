@@ -1707,8 +1707,8 @@ function renderConclusiones(ctx){
     const avg = a => a.reduce((s,w)=>s+(ctx.weekCounts[w]||0),0)/a.length;
     if (prev.length && avg(prev)>0){
       const aR=avg(rec), aP=avg(prev), delta=Math.round((aR-aP)/aP*100);
-      if (delta>=15) items.push({icon:'<span data-icon="trend"></span>', html:`Los correctivos van <b>al alza</b>: ${aR.toFixed(1)}/semana recientes, ${delta}% más que antes — el preventivo no está alcanzando el ritmo de fallas.`});
-      else if (delta<=-15) items.push({icon:'<span data-icon="trend-down"></span>', html:`Los correctivos van <b>a la baja</b>: ${aR.toFixed(1)}/semana, ${Math.abs(delta)}% menos que antes — vale la pena revisar qué cambió y mantenerlo.`});
+      if (delta>=15) items.push({icon:'<span data-icon="trend"></span>', html:esc(TA('Los correctivos van al alza: {a}/semana recientes, {p}% más que antes — el preventivo no está alcanzando el ritmo de fallas.').replace('{a}', aR.toFixed(1)).replace('{p}', delta))});
+      else if (delta<=-15) items.push({icon:'<span data-icon="trend-down"></span>', html:esc(TA('Los correctivos van a la baja: {a}/semana, {p}% menos que antes — vale la pena revisar qué cambió y mantenerlo.').replace('{a}', aR.toFixed(1)).replace('{p}', Math.abs(delta)))});
       else items.push({icon:'<span data-icon="minus"></span>', html:`El volumen de correctivos se mantiene <b>estable</b>, cerca de ${aR.toFixed(1)}/semana.`});
     }
   }

@@ -157,6 +157,15 @@
   function mono(o) {
     o = o || {};
     const s = o.size || 32;
+    // (v76) Otra empresa (firebase-config.js): sus iniciales en un escudo gris, nunca "VT".
+    const E = window.VT_EMPRESA;
+    if (E && !E.legado) {
+      const ini = String(E.nombre || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '·';
+      const nom = String(E.nombre || '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+      return '<svg class="vt-mono" width="' + s + '" height="' + s + '" viewBox="0 0 32 32" role="img" aria-label="' + nom + '">'
+        + '<path d="M4 3.5h24a1 1 0 0 1 1 1V16c0 7.2-5.6 11.4-12.6 13.4a1.6 1.6 0 0 1-.8 0C8.6 27.4 3 23.2 3 16V4.5a1 1 0 0 1 1-1z" fill="#3B4A57"/>'
+        + '<text x="16" y="20.2" text-anchor="middle" font-family="IBM Plex Sans,Arial,sans-serif" font-weight="700" font-size="12.5" letter-spacing="-.4" fill="#fff">' + ini.replace(/[&<>"']/g, '') + '</text></svg>';
+    }
     return '<svg class="vt-mono" width="' + s + '" height="' + s + '" viewBox="0 0 32 32" role="img" aria-label="VoidTech">'
       + '<path d="M4 3.5h24a1 1 0 0 1 1 1V16c0 7.2-5.6 11.4-12.6 13.4a1.6 1.6 0 0 1-.8 0C8.6 27.4 3 23.2 3 16V4.5a1 1 0 0 1 1-1z" fill="#D21F26"/>'
       + '<text x="16" y="20.2" text-anchor="middle" font-family="IBM Plex Sans,Arial,sans-serif" font-weight="700" font-size="12.5" letter-spacing="-.4" fill="#fff">VT</text></svg>';

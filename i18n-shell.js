@@ -67,7 +67,7 @@
     login_e_red: 'Sin conexión a internet. Revisa la señal e intenta de nuevo.', login_e_otro: 'Error: {e}',
     login_escribeCorreo: 'Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".',
     login_enviado: 'Si ese correo tiene cuenta, te llegó un enlace para crear una contraseña nueva (revisa también spam).',
-    login_noEnviado: 'No se pudo enviar el correo: {e}', login_sinRed: 'Sin conexión a internet.',
+    login_noEnviado: 'No se pudo enviar el correo: {e}', login_sinRed: 'Sin conexión a internet.', login_empresa: 'Empresa:', login_empCambiar: 'Cambiar', login_empCodigo: 'Código de empresa', login_empUsar: 'Usar', login_empCancelar: 'Cancelar', login_empEscribe: 'Escribe el código que te dio quien te dio acceso.', login_empNoExiste: 'No hay ninguna empresa con ese código. Revísalo con quien te dio acceso.', m_empresa: 'Empresa: {n}',
   },
   en: {
     a_conectado: "Connected",
@@ -122,7 +122,7 @@
     login_e_red: 'No internet connection. Check the signal and try again.', login_e_otro: 'Error: {e}',
     login_escribeCorreo: 'Type your email above and tap “I forgot my password” again.',
     login_enviado: 'If that email has an account, you got a link to create a new password (check spam too).',
-    login_noEnviado: 'Could not send the email: {e}', login_sinRed: 'No internet connection.',
+    login_noEnviado: 'Could not send the email: {e}', login_sinRed: 'No internet connection.', login_empresa: 'Company:', login_empCambiar: 'Change', login_empCodigo: 'Company code', login_empUsar: 'Use', login_empCancelar: 'Cancel', login_empEscribe: 'Type the code you were given with your access.', login_empNoExiste: 'There is no company with that code. Check it with whoever gave you access.', m_empresa: 'Company: {n}',
   },
   tr: {
     a_conectado: "Bağlı",
@@ -177,7 +177,7 @@
     login_e_red: 'İnternet bağlantısı yok. Sinyali kontrol edip tekrar deneyin.', login_e_otro: 'Hata: {e}',
     login_escribeCorreo: 'E-postanızı yukarıya yazıp “Şifremi unuttum”a tekrar dokunun.',
     login_enviado: 'Bu e-postanın hesabı varsa yeni şifre oluşturma bağlantısı gönderildi (spam klasörünü de kontrol edin).',
-    login_noEnviado: 'E-posta gönderilemedi: {e}', login_sinRed: 'İnternet bağlantısı yok.',
+    login_noEnviado: 'E-posta gönderilemedi: {e}', login_sinRed: 'İnternet bağlantısı yok.', login_empresa: 'Şirket:', login_empCambiar: 'Değiştir', login_empCodigo: 'Şirket kodu', login_empUsar: 'Kullan', login_empCancelar: 'İptal', login_empEscribe: 'Erişiminizle birlikte verilen kodu yazın.', login_empNoExiste: 'Bu kodla bir şirket yok. Size erişim verenle kontrol edin.', m_empresa: 'Şirket: {n}',
   },
 }]);
 if (window.i18n) window.i18n._drenar();

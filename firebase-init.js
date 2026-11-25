@@ -619,10 +619,17 @@ function fbTecnicosActualizarCopia(lista) {
   _fbTecPromesa = Promise.resolve(activos.map(t => ({ ...t, plantas: t.plantas.slice() })));
   return activos;
 }
-async function _fbTecDesdeJson() {
+// (v74) La lista vieja tecnicos.json es solo de la empresa de siempre (VT_EMPRESA.legado):
+// otra empresa nunca la pide. La usan esta página y admin.html (Migrar).
+async function fbTecnicosJson() {
+  if (window.VT_EMPRESA && !VT_EMPRESA.legado) return [];
   const r = await fetch('tecnicos.json?_=' + Date.now()); // evita caché vieja
   if (!r.ok) throw new Error('tecnicos.json HTTP ' + r.status);
-  return _fbTecActivos(await r.json());
+  const d = await r.json();
+  return Array.isArray(d) ? d : [];
+}
+async function _fbTecDesdeJson() {
+  return _fbTecActivos(await fbTecnicosJson());
 }
 function fbTecnicos(forzar) {
   if (_fbTecPromesa && !forzar) return _fbTecPromesa.then(l => l.map(t => ({ ...t, plantas: t.plantas.slice() })));

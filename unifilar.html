@@ -1031,7 +1031,7 @@ function abrirFormPlano(id, o) {
     <div ${naves.length > 1 ? '' : 'hidden'}><label for="pNave">${esc(tx('Nave'))}</label><select id="pNave">${opt('', '—', !p.planta)}${naves.map(v => opt(v, v, v === p.planta)).join('')}</select></div>
     ${inp('pSis', 'Sistema', p.sistema, '480Y/277 V · 3F 4H · 60 Hz', 120)}
     <h4>${esc(tx('Cajetín'))}</h4>
-    <div class="g2">${inp('cEmp', 'Empresa', c.empresa, 'VoidTech Dominicana')}${inp('cDir', 'Dirección', c.direccion, '')}</div>
+    <div class="g2">${inp('cEmp', 'Empresa', c.empresa, (window.VT_EMPRESA && !VT_EMPRESA.legado) ? VT_EMPRESA.nombre : 'VoidTech Dominicana')}${inp('cDir', 'Dirección', c.direccion, '')}</div>
     <div class="g2">${inp('cPro', 'Proyecto', c.proyecto, 'Instalación eléctrica · Nave 1')}${inp('cTit', 'Título del plano', c.titulo, 'Diagrama unifilar general')}</div>
     <div class="g3">${inp('cDib', 'Dibujó', c.dibujo, '')}${inp('cRev', 'Revisó', c.reviso, '')}${inp('cEsc', 'Escala', c.escala, 'S/E')}</div>
     <div class="g2">${inp('cIng', 'Ingeniero responsable', c.ingNombre, 'Ing. Nombre Apellido')}${inp('cCod', 'N.º CODIA', c.ingCodia, '')}</div>

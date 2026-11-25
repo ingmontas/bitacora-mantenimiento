@@ -390,8 +390,8 @@ async function modalUsuario(u) {
     <div class="naves" id="uNaves">${plantas.concat(extra).map(p => `<label class="ck"><input type="checkbox" value="${esc(p)}"${sel.includes(p) ? ' checked' : ''}> ${esc(p)}</label>`).join('') || '<div class="nota">No hay plantas en /plantas todavía.</div>'}</div>
     <div id="uTecBox">
       <div class="g2">
-        <div><label class="f">Nombre de técnico</label><input id="uTec" maxlength="100" value="${esc(u.tecnico || '')}" placeholder="FELIX M. GIL #777"></div>
-        <div><label class="f">Nombre corto</label><input id="uTecC" maxlength="40" value="${esc(u.tecnicoCorto || '')}" placeholder="FELIX #777"></div>
+        <div><label class="f">Nombre de técnico</label><input id="uTec" maxlength="100" value="${esc(u.tecnico || '')}" placeholder="JUAN PÉREZ #101"></div>
+        <div><label class="f">Nombre corto</label><input id="uTecC" maxlength="40" value="${esc(u.tecnicoCorto || '')}" placeholder="JUAN #101"></div>
       </div>
       <div class="nota">Igual que se escribe en las OTs. Incentivos y Rentabilidad buscan las OTs por este nombre: si lo cambias, las OTs viejas siguen con el nombre anterior.</div>
       <div id="uEnlace"></div>
@@ -592,10 +592,7 @@ async function enviarReset(u) {
 // tecnicos.json se copian EXACTOS (Incentivos y Rentabilidad buscan por ellos).
 async function listaDesdeJson() {
   try {
-    const r = await fetch('tecnicos.json?_=' + Date.now());
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    return (Array.isArray(d) ? d : []).filter(t => t && t.nombre)
+    return (await fbTecnicosJson()).filter(t => t && t.nombre)
       .map(t => ({ nombre: String(t.nombre), corto: String(t.corto || t.nombre), plantas: [], activo: true, uid: '' }));
   } catch (e) { console.warn('tecnicos.json:', e.message); return []; }
 }

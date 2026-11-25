@@ -552,7 +552,8 @@ function mergeEquipoInto(targetList, importedEquipo){
 // este celular (localStorage) — eso significaba que "Juan Pérez", "juan perez"
 // y "J. Pérez" contaban como 3 personas distintas entre Inventario y
 // Bitácora/Análisis. Ahora se elige de la misma tecnicos.json.
-const TECNICOS_INV_FALLBACK = [
+// (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
+const TECNICOS_INV_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
   { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
   { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
   { "nombre": "LEBRON", "corto": "LEBRON" },

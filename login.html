@@ -37,6 +37,17 @@
   button[type=submit]{width:100%;min-height:50px;margin-top:22px;border:none;border-radius:10px;background:var(--vt-red);color:#fff;font-weight:600;font-size:16px;cursor:pointer;font-family:inherit;}
   button[type=submit]:disabled{opacity:.6;}
   #msg{margin-top:14px;font-size:13.5px;color:var(--color-danger-text);min-height:18px;line-height:1.4;}
+  /* (v74) varias empresas */
+  [hidden]{display:none!important;}
+  #empFila{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;min-height:44px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--border);margin-top:10px;padding-top:6px;}
+  #empFila b{color:var(--text);font-weight:600;}
+  #empFila button{background:none;border:none;color:var(--color-accent-text);font:inherit;font-weight:600;min-height:44px;padding:0 8px;cursor:pointer;}
+  #empForm{margin-top:4px;}
+  #empForm .fila{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  #empForm .fila input{flex:1 1 100%;min-width:0;text-transform:lowercase;}
+  #empForm .fila button{flex:1 1 0;width:auto;margin-top:0;min-height:48px;font-size:15px;padding:0 16px;border-radius:10px;border:1px solid var(--color-border-strong);background:var(--color-surface);color:var(--text);font:inherit;font-weight:600;cursor:pointer;}
+  #empForm .fila button.si{background:var(--vt-red);border-color:var(--vt-red);color:#fff;}
+  #empMsg{font-size:13px;color:var(--color-danger-text);min-height:16px;margin-top:6px;line-height:1.4;}
   .pie{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:380px;width:100%;margin-top:16px;font-size:12.5px;color:var(--muted);}
 </style>
 </head>
@@ -54,13 +65,46 @@
     <button type="submit" id="submitBtn" data-i18n="shell.login_entrar">Iniciar sesión</button>
   </form>
   <a href="#" id="olvide" style="display:flex;align-items:center;justify-content:center;min-height:44px;margin-top:8px;font-size:14px;color:var(--muted);" data-i18n="shell.login_olvide">Olvidé mi contraseña</a>
+  <div id="empFila" hidden><span data-i18n="shell.login_empresa">Empresa:</span> <b id="empNombre"></b><button type="button" id="empCambiar" data-i18n="shell.login_empCambiar">Cambiar</button></div>
+  <form id="empForm" hidden>
+    <label for="empCodigo" data-i18n="shell.login_empCodigo">Código de empresa</label>
+    <div class="fila"><input id="empCodigo" autocomplete="organization" autocapitalize="none" spellcheck="false" maxlength="40"/><button type="submit" class="si" data-i18n="shell.login_empUsar">Usar</button><button type="button" id="empCancelar" data-i18n="shell.login_empCancelar">Cancelar</button></div>
+    <div id="empMsg" role="alert"></div>
+  </form>
 </div>
-<div class="pie"><span>VoidTech © 2026</span><div data-i18n-selector></div></div>
+<div class="pie"><span id="pieMarca">VoidTech © 2026</span><div data-i18n-selector></div></div>
 <script>
 firebase.initializeApp(firebaseConfig);
 document.getElementById('vtMono').innerHTML = window.VTIcons ? VTIcons.mono({ size: 44 }) : '';
 const L = (k, p) => (window.i18n && i18n.has('shell.' + k) ? i18n.t('shell.' + k, p) : k);
 const auth = firebase.auth();
+
+// (v74) Varias empresas: cada una con su propio Firebase (firebase-config.js).
+// Con una sola empresa (hoy) no se muestra nada nuevo.
+(function () {
+  // Sin firebase-config.js nuevo (copia vieja del celular): todo como antes.
+  const E = window.VT_EMPRESA || { legado: true, puedeCambiar: false, titulo: t => t };
+  const $ = id => document.getElementById(id);
+  if (!E.legado) document.querySelector('.brand b').outerHTML = E.marcaHtml;
+  document.title = E.titulo(document.title);
+  $('pieMarca').textContent = E.titulo($('pieMarca').textContent);
+  if (!E.puedeCambiar) return;
+  $('empNombre').textContent = E.nombre;
+  $('empFila').hidden = false;
+  const abrir = (msg) => { $('empFila').hidden = true; $('empForm').hidden = false; $('empMsg').textContent = msg || ''; $('empCodigo').focus(); };
+  if (E.codigoMalo) abrir(L('login_empNoExiste'));
+  $('empCambiar').addEventListener('click', () => abrir(''));
+  $('empCancelar').addEventListener('click', () => { $('empForm').hidden = true; $('empFila').hidden = false; });
+  $('empForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const c = $('empCodigo').value;
+    if (!c.trim()) { $('empMsg').textContent = L('login_empEscribe'); return; }
+    if (!vtEmpresaElegir(c)) { $('empMsg').textContent = L('login_empNoExiste'); return; }
+    // Se recarga sin ?empresa= para que mande la elegida; se conserva ?next=.
+    const q = new URLSearchParams(location.search); q.delete('empresa');
+    location.replace('login.html' + (q.toString() ? '?' + q : ''));
+  });
+})();
 const params = new URLSearchParams(location.search);
 // (5 oct 2026) Solo se acepta volver a una página propia de la app
 // ("bitacora.html?equipo=…"). Antes cualquier valor servía: un enlace

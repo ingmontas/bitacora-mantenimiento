@@ -1095,7 +1095,8 @@ function prefillEquipoDesdeQR() {
 // ══════ LISTA DE TÉCNICOS (Administración → /config/tecnicos; respaldo tecnicos.json) ══════
 // (7 oct 2026) Respaldo igual a tecnicos.json: ANTONIO SANTANA #805 ya no
 // trabaja aquí (sus OTs viejas conservan su nombre, pero no se ofrece).
-const TECNICOS_FALLBACK = [
+// (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
+const TECNICOS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
   { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
   { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
   { "nombre": "LEBRON", "corto": "LEBRON" },
@@ -1268,7 +1269,8 @@ function refrescarAreaYLinea() {
 // la lectura — son las mismas 26 áreas que estaban escritas en el HTML antes.
 // Cada área ahora también guarda a qué planta pertenece (plantaNombre) — FASE
 // 2b — para poder filtrar el <select> de Área según la planta elegida.
-const AREAS_FALLBACK = [
+// (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
+const AREAS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
   'Almacén','Oficinas','Comedor','Baños','Área Común','Bombas','Estructura',
   'Compresor de Aire','Chiller','Ensamble de Válvulas','Coating','Weaving',
   'Tape-Line','Reciclaje','PE-Film','Agua Tratada','Transformadores',

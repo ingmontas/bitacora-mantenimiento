@@ -597,7 +597,8 @@ function addDaysStr(baseStr, dias) {
 }
 
 // ══════ TÉCNICOS (mismo patrón que bitacora.html) ══════
-const TECNICOS_FALLBACK = [
+// (v74) Otra empresa (firebase-config.js) no recibe la lista de la empresa de siempre.
+const TECNICOS_FALLBACK = (window.VT_EMPRESA && !VT_EMPRESA.legado) ? [] : [
   { "nombre": "FELIX M. GIL #777", "corto": "FELIX #777" },
   { "nombre": "JUAN L. JIMÉNEZ #628", "corto": "JUAN #628" },
   { "nombre": "LEBRON", "corto": "LEBRON" },
